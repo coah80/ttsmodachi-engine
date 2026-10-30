@@ -1,0 +1,12 @@
+target/
+node_modules/
+dist/
+data/
+cache/
+*.cxi
+*.3ds
+*.cia
+*.bin
+*.wire
+*.wav
+roms

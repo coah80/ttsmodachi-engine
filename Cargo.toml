@@ -1,0 +1,11 @@
+[workspace]
+members = ["crates/tts-core", "crates/tts-worker"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+publish = false
+
+[profile.release]
+codegen-units = 1
+lto = "fat"

@@ -1,0 +1,10 @@
+body {
+  max-width: 40rem;
+  margin: 1rem auto;
+  padding: 0 1rem;
+}
+
+textarea,
+audio {
+  width: 100%;
+}

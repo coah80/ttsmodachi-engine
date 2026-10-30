@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ttsmodachi-engine</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <h1>ttsmodachi-engine</h1>
+    <form id="form">
+      <p>
+        <label for="text">text</label><br />
+        <textarea id="text" rows="5" maxlength="2000" required>Hello, this is Tomodachi Life text to speech.</textarea>
+      </p>
+      <p><label>pitch <input name="pitch" type="number" min="0" max="100" value="50" /></label></p>
+      <p><label>speed <input name="speed" type="number" min="0" max="100" value="50" /></label></p>
+      <p><label>quality <input name="quality" type="number" min="0" max="100" value="50" /></label></p>
+      <p><label>tone <input name="tone" type="number" min="0" max="100" value="50" /></label></p>
+      <p><label>accent <input name="accent" type="number" min="0" max="100" value="50" /></label></p>
+      <p>
+        <label>intonation
+          <select name="intonation">
+            <option>1</option>
+            <option>2</option>
+            <option>3</option>
+            <option>4</option>
+          </select>
+        </label>
+      </p>
+      <p><label>volume <input name="volume" type="number" min="25" max="300" value="100" /></label></p>
+      <p><button id="generate">generate</button></p>
+    </form>
+    <p id="status" role="status"></p>
+    <audio id="player" controls></audio>
+    <p><a id="download" download="speech.wav" hidden>download wav</a></p>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

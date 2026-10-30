@@ -1,0 +1,16 @@
+[package]
+name = "tts-worker"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "tts-worker"
+path = "src/main.rs"
+
+[dependencies]
+tts-core = { path = "../tts-core" }
+libc = "0.2"
+
+[lints.rust]
+warnings = "allow"
