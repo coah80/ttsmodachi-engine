@@ -2,7 +2,7 @@
 
 the Tomodachi Life text to speech engine, ported to Rust, so it runs without a 3DS or an emulator.
 
-## what it is
+## what is this?
 
 - `crates/tts-core`: the engine, a port of the game's own TTS code. It gives the same audio as the game running in an emulator, byte for byte.
 - `crates/tts-worker`: an HTTP server around the engine, `POST /render` returns a WAV.
