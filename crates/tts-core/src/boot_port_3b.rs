@@ -1,115 +1,39 @@
-//! Voice resource loading on the boot path. Guest state is caller-owned.
-//! Entry-isolation replay passes; whole-call-tree certification is incomplete.
-//! Host still contains existing callee ports that need real adapters.
 use crate::boot::Memory;
 use crate::frontend as f;
 use crate::leftovers_1::OpenRuntime;
 
-/// Foreign calls must receive the current arena, including local out parameters.
 pub trait Host {
     fn call(&mut self, m: &mut Memory<'_>, address: u32, args: &[u32]) -> u32;
 }
-/// Reconstructed string literals in the same order as the source's lookups.
-/// The caller places their NUL-terminated concatenation at `literal_base`.
-pub const TEXT: &[&str] = &[
-    "select",
-    "/",
-    "voice",
-    "voicemodel",
-    "frequencyhz",
-    "f",
-    "bet2voicemapatstartup",
-    "HMPG",
-    "VCFG",
-    "bet2voiceoverride.",
-    "FS",
-    "ALPHA",
-    "BETA",
-    "VUV_REL_AMP",
-    "VOL",
-    "MVF_BOOST",
-    "FRAME_SIZE",
-    "LOGLEVEL",
-    "BREAKERSTR",
-    "BREAKMAXDUR",
-    "SPLIT",
-    "UV",
-    "MVF_UV",
-    "LT_STREAMS",
-    "ORDER",
-    "RHO",
-    "DATATYPE",
-    "VSYNTH_INIT",
-    "ORDER_BEGIN_FAST",
-    "PGEN_COMPLEX_LF0",
-    "PGEN_COMPLEX_MVF",
-    "PGEN_COMPLEX_CEP_ST",
-    "PGEN_COMPLEX_CEP_LT",
-    "high",
-    "default",
-    "low",
-    "medium",
-    "FEEX",
-    "TREE",
-    "PDF ",
-    "CBK ",
-    "DWIN",
-    "MCP ",
-    "LF0 ",
-    "DUR ",
-    "MVF ",
-    "VCF ",
-    "DYN ",
-    "ACC ",
-    "bet2voiceexcitetype",
-    "bet2voicealpha",
-    "bet2voicebeta",
-    "bet2voicevol",
-    "bet2voicevuvrelamp",
-    "bet2voicemvfboost",
-    "bet2voiceframesize",
-    "bet2voiceorder",
-    "bet2voicevsynthinit",
-    "FVPG",
-    "%s%s%s%s",
-    "message",
-    "Corrupt voice configuration chunk",
-    "file",
-    "parameter",
-    "value",
-    "Specified MCEP order %d is higher than order of the data (%d)",
-    "%s%s%s%x",
-    "lhError",
+
+pub const LITERAL_ADDRESSES: [u32; 68] = [
+    0x225640, 0x1031fc, 0x1551f6, 0x1555a4, 0x155598, 0x103c3c, 0x22566c, 0x225684, 0x22568c,
+    0x225b04, 0x225b18, 0x225b1c, 0x225b24, 0x225b2c, 0x225b38, 0x225b3c, 0x225b48, 0x225b54,
+    0x225b60, 0x225b6c, 0x225b78, 0x1126d0, 0x225b84, 0x225b8c, 0x225b98, 0x225ba0, 0x225ba4,
+    0x225bb0, 0x225f84, 0x225fe0, 0x22601c, 0x226040, 0x226434, 0x225ff4, 0x158714, 0x226030,
+    0x226034, 0x226448, 0x226458, 0x226460, 0x226468, 0x226450, 0x226470, 0x226478, 0x226480,
+    0x226488, 0x226490, 0x2269a4, 0x2269ac, 0x2269f8, 0x226a30, 0x226a40, 0x226e08, 0x226e18,
+    0x226e2c, 0x226e40, 0x226e54, 0x226e64, 0x226e78, 0x155ec0, 0x1534e6, 0x225fa0, 0x17729c,
+    0x152988, 0x1928f6, 0x2269b4, 0x151bac, 0x151b98,
 ];
-/// Scratch must be disjoint from all live objects and literal data. Its 1024
-/// bytes model ABI-local storage and are restored on return, as in lane 3.
+
 pub struct Environment<'a> {
     pub scratch: u32,
-    pub literal_base: u32,
+
     pub version: u32,
     pub module: u32,
     pub character_classes: &'a [u16; 256],
-    /// ROM addresses of the literals, parallel to `TEXT`. A zero entry keeps
-    /// the literal in the caller's pool. The ARM passes the ROM address of
-    /// every literal, and a parameter key ends up stored in the arena, so a
-    /// live replay has to use the same addresses.
-    pub literal_addresses: Option<&'a [u32]>,
+
+    pub literals: &'a [(&'a [u8], u32)],
 }
 fn lit(e: &Environment<'_>, name: &str) -> u32 {
-    let mut p = e.literal_base;
-    for (i, s) in TEXT.iter().enumerate() {
-        if *s == name {
-            if let Some(table) = e.literal_addresses {
-                if table[i] != 0 {
-                    return table[i];
-                }
-            }
-            return p;
-        }
-        p += s.len() as u32 + 1;
-    }
-    panic!("missing voice-loader literal");
+    e.literals
+        .iter()
+        .find(|(text, _)| *text == name.as_bytes())
+        .map(|(_, address)| *address)
+        .expect("missing voice-loader literal")
 }
+
 fn bad(r: u32) -> bool {
     r >= 0x80000000
 }
@@ -182,8 +106,7 @@ impl<H: Host> crate::selection::arena::Host for Sel<'_, H> {
         )
     }
 }
-/// fn_242444. The chunk string read is a host call, so the replay compares
-/// its arguments and its result.
+
 fn read_string(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -196,8 +119,7 @@ fn read_string(
 ) -> u32 {
     h.call(m, 0x242444, &[r, src, size, pos, dst, len])
 }
-/// fn_2a4864. The default voice configuration is a host call, so the replay
-/// compares its argument and its result.
+
 fn defaults(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     h.call(m, 0x2a4864, &[p])
 }
@@ -208,8 +130,7 @@ fn drop_voice(m: &mut Memory<'_>, h: &mut impl Host, p: u32) {
         p,
     );
 }
-/// fn_2a9090. The frame release is a host call, so the replay compares its
-/// argument and its result.
+
 fn release_frame(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     h.call(m, 0x2a9090, &[p])
 }
@@ -260,8 +181,7 @@ fn clear_handles(m: &mut Memory<'_>, h: &mut impl Host, p: u32) {
     }
     m.put_half(p + 0x788, 0);
 }
-/// fn_2252b0. The complete load, override, model/window and cleanup state machine.
-/// Missing foreign adapters are explicit Host calls, never successful defaults.
+
 pub fn fn_2252b0(m: &mut Memory<'_>, p: u32, e: &Environment<'_>, h: &mut impl Host) -> u32 {
     let saved: [u8; 1024] = core::array::from_fn(|i| m.byte(e.scratch + i as u32));
     let rc = load(m, p, e, h);
@@ -274,9 +194,7 @@ fn load(m: &mut Memory<'_>, p: u32, e: &Environment<'_>, h: &mut impl Host) -> u
     let cfg = p + 0x94;
     let model = p + 0x1ac;
     let s = e.scratch;
-    // The frame model mirrors the ARM's frame of fn_2252b0: the same offset
-    // from the frame base holds the same slot, so an ABI-local pointer names
-    // the same slot in both and the bytes written through it line up.
+
     let path = s + 0x20;
     let key = s + 0xb0;
     let win = s + 0xb0;
@@ -291,13 +209,9 @@ fn load(m: &mut Memory<'_>, p: u32, e: &Environment<'_>, h: &mut impl Host) -> u
     let data = s + 0xac;
     let rd_slot = s + 0xa0;
     let val_slot = s + 0x14;
-    // The ROM's fn_2252b0 reads the chunk strings into the frame's own
-    // length slot: the callee writes the length there.
+
     let len_slot = s + 0x238;
-    // The ROM reuses the value buffer as the window pointer array: its
-    // fn_2252b0 passes the frame slot +0xf0 to fn_2a2f04 as the array, and
-    // the same slot holds the override value while the configuration chunk
-    // is read.
+
     let wins = s + 0xf0;
     m.put_word(out1, 0);
     m.put_word(size, 0);
@@ -325,7 +239,11 @@ fn load(m: &mut Memory<'_>, p: u32, e: &Environment<'_>, h: &mut impl Host) -> u
     append(m, path, m.word(out1));
     leaf(m, 0x1757a8, &[m.word(ctx + 20), m.word(out1)]);
     m.put_word(int1, 0);
-    let r = h.call(m, 0x175850, &[m.word(ctx + 20), lit(e, "frequencyhz"), int1]);
+    let r = h.call(
+        m,
+        0x175850,
+        &[m.word(ctx + 20), lit(e, "frequencyhz"), int1],
+    );
     let frequency = m.word(int1) as i32;
     if bad(r) || frequency <= 0 {
         return 0x84e02000;
@@ -359,7 +277,7 @@ fn load(m: &mut Memory<'_>, p: u32, e: &Environment<'_>, h: &mut impl Host) -> u
         }
         clear_blocks(m, h, p, ctx);
         h.call(m, 0x2a41b8, &[model]);
-        // fn_weak_f94 is unresolved in the ROM; RVCT emits no call.
+
         drop_voice(m, h, m.word(p + 16));
         m.put_word(p + 16, 0);
         clear_handles(m, h, p);
@@ -404,7 +322,7 @@ fn load(m: &mut Memory<'_>, p: u32, e: &Environment<'_>, h: &mut impl Host) -> u
                 pos = pos.wrapping_add(m.word(len_slot));
                 m.put_word(len_slot, 256);
                 r = read_string(m, h, rd, m.word(data), m.word(size), pos, value, len_slot);
-                    if bad(r) {
+                if bad(r) {
                     break;
                 }
             }
@@ -732,9 +650,6 @@ fn load(m: &mut Memory<'_>, p: u32, e: &Environment<'_>, h: &mut impl Host) -> u
                     r = 0;
                 }
                 if !bad(r) && m.word(win + 20) != 0 && m.word(win + 52) != 0 {
-                    // The ROM passes eight words: the window array and the
-                    // reader name are the frame slots +0xf0 and +0xa0, and
-                    // the last word repeats the dimension.
                     r = h.call(
                         m,
                         0x2a2f04,
@@ -880,7 +795,7 @@ fn load(m: &mut Memory<'_>, p: u32, e: &Environment<'_>, h: &mut impl Host) -> u
     if stage >= 3 {
         h.call(m, 0x2a41b8, &[model]);
     }
-    // The unresolved weak configuration destructor emits no ROM call.
+
     if m.word(p + 16) != 0 {
         drop_voice(m, h, m.word(p + 16));
         m.put_word(p + 16, 0);
@@ -889,12 +804,11 @@ fn load(m: &mut Memory<'_>, p: u32, e: &Environment<'_>, h: &mut impl Host) -> u
     rc
 }
 
-/// Regional diagnostic literals and disjoint ABI-local storage for pool teardown.
 pub struct DestructionEnvironment {
     pub pool_file: u32,
     pub pool_format: u32,
     pub free_pool_label: u32,
-    /// Six words, restored on return. Must not overlap callback-owned state.
+
     pub scratch: u32,
 }
 struct DestructorCalls<'a, H> {
@@ -924,8 +838,7 @@ impl<H: Host> crate::frontend::HeapVtableM for ReleaseMethods<'_, H> {
         );
     }
 }
-/// The arena-aware release of one heap object: the ROM's release method is
-/// dispatched through the host, so the ARM's release calls are compared.
+
 pub fn release_object(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, object: u32) {
     if heap == 0 || object == 0 {
         return;
@@ -990,7 +903,7 @@ impl<H: Host> crate::reentrant::HooksM for DestructorCalls<'_, H> {
         }
     }
 }
-/// fn_2d9bb0. Each slot is read after the preceding release callback.
+
 pub fn fn_2d9bb0(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     if p == 0 {
         return 0x84e02006;
@@ -1004,7 +917,7 @@ pub fn fn_2d9bb0(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     leaf(m, 0x195bec, &[p, 0, 0x44]);
     0
 }
-/// fn_2a9090. The frame release the live replay binds through the host.
+
 pub fn fn_2a9090(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     crate::selection::arena_mid::release_frame_lookup(
         &mut crate::selection::arena::Arena::new(m.base, m.bytes),
@@ -1013,13 +926,7 @@ pub fn fn_2a9090(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     )
 }
 
-/// fn_2db4a0. The pool release the live replay binds through the host.
-pub fn fn_2db4a0(
-    m: &mut Memory<'_>,
-    h: &mut impl Host,
-    p: u32,
-    k: &DestructionEnvironment,
-) -> u32 {
+pub fn fn_2db4a0(m: &mut Memory<'_>, h: &mut impl Host, p: u32, k: &DestructionEnvironment) -> u32 {
     crate::reentrant::free_pool_m(
         m,
         &mut DestructorCalls {
@@ -1031,13 +938,9 @@ pub fn fn_2db4a0(
     0
 }
 
-/// fn_2a41b8. fn_2da9d4 is a tail wrapper around the certified free_pool_m.
-/// Pool and tree teardown execute real Rust bodies, including heap/log dispatch.
 pub fn fn_2a41b8(m: &mut Memory<'_>, h: &mut impl Host, p: u32, k: &DestructionEnvironment) {
     leaf(m, 0x195bec, &[p, 0, 0x1e0]);
-    // The pool release stays a direct call: the round-two destructor gate
-    // requires the pool teardown to be real, not a host call.  The ARM does
-    // not call fn_2db4a0 in the live scene.
+
     crate::reentrant::free_pool_m(
         m,
         &mut DestructorCalls {
@@ -1049,23 +952,6 @@ pub fn fn_2a41b8(m: &mut Memory<'_>, h: &mut impl Host, p: u32, k: &DestructionE
     fn_2d9bb0(m, h, p + 0x440);
 }
 
-// ----------------------------------------------------------------------
-// The arena-aware resource open.
-//
-// leftovers_1::fn_242fd0 is the certified port of the ROM's resource
-// open, but its host traits (frontend::HeapVtable, frontend::MethodTable
-// and frontend::BlockHeap) carry no arena while the engine heap they
-// reach lives in the arena, so the shared port cannot run against live
-// memory. The body below is that port's body with the four heap call
-// sites routed through the arena-aware stage ports: leftovers_1's
-// stage_allocate / stage_calloc / stage_release reach the ROM's own
-// allocator methods (fn_4a779c / fn_4a7758 / fn_4a774c) through the
-// host's call boundary, with the arena in hand.
-// ----------------------------------------------------------------------
-
-/// The host the arena-aware resource open needs. The heap and method
-/// tables arrive through `render_part_c::Host::call`, which carries the
-/// arena; the arena-less traits the shared ports use stay unimplemented.
 pub trait OpenHostM:
     crate::leftovers_1::CloseHost
     + crate::render_part_a::ReaderHost
@@ -1073,16 +959,13 @@ pub trait OpenHostM:
     + crate::log_live::LogMethodsM
     + crate::render_part_c::Host
 {
-    /// fn_196394: `size` bytes from the heap at `heap`.
     fn alloc_block_m(&mut self, m: &mut Memory<'_>, heap: u32, size: u32) -> u32;
-    /// fn_1963e0: regrow `data` to `size` bytes in the heap at `heap`.
+
     fn realloc_block_m(&mut self, m: &mut Memory<'_>, heap: u32, data: u32, size: u32) -> u32;
-    /// fn_1963b8: `count` cells of `size` bytes from the heap at `heap`.
+
     fn alloc_cells_m(&mut self, m: &mut Memory<'_>, heap: u32, count: u32, size: u32) -> u32;
 }
 
-/// The close-path adapter of `leftovers_1`, with the arena-aware heap
-/// ports in place of the arena-less ones.
 struct CallsM<'a, H>(&'a mut H);
 impl<H: OpenHostM> crate::boot_part_b::Host for CallsM<'_, H> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
@@ -1128,9 +1011,6 @@ impl<H: OpenHostM> crate::boot_part_d::Host for CallsM<'_, H> {
     }
 }
 
-/// fn_196a64 / fn_196cfc. The block creator of the shared
-/// `frontend::create_block`, with the arena-less cell allocation routed
-/// through the arena-aware calloc.
 fn create_block_m(
     m: &mut Memory<'_>,
     h: &mut impl OpenHostM,
@@ -1224,10 +1104,7 @@ fn open_error_m(
         k.scratch + 0x1c0,
     );
 }
-/// fn_242fd0, arena-aware. Open a RIFF resource, read its type and
-/// optional INFO/VERS, compare the packed version and leave the reader at
-/// its first data chunk. The body is leftovers_1::fn_242fd0's; only the
-/// heap call sites differ.
+
 pub fn fn_242fd0_m(
     m: &mut Memory<'_>,
     args: [u32; 9],
@@ -1241,9 +1118,12 @@ pub fn fn_242fd0_m(
     m.bytes[k.scratch as usize..k.scratch as usize + 1024].copy_from_slice(&saved);
     rc
 }
-fn close_open_record_m(m: &mut Memory<'_>, rec: u32, k: &OpenRuntime, h: &mut impl OpenHostM) -> u32 {
-    // The older normalization helper omits the broker-backed branches.
-    // Execute both broker and mapped-file branches through the live ports.
+fn close_open_record_m(
+    m: &mut Memory<'_>,
+    rec: u32,
+    k: &OpenRuntime,
+    h: &mut impl OpenHostM,
+) -> u32 {
     if m.byte(rec + 4) != 0 {
         return crate::normalization::close_owner_pair(m.bytes, rec, h);
     }
@@ -1538,7 +1418,8 @@ fn open_inner_m(m: &mut Memory<'_>, a: [u32; 9], k: &OpenRuntime, h: &mut impl O
             break 'operation;
         }
         rc = rp_open_chunk(m, h, p, chunk, len, data, &k.reader);
-        if rc >= 0x80000000 || !equals_m(m, chunk, b"LIST") || m.word(len) <= 4 || m.word(data) == 0 {
+        if rc >= 0x80000000 || !equals_m(m, chunk, b"LIST") || m.word(len) <= 4 || m.word(data) == 0
+        {
             open_error_m(
                 m,
                 h,
@@ -1676,137 +1557,298 @@ fn open_inner_m(m: &mut Memory<'_>, a: [u32; 9], k: &OpenRuntime, h: &mut impl O
     rc
 }
 
-/// The reader's trace line, arena-aware.
-fn rp_info(m:&mut crate::boot::Memory<'_>,r:u32,k:&crate::render_part_a::ReaderRuntime,level:u32,slot:usize){
-    let logger=m.word(m.word(r+8)+16);
-    crate::normalization::log_fanout(m.bytes,logger,k.category,level,0,k.messages[slot]);
+fn rp_info(
+    m: &mut crate::boot::Memory<'_>,
+    r: u32,
+    k: &crate::render_part_a::ReaderRuntime,
+    level: u32,
+    slot: usize,
+) {
+    let logger = m.word(m.word(r + 8) + 16);
+    crate::normalization::log_fanout(m.bytes, logger, k.category, level, 0, k.messages[slot]);
 }
-/// The reader's error line, arena-aware.
-fn rp_error(m:&mut crate::boot::Memory<'_>,h:&mut impl OpenHostM,r:u32,k:&crate::render_part_a::ReaderRuntime,code:u32,format:u32,args:&[u32]){
-    for (i,&v) in args.iter().enumerate(){m.put_word(k.scratch+0x100+i as u32*4,v);}
-    crate::render_part_a::error_log(m,h,m.word(m.word(r+8)+16),k.category,code,format,k.scratch+0x100,k.scratch);
-}
-/// The reader's descriptor append (fn_196db0 / fn_196cfc), arena-aware.
-/// The block growth reaches the engine heap through the host, with the
-/// arena in hand.
-fn rp_append(m:&mut crate::boot::Memory<'_>,h:&mut impl OpenHostM,array:u32,source:u32)->u32 {
-    let mut bytes=[0u8;16];bytes.copy_from_slice(&m.bytes[source as usize..source as usize+16]);
-    let mut block=crate::frontend::GrowBlock{
-        data:m.word(array),elem_size:u16::from_le_bytes(m.bytes[array as usize+4..array as usize+6].try_into().unwrap()),
-        callback:m.word(array+8),cap:m.word(array+16),count:m.word(array+20),
-        grow:u16::from_le_bytes(m.bytes[array as usize+24..array as usize+26].try_into().unwrap()),heap:m.word(array+28),
-    };
-    let callback=block.callback;
-    let mut slot=0u32;
-    if rp_slot(Some(&mut block),m,h,Some(&mut slot))==0 {return 0;}
-    let size=block.elem_size as usize;
-    let at=slot as usize;
-    crate::selection::arena_leaf::copy_bytes(
-        &mut crate::selection::arena::Arena::new(0,m.bytes),
-        slot,source,block.elem_size as u32,
+
+fn rp_error(
+    m: &mut crate::boot::Memory<'_>,
+    h: &mut impl OpenHostM,
+    r: u32,
+    k: &crate::render_part_a::ReaderRuntime,
+    code: u32,
+    format: u32,
+    args: &[u32],
+) {
+    for (i, &v) in args.iter().enumerate() {
+        m.put_word(k.scratch + 0x100 + i as u32 * 4, v);
+    }
+    crate::render_part_a::error_log(
+        m,
+        h,
+        m.word(m.word(r + 8) + 16),
+        k.category,
+        code,
+        format,
+        k.scratch + 0x100,
+        k.scratch,
     );
-    m.put_word(array,block.data);m.put_word(array+16,block.cap);m.put_word(array+20,block.count);
-    if callback!=0 {
-        let destination=block.data.wrapping_add(block.count.wrapping_sub(1).wrapping_mul(block.elem_size as u32));
-        // The record is published. Run the caller's initializer with live
-        // memory, then apply its veto exactly as fn_196db0 does.
-        if h.array_initializer(m.bytes,callback,source,block.heap,destination)==0 {
-            m.put_word(array+20,m.word(array+20).wrapping_sub(1));return 0;
+}
+
+fn rp_append(
+    m: &mut crate::boot::Memory<'_>,
+    h: &mut impl OpenHostM,
+    array: u32,
+    source: u32,
+) -> u32 {
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&m.bytes[source as usize..source as usize + 16]);
+    let mut block = crate::frontend::GrowBlock {
+        data: m.word(array),
+        elem_size: u16::from_le_bytes(
+            m.bytes[array as usize + 4..array as usize + 6]
+                .try_into()
+                .unwrap(),
+        ),
+        callback: m.word(array + 8),
+        cap: m.word(array + 16),
+        count: m.word(array + 20),
+        grow: u16::from_le_bytes(
+            m.bytes[array as usize + 24..array as usize + 26]
+                .try_into()
+                .unwrap(),
+        ),
+        heap: m.word(array + 28),
+    };
+    let callback = block.callback;
+    let mut slot = 0u32;
+    if rp_slot(Some(&mut block), m, h, Some(&mut slot)) == 0 {
+        return 0;
+    }
+    let size = block.elem_size as usize;
+    let at = slot as usize;
+    crate::selection::arena_leaf::copy_bytes(
+        &mut crate::selection::arena::Arena::new(0, m.bytes),
+        slot,
+        source,
+        block.elem_size as u32,
+    );
+    m.put_word(array, block.data);
+    m.put_word(array + 16, block.cap);
+    m.put_word(array + 20, block.count);
+    if callback != 0 {
+        let destination = block.data.wrapping_add(
+            block
+                .count
+                .wrapping_sub(1)
+                .wrapping_mul(block.elem_size as u32),
+        );
+
+        if h.array_initializer(m.bytes, callback, source, block.heap, destination) == 0 {
+            m.put_word(array + 20, m.word(array + 20).wrapping_sub(1));
+            return 0;
         }
     }
     1
 }
-/// fn_196cfc, arena-aware: take the next slot, growing the block first.
+
 fn rp_slot(
     block: Option<&mut crate::frontend::GrowBlock>,
     m: &mut crate::boot::Memory<'_>,
     h: &mut impl OpenHostM,
     out: Option<&mut u32>,
 ) -> u32 {
-    let (Some(block),Some(out))=(block,out) else {return 0;};
-    if block.cap<block.count.wrapping_add(1) {
-        let quantum=block.grow as u32;
-        if quantum==0 {return 0;}
-        let slots=(block.count/quantum).wrapping_add(1).wrapping_mul(quantum);
-        let bytes=(block.elem_size as u32).wrapping_mul(slots);
-        if block.data!=0 {
-            let grown=h.realloc_block_m(m,block.heap,block.data,bytes);
-            if grown!=0 {block.data=grown;} else {return 0;}
-        } else {
-            let fresh=h.alloc_block_m(m,block.heap,bytes);
-            block.data=fresh;
-            if fresh==0 {return 0;}
+    let (Some(block), Some(out)) = (block, out) else {
+        return 0;
+    };
+    if block.cap < block.count.wrapping_add(1) {
+        let quantum = block.grow as u32;
+        if quantum == 0 {
+            return 0;
         }
-        block.cap=slots;
+        let slots = (block.count / quantum)
+            .wrapping_add(1)
+            .wrapping_mul(quantum);
+        let bytes = (block.elem_size as u32).wrapping_mul(slots);
+        if block.data != 0 {
+            let grown = h.realloc_block_m(m, block.heap, block.data, bytes);
+            if grown != 0 {
+                block.data = grown;
+            } else {
+                return 0;
+            }
+        } else {
+            let fresh = h.alloc_block_m(m, block.heap, bytes);
+            block.data = fresh;
+            if fresh == 0 {
+                return 0;
+            }
+        }
+        block.cap = slots;
     }
-    *out=block.count.wrapping_mul(block.elem_size as u32).wrapping_add(block.data);
-    block.count=block.count.wrapping_add(1);
+    *out = block
+        .count
+        .wrapping_mul(block.elem_size as u32)
+        .wrapping_add(block.data);
+    block.count = block.count.wrapping_add(1);
     1
 }
-/// fn_24277c. Read a chunk's name and length, validate its containment, and
-/// push its descriptor. Invalid names clear only name[0], not the whole buffer.
-pub fn rp_open_chunk(m:&mut crate::boot::Memory<'_>,h:&mut impl OpenHostM,r:u32,name:u32,out_len:u32,out_data:u32,k:&crate::render_part_a::ReaderRuntime)->u32 {
-    assert_eq!(m.base,0);if r==0||out_len==0{return 0x8a202007;}
-    rp_info(m,r,k,4,8);let slot=k.scratch+0x80;m.put_word(slot,0);
-    let array=m.word(r+20);let last=crate::normalization::chunk_last(m.bytes,array,slot);let parent=m.word(slot);
-    let mut rc=0;
-    if last!=0 {
-        if m.word(r+52).wrapping_add(8)>m.word(parent+12){rp_info(m,r,k,3,9);rc=0x8a202014;}
-        else if m.word(r+40)==0||m.word(r+44)>m.word(r+52)||m.word(r+52).wrapping_add(8)>m.word(r+48){
-            rc=crate::render_part_a::map_reader_window(m,h,r,m.word(r+52),8,r+24,k);
+
+pub fn rp_open_chunk(
+    m: &mut crate::boot::Memory<'_>,
+    h: &mut impl OpenHostM,
+    r: u32,
+    name: u32,
+    out_len: u32,
+    out_data: u32,
+    k: &crate::render_part_a::ReaderRuntime,
+) -> u32 {
+    assert_eq!(m.base, 0);
+    if r == 0 || out_len == 0 {
+        return 0x8a202007;
+    }
+    rp_info(m, r, k, 4, 8);
+    let slot = k.scratch + 0x80;
+    m.put_word(slot, 0);
+    let array = m.word(r + 20);
+    let last = crate::normalization::chunk_last(m.bytes, array, slot);
+    let parent = m.word(slot);
+    let mut rc = 0;
+    if last != 0 {
+        if m.word(r + 52).wrapping_add(8) > m.word(parent + 12) {
+            rp_info(m, r, k, 3, 9);
+            rc = 0x8a202014;
+        } else if m.word(r + 40) == 0
+            || m.word(r + 44) > m.word(r + 52)
+            || m.word(r + 52).wrapping_add(8) > m.word(r + 48)
+        {
+            rc = crate::render_part_a::map_reader_window(m, h, r, m.word(r + 52), 8, r + 24, k);
         }
     } else {
-        rc=crate::render_part_a::map_reader_window(m,h,r,0,8,r+24,k);m.put_word(r+52,0);
-        if rc<0x80000000 {
-            let c=m.byte(m.word(r+40));if matches!(c,0xe0|0xfb){let at=m.offset(r+13);m.bytes[at]=1;}
+        rc = crate::render_part_a::map_reader_window(m, h, r, 0, 8, r + 24, k);
+        m.put_word(r + 52, 0);
+        if rc < 0x80000000 {
+            let c = m.byte(m.word(r + 40));
+            if matches!(c, 0xe0 | 0xfb) {
+                let at = m.offset(r + 13);
+                m.bytes[at] = 1;
+            }
         }
     }
-    if rc<0x80000000 {
-        let off=m.word(r+52).wrapping_sub(m.word(r+44));let source=m.word(r+40);
-        if source!=0&&off.wrapping_add(4)<=m.word(r+48)&&name!=0 {
-            let mut a=crate::selection::arena::Arena::new(0,m.bytes);crate::selection::arena_leaf::copy_bytes(&mut a,name,source.wrapping_add(off),4);a.set_u8(name+4,0);
-            if a.u8(r+13)==1 {for i in 0..4 {a.set_u8(name+i,a.u8(name+i)^0xa9);}}
+    if rc < 0x80000000 {
+        let off = m.word(r + 52).wrapping_sub(m.word(r + 44));
+        let source = m.word(r + 40);
+        if source != 0 && off.wrapping_add(4) <= m.word(r + 48) && name != 0 {
+            let mut a = crate::selection::arena::Arena::new(0, m.bytes);
+            crate::selection::arena_leaf::copy_bytes(&mut a, name, source.wrapping_add(off), 4);
+            a.set_u8(name + 4, 0);
+            if a.u8(r + 13) == 1 {
+                for i in 0..4 {
+                    a.set_u8(name + i, a.u8(name + i) ^ 0xa9);
+                }
+            }
         }
-        let mut a=crate::selection::arena::Arena::new(0,m.bytes);crate::selection::arena_leaf::copy_bytes(&mut a,out_len,source.wrapping_add(off).wrapping_add(4),4);
-        a.set_u32(r+52,a.u32(r+52).wrapping_add(8));
+        let mut a = crate::selection::arena::Arena::new(0, m.bytes);
+        crate::selection::arena_leaf::copy_bytes(
+            &mut a,
+            out_len,
+            source.wrapping_add(off).wrapping_add(4),
+            4,
+        );
+        a.set_u32(r + 52, a.u32(r + 52).wrapping_add(8));
         for i in 0..4 {
-            let c=a.u8(name+i);
-            if c.is_ascii_alphanumeric()||c==b' ' {continue;}
-            if parent!=0 {
-                rp_error(m,h,r,k,0x6983,k.triple_format,&[k.file_key,m.word(r+16),k.parent_key,parent,k.offset_key,m.word(r+52).wrapping_sub(8)]);
-            } else {rp_error(m,h,r,k,0x697c,k.pair_format,&[k.file_key,m.word(r+16)]);}
-            rc=0x8a202004;break;
+            let c = a.u8(name + i);
+            if c.is_ascii_alphanumeric() || c == b' ' {
+                continue;
+            }
+            if parent != 0 {
+                rp_error(
+                    m,
+                    h,
+                    r,
+                    k,
+                    0x6983,
+                    k.triple_format,
+                    &[
+                        k.file_key,
+                        m.word(r + 16),
+                        k.parent_key,
+                        parent,
+                        k.offset_key,
+                        m.word(r + 52).wrapping_sub(8),
+                    ],
+                );
+            } else {
+                rp_error(
+                    m,
+                    h,
+                    r,
+                    k,
+                    0x697c,
+                    k.pair_format,
+                    &[k.file_key, m.word(r + 16)],
+                );
+            }
+            rc = 0x8a202004;
+            break;
         }
-        if rc<0x80000000&&parent!=0 {
-            let len=m.word(out_len);let end=m.word(parent+12);
-            if len>end||(m.word(r+52).wrapping_add(len)as i32)>(end as i32){
-                rp_error(m,h,r,k,0x6984,k.four_format,&[k.file_key,m.word(r+16),k.chunk_key,name]);rc=0x8a202004;
+        if rc < 0x80000000 && parent != 0 {
+            let len = m.word(out_len);
+            let end = m.word(parent + 12);
+            if len > end || (m.word(r + 52).wrapping_add(len) as i32) > (end as i32) {
+                rp_error(
+                    m,
+                    h,
+                    r,
+                    k,
+                    0x6984,
+                    k.four_format,
+                    &[k.file_key, m.word(r + 16), k.chunk_key, name],
+                );
+                rc = 0x8a202004;
             }
         }
-        if rc<0x80000000&&out_data!=0 {
-            let pos=m.word(r+52);let len=m.word(out_len);
-            if m.word(r+40)==0||m.word(r+44)>pos||pos.wrapping_add(len)>m.word(r+48) {
-                rc=crate::render_part_a::map_reader_window(m,h,r,pos,len,r+24,k);
+        if rc < 0x80000000 && out_data != 0 {
+            let pos = m.word(r + 52);
+            let len = m.word(out_len);
+            if m.word(r + 40) == 0 || m.word(r + 44) > pos || pos.wrapping_add(len) > m.word(r + 48)
+            {
+                rc = crate::render_part_a::map_reader_window(m, h, r, pos, len, r + 24, k);
             }
         }
-        if rc<0x80000000 {
-            let element=k.scratch+0x40;for i in 0..16 {m.bytes[(element+i)as usize]=0;}
-            let mut a=crate::selection::arena::Arena::new(0,m.bytes);
-            // ROM sp+4 held the Begin-log reader argument before strcpy.
-            // Its upper bytes survive in the descriptor name padding.
-            a.set_u32(element+4,r);crate::selection::arena_leaf::copy_string(&mut a,element,name);
-            a.set_u32(element+8,a.u32(r+52));a.set_u32(element+12,a.u32(r+52).wrapping_add(a.u32(out_len)));
-            if rp_append(m,h,m.word(r+20),element)!=0 {
-                if out_data!=0 {m.put_word(out_data,m.word(r+40).wrapping_add(m.word(r+52).wrapping_sub(m.word(r+44))));}
-            } else {rp_error(m,h,r,k,0x6978,0,&[]);rc=0x8a20200a;}
+        if rc < 0x80000000 {
+            let element = k.scratch + 0x40;
+            for i in 0..16 {
+                m.bytes[(element + i) as usize] = 0;
+            }
+            let mut a = crate::selection::arena::Arena::new(0, m.bytes);
+
+            a.set_u32(element + 4, r);
+            crate::selection::arena_leaf::copy_string(&mut a, element, name);
+            a.set_u32(element + 8, a.u32(r + 52));
+            a.set_u32(element + 12, a.u32(r + 52).wrapping_add(a.u32(out_len)));
+            if rp_append(m, h, m.word(r + 20), element) != 0 {
+                if out_data != 0 {
+                    m.put_word(
+                        out_data,
+                        m.word(r + 40)
+                            .wrapping_add(m.word(r + 52).wrapping_sub(m.word(r + 44))),
+                    );
+                }
+            } else {
+                rp_error(m, h, r, k, 0x6978, 0, &[]);
+                rc = 0x8a20200a;
+            }
         }
     }
-    if rc>=0x80000000 {m.bytes[name as usize]=0;m.put_word(out_len,0);if out_data!=0 {m.put_word(out_data,0);}}
-    rp_info(m,r,k,4,10);rc
+    if rc >= 0x80000000 {
+        m.bytes[name as usize] = 0;
+        m.put_word(out_len, 0);
+        if out_data != 0 {
+            m.put_word(out_data, 0);
+        }
+    }
+    rp_info(m, r, k, 4, 10);
+    rc
 }
 
-/// fn_2a0178, arena-aware: open the voice object. The selection stage ports
-/// work on the arena, so the borrow of the arena stays inside this file.
 pub fn open_voice_object_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -1832,13 +1874,6 @@ pub fn open_voice_object_m(
     )
 }
 
-/// fn_196c7c, arena-aware: the reader's chunk-table release.
-///
-/// The shared `render_part_a::reader_release_array` frees the table through
-/// the arena-less `frontend::HeapVtable`, whose release hook cannot reach the
-/// engine heap that lives in the arena. `reentrant2::destroy_array_m` reaches
-/// the same heap release through `fn_196428`, so the block goes back to the
-/// engine heap the ARM freed it from.
 pub fn reader_release_array_m(m: &mut Memory<'_>, h: &mut impl OpenHostM, array: u32) -> u32 {
     struct Hooks<'a, H>(&'a mut H);
     impl<H: OpenHostM> crate::reentrant2::HooksM for Hooks<'_, H> {
@@ -1855,8 +1890,6 @@ pub fn reader_release_array_m(m: &mut Memory<'_>, h: &mut impl OpenHostM, array:
     crate::reentrant2::destroy_array_m(m, array, &mut Hooks(h))
 }
 
-/// The clone hooks of fn_196b00 with the arena in hand: the copied table and
-/// its buffer are allocated and released through the engine heap.
 struct RpCloneHooks<'a, H>(&'a mut H);
 impl<H: OpenHostM> crate::reentrant2::HooksM for RpCloneHooks<'_, H> {
     fn call_m(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>) -> u32 {
@@ -1884,11 +1917,6 @@ impl<H: OpenHostM> crate::reentrant2::HooksM for RpCloneHooks<'_, H> {
     }
 }
 
-/// fn_242c9c, arena-aware: find a named chunk, restoring a cloned descriptor
-/// table and the saved reader position on any unsuccessful search.
-///
-/// The body is `render_part_a::find_reader_chunk`'s; the clone, the chunk
-/// open and the table release reach the engine heap through the arena.
 pub fn find_reader_chunk_m(
     m: &mut Memory<'_>,
     h: &mut impl OpenHostM,
@@ -2003,8 +2031,6 @@ pub fn find_reader_chunk_m(
     rc
 }
 
-/// fn_2421b0, arena-aware: close the owner, the name and the chunk table,
-/// releasing the reader only on a non-error owner close.
 pub fn close_reader_m(
     m: &mut Memory<'_>,
     h: &mut impl OpenHostM,
@@ -2037,7 +2063,6 @@ pub fn close_reader_m(
     rc
 }
 
-/// fn_179208. The broker's data unmap, with the arena-aware close adapter.
 pub fn unmap_m(
     m: &mut Memory<'_>,
     args: [u32; 3],

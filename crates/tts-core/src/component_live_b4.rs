@@ -1,28 +1,10 @@
-//! live fe lookup-domain and tokenize entries (1ea4e0, 26bb6c, 1ede44) over the caller's arena, for the 1f98c8 root.
-//!
-//! Every guest pointer stays a scalar address inside the caller's arena and
-//! every guest call is issued through the caller's host, so the ports leave
-//! the arena exactly as the ROM leaves it.
-//!
-//! The offsets come from the ROM objects (`build/target/fn_*.o`) and match
-//! the C units: `record_size`/`offset_size`/`offset_bytes` at header +0x34,
-//! +0x36, +0x44 (`ldr` +0x34/+0x36/+0x44 in `fn_26bb6c.o`), the separator
-//! the `fn_26bb6c` expansion breaks on at +0x08 (`ldrb` +0x08) and the one
-//! `fn_26bb54` reports at +0x09 (`src/fn_26bb54.c`, the ARM's 0x16 byte).
-//!
-//! `lookup_entry` (and through it `fn_26bb6c_m`) calls lane b's
-//! `component_live_b::fn_26c1c0_m` (exact ARM call
-//! `fn_26c1c0(reader, text, start, end, fold)`); this file holds no trie
-//! copy. Lane b round 8 carried an extra `fn_26b37c` read before the char
-//! walk that missed this capture (1/4 archive reads); lane b has since
-//! removed it and certified the port, so the binding is back.
+
 
 #![allow(dead_code)]
 #![allow(non_upper_case_globals)]
 
 use crate::{boot::Memory, component_live_b::Host};
 
-/// The `DictionaryState` (the ROM's `fn_26c1c0` reader) field offsets.
 const ST_POS: u32 = 0x00;
 const ST_BIT: u32 = 0x04;
 const ST_BUFFER: u32 = 0x08;
@@ -31,7 +13,6 @@ const ST_H0: u32 = 0x10;
 const ST_H1: u32 = 0x14;
 const ST_OUTPUT: u32 = 0x18;
 
-/// The `DictionaryTables` field offsets.
 const TB_HEADER: u32 = 0x00;
 const TB_ALPHABET: u32 = 0x04;
 const TB_PAIRS: u32 = 0x08;
@@ -52,7 +33,6 @@ const TB_DATA_OFFSET: u32 = 0x40;
 const TB_RECORDS: u32 = 0x44;
 const TB_OFFSETS: u32 = 0x48;
 
-/// The `DictionaryHeader` field offsets.
 const HD_FIRST_CHAR: u32 = 0x04;
 const HD_INPUT_MIN: u32 = 0x04;
 const HD_INPUT_MAX: u32 = 0x05;
@@ -82,27 +62,23 @@ const HD_OFFSET_SIZE: u32 = 0x36;
 const HD_INITIAL_POS: u32 = 0x38;
 const HD_OFFSET_BYTES: u32 = 0x44;
 
-/// Read a guest word. `None` when the address is outside the caller's arena.
 fn g_word(m: &Memory<'_>, p: u32) -> Option<u32> {
     let at = p.checked_sub(m.base)? as usize;
     let b = m.bytes.get(at..at.checked_add(4)?)?;
     Some(u32::from_le_bytes(b.try_into().ok()?))
 }
 
-/// Read a guest half word. `None` when the address is outside the arena.
 fn g_half(m: &Memory<'_>, p: u32) -> Option<u16> {
     let at = p.checked_sub(m.base)? as usize;
     let b = m.bytes.get(at..at.checked_add(2)?)?;
     Some(u16::from_le_bytes(b.try_into().ok()?))
 }
 
-/// Read a guest byte. `None` when the address is outside the arena.
 fn g_byte(m: &Memory<'_>, p: u32) -> Option<u8> {
     let at = p.checked_sub(m.base)? as usize;
     Some(*m.bytes.get(at)?)
 }
 
-/// True when `n` bytes at `p` are inside the caller's arena.
 fn g_range(m: &Memory<'_>, p: u32, n: u32) -> bool {
     let at = match p.checked_sub(m.base) {
         Some(v) => v as usize,
@@ -114,7 +90,6 @@ fn g_range(m: &Memory<'_>, p: u32, n: u32) -> bool {
     }
 }
 
-/// Write a guest word.
 fn p_word(m: &mut Memory<'_>, p: u32, v: u32) -> bool {
     if !g_range(m, p, 4) {
         return false;
@@ -124,7 +99,6 @@ fn p_word(m: &mut Memory<'_>, p: u32, v: u32) -> bool {
     true
 }
 
-/// Write a guest half word.
 fn p_half(m: &mut Memory<'_>, p: u32, v: u16) -> bool {
     if !g_range(m, p, 2) {
         return false;
@@ -134,7 +108,6 @@ fn p_half(m: &mut Memory<'_>, p: u32, v: u16) -> bool {
     true
 }
 
-/// Write a guest byte.
 fn p_byte(m: &mut Memory<'_>, p: u32, v: u8) -> bool {
     if !g_range(m, p, 1) {
         return false;
@@ -144,7 +117,6 @@ fn p_byte(m: &mut Memory<'_>, p: u32, v: u8) -> bool {
     true
 }
 
-/// The length of the guest string at `p`, terminator excluded.
 fn g_strlen(m: &Memory<'_>, p: u32) -> Option<u32> {
     let mut i = 0u32;
     loop {
@@ -156,7 +128,6 @@ fn g_strlen(m: &Memory<'_>, p: u32) -> Option<u32> {
     }
 }
 
-/// Copy the guest string `src` to `dst`, terminator included.
 fn g_strcpy(m: &mut Memory<'_>, dst: u32, src: u32) -> bool {
     let len = match g_strlen(m, src) {
         Some(v) => v,
@@ -173,9 +144,6 @@ fn g_strcpy(m: &mut Memory<'_>, dst: u32, src: u32) -> bool {
     true
 }
 
-/// Case-insensitive guest strcmp for the dictionary index search. The
-/// C compares with `fn_195d58` and the ARM matches `ACRON1` against
-/// `acron1` via `fn_1769d0`; a byte compare misses those entries.
 fn g_strcmp_ci(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     fn fold(c: u8) -> u8 {
         if c >= b'a' && c <= b'z' {
@@ -198,7 +166,6 @@ fn g_strcmp_ci(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     }
 }
 
-/// Find `c` in the guest string `s`. Zero when it is absent.
 fn g_strchr(m: &Memory<'_>, s: u32, c: u32) -> u32 {
     let mut i = 0u32;
     loop {
@@ -217,28 +184,10 @@ fn g_strchr(m: &Memory<'_>, s: u32, c: u32) -> u32 {
     }
 }
 
-/// The `fn_240b28` case fold, issued through the caller's host.
 fn fold_byte(h: &mut impl Host, m: &mut Memory<'_>, c: u8) -> u8 {
     (h.call_m(0x240b28, &[u32::from(c)], m) & 0xff) as u8
 }
 
-
-/// The `fn_26bb6c` dictionary lookup: the decoded entry of `text`.
-///
-/// The exact ARM call is `fn_26bb6c(state, text, start, end, fold, length)`:
-/// `state` is the `DictionaryState`, `start` and `end` point at the halfword
-/// bounds of the query inside `text` and `length` points at the halfword that
-/// receives the length of the decoded entry. The decoded bytes are written to
-/// `state->output`.
-///
-/// The ROM's dictionary header offsets are the ones above; `src/fn_26bb6c.c`
-/// puts `record_size`, `offset_size` and `offset_bytes` four bytes too high.
-/// The `fn_26bb6c` decode with native bounds: the entry of `text` between
-/// the `s16` bounds `first` and `last`, or `None` when the ROM returns 0.
-///
-/// `fn_26bb6c_m` (the exact ARM call) and `fn_1ea4e0_m` (whose `start`,
-/// `end` and `length` are native locals) share this core, so the decode
-/// runs once for both entries.
 fn lookup_entry(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -283,9 +232,7 @@ fn lookup_entry(
         } else {
             raw
         };
-        // The ROM only rejects a character above the range: the lower bound
-        // never reaches the branch (`ldrbls` leaves the tables pointer in the
-        // register it masks).
+
         if c >= input_min && c > input_max {
             return None;
         }
@@ -294,8 +241,7 @@ fn lookup_entry(
     if last < first {
         return None;
     }
-    // Lane b owns the trie lookup: `first`/`last` are the `s16` bounds the
-    // ARM passes by value to `fn_26c1c0`.
+
     let found = crate::component_live_b::fn_26c1c0_m(
         m,
         h,
@@ -308,7 +254,7 @@ fn lookup_entry(
     if found < 0 {
         return None;
     }
-    // The offset of the entry, read out of the packed offset table.
+
     let offset_bits = match g_byte(m, header.wrapping_add(HD_OFFSET_BITS)) {
         Some(v) => v,
         None => return None,
@@ -395,7 +341,7 @@ fn lookup_entry(
     if (value as i32) < 0 {
         return None;
     }
-    // The record of the entry.
+
     let records = match g_word(m, tables.wrapping_add(TB_RECORDS)) {
         Some(v) => v,
         None => return None,
@@ -446,7 +392,7 @@ fn lookup_entry(
         Some(v) => v,
         None => return None,
     };
-    // The byte-pair expansion of the record.
+
     let mut temporary = [0u8; 44];
     let mut count = 0u16;
     let mut expanded = 0u16;
@@ -484,7 +430,7 @@ fn lookup_entry(
                     }
                     j += 1;
                 }
-                // the rom re-reads output[expanded] each pass; it holds the last replacement
+
                 let head = match g_byte(m, output.wrapping_add(u32::from(expanded))) {
                     Some(v) => v,
                     None => return None,
@@ -520,7 +466,7 @@ fn lookup_entry(
             break;
         }
     }
-    // The prefix chain of the entry.
+
     let mut prefix = match g_byte(m, output) {
         Some(v) => v,
         None => return None,
@@ -576,7 +522,7 @@ fn lookup_entry(
                         j -= 1;
                     }
                     span += 1;
-                    // the rom re-indexes by temporary[expanded], which holds the last replacement
+
                     let head_index = u32::from(temporary[expanded as usize].wrapping_sub(pair_base));
                     let second = match g_byte(m, pairs.wrapping_add(head_index * 2 + 1)) {
                         Some(v) => v,
@@ -627,16 +573,6 @@ fn lookup_entry(
     Some(count)
 }
 
-/// The `fn_26bb6c` dictionary lookup: the decoded entry of `text`.
-///
-/// The exact ARM call is `fn_26bb6c(state, text, start, end, fold, length)`:
-/// `state` is the `DictionaryState`, `start` and `end` point at the halfword
-/// bounds of the query inside `text` and `length` points at the halfword that
-/// receives the length of the decoded entry. The decoded bytes are written to
-/// `state->output`.
-///
-/// The ROM's dictionary header offsets are the ones above (see the file
-/// header). The trie lookup is lane b's `component_live_b::fn_26c1c0_m`.
 pub fn fn_26bb6c_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -665,16 +601,14 @@ pub fn fn_26bb6c_m(
         None => 0,
     }
 }
-/// The `LookupOwner` field offsets (`src/fn_1ea4e0.c`).
+
 const OW_HEAP: u32 = 0x04;
 const OW_RESOURCES: u32 = 0x0c;
 const OW_LOGGER: u32 = 0x10;
 
-/// The `LookupDictionary` field offsets: the size word, then the state.
 const LD_SIZE: u32 = 0x00;
 const LD_STATE: u32 = 0x04;
 
-/// The `LookupContext` field offsets (`src/fn_1ea4e0.c`).
 const LC_MAIN: u32 = 0x04;
 const LC_SYSTEM: u32 = 0x24;
 const LC_LANGUAGE: u32 = 0x44;
@@ -689,24 +623,18 @@ const LC_RESULT_CAP: u32 = 0x8c;
 const LC_QUERY_CAP: u32 = 0x8e;
 const LC_RESOURCE_NAME: u32 = 0x9e;
 
-/// The `fn_176f94` gate tag and size of the lookup entry.
 const LOOKUP_TAG: u32 = 0xf37f;
 const LOOKUP_SIZE: u32 = 0x2a4;
 
-/// The header offset `fn_26bb54` reads: the separator byte the lookup
-/// entry reports (`src/fn_26bb54.c` reads the header word and then + 9).
 const HD_SEPARATOR_OUT: u32 = 0x09;
 
-/// `D_8f8f44`, the log module of the lookup entry.
 const LOOKUP_MODULE: u32 = 0x8f8f44;
 
-/// The error codes of the lookup entry.
 const LOOKUP_GATE: u32 = 0x89802008;
 const LOOKUP_BAD: u32 = 0x89802007;
 const LOOKUP_MEMORY: u32 = 0x8980200a;
 const LOOKUP_INVALID: u32 = 0x89802014;
 
-/// Append the guest string `src` to the guest string `dst`.
 fn g_strcat(m: &mut Memory<'_>, dst: u32, src: u32) -> bool {
     let base = match g_strlen(m, dst) {
         Some(v) => v,
@@ -725,7 +653,6 @@ fn g_strcat(m: &mut Memory<'_>, dst: u32, src: u32) -> bool {
     true
 }
 
-/// Write zeroes to `n` bytes at `dst`.
 fn g_memset(m: &mut Memory<'_>, dst: u32, n: u32) -> bool {
     if !g_range(m, dst, n) {
         return false;
@@ -737,7 +664,6 @@ fn g_memset(m: &mut Memory<'_>, dst: u32, n: u32) -> bool {
     true
 }
 
-/// Append the literal C string `lit` (terminator included) to `dst`.
 fn g_strcat_lit(m: &mut Memory<'_>, dst: u32, lit: &[u8]) -> bool {
     let base = match g_strlen(m, dst) {
         Some(v) => v,
@@ -752,7 +678,6 @@ fn g_strcat_lit(m: &mut Memory<'_>, dst: u32, lit: &[u8]) -> bool {
     true
 }
 
-/// True when the guest string at `p` equals the literal C string `lit`.
 fn g_lit_eq(m: &Memory<'_>, p: u32, lit: &[u8]) -> bool {
     let mut i = 0u32;
     for &want in lit {
@@ -764,7 +689,6 @@ fn g_lit_eq(m: &Memory<'_>, p: u32, lit: &[u8]) -> bool {
     true
 }
 
-/// True when the first `n` guest bytes at `p` equal the literal's first `n`.
 fn g_lit_prefix_eq(m: &Memory<'_>, p: u32, lit: &[u8], n: u32) -> bool {
     let mut i = 0u32;
     while i < n {
@@ -776,10 +700,6 @@ fn g_lit_prefix_eq(m: &Memory<'_>, p: u32, lit: &[u8], n: u32) -> bool {
     true
 }
 
-/// Copy the literal `lit` (terminator included) onto the heap.
-///
-/// The `sysdct`/`lid` resource names are static literals with no arena
-/// home; the resource loader keeps the pointer, so the port never frees it.
 fn alloc_lit(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, lit: &[u8]) -> u32 {
     let p = h.call_m(0x196394, &[heap, lit.len() as u32], m);
     if p == 0 {
@@ -793,11 +713,6 @@ fn alloc_lit(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, lit: &[u8]) -> u3
     p
 }
 
-/// Render `value` in base 10 into `buffer`, terminator included.
-///
-/// The ROM's `fn_176ac8` digit table is the engine's lowercase digits; base
-/// 10 uses plain decimal digits either way, so the lookup entry formats the
-/// numbered-query suffix inline.
 fn render_decimal(mut value: u32, buffer: &mut [u8]) {
     let mut digits = [0u8; 10];
     let mut count = 0usize;
@@ -815,12 +730,6 @@ fn render_decimal(mut value: u32, buffer: &mut [u8]) {
     buffer[count] = 0;
 }
 
-/// The shared tail of the lookup entry: the ROM's `cleanup`, `failure` and
-/// `done` labels.
-///
-/// Frees the lookup key when the entry allocated one, stores the result
-/// vector on success, unwinds the half-built dictionary on failure, issues
-/// the leaving log and returns `rc`.
 #[allow(clippy::too_many_arguments)]
 fn lookup_tail(
     m: &mut Memory<'_>,
@@ -887,22 +796,6 @@ fn lookup_tail(
     rc
 }
 
-/// The `fn_1ea4e0` dictionary lookup (fe_dctlkp_Lookup, cfg idx 7,
-/// getString/lookupDomain).
-///
-/// The exact ARM call is `fn_1ea4e0(ctx, handle, key, text, out, count,
-/// separator)`: `ctx` is the `LookupContext`, `key` names the dictionary,
-/// `text` is the query, `out` receives the result vector, `count` points at
-/// the halfword that enters as `0xffff`/`1` (single lookup) or a running
-/// count and leaves as the result count, and `separator` receives the
-/// dictionary separator byte. The `+0x69c` call is the file-local
-/// `lookup_entry` (the `fn_26bb6c` decode); every other guest call goes
-/// through the caller's host, so the port leaves the arena exactly as the
-/// ROM leaves it.
-///
-/// Pure string and memory helpers run inline on the arena; the heap, the
-/// resources, the log, the entry gate and the dictionary setup family go
-/// through the host.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_1ea4e0_m(
     m: &mut Memory<'_>,
@@ -943,9 +836,7 @@ pub fn fn_1ea4e0_m(
     let entry_count = g_half(m, count).unwrap_or(0);
     let mut lookup_key = key;
     let mut allocated = false;
-    // The dictionary the key selects: the single lookup (`*count == 1`)
-    // copies the key with the `C` marker and picks the language or the
-    // system table; every other entry uses the main table as is.
+
     let dictionary = if entry_count == 1 {
         let len = g_strlen(m, key).unwrap_or(0);
         let p = h.call_m(0x196394, &[heap, len.wrapping_add(2)], m);
@@ -988,14 +879,14 @@ pub fn fn_1ea4e0_m(
         ctx.wrapping_add(LC_MAIN)
     };
     let single = entry_count == 0xffff || entry_count == 1;
-    // The ROM zeroes the running count before the first query.
+
     if !p_half(m, count, 0) {
         return lookup_tail(
             m, h, ctx, heap, key, lookup_key, allocated, count, out, dictionary, false,
             LOOKUP_MEMORY,
         );
     }
-    // The dictionary index of the lookup key.
+
     let dict_count = g_half(m, ctx.wrapping_add(LC_DICT_COUNT)).unwrap_or(0);
     let keys = g_word(m, ctx.wrapping_add(LC_KEYS)).unwrap_or(0);
     let mut index: i32 = -1;
@@ -1023,10 +914,7 @@ pub fn fn_1ea4e0_m(
             );
         }
     } else {
-        // The dictionary is not loaded yet: grow the registries, load the
-        // resource and build the tables through the host. The capture path
-        // never reaches this branch (the `unixlit` table is already
-        // loaded), so the test host rejects these calls.
+
         pending = true;
         let dc = u32::from(g_half(m, ctx.wrapping_add(LC_DICT_COUNT)).unwrap_or(0));
         let old_res = g_word(m, ctx.wrapping_add(LC_RESOURCES)).unwrap_or(0);
@@ -1047,10 +935,7 @@ pub fn fn_1ea4e0_m(
                 LOOKUP_MEMORY,
             );
         }
-        // The resource name: the ROM passes the static `sysdct`/`lid`
-        // literals or the context's own name. Literals have no arena home,
-        // so the port copies the selected name onto the heap once; the
-        // resource loader keeps the pointer.
+
         let name = if dictionary == ctx.wrapping_add(LC_SYSTEM) {
             alloc_lit(m, h, heap, b"sysdct\0")
         } else if dictionary == ctx.wrapping_add(LC_LANGUAGE) {
@@ -1196,7 +1081,7 @@ pub fn fn_1ea4e0_m(
             );
         }
     }
-    // The separator byte of the dictionary header.
+
     {
         let tables = match g_word(m, state.wrapping_add(ST_TABLES)) {
             Some(v) => v,
@@ -1216,9 +1101,7 @@ pub fn fn_1ea4e0_m(
                 );
             }
         };
-        // The separator the ROM's `fn_26bb54` returns: the byte at header
-        // + 9 (`src/fn_26bb54.c`, `component_live_c::fn_26bb54_m`), not the
-        // header + 8 byte the `fn_26bb6c` expansion loop breaks on.
+
         let value = match g_byte(m, header.wrapping_add(HD_SEPARATOR_OUT)) {
             Some(v) => v,
             None => {
@@ -1235,7 +1118,7 @@ pub fn fn_1ea4e0_m(
             );
         }
     }
-    // Size the query buffer for the text.
+
     let mut query = g_word(m, ctx.wrapping_add(LC_QUERY)).unwrap_or(0);
     {
         let len = g_strlen(m, text).unwrap_or(0);
@@ -1431,56 +1314,29 @@ pub fn fn_1ea4e0_m(
     lookup_tail(m, h, ctx, heap, key, lookup_key, allocated, count, out, dictionary, pending, 0)
 }
 
-/// The `TokenContext` field offsets (`src/fn_1ede44.c`).
 const TC_PUNCT: u32 = 0x64;
 const TC_IFACE: u32 = 0x84;
 const TC_DOM_COUNT: u32 = 0x94;
 const TC_DOMAINS: u32 = 0x98;
 
-/// The `TokenInterface` slot offsets: the ROM calls each entry through the
-/// pointer the arena holds (`blx ip`), so the port reads the slot and
-/// issues the same entry through the caller's host.
 const IF_FIRST: u32 = 0x24;
 const IF_NEXT: u32 = 0x28;
 const IF_FIND: u32 = 0x34;
 const IF_SET: u32 = 0x50;
 const IF_GET: u32 = 0x58;
 
-/// The `TokenAnnotation` field offsets: the type halfword at +0, the
-/// position word at +12 and the domain pointer at +20.
 const TA_POSITION: u32 = 0x0c;
 const TA_DOMAIN: u32 = 0x14;
 
-/// The `TokenDomain` field offsets.
 const TD_NAME: u32 = 0x00;
 const TD_ALPHA: u32 = 0x04;
 const TD_DIGITS: u32 = 0x08;
 const TD_PUNCT: u32 = 0x0c;
 
-/// The error codes of the tokenize entry.
 const TOKEN_GATE: u32 = 0x89802008;
 const TOKEN_MEMORY: u32 = 0x8980200a;
 const TOKEN_ERROR: u32 = 0xa02a;
 
-/// Caller stack-scratch frame of the `fn_1ede44` tokenize entry: the ROM
-/// keeps these locals on its machine stack (`push {r0-r11, lr}; sub sp,
-/// sp, #52` in the objdump of `build/target/fn_1ede44.o`) and passes
-/// their addresses to the token interface. The caller passes the base that
-/// plays the role of the ROM's `sp`; the slots sit at the ROM's exact
-/// sp-relative offsets so the addresses the port hands out match:
-/// position `u16` @+12 (`strh/ldrh [sp, #12]`; set field-2 value),
-/// item `u16` @+16 (`add r0, sp, #16` into `find`; `first` reloads it),
-/// text `*mut u8` @+20 (`add r0, sp, #20` into `get`),
-/// token `u16` @+24 (`add r3, sp, #24` into `first`/`next`; set id),
-/// type `u8` @+28 (set field-0 value),
-/// length `u16` @+32 (`add r1, sp, #32` into `get`, never read back),
-/// written `u16` @+36 (`add r6, sp, #36` into every `set`, never read),
-/// start `u16` @+48 (`ldrh [sp, #48]` picks `first` vs `next`;
-/// set field-1 value). The ROM's remaining two locals stay Rust locals:
-/// domain @+40 and the annotation cursor @+44 are only ever touched by
-/// the inlined domain search, never handed to the guest.
-/// The ROM zeroes position/item/token/type/length/written at entry
-/// (objdump +0x20..+0x3c); text and start take values below instead.
 const S_POSITION: u32 = 12;
 const S_ITEM: u32 = 16;
 const S_TEXT: u32 = 20;
@@ -1491,13 +1347,10 @@ const S_WRITTEN: u32 = 36;
 const S_START: u32 = 48;
 const SCRATCH_SIZE: u32 = 50;
 
-/// True when `c` is token whitespace: space, tab, newline, carriage return
-/// or underscore.
 fn token_space(c: u8) -> bool {
     c == b' ' || c == b'\t' || c == b'\n' || c == b'\r' || c == b'_'
 }
 
-/// The `fn_1ede44` digit test for the domain's digit set.
 fn token_digit(m: &Memory<'_>, ctx: u32, domain: u16, c: u8) -> bool {
     if domain == 999 {
         return (c.wrapping_sub(b'0') as u32) <= 9;
@@ -1514,7 +1367,6 @@ fn token_digit(m: &Memory<'_>, ctx: u32, domain: u16, c: u8) -> bool {
     c != 0 && g_strchr(m, digits, u32::from(c)) != 0
 }
 
-/// The `fn_1ede44` punctuation test for the domain's punctuation set.
 fn token_punctuation(m: &Memory<'_>, ctx: u32, domain: u16, c: u8) -> bool {
     if domain == 999 {
         let punct = g_word(m, ctx.wrapping_add(TC_PUNCT)).unwrap_or(0);
@@ -1529,7 +1381,6 @@ fn token_punctuation(m: &Memory<'_>, ctx: u32, domain: u16, c: u8) -> bool {
     c != 0 && g_strchr(m, punct, u32::from(c)) != 0
 }
 
-/// The `fn_1ede44` alpha test for the domain's alpha set.
 fn token_alpha(m: &Memory<'_>, ctx: u32, domain: u16, c: u8) -> bool {
     if domain == 999 {
         return !token_space(c)
@@ -1545,12 +1396,6 @@ fn token_alpha(m: &Memory<'_>, ctx: u32, domain: u16, c: u8) -> bool {
     c != 0 && g_strchr(m, alpha, u32::from(c)) != 0
 }
 
-/// The `fn_1ede44` domain search: the domain of the annotation covering
-/// `position`, or 999 when no annotation names one.
-///
-/// `index` is the caller's scan cursor over the annotations. Domain names
-/// compare through lane c2's `fn_1765ac`, guarded to the arena like every
-/// other guest read on a port path.
 fn token_domain(
     m: &Memory<'_>,
     ctx: u32,
@@ -1609,33 +1454,11 @@ fn token_domain(
     *domain = found;
 }
 
-/// The shared tail of the tokenize entry: the ROM's `leave` label.
-///
-/// Issues the leaving log and returns `rc`. The `error` label (the `0xa02a`
-/// log) is issued by the caller first. The frame lives in caller scratch,
-/// so there is nothing to free, exactly like the ROM's stack frame.
 fn token_tail(m: &mut Memory<'_>, h: &mut impl Host, logger: u32, rc: u32) -> u32 {
     h.call_m(0x1738e8, &[logger, LOOKUP_MODULE, 4, 0], m);
     rc
 }
 
-/// The `fn_1ede44` tokenize entry (fe_dctlkp_Tokenize, cfg idx 11).
-///
-/// The exact ARM call is `fn_1ede44(p, handle, text_handle, annotations,
-/// count)`: `p` is the `TokenContext`, `text_handle` is the two-word text
-/// handle, `annotations` points at `count` `TokenAnnotation`s, and the port
-/// emits one token record per run of alpha, digit, punctuation or space
-/// through the `TokenInterface` the arena holds (`first` at +0x24, `next`
-/// at +0x28, `find` at +0x34, `set` at +0x50, `get` at +0x58). Every
-/// interface call goes through the caller's host with the arena's own entry
-/// address (the entry gates its own handle, exactly like the ROM's callee
-/// does); the pure character tests run inline.
-///
-/// The ROM keeps `item`, `token`, `text`, `length`, `written`, `type`,
-/// `start` and `position` on its stack and passes their addresses down.
-/// The port keeps the same 20 bytes in caller stack scratch at the ROM's
-/// exact sp-relative offsets (`S_*` above, from `build/target/fn_1ede44.o`),
-/// so no heap block is allocated or freed and no caller slot is clobbered.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_1ede44_m(
     m: &mut Memory<'_>,
@@ -1665,8 +1488,7 @@ pub fn fn_1ede44_m(
         Some(v) => v,
         None => return token_tail(m, h, logger, TOKEN_MEMORY),
     };
-    // The tokenize frame lives in caller stack scratch at the ROM's
-    // sp-relative offsets; fail closed when the scratch is not mapped.
+
     if !g_range(m, scratch, SCRATCH_SIZE) {
         h.call_m(0x173dc0, &[logger, LOOKUP_MODULE, TOKEN_ERROR, 0], m);
         return token_tail(m, h, logger, TOKEN_MEMORY);
@@ -1679,7 +1501,7 @@ pub fn fn_1ede44_m(
     let type_slot = scratch.wrapping_add(S_TYPE);
     let start_slot = scratch.wrapping_add(S_START);
     let position_slot = scratch.wrapping_add(S_POSITION);
-    // The ROM's entry zeroes (objdump +0x20..+0x3c).
+
     if !p_half(m, position_slot, 0)
         || !p_half(m, item, 0)
         || !p_half(m, token, 0)

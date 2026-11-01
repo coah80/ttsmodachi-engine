@@ -1,22 +1,18 @@
-//! speech_1 path ports, part 3. Guest addresses use the caller-owned arena.
+
 use crate::boot::Memory;
 
-/// Platform/vtable callbacks can reenter using the same arena, never a captured view.
 pub trait Host {
     fn call(&mut self, memory: &mut Memory<'_>, method: u32, args: &[u32]) -> u32;
 }
 
-/// fn_7e715c.
 pub fn fn_7e715c(m: &mut Memory<'_>, p: u32, v: u32) -> u32 {
     u32::from(m.word(p + 0x30) <= v && v < m.word(p + 0x34))
 }
 
-/// fn_7f6820.
 pub fn fn_7f6820(m: &mut Memory<'_>, p: u32) -> u32 {
     u32::from(m.word(p + 0x80) >= m.word(p + 0x88))
 }
 
-/// fn_4a794c.
 pub fn fn_4a794c(m: &mut Memory<'_>, p: u32, count: u32, whence: u32, element: u32) -> u32 {
     if count > 0x7ffffff { return 0x80000104; }
     let off = count.wrapping_mul(element);
@@ -30,13 +26,11 @@ pub fn fn_4a794c(m: &mut Memory<'_>, p: u32, count: u32, whence: u32, element: u
     0
 }
 
-/// fn_4a774c. A void tail-call preserves its callback's r0.
 pub fn fn_4a774c(m: &mut Memory<'_>, p: u32, a: u32, h: &mut impl Host) -> u32 {
     let method = m.word(m.word(p) + 12);
     h.call(m, method, &[p, a])
 }
 
-/// fn_4a7aac.
 pub fn fn_4a7aac(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     let cb = m.word(p + 12);
     let method = m.word(m.word(cb) + 12);
@@ -44,7 +38,6 @@ pub fn fn_4a7aac(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     0
 }
 
-/// fn_4a78f0. Uses the existing RVCT copy port.
 pub fn fn_4a78f0(m: &mut Memory<'_>, dst: u32, a: u32, b: u32, p: u32) -> u32 {
     let mut n = a.wrapping_mul(b);
     let pos = m.word(p + 4);
@@ -58,18 +51,15 @@ pub fn fn_4a78f0(m: &mut Memory<'_>, dst: u32, a: u32, b: u32, p: u32) -> u32 {
     n
 }
 
-/// fn_301ea0. The caller supplies the regional address of D_c509a4.
 pub fn fn_301ea0(m: &mut Memory<'_>, global: u32) -> u32 {
     let _ = m;
     global
 }
 
-/// fn_302078.
 pub fn fn_302078(m: &mut Memory<'_>, global: u32) -> u32 {
     fn_301ea0(m, global).wrapping_add(4)
 }
 
-/// fn_2a76a4. Absolute-index frontend callbacks receive the live arena.
 pub fn fn_2a76a4(m: &mut Memory<'_>, ctx: u32, rows: u32, cols: u32,
     padding: u32, out: u32, h: &mut impl crate::frontend::HeapVtableM) -> u32 {
     assert_eq!(m.base, 0);
@@ -95,7 +85,6 @@ pub fn fn_2a76a4(m: &mut Memory<'_>, ctx: u32, rows: u32, cols: u32,
     0
 }
 
-/// fn_84c160. Real recursive locks enclose the owned range predicate.
 pub fn fn_84c160(m: &mut Memory<'_>, p: u32, v: u32,
     h: &mut impl crate::boot_part_b::Host) -> u32 {
     crate::boot_part_b::fn_1840fc(m,p.wrapping_add(88),h);
@@ -104,7 +93,6 @@ pub fn fn_84c160(m: &mut Memory<'_>, p: u32, v: u32,
     result
 }
 
-/// fn_39f5b8. Real recursive locks and guest heap release, including its count write.
 pub fn fn_39f5b8(m: &mut Memory<'_>, p: u32, pointer: u32,
     h: &mut impl crate::boot_part_b::Host) {
     let inner=m.word(p.wrapping_add(4));
@@ -113,7 +101,6 @@ pub fn fn_39f5b8(m: &mut Memory<'_>, p: u32, pointer: u32,
     crate::boot_part_b::fn_18423c(m,inner.wrapping_add(88),h);
 }
 
-/// fn_4a79b8. Real block resize/size and copy ports; callbacks borrow the live arena.
 pub fn fn_4a79b8(m: &mut Memory<'_>, p: u32, old: u32, size: u32,
     h: &mut (impl Host + crate::boot_part_b::Host)) -> u32 {
     assert_eq!(m.base,0);
@@ -137,7 +124,6 @@ pub fn fn_4a79b8(m: &mut Memory<'_>, p: u32, old: u32, size: u32,
     new
 }
 
-/// fn_3015a4. Find matching database records, using the real allocator and byte ports.
 pub fn fn_3015a4(m: &mut Memory<'_>, ctx: u32, crit: u32, list: u32,
     out_buf: u32, out_count: u32, h: &mut impl crate::boot_part_f::Host) -> u32 {
     fn cmp(m: &Memory<'_>, a: u32, b: u32) -> i32 {
@@ -214,7 +200,7 @@ pub fn fn_3015a4(m: &mut Memory<'_>, ctx: u32, crit: u32, list: u32,
                     } else {
                         buf = crate::boot_part_f::fn_1b2140(m,heap,32,&mut ierr,h);
                         if ierr == 0 {
-                            // Read each field after the callback, matching the original.
+
                             let head = m.word(node);
                             for i in 0..3 { m.put_word(buf+i*4,m.word(head+8+i*4)); }
                             for i in 0..3 { m.put_word(buf+12+i*4,m.word(node+4+i*4)); }
@@ -262,8 +248,7 @@ fn sp3_len(m:&Memory<'_>,s:u32)->u32 {
 }
 fn sp3_byte(m:&mut Memory<'_>,p:u32,v:u8) {let i=m.offset(p);m.bytes[i]=v;}
 fn sp3_string(m:&mut Memory<'_>,p:u32,s:&[u8]) {let i=m.offset(p);m.bytes[i..i+s.len()].copy_from_slice(s);}
-/// Additional external callees are explicitly identified by their ROM entry.
-/// Local frames use caller-owned guest scratch, restored before returning.
+
 pub trait SpeechHost: crate::speech_part_5::Host {}
 
 fn sp3_frame(m:&mut Memory<'_>,scratch:u32,body:impl FnOnce(&mut Memory<'_>)->u32)->u32 {
@@ -274,14 +259,14 @@ fn sp3_frame(m:&mut Memory<'_>,scratch:u32,body:impl FnOnce(&mut Memory<'_>)->u3
     m.bytes[at..at+4096].copy_from_slice(&saved);
     r
 }
-/// fn_2e3e9c. Both dictionary implementations call the landed real ports.
+
 pub fn fn_2e3e9c(m:&mut Memory<'_>,p:u32,a:u32,b:u32,o1:u32,o2:u32,h:&mut impl SpeechHost)->u32 {
     m.put_word(o1,0);m.put_word(o2,0);
     if m.byte(p+20)!=1 {
         crate::speech_part_5::fn_301b70(m,m.word(p+36),a,b,p,o1,o2,h)
     } else {fn_3015a4(m,a,b,p,o1,o2,h)}
 }
-/// fn_2e4260. Expansion uses the landed speech-5 fn_2f91f8.
+
 pub fn fn_2e4260(m:&mut Memory<'_>,ctx:u32,source:u32,count:u32,out:u32,out_count:u32,scratch:u32,h:&mut impl SpeechHost)->u32 {
     sp3_frame(m,scratch,|m| {
         let mut status=0u8;let mut total=0u32;let mut items=0;
@@ -334,18 +319,11 @@ pub fn fn_2e4260(m:&mut Memory<'_>,ctx:u32,source:u32,count:u32,out:u32,out_coun
         m.put_word(out,items);m.put_word(out_count,total);status as u32
     })
 }
-/// fn_2fbe50. Transcription-needed predicate: the ROM is a bare
-/// `MOV r0, #0; BX lr` stub (always false: never format). The speech_2
-/// numbers path reaches it through fn_2e19dc's vtable guard; without this
-/// arm the live engine reads the unbound sentinel as true and formats.
-/// (Seg6 r3: wire-a, please add `0x2fbe50 => crate::speech_part_3::fn_2fbe50_m()`
-/// to the engine_live dispatcher; the test below covers it.)
+
 pub fn fn_2fbe50_m() -> u32 {
     0
 }
 
-/// fn_2e19dc. Formatter is the real fn_2e1fc8; only its unported formatter
-/// implementation is dispatched through the speech-5 host.
 pub fn fn_2e19dc(m:&mut Memory<'_>,o:u32,a:u32,b:u32,e:u32,n:u32,scratch:u32,h:&mut impl SpeechHost)->u32 {
     sp3_frame(m,scratch,|m| {
         if e==0 || n==0 {return 0;}
@@ -366,7 +344,7 @@ pub fn fn_2e19dc(m:&mut Memory<'_>,o:u32,a:u32,b:u32,e:u32,n:u32,scratch:u32,h:&
         h.call(m,m.word(vt+16),&[o.wrapping_sub(m.word(vt+40)),a,fmt,scratch+2160,b,scratch])
     })
 }
-/// fn_4a77ac. Archive lookup calls the landed speech-1 port.
+
 pub fn fn_4a77ac(m:&mut Memory<'_>,archive:u32,allocator:u32,name:u32,mode:u32,result:u32,scratch:u32,env:&crate::speech_part_1::ArchiveEnvironment,h:&mut impl SpeechHost)->u32 {
     sp3_frame(m,scratch,|m| {
         let file=h.call(m,m.word(m.word(allocator)+8),&[allocator,16,4]);
@@ -419,8 +397,7 @@ fn sp3_convert(m:&mut Memory<'_>,engine:u32,src:u32,dst:u32,h:&mut impl SpeechHo
     }
     status
 }
-/// fn_2b3608. The owned prepare/convert/release tree is translated in full.
-/// Configuration agreement calls the landed speech-5 fn_2b24e8.
+
 pub fn fn_2b3608(m:&mut Memory<'_>,engine:u32,input:u32,out:u32,out_count:u32,scratch:u32,h:&mut impl SpeechHost)->u32 {
     sp3_frame(m,scratch,|m| {
         let mut config=m.word(engine+68);let mut status=0u8;
@@ -454,7 +431,7 @@ pub fn fn_2b3608(m:&mut Memory<'_>,engine:u32,input:u32,out:u32,out_count:u32,sc
             if i==0 {crate::boot_part_f::fn_1b2128(m,m.word(engine+56),items,h);items=0;}
         }
         if m.word(params+12)!=0 {crate::boot_part_f::fn_1b2128(m,m.word(engine+56),m.word(params+12),h);}
-        // No guest frame is needed after prepare. Nested calls restore it.
+
         let r=fn_2e4260(m,m.word(engine+76),items,i,out,out_count,scratch,h);
         if r!=0 {return r;}
         if items!=0 {
@@ -473,29 +450,20 @@ pub fn fn_2b3608(m:&mut Memory<'_>,engine:u32,input:u32,out:u32,out_count:u32,sc
     })
 }
 
-/// Typed PCRE entry, selected by the caller body, not by the host binding.
 pub type RegexEntry<H> = fn(&mut H,u32,u32,&mut crate::regex::FrameStore<'_>,&[u8],
     Option<&crate::regex::ExecExtra<'_>>,&[u8],usize,usize,i32,u32,Option<&mut[i32]>,i32,
     &crate::regex::PcreTables<'_>,Option<crate::regex::CalloutFn>)->i32;
-/// Round-4 host bindings. `regex_exec` binds the existing typed PCRE port
-/// to the caller's frame store and tables; it is not an external stub.
+
 pub trait SpeechRound4Host: SpeechHost + crate::frontend::HeapVtableM {
     type RegexHost: crate::regex::PcreHost;
     fn regex_exec(&mut self, m:&mut Memory<'_>, args:&[u32], offsets:&mut [i32;100],
         exec:RegexEntry<Self::RegexHost>,callout:fn(&mut Memory<'_>,u32,&mut Self)->u32)->i32 where Self:Sized;
-    /// Regional ROM literals and diagnostic callsite selectors. 666660 is
-    /// the pitch limit; 91728c is the history weight table; 91724d is the LF0
-    /// heap name. Function-address keys select their source diagnostic text.
+
     fn literal(&self, address:u32)->u32;
-    /// Resolve the input/temporary private-heap diagnostic name. The older
-    /// arena ports supply a sentinel; production bindings supply a ROM pointer.
+
     fn pool_name(&self, pool:u32)->u32;
 }
 
-/// Scratch for the typed band solver. All buffers belong to the caller.
-/// coefficients holds count*order words and at least count words for smoothing;
-/// input holds count+4 words for smoothing, output holds count words. nodes
-/// holds every node reachable in a decision tree. No buffer is allocated here.
 pub struct FilterWorkspace<'a> {
     pub nodes:&'a mut [crate::selection::DecisionNode],
     pub coefficients:&'a mut [i32],
@@ -561,8 +529,7 @@ fn sp4_log(m:&mut Memory<'_>,p:u32,level:u32,site:u32,args:&[u32],h:&mut impl Sp
     }
     m.bytes[at..at+160].copy_from_slice(&saved);
 }
-/// fn_2b8f08. Resolve every token range, using the existing list, priority,
-/// dump, allocator and logger ports. scratch is a disjoint 4096-byte frame.
+
 pub fn fn_2b8f08(m:&mut Memory<'_>,p:u32,scratch:u32,h:&mut impl SpeechRound4Host)->u32 {
     assert_eq!(m.base,0,"normalization ports use absolute arena offsets");
     sp3_frame(m,scratch,|m|{
@@ -623,8 +590,7 @@ pub fn fn_2b8f08(m:&mut Memory<'_>,p:u32,scratch:u32,h:&mut impl SpeechRound4Hos
         rc
     })
 }
-/// fn_2b7118. The PCRE binding executes the existing Rust regex engine.
-/// fn_2b6afc is now landed in speech part 5 and must be bound as its callout.
+
 pub fn fn_2b7118(m:&mut Memory<'_>,p:u32,o:u32,scratch:u32,h:&mut impl SpeechRound4Host)->u32 {
     assert_eq!(m.base,0);
     sp3_frame(m,scratch,|m|{
@@ -700,8 +666,7 @@ fn sp4_factor(m:&mut Memory<'_>,context:u32,p:u32,w:&mut FilterWorkspace<'_>,h:&
         crate::log_live::fn_1738e8(m,m.word(context+16),category,0,0,format,0,h);
     }
 }
-/// fn_2a27fc. Full order-three fast path and general path, followed by
-/// the existing factorization and triangular solver ports.
+
 pub fn fn_2a27fc(m:&mut Memory<'_>,context:u32,p:u32,w:&mut FilterWorkspace<'_>,h:&mut impl SpeechRound4Host){
     if m.word(p+32)==0 {return;}
     m.put_word(p+56,m.word(m.word(p+48)));
@@ -798,7 +763,7 @@ impl<H:SpeechRound4Host> crate::selection::arena::Host for Round4Selection<'_, '
         (sp4_dispatch(&mut Memory{base:a.base,bytes:a.bytes},f,args,self.scratch,self.w,self.h),0)
     }
 }
-/// Decision-tree walk shared with the selection live host (seg5 0x2d9dc0 arm). No host calls.
+
 pub(crate) fn sp4_tree(m:&Memory<'_>,env:u32,pos:u32,rtab:u32,ridx:u32,ent:u32,w:&mut FilterWorkspace<'_>)->u32 {
     let table=rtab+ridx*4;let questions=m.word(table+16);let base=m.word(m.word(table+36)+ent*8+4);
     let mut count=1usize;let mut i=0;
@@ -812,9 +777,7 @@ pub(crate) fn sp4_tree(m:&Memory<'_>,env:u32,pos:u32,rtab:u32,ridx:u32,ent:u32,w
         i+=1;
     }
     let mut features=crate::selection::SelectionFeatures{count:sp3_half(m,env+6) as usize,columns:[None;60]};
-    // The C reads tab[v] for any question kind v (including v>=30, which aliases
-    // subsequent struct fields past the 30-entry tab). Replicate by populating
-    // columns 0..60 from env (round 1, seg5: fixes 227d64-2 voiced count).
+
     for j in 0..60 {let p=m.word(env+12+j*4);if p!=0 {features.columns[j as usize]=Some(&m.bytes[m.offset(p)..]);}}
     crate::selection::DecisionTree{questions:&m.bytes[m.offset(questions)..],nodes:&w.nodes[..count]}.select(features,pos as usize).expect("decision tree") as u32
 }
@@ -822,8 +785,7 @@ pub(crate) fn sp4_tree(m:&Memory<'_>,env:u32,pos:u32,rtab:u32,ridx:u32,ent:u32,w
 impl<H:SpeechRound4Host> crate::boot_part_e::Host for Round4Format<'_,H> {
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.0.call(m,f,a)}
 }
-/// Bind the existing cache-window port without retaining an arena view across
-/// an unmap or a reload. The cold reload entry has no Rust port yet.
+
 pub(crate) fn sp4_cache(m:&mut Memory<'_>,p:u32,offset:u32,len:u32,out:u32,h:&mut impl SpeechRound4Host)->u32 {
     if out!=0 {m.put_word(out,0);}
     let held=m.word(p+12);let pos=m.word(p+8);let size=m.word(p+16);
@@ -915,8 +877,7 @@ fn sp4_smooth(m:&mut Memory<'_>,stream:u32,w:&mut FilterWorkspace<'_>) {
     let dest=m.word(stream+44);
     for i in 0..n {m.put_word(dest+i as u32*4,w.output[i] as u32);}
 }
-/// fn_2a5578. Pitch trajectory construction, history, range filtering and cleanup.
-/// scratch is a disjoint 4096-byte local frame; ROM literals stay host-owned.
+
 pub fn fn_2a5578(m:&mut Memory<'_>,state:u32,model:u32,config:u32,scratch:u32,w:&mut FilterWorkspace<'_>,h:&mut impl SpeechRound4Host)->u32 {
     assert_eq!(m.base,0);
     sp3_frame(m,scratch,|m|{
@@ -1087,11 +1048,6 @@ pub fn fn_2a5578(m:&mut Memory<'_>,state:u32,model:u32,config:u32,scratch:u32,w:
     })
 }
 
-
-
-
-/// fn_2da9e0. Fixed three-tap backward-stream equations, including both
-/// boundary rows. Every operation wraps exactly like the ARM ALU.
 pub fn fn_2da9e0(m:&mut Memory<'_>,p:u32) {
     let k=m.word(p+28).wrapping_add(1);
     let a=m.word(p+48);let b=m.word(p+52);let rows=m.word(p+60);let out=m.word(p+64);
@@ -1124,8 +1080,6 @@ pub fn fn_2da9e0(m:&mut Memory<'_>,p:u32) {
     m.put_word(row+4,0);m.put_word(row+8,0);
 }
 
-/// fn_24dcf0. Diagnostic range rendering still writes the live text buffer
-/// even when the logger is disabled. scratch supplies its local description.
 pub fn fn_24dcf0(m:&mut Memory<'_>,p:u32,block:u32,range:u32,mode:u32,scratch:u32,h:&mut impl SpeechRound4Host)->u32 {
     assert_eq!(m.base,0);
     let at=m.offset(scratch);let mut saved=[0u8;32];saved.copy_from_slice(&m.bytes[at..at+32]);
@@ -1162,8 +1116,6 @@ pub fn fn_24dcf0(m:&mut Memory<'_>,p:u32,block:u32,range:u32,mode:u32,scratch:u3
     m.bytes[at..at+32].copy_from_slice(&saved);rc
 }
 
-/// fn_2e564c. Recursive postorder check evaluation. The caller supplies a
-/// disjoint 4096-byte frame; each recursive level consumes 64 bytes.
 pub fn fn_2e564c(m:&mut Memory<'_>,p:u32,arg:u32,node:u32,result:u32,depth:u8,scratch:u32,h:&mut impl SpeechRound4Host)->u32 {
     assert_eq!(m.base,0);
     sp3_frame(m,scratch,|m|sp5_check(m,p,arg,node,result,depth,scratch,scratch+4096,h))
@@ -1238,9 +1190,6 @@ fn sp5_check(m:&mut Memory<'_>,p:u32,arg:u32,node:u32,result:u32,depth:u8,s:u32,
     sp4_log(m,p,4,0x2e56ff,&[],h);rc
 }
 
-// The legacy lookup dispatcher takes a host without an arena argument.
-// Bind its tiny pointer descriptor locally so lookup_value_m can receive the
-// live caller arena during a comparator callback. No guest memory is cloned.
 fn sp5_lookup(m:&mut Memory<'_>,p:u32,key:u32,out:u32,h:&mut impl SpeechRound4Host)->u32 {
     let lookup=m.word(m.word(p+60));
     m.put_word(out,0);
@@ -1251,8 +1200,7 @@ fn sp5_lookup(m:&mut Memory<'_>,p:u32,key:u32,out:u32,h:&mut impl SpeechRound4Ho
             let cmp=if p==0 {0}else{self.m.word(self.m.word(p+60)+8)};
             let rc=crate::reentrant2::lookup_value_m(self.m.bytes,if p==0{None}else{Some(p)},key,Some(&mut value),
                 |a,b,bytes|self.h.call(&mut Memory{base:0,bytes},cmp,&[a,b]) as i32);
-            // A miss does not write the C out-slot. Preserve any live
-            // callback mutation instead of overwriting it with a cached zero.
+
             if rc>=0x80000000 {self.m.word(self.out)}else{value}
         }
     }
@@ -1287,9 +1235,6 @@ impl<H:SpeechRound4Host> crate::speech_part_5::Host for Round5Speech<'_,H> {
     fn entries(&mut self,m:&mut Memory<'_>,p:u32,a:u32,b:u32,c:&mut u32,d:&mut u32)->u32{self.h.entries(m,p,a,b,c,d)}
 }
 
-
-// The existing buffer ports expose allocation status but no logger binding.
-// Preserve their source units' failed-allocation diagnostic at this boundary.
 fn sp5_buffer_error(m:&mut Memory<'_>,p:u32,rc:u32,h:&mut impl SpeechRound4Host) {
     if rc>=0x80000000 {sp4_log(m,p,u32::MAX,0x5df0,&[],h);}
 }

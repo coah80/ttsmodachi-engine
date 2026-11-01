@@ -1,10 +1,7 @@
-//! Live fn_1738e8. Guest addresses use the caller's boot::Memory base.
-//! No rule tables or recorded callback results are read.
+
+
 use crate::boot::Memory;
 
-/// Bind a guest method address to its real Rust implementation or platform call.
-/// The dispatcher must not retain an arena borrow. Unknown addresses must fail
-/// explicitly rather than returning a recorded or invented reply.
 pub trait LogMethodsM {
     fn log_m(
         &mut self,
@@ -19,10 +16,6 @@ pub trait LogMethodsM {
     ) -> u32;
 }
 
-/// Fan out using vtable byte offset 24, preserving callback read/write order.
-/// `varargs` points just past the incoming format word, as ARM's va_list does.
-/// Each callback receives a copy of that address, not a shared advancing cursor.
-/// This is not fn_1739fc, which does not suppress target 1 at levels above 1.
 pub fn fn_1738e8(
     mem: &mut Memory<'_>,
     logger: u32,
@@ -47,8 +40,7 @@ pub fn fn_1738e8(
     for index in 0..6 {
         let offset = if index == 5 { 52 } else { 8 + index * 8 };
         let pair = logger.wrapping_add(offset);
-        // Re-read the pair and method after each call. A callback may replace
-        // a later target or reenter logging on these same bytes.
+
         let methods = mem.word(pair.wrapping_add(4));
         if methods != 0 {
             let method = mem.word(methods.wrapping_add(24));
@@ -70,4 +62,28 @@ pub fn fn_1738e8(
         }
     }
     result
+}
+
+pub fn variadic_m(
+    m: &mut Memory<'_>, entry: u32, a: [u32; 4], format: &[u8],
+    varargs: &[u32], scratch: u32,
+    mut call: impl FnMut(&mut Memory<'_>, u32, &[u32]) -> u32,
+) -> bool {
+    assert!(matches!(entry, 0x1738e8 | 0x173dc0));
+    if a[0] == 0 { return true; }
+    if entry == 0x1738e8 && (a[2] > m.byte(a[0] + 48) as u32
+        || (m.byte(a[0] + 49) != 0 && a[2] > 4)) { return true; }
+    let format = format.strip_suffix(&[0]).unwrap_or(format);
+    let end = m.bytes.len().min(0xa70000);
+    let literal = (0x100000 + m.bytes[0x100000..end].windows(format.len() + 1)
+        .position(|w| &w[..format.len()] == format && w[format.len()] == 0)
+        .expect("ROM logging format")) as u32;
+    assert!(varargs.len() <= 32);
+    let at = m.offset(scratch);
+    let saved: [u8; 160] = m.bytes[at..at + 160].try_into().unwrap();
+    for (i, value) in varargs.iter().enumerate() { m.put_word(scratch + i as u32 * 4, *value); }
+    if entry == 0x1738e8 { call(m, entry, &[a[0], a[1], a[2], a[3], literal, scratch]); }
+    else { call(m, entry, &[a[0], a[1], a[2], literal, scratch, scratch + 128]); }
+    m.bytes[at..at + 160].copy_from_slice(&saved);
+    true
 }

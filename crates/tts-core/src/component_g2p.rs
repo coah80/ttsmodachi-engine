@@ -1,39 +1,9 @@
-//! Live G2P dictionary lookup `fn_2c9ba0`, over the caller's arena.
-//!
-//! The exact ARM call is
-//! `fn_2c9ba0(engine, normalized, text, lookup_type, domain, position,
-//! token, handle_obj, handle_data, end)` (ten words: `r0`-`r3` plus six
-//! stack words). `engine` is the word-engine object: `+0x00` the services
-//! (`services+0x04` the allocator, `services+0x10` the logger), `+0x0c`
-//! the token vtable (`+0x2c` insert-after, `+0x50` set), `+0x10`/`+0x14`
-//! the dictionary handle, `+0x18` the dictionary vtable (`+0x48` lookup),
-//! `+0x1c`/`+0x20` the MDE handle, `+0x24` the MDE vtable (`+0x24` input,
-//! `+0x28` output, `+0x2c` select), `+0x58` the pronunciation buffer and
-//! `+0x172` the lookup flags. Every guest call is issued through the host;
-//! `sp` is the ARM entry SP (the caller's body SP). The frame hangs off
-//! `sp` at the disassembled offsets, exactly where the ARM keeps it; the
-//! `mode` buffer and the address-taken cells all live there. The pointer
-//! tables the C keeps
-//! on its stack live in Rust locals. Guest allocation (the pronunciation
-//! resize) goes through the live heap (`0x1963e0`).
-//!
-//! The ROM's literals live in the ROM image the caller owns: `dctbased_mde`
-//! at 0x2c9eb0, `normal` at 0x2c9b2c, `_` at 0x2c9b34, the log formats at
-//! 0x2c9b1c/0x2c9ec0/0x2c9b38/0x2ca360/0x2ca370/0x2ca6a8/0x2ca6c8, `0` at
-//! 0x2c9eac, the empty strings at 0x2c9ebc/0x2ca6c4, `\x11` at 0x2ca69c,
-//! `*` at 0x2ca6f0 and the logger module at 0x8f9532.
+
 
 #![allow(dead_code)]
 
 use crate::{boot::Memory, component_live_b::Host};
 
-/// `fn_2c9ba0` frame slots as ARM SP-relative offsets. The ARM keeps
-/// `push {r0-r3, r4-r8, sb, sl, fp, lr}` (0x34) plus `sub sp, #0x184`, so
-/// the body SP is the entry SP minus 0x1B8 and every slot below hangs off
-/// it; the incoming stack words (domain at +0x1B8, position at +0x1BC,
-/// token at +0x1C0, handle at +0x1C4/+0x1C8, end at +0x1CC) live in the
-/// caller's frame, exactly like the ARM's. No fixed window: the caller
-/// passes the live entry SP and the frame lands where the ARM puts it.
 pub const G2P9B_SUB: u32 = 0x1b8;
 const G_MODE: u32 = 0x20;
 const G_RESULT_COUNT: u32 = 0x10;
@@ -65,6 +35,9 @@ const EMPTY2_S: u32 = 0x2ca6c4;
 const ONE_S: u32 = 0x2ca69c;
 const STAR_S: u32 = 0x2ca6f0;
 
+fn s_lit(rom: crate::rom_region::Rom, us: u32) -> u32 {
+    crate::rom_region::addr(rom, us)
+}
 const FAIL_MEM: u32 = 0x89b0200a;
 const FAIL_HANDLE: u32 = 0x89b02007;
 
@@ -123,13 +96,6 @@ fn p_word(m: &mut Memory<'_>, p: u32, v: u32) -> bool {
     true
 }
 
-/// The `fn_2c9ba0` G2P lookup, live over the caller's arena.
-///
-/// Ports `src/fn_2c9748.c:150` 1:1. `position`/`token_in` are the `u16`
-/// stack words the ARM receives; `end` is the `u16 *` the ARM fills with
-/// `position + strlen(text)`. Returns the last callee status, `0` on the
-/// select-fallback path, `0x89b02007` on a null result word and
-/// `0x89b0200a` when the pronunciation resize fails.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c9ba0_m(
     m: &mut Memory<'_>,
@@ -146,9 +112,7 @@ pub fn fn_2c9ba0_m(
     handle_data: u32,
     end: u32,
 ) -> u32 {
-    // The ARM body SP: entry SP minus the 0x34 push minus the 0x184
-    // frame. Every slot below hangs off it at the disassembled offset,
-    // so the frame sits exactly where the ARM keeps it.
+
     let body = sp.wrapping_sub(G2P9B_SUB);
     let mode = body.wrapping_add(G_MODE);
     let a_count = body.wrapping_add(G_RESULT_COUNT);
@@ -162,7 +126,6 @@ pub fn fn_2c9ba0_m(
     let a_mde_result = body.wrapping_add(G_MDE_RESULT);
     let a_lookup = body.wrapping_add(G_LOOKUP);
 
-    // The scratch frame holds the mode buffer and the address-taken cells.
     if !g_range(m, mode, 128)
         || !g_range(m, a_count, 2)
         || !g_range(m, a_length, 2)
@@ -202,7 +165,7 @@ pub fn fn_2c9ba0_m(
     let f_mde_output = g_word(m, mde_api.wrapping_add(0x28)).unwrap_or(0);
     let f_mde_select = g_word(m, mde_api.wrapping_add(0x2c)).unwrap_or(0);
 
-    h.call_m(0x195cd0, &[mode, LIT_MODE], m);
+    h.call_m(0x195cd0, &[mode, s_lit(h.rom(), 0x2c9eb0)], m);
     let mut status: u32;
     let mode_length = h.call_m(0x195d90, &[mode], m) as u16;
     h.call_m(0x1738e8, &[logger, CAT, 5, 0, FMT_L1, mode, normalized], m);
@@ -217,11 +180,11 @@ pub fn fn_2c9ba0_m(
     if status >= 0x80000000 {
         return status;
     }
-    if h.call_m(0x195d58, &[domain, LIT_NORMAL], m) != 0
+    if h.call_m(0x195d58, &[domain, s_lit(h.rom(), 0x2c9b2c)], m) != 0
         && h.call_m(0x195d90, &[domain], m).wrapping_add(u32::from(mode_length)).wrapping_add(2)
             < 128
     {
-        h.call_m(0x195c90, &[mode, LIT_UNDER], m);
+        h.call_m(0x195c90, &[mode, s_lit(h.rom(), 0x2c9b34)], m);
         h.call_m(0x195c90, &[mode, domain], m);
     }
     status = h.call_m(f_mde_select, &[mde_obj, mde_data, mode], m);
@@ -263,8 +226,8 @@ pub fn fn_2c9ba0_m(
     if g_byte(m, mde_result).unwrap_or(0) == b'{' {
         context_count = 2;
         prefixes[0] = mde_result.wrapping_add(1);
-        prefixes[1] = ZERO_S;
-        contexts[0] = ZERO_S;
+        prefixes[1] = s_lit(h.rom(), 0x2c9eac);
+        contexts[0] = s_lit(h.rom(), 0x2c9eac);
         contexts[1] = mde_result.wrapping_add(1);
         if !p_byte(m, mde_result, 0) {
             return FAIL_MEM;
@@ -280,8 +243,8 @@ pub fn fn_2c9ba0_m(
     } else {
         base = mde_result;
         context_count = 1;
-        prefixes[0] = ZERO_S;
-        contexts[0] = ZERO_S;
+        prefixes[0] = s_lit(h.rom(), 0x2c9eac);
+        contexts[0] = s_lit(h.rom(), 0x2c9eac);
     }
     cursor = h.call_m(0x195d30, &[base, u32::from(b'{')], m);
     if cursor == 0 && context_count == 1 {
@@ -324,19 +287,19 @@ pub fn fn_2c9ba0_m(
     while u32::from(i) < context_count {
         let mut j = 0u16;
         while u32::from(j) < u32::from(infix_count) {
-            if h.call_m(0x195d58, &[contexts[i as usize], ZERO_S], m) == 0
-                && h.call_m(0x195d58, &[suffixes[j as usize], ZERO_S], m) == 0
+            if h.call_m(0x195d58, &[contexts[i as usize], s_lit(h.rom(), 0x2c9eac)], m) == 0
+                && h.call_m(0x195d58, &[suffixes[j as usize], s_lit(h.rom(), 0x2c9eac)], m) == 0
             {
                 j = j.wrapping_add(1);
                 continue;
             }
-            if h.call_m(0x195d58, &[prefixes[i as usize], ZERO_S], m) != 0 {
+            if h.call_m(0x195d58, &[prefixes[i as usize], s_lit(h.rom(), 0x2c9eac)], m) != 0 {
                 h.call_m(0x195cd0, &[lookup, prefixes[i as usize]], m);
                 h.call_m(0x195c90, &[lookup, base], m);
             } else {
                 h.call_m(0x195cd0, &[lookup, base], m);
             }
-            if h.call_m(0x195d58, &[infixes[j as usize], ZERO_S], m) != 0 {
+            if h.call_m(0x195d58, &[infixes[j as usize], s_lit(h.rom(), 0x2c9eac)], m) != 0 {
                 h.call_m(0x195c90, &[lookup, infixes[j as usize]], m);
             }
             h.call_m(0x1738e8, &[logger, CAT, 5, 0, FMT_LOOKUP, lookup], m);
@@ -368,7 +331,7 @@ pub fn fn_2c9ba0_m(
             let mut k = 0u16;
             while u32::from(k) < u32::from(result_count) {
                 let word = g_word(m, results.wrapping_add(u32::from(k) * 4)).unwrap_or(0);
-                // The record fields, split in place at the separator.
+
                 let mut p = h.call_m(0x195d30, &[word, separator], m);
                 let mut entry_type = 0u32;
                 let mut result_domain = 0u32;
@@ -435,14 +398,14 @@ pub fn fn_2c9ba0_m(
                 }
                 h.call_m(0x1738e8, &[logger, CAT, 5, 0, FMT_VALID, word], m);
                 if result_domain != 0
-                    && h.call_m(0x195d58, &[result_domain, EMPTY_S], m) != 0
+                    && h.call_m(0x195d58, &[result_domain, s_lit(h.rom(), 0x2c9ebc)], m) != 0
                     && h.call_m(0x1960a8, &[result_domain, domain], m) == 0
                 {
                     h.call_m(0x1738e8, &[logger, CAT, 5, 0, FMT_DOMAIN], m);
                     k = k.wrapping_add(1);
                     continue;
                 }
-                if usage != 0 && h.call_m(0x195d58, &[usage, ZERO_S], m) == 0 {
+                if usage != 0 && h.call_m(0x195d58, &[usage, s_lit(h.rom(), 0x2c9eac)], m) == 0 {
                     h.call_m(0x1738e8, &[logger, CAT, 5, 0, FMT_USAGE], m);
                     k = k.wrapping_add(1);
                     continue;
@@ -469,8 +432,7 @@ pub fn fn_2c9ba0_m(
                 if status >= 0x80000000 {
                     return status;
                 }
-                // `&position` is the incoming stack word the ARM passes;
-                // materialize it exactly like the ARM's own call setup.
+
                 if !p_half(m, body.wrapping_add(G_POSITION), position) {
                     return FAIL_MEM;
                 }
@@ -505,15 +467,15 @@ pub fn fn_2c9ba0_m(
                     }
                 }
                 let pronunciation = g_word(m, engine.wrapping_add(0x58)).unwrap_or(0);
-                if h.call_m(0x195d58, &[contexts[i as usize], ZERO_S], m) != 0 {
+                if h.call_m(0x195d58, &[contexts[i as usize], s_lit(h.rom(), 0x2c9eac)], m) != 0 {
                     h.call_m(0x195cd0, &[pronunciation, contexts[i as usize]], m);
-                    h.call_m(0x195c90, &[pronunciation, ONE_S], m);
+                    h.call_m(0x195c90, &[pronunciation, s_lit(h.rom(), 0x2ca69c)], m);
                 } else {
-                    h.call_m(0x195cd0, &[pronunciation, ONE_S], m);
+                    h.call_m(0x195cd0, &[pronunciation, s_lit(h.rom(), 0x2ca69c)], m);
                 }
                 h.call_m(0x195c90, &[pronunciation, word], m);
-                h.call_m(0x195c90, &[pronunciation, ONE_S], m);
-                if h.call_m(0x195d58, &[suffixes[j as usize], ZERO_S], m) != 0 {
+                h.call_m(0x195c90, &[pronunciation, s_lit(h.rom(), 0x2ca69c)], m);
+                if h.call_m(0x195d58, &[suffixes[j as usize], s_lit(h.rom(), 0x2c9eac)], m) != 0 {
                     h.call_m(0x195c90, &[pronunciation, suffixes[j as usize]], m);
                 }
                 let pron_len = h.call_m(0x195d90, &[pronunciation], m);
@@ -534,7 +496,8 @@ pub fn fn_2c9ba0_m(
                     return status;
                 }
                 if feature5 != 0 {
-                    if h.call_m(0x195d58, &[feature5, EMPTY2_S], m) != 0 {
+
+                    if h.call_m(0x195d58, &[feature5, s_lit(h.rom(), 0x2ca6c4)], m) != 0 {
                         let f5_len = h.call_m(0x195d90, &[feature5], m);
                         status = h.call_m(
                             f_set,
@@ -552,7 +515,7 @@ pub fn fn_2c9ba0_m(
                     } else {
                         status = h.call_m(
                             f_set,
-                            &[handle_obj, handle_data, u32::from(token), 5, 2, STAR_S, a_written],
+                            &[handle_obj, handle_data, u32::from(token), 5, 2, s_lit(h.rom(), 0x2ca6f0), a_written],
                             m,
                         );
                     }
@@ -561,7 +524,8 @@ pub fn fn_2c9ba0_m(
                     }
                 }
                 if feature6 != 0 {
-                    if h.call_m(0x195d58, &[feature6, EMPTY2_S], m) != 0 {
+
+                    if h.call_m(0x195d58, &[feature6, s_lit(h.rom(), 0x2ca6c4)], m) != 0 {
                         let f6_len = h.call_m(0x195d90, &[feature6], m);
                         status = h.call_m(
                             f_set,
@@ -579,7 +543,7 @@ pub fn fn_2c9ba0_m(
                     } else {
                         status = h.call_m(
                             f_set,
-                            &[handle_obj, handle_data, u32::from(token), 6, 2, STAR_S, a_written],
+                            &[handle_obj, handle_data, u32::from(token), 6, 2, s_lit(h.rom(), 0x2ca6f0), a_written],
                             m,
                         );
                     }
@@ -621,7 +585,7 @@ pub fn fn_2c9ba0_m(
                 } else {
                     status = h.call_m(
                         f_set,
-                        &[handle_obj, handle_data, u32::from(token), 9, 1, EMPTY2_S, a_written],
+                        &[handle_obj, handle_data, u32::from(token), 9, 1, s_lit(h.rom(), 0x2ca6c4), a_written],
                         m,
                     );
                 }
@@ -637,12 +601,6 @@ pub fn fn_2c9ba0_m(
     status
 }
 
-/// `fn_2c93f0` frame slots as ARM SP-relative offsets. The ARM keeps
-/// `push {r0-r3, r4-r8, sb, sl, fp, lr}` (0x34) plus `sub sp, #0x1c`, so the
-/// body SP is the entry SP minus 0x50; the token home is the incoming
-/// stack word at +0x54 (written by select, like the ARM), while `&start`
-/// is only ever read, so the port keeps the value in a Rust local and
-/// never needs the incoming word's address.
 pub const G2P93F0_SUB: u32 = 0x50;
 const F93_APPLIED: u32 = 0x0c;
 const F93_TOKEN: u32 = 0x54;
@@ -650,15 +608,6 @@ const F93_KIND: u32 = 0x10;
 const F93_COUNT: u32 = 0x14;
 const F93_ENABLED: u32 = 0x18;
 
-/// `fn_2c8554` recursion levels as ARM SP-relative frames. The ARM keeps
-/// `push {r4-r8, sb, sl, fp, lr}` (0x24) plus `sub sp, #0x134` per call, so
-/// level N's body SP is its entry SP minus 0x158, and each deeper level
-/// hangs 0x158 below the previous body. No fixed window and no depth cap:
-/// the caller passes the level-0 entry SP (the `fn_2c93f0` body SP) and
-/// each level is computed arithmetically, exactly like the ARM's own
-/// stack. Slot offsets below hang off each level's body SP; `buf` spans
-/// +0x14..+0x114 like the ARM's (writes past +0x84 would clobber the
-/// later slots on the ARM too, so the layout matches by construction).
 pub const G2P85_SUB: u32 = 0x158;
 const R_BUF: u32 = 0x14;
 const R_TABLE: u32 = 0x120;
@@ -696,12 +645,6 @@ const FMT85_USAGE: u32 = 0x2c93c4;
 const STAR93: u32 = 0x2c8868;
 const LIT_MDEU: u32 = 0x2c886c;
 
-/// The `fn_2c84ac` heap grower, live over the caller's arena.
-///
-/// Ports `src/fn_2c84ac.c:12`: when `n` exceeds 0x80 the three buffers at
-/// `p+0x58/0x5c/0x60` are reallocated to `n` through the live heap
-/// (`0x1963e0` over the allocator at `ctx+4`). A null grow logs `0x84d0`
-/// and reports `0x89b0200a`; otherwise the status is 0.
 pub fn fn_2c84ac_m(m: &mut Memory<'_>, h: &mut impl Host, p: u32, n: u32) -> u32 {
     if n <= 0x80 {
         return 0;
@@ -723,17 +666,6 @@ pub fn fn_2c84ac_m(m: &mut Memory<'_>, h: &mut impl Host, p: u32, n: u32) -> u32
     0
 }
 
-/// The `fn_2c8554` MDE/g2p row engine, live over the caller's arena.
-///
-/// Ports `src/fn_2c84ac.c:76` 1:1. `recsp` is the ARM entry SP of level 0
-/// (the `fn_2c93f0` body SP); each level's frame hangs 0x158 below the
-/// previous body SP, exactly like the ARM's own nesting, with no depth
-/// cap. `applied_ptr` is the caller's `u8` cell the engine
-/// sets once a row applies. `word`/`opts` are guest string addresses,
-/// `limit`/`start` plain words. Every guest call is issued through the
-/// host except the certified leaf lookup `fn_1ea4e0_m`, which nests
-/// directly the way `component_live_b3::fn_1ec7cc_m` nests it. Returns the
-/// last callee status, or `0x89b02007` on a null result word.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c8554_m(
     m: &mut Memory<'_>,
@@ -747,11 +679,7 @@ pub fn fn_2c8554_m(
     applied_ptr: u32,
     start: u32,
 ) -> u32 {
-    // This level's body SP: the level-0 entry SP minus one 0x24 push plus
-    // 0x134 frame per level, exactly like the ARM's own nesting. No depth
-    // cap: the ARM has none either (its bound is the stack guard), and the
-    // guest range check below fails closed if the arithmetic ever leaves
-    // the arena.
+
     let base = recsp.wrapping_sub(level.wrapping_add(1).wrapping_mul(G2P85_SUB));
     let buf = base.wrapping_add(R_BUF);
     let a_table = base.wrapping_add(R_TABLE);
@@ -790,12 +718,11 @@ pub fn fn_2c8554_m(
 
     let mut rc = 0u32;
     let mut kind = 0u32;
-    // The row loop index and the pad-loop counter below are 16-bit on the
-    // ARM (`uxth`); the counts and the `rem` window stay 32-bit.
+
     if h.call_m(0x195d90, &[word], m) == limit {
-        h.call_m(0x195cd0, &[buf, LIT_MDEU], m);
+        h.call_m(0x195cd0, &[buf, s_lit(h.rom(), 0x2c886c)], m);
         h.call_m(0x195c90, &[buf, opts], m);
-        h.call_m(0x195c90, &[buf, LIT_USCORE], m);
+        h.call_m(0x195c90, &[buf, s_lit(h.rom(), 0x2c8874)], m);
         let mut n = h.call_m(0x195d90, &[buf], m) as u16;
         let mut k = 0u16;
         while u32::from(k) < h.call_m(0x195d90, &[f5c], m) && u32::from(n) < 256 {
@@ -815,12 +742,12 @@ pub fn fn_2c8554_m(
         if !p_half(m, a_flag, 0xffff) {
             return FAIL_MEM;
         }
-        rc = h.call_m(f_fec, &[f10, f14, LIT_FECFG, buf, a_table, a_flag, a_delim], m);
+        rc = h.call_m(f_fec, &[f10, f14, s_lit(h.rom(), 0x2c8884), buf, a_table, a_flag, a_delim], m);
         if rc >= 0x80000000 {
             return rc;
         }
         if g_half(m, a_flag).unwrap_or(0) == 0 {
-            h.call_m(0x195cd0, &[buf, LIT_MDEU], m);
+            h.call_m(0x195cd0, &[buf, s_lit(h.rom(), 0x2c886c)], m);
             n = 4;
             k = 0;
             while u32::from(k) < h.call_m(0x195d90, &[f5c], m) && u32::from(n) < 256 {
@@ -840,7 +767,7 @@ pub fn fn_2c8554_m(
             if !p_half(m, a_flag, 0xffff) {
                 return FAIL_MEM;
             }
-            rc = h.call_m(f_fec, &[f10, f14, LIT_FECFG, buf, a_table, a_flag, a_delim], m);
+            rc = h.call_m(f_fec, &[f10, f14, s_lit(h.rom(), 0x2c8884), buf, a_table, a_flag, a_delim], m);
             if rc >= 0x80000000 {
                 return rc;
             }
@@ -859,7 +786,7 @@ pub fn fn_2c8554_m(
             h.call_m(0x1738e8, &[logger, CAT93, 5, 0, FMT_SUCCEEDS], m);
         }
     }
-    // `after`: the row engine runs only when the generation differs.
+
     if g_byte(m, p.wrapping_add(0x6d)).unwrap_or(0) == start as u8 {
         return rc;
     }
@@ -880,7 +807,7 @@ pub fn fn_2c8554_m(
         if !p_half(m, a_flag, 0) {
             return FAIL_MEM;
         }
-        rc = h.call_m(f_fec, &[f10, f14, LIT_MDE, base_w, a_table, a_flag, a_delim], m);
+        rc = h.call_m(f_fec, &[f10, f14, s_lit(h.rom(), 0x2c88a8), base_w, a_table, a_flag, a_delim], m);
         if rc >= 0x80000000 {
             return rc;
         }
@@ -903,7 +830,7 @@ pub fn fn_2c8554_m(
             let delim = u32::from(g_byte(m, a_delim).unwrap_or(0));
             let mut q = h.call_m(0x195d30, &[f1, delim], m);
             if q == 0 {
-                // nf1
+
             } else {
                 kind = q.wrapping_add(1);
                 if !p_byte(m, q, 0) {
@@ -929,26 +856,26 @@ pub fn fn_2c8554_m(
                 }
             }
             let n = h.call_m(0x195d90, &[f58], m) as u16;
-            let f1v = if f1 == 0 || h.call_m(0x195d58, &[f1, E93_2], m) == 0 {
-                STAR93
+            let f1v = if f1 == 0 || h.call_m(0x195d58, &[f1, s_lit(h.rom(), 0x2c8870)], m) == 0 {
+                s_lit(h.rom(), 0x2c8868)
             } else {
                 f1
             };
-            let f4v = if f4 == 0 || h.call_m(0x195d58, &[f4, E93_2], m) == 0 {
-                STAR93
+            let f4v = if f4 == 0 || h.call_m(0x195d58, &[f4, s_lit(h.rom(), 0x2c8870)], m) == 0 {
+                s_lit(h.rom(), 0x2c8868)
             } else {
                 f4
             };
             if n != 0 {
-                h.call_m(0x195c90, &[f58, LIT_PLUS], m);
-                h.call_m(0x195c90, &[f5c, LIT_SPACE], m);
-                h.call_m(0x195c90, &[f60, LIT_SPACE], m);
+                h.call_m(0x195c90, &[f58, s_lit(h.rom(), 0x2c8ca4)], m);
+                h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+                h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
             }
-            if f3 == 0 || h.call_m(0x195d58, &[f3, E93_2], m) == 0 {
-                // K: the affix/decode path.
-                if kind != 0 && h.call_m(0x195d58, &[kind, LIT_YES], m) == 0 {
-                    // M: the one-word MDE path.
-                    h.call_m(0x195cd0, &[buf.wrapping_add(4), LIT_ONEWORD], m);
+            if f3 == 0 || h.call_m(0x195d58, &[f3, s_lit(h.rom(), 0x2c8870)], m) == 0 {
+
+                if kind != 0 && h.call_m(0x195d58, &[kind, s_lit(h.rom(), 0x2c8cb0)], m) == 0 {
+
+                    h.call_m(0x195cd0, &[buf.wrapping_add(4), s_lit(h.rom(), 0x2c8cb4)], m);
                     if !p_byte(m, word.wrapping_add(u32::from(i)), 0) {
                         return FAIL_MEM;
                     }
@@ -1020,9 +947,9 @@ pub fn fn_2c8554_m(
                     if rc >= 0x80000000 {
                         return rc;
                     }
-                    h.call_m(0x195c90, &[f58, LIT_ONE], m);
-                    h.call_m(0x195c90, &[f5c, LIT_SPACE], m);
-                    h.call_m(0x195c90, &[f60, LIT_SPACE], m);
+                    h.call_m(0x195c90, &[f58, s_lit(h.rom(), 0x2c8cac)], m);
+                    h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+                    h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
                     h.call_m(0x195c90, &[f58, gptr], m);
                     h.call_m(0x195c90, &[f5c, a_c1], m);
                     h.call_m(0x195c90, &[f60, a_c2], m);
@@ -1030,8 +957,8 @@ pub fn fn_2c8554_m(
                     let bound = h.call_m(0x195d90, &[gptr], m).wrapping_sub(1) & 0xffff;
                     if bound > 0 {
                         loop {
-                            h.call_m(0x195c90, &[f5c, LIT_SPACE], m);
-                            h.call_m(0x195c90, &[f60, LIT_SPACE], m);
+                            h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+                            h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
                             j = j.wrapping_add(1);
                             if !(bound > u32::from(j)) {
                                 break;
@@ -1056,8 +983,8 @@ pub fn fn_2c8554_m(
                     let mut j = 0u16;
                     if (rem2 as u16) > 0 {
                         loop {
-                            h.call_m(0x195c90, &[f5c, LIT_SPACE], m);
-                            h.call_m(0x195c90, &[f60, LIT_SPACE], m);
+                            h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+                            h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
                             j = j.wrapping_add(1);
                             if !(u32::from(m_count) > u32::from(j)) {
                                 break;
@@ -1072,9 +999,9 @@ pub fn fn_2c8554_m(
                 if rc >= 0x80000000 {
                     return rc;
                 }
-                h.call_m(0x195c90, &[f58, LIT_ONE], m);
-                h.call_m(0x195c90, &[f5c, LIT_SPACE], m);
-                h.call_m(0x195c90, &[f60, LIT_SPACE], m);
+                h.call_m(0x195c90, &[f58, s_lit(h.rom(), 0x2c8cac)], m);
+                h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+                h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
                 h.call_m(0x195c90, &[f58, f3], m);
                 h.call_m(0x195c90, &[f5c, f1v], m);
                 h.call_m(0x195c90, &[f60, f4v], m);
@@ -1082,8 +1009,8 @@ pub fn fn_2c8554_m(
                 let bound = f3len.wrapping_sub(1) & 0xffff;
                 if bound > 0 {
                     loop {
-                        h.call_m(0x195c90, &[f5c, LIT_SPACE], m);
-                        h.call_m(0x195c90, &[f60, LIT_SPACE], m);
+                        h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+                        h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
                         j = j.wrapping_add(1);
                         if !(bound > u32::from(j)) {
                             break;
@@ -1091,7 +1018,7 @@ pub fn fn_2c8554_m(
                     }
                 }
             }
-            // call:
+
             rc = fn_2c8554_m(m, h, recsp, level.wrapping_add(1), p, word, opts, u32::from(i), applied_ptr, start);
             if rc >= 0x80000000 {
                 return rc;
@@ -1106,8 +1033,7 @@ pub fn fn_2c8554_m(
             }
             k = k.wrapping_add(1);
         }
-        // `goto cont` with `applied` set always reaches `return rc`: the
-        // flag is never cleared, so the next head check returns it.
+
         if g_byte(m, applied_ptr).unwrap_or(0) != 0 {
             return rc;
         }
@@ -1119,7 +1045,7 @@ pub fn fn_2c8554_m(
             return FAIL_MEM;
         }
         let f172 = u32::from(g_byte(m, p.wrapping_add(0x172)).unwrap_or(0));
-        rc = h.call_m(f_g2p, &[f10, f14, LIT_G2P, base_w, a_table, a_flag, a_delim, f172], m);
+        rc = h.call_m(f_g2p, &[f10, f14, s_lit(h.rom(), 0x2c9118), base_w, a_table, a_flag, a_delim, f172], m);
         if rc >= 0x80000000 {
             return rc;
         }
@@ -1142,14 +1068,14 @@ pub fn fn_2c8554_m(
             let delim = u32::from(g_byte(m, a_delim).unwrap_or(0));
             let mut q = h.call_m(0x195d30, &[f1, delim], m);
             if q == 0 {
-                // nf2
+
             } else {
                 if !p_byte(m, q, 0) {
                     return FAIL_MEM;
                 }
                 q = h.call_m(0x195d30, &[q.wrapping_add(1), delim], m);
                 if q == 0 {
-                    // nf2
+
                 } else {
                     if !p_byte(m, q, 0) {
                         return FAIL_MEM;
@@ -1157,7 +1083,7 @@ pub fn fn_2c8554_m(
                     f2 = q.wrapping_add(1);
                     q = h.call_m(0x195d30, &[f2, delim], m);
                     if q == 0 {
-                        // nf2
+
                     } else {
                         if !p_byte(m, q, 0) {
                             return FAIL_MEM;
@@ -1171,7 +1097,7 @@ pub fn fn_2c8554_m(
                             }
                             q = h.call_m(0x195d30, &[f4, delim], m);
                             if q == 0 {
-                                // nf2
+
                             } else {
                                 if !p_byte(m, q, 0) {
                                     return FAIL_MEM;
@@ -1179,7 +1105,7 @@ pub fn fn_2c8554_m(
                                 f5 = q.wrapping_add(1);
                                 q = h.call_m(0x195d30, &[f5, delim], m);
                                 if q == 0 {
-                                    // nf2
+
                                 } else {
                                     if !p_byte(m, q, 0) {
                                         return FAIL_MEM;
@@ -1200,21 +1126,21 @@ pub fn fn_2c8554_m(
                 return FAIL_HANDLE;
             }
             h.call_m(0x1738e8, &[logger, CAT93, 5, 0, FMT85_VALID, f1], m);
-            if f2 != 0 && h.call_m(0x195d58, &[f2, E93_4], m) != 0 {
+            if f2 != 0 && h.call_m(0x195d58, &[f2, s_lit(h.rom(), 0x2c8cbc)], m) != 0 {
                 if h.call_m(0x1960a8, &[f2, opts], m) == 0 {
                     h.call_m(0x1738e8, &[logger, CAT93, 5, 0, FMT85_DOMAIN], m);
                     k = k.wrapping_add(1);
                     continue;
                 }
             }
-            if f6 != 0 && h.call_m(0x195d58, &[f6, ZERO93], m) == 0 {
+            if f6 != 0 && h.call_m(0x195d58, &[f6, s_lit(h.rom(), 0x2c9130)], m) == 0 {
                 h.call_m(0x1738e8, &[logger, CAT93, 5, 0, FMT85_USAGE], m);
                 k = k.wrapping_add(1);
                 continue;
             }
             let n = h.call_m(0x195d90, &[f58], m) as u16;
-            if h.call_m(0x195d58, &[f1, E93_3], m) == 0 {
-                // call2:
+            if h.call_m(0x195d58, &[f1, s_lit(h.rom(), 0x2c9134)], m) == 0 {
+
                 rc = fn_2c8554_m(m, h, recsp, level.wrapping_add(1), p, word, opts, u32::from(i), applied_ptr, start);
                 if rc >= 0x80000000 {
                     return rc;
@@ -1230,13 +1156,13 @@ pub fn fn_2c8554_m(
                 k = k.wrapping_add(1);
                 continue;
             }
-            if f3 == 0 || h.call_m(0x195d58, &[f3, E93_3], m) == 0 {
-                f3 = STAR93;
+            if f3 == 0 || h.call_m(0x195d58, &[f3, s_lit(h.rom(), 0x2c9134)], m) == 0 {
+                f3 = s_lit(h.rom(), 0x2c8868);
             }
-            let f4v = if f4 != 0 && h.call_m(0x195d58, &[f4, E93_3], m) != 0 {
+            let f4v = if f4 != 0 && h.call_m(0x195d58, &[f4, s_lit(h.rom(), 0x2c9134)], m) != 0 {
                 f4
             } else {
-                STAR93
+                s_lit(h.rom(), 0x2c8868)
             };
             let grow = h.call_m(0x195d90, &[f1], m).wrapping_add(u32::from(n)).wrapping_add(4);
             rc = fn_2c84ac_m(m, h, p, grow);
@@ -1244,13 +1170,13 @@ pub fn fn_2c8554_m(
                 return rc;
             }
             if n != 0 {
-                h.call_m(0x195c90, &[f58, LIT_PLUS], m);
-                h.call_m(0x195c90, &[f5c, LIT_SPACE], m);
-                h.call_m(0x195c90, &[f60, LIT_SPACE], m);
+                h.call_m(0x195c90, &[f58, s_lit(h.rom(), 0x2c8ca4)], m);
+                h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+                h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
             }
-            h.call_m(0x195c90, &[f58, LIT_ONE], m);
-            h.call_m(0x195c90, &[f5c, LIT_SPACE], m);
-            h.call_m(0x195c90, &[f60, LIT_SPACE], m);
+            h.call_m(0x195c90, &[f58, s_lit(h.rom(), 0x2c8cac)], m);
+            h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+            h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
             h.call_m(0x195c90, &[f58, f1], m);
             h.call_m(0x195c90, &[f5c, f3], m);
             h.call_m(0x195c90, &[f60, f4v], m);
@@ -1258,18 +1184,18 @@ pub fn fn_2c8554_m(
             let bound = h.call_m(0x195d90, &[f1], m).wrapping_sub(1) & 0xffff;
             if bound > 0 {
                 loop {
-                    h.call_m(0x195c90, &[f5c, LIT_SPACE], m);
-                    h.call_m(0x195c90, &[f60, LIT_SPACE], m);
+                    h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+                    h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
                     j = j.wrapping_add(1);
                     if !(bound > u32::from(j)) {
                         break;
                     }
                 }
             }
-            h.call_m(0x195c90, &[f58, LIT_ONE], m);
-            h.call_m(0x195c90, &[f5c, LIT_SPACE], m);
-            h.call_m(0x195c90, &[f60, LIT_SPACE], m);
-            // call2:
+            h.call_m(0x195c90, &[f58, s_lit(h.rom(), 0x2c8cac)], m);
+            h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+            h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
+
             rc = fn_2c8554_m(m, h, recsp, level.wrapping_add(1), p, word, opts, u32::from(i), applied_ptr, start);
             if rc >= 0x80000000 {
                 return rc;
@@ -1288,17 +1214,6 @@ pub fn fn_2c8554_m(
     }
 }
 
-/// The `fn_2c93f0` MDE-config fallback, live over the caller's arena.
-///
-/// Ports `src/fn_2c93f0.c:32` 1:1. `p` is the word-engine object (the same
-/// `fe` the G2P lookup takes): `+0x00` the services, `+0x0c` the token
-/// vtable (`+0x2c` select, `+0x50` set), `+0x58/0x5c/0x60` the text,
-/// alternate and extra buffers, `+0x6a/0x6b/0x6c/0x6e` the length limits,
-/// capital-only and disabled flags. `start`/`token_in` are the `u16` stack
-/// words the ARM receives; `end` is the `u16 *` the ARM fills.
-/// Level 0 of the nested `fn_2c8554` recursion enters at this body SP.
-/// Returns the last callee status,
-/// or `0x89b02007` on a null result word.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c93f0_m(
     m: &mut Memory<'_>,
@@ -1314,10 +1229,7 @@ pub fn fn_2c93f0_m(
     handle_data: u32,
     end: u32,
 ) -> u32 {
-    // The ARM body SP: entry SP minus the 0x34 push minus the 0x1c
-    // frame. The token home is the incoming stack word, written by
-    // select exactly like the ARM; `&start` is only ever read, so the
-    // port keeps the value in a Rust local.
+
     let body = sp.wrapping_sub(G2P93F0_SUB);
     let a_applied = body.wrapping_add(F93_APPLIED);
     let a_token = body.wrapping_add(F93_TOKEN);
@@ -1352,7 +1264,7 @@ pub fn fn_2c93f0_m(
         || h.call_m(0x195d90, &[text], m) < u32::from(g_byte(m, p.wrapping_add(0x6a)).unwrap_or(0))
         || h.call_m(0x195d90, &[text], m) > u32::from(g_byte(m, p.wrapping_add(0x6b)).unwrap_or(0));
     if skip {
-        h.call_m(0x1738e8, &[logger, CAT93, 5, 0, SKIP_FMT, word], m);
+        h.call_m(0x1738e8, &[logger, CAT93, 5, 0, s_lit(h.rom(), 0x2c9724), word], m);
         return rc;
     }
     if g_byte(m, p.wrapping_add(0x6c)).unwrap_or(0) == 1 {
@@ -1360,13 +1272,13 @@ pub fn fn_2c93f0_m(
         let upper = (c.wrapping_sub(b'A') as u32) <= 25;
         let listed = matches!(c, 0x80 | 0x8e | 0x8f | 0x90 | 0x92 | 0x99 | 0x9a | 0xa5);
         if !upper && !listed {
-            h.call_m(0x1738e8, &[logger, CAT93, 5, 0, SKIP_FMT, word], m);
+            h.call_m(0x1738e8, &[logger, CAT93, 5, 0, s_lit(h.rom(), 0x2c9724), word], m);
             return rc;
         }
     }
-    h.call_m(0x195cd0, &[text_buf, E93_S], m);
-    h.call_m(0x195cd0, &[alt_buf, E93_S], m);
-    h.call_m(0x195cd0, &[extra_buf, E93_S], m);
+    h.call_m(0x195cd0, &[text_buf, s_lit(h.rom(), 0x2c93c0)], m);
+    h.call_m(0x195cd0, &[alt_buf, s_lit(h.rom(), 0x2c93c0)], m);
+    h.call_m(0x195cd0, &[extra_buf, s_lit(h.rom(), 0x2c93c0)], m);
     rc = fn_2c8554_m(m, h, body, 0, p, word, opts, 0, a_applied, 0);
     if rc >= 0x80000000 || g_byte(m, a_applied).unwrap_or(0) == 0 {
         return rc;
@@ -1389,8 +1301,7 @@ pub fn fn_2c93f0_m(
     if rc >= 0x80000000 {
         return rc;
     }
-    // The ARM caller pushes the stack words; `&start` is the incoming
-    // slot, materialized here exactly like the ARM's own call setup.
+
     if !p_half(m, body.wrapping_add(0x50), start) {
         return FAIL_MEM;
     }
@@ -1471,7 +1382,7 @@ pub fn fn_2c93f0_m(
     }
     h.call_m(
         f_set,
-        &[handle_obj, handle_data, u32::from(token), 9, 1, E93_S, a_count],
+        &[handle_obj, handle_data, u32::from(token), 9, 1, s_lit(h.rom(), 0x2c93c0), a_count],
         m,
     )
 }

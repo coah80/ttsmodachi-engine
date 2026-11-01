@@ -1,10 +1,10 @@
-//! Boot-path lane 4. Addresses are guest addresses in caller-owned memory.
+
 use crate::boot::Memory;
 fn put(m: &mut Memory<'_>, p: u32, v: u32) {
     let at = (p - m.base) as usize;
     m.bytes[at..at + 4].copy_from_slice(&v.to_le_bytes());
 }
-/// Return the region's static descriptor, supplied by the image loader.
+
 pub fn fn_228760(m: &mut Memory<'_>, a: u32, out: u32, descriptor: u32) -> u32 {
     if a <= 1 {
         put(m, out, descriptor);
@@ -14,7 +14,6 @@ pub fn fn_228760(m: &mut Memory<'_>, a: u32, out: u32, descriptor: u32) -> u32 {
     }
 }
 
-/// Region-specific static descriptor getter.
 pub fn fn_22c5cc(m: &mut Memory<'_>, a: u32, out: u32, descriptor: u32) -> u32 {
     if a <= 1 {
         put(m, out, descriptor);
@@ -60,7 +59,7 @@ pub fn fn_2475f8(m: &mut Memory<'_>, obj: u32, h: &mut impl crate::frontend::Hea
     put(m, obj + 0x4c, 0);
     0
 }
-/// Free regex/string arrays and their elements with the real reentrant heap port.
+
 pub fn fn_248210(
     m: &mut Memory<'_>,
     obj: u32,
@@ -68,7 +67,7 @@ pub fn fn_248210(
     count: u32,
     h: &mut impl crate::frontend::HeapVtableM,
 ) {
-    // The field must be mapped. Every graph edge is reloaded across callbacks.
+
     if m.word(field) == 0 {
         return;
     }
@@ -97,7 +96,6 @@ pub fn fn_248210(
     put(m, field, 0);
 }
 
-/// Read a three-byte, NUL-padded key through the existing strncpy port.
 fn key3(m: &Memory<'_>, p: u32) -> [u8; 4] {
     let mut local = [0u8; 8];
     let at = (p - m.base) as usize;
@@ -139,8 +137,6 @@ pub fn fn_248a28(m: &mut Memory<'_>, base: u32, limit: u32, cursor: u32) -> u32 
     }
 }
 
-/// Live dependencies and immutable regional addresses. Scratch is a disjoint
-/// caller-owned 160-byte range. Nested calls need a different range.
 #[derive(Clone, Copy)]
 pub struct Environment {
     pub null_pair: [u8; 8],
@@ -153,7 +149,7 @@ pub struct Environment {
     pub handlers: [u32; 5],
     pub runtime_callbacks: [u32; 3],
     pub scratch: u32,
-    /// Disjoint 1024-byte staging area for the block-data teardown port.
+
     pub block_scratch: u32,
 }
 struct Calls<'a, H>(&'a mut H);
@@ -252,7 +248,7 @@ fn context(m: &Memory<'_>, object: u32, tag: u32, e: &Environment) -> (u32, u32)
     );
     (rc, ctx)
 }
-/// Count and group three-byte keys in a bounded two-string record stream.
+
 pub fn fn_2484e8(
     m: &mut Memory<'_>,
     a: [u32; 8],
@@ -333,7 +329,7 @@ pub fn fn_2484e8(
     error(m, m.word(m.word(obj) + 16), e.module, 0xc353, e, h);
     1
 }
-/// Open the block-data root. Allocation uses the real fn_1963b8 dispatch.
+
 pub fn fn_250918(
     m: &mut Memory<'_>,
     obj: u32,
@@ -363,7 +359,7 @@ pub fn fn_250918(
     trace(m, logger, module, e.end, 0, e, h);
     0
 }
-/// Open the runtime-data manager, including its real callback-block constructor.
+
 pub fn fn_24dac8(
     m: &mut Memory<'_>,
     obj: u32,
@@ -431,7 +427,7 @@ impl crate::frontend::MethodTable for CompletedAllocation {
         self.0
     }
 }
-/// Construct the normalizer's context map using fn_1964e0's existing port.
+
 pub fn fn_24d84c(
     m: &mut Memory<'_>,
     obj: u32,
@@ -465,8 +461,7 @@ pub fn fn_24d84c(
     error(m, m.word(m.word(obj) + 16), m.word(obj + 72), 0x5de7, e, h);
     rc
 }
-/// Open the lightweight transcoder handle, resolving the engine and resource
-/// through their existing ports. Resource temporaries are restored on exit.
+
 pub fn fn_230c58(
     m: &mut Memory<'_>,
     object: u32,
@@ -562,7 +557,7 @@ impl<H: crate::boot_part_b::Host> crate::normalization::NormalizationHost for No
         pair
     }
 }
-/// Open the full transcoder and its one-byte flag through the existing port.
+
 pub fn fn_230a14(
     m: &mut Memory<'_>,
     object: u32,
@@ -636,7 +631,6 @@ pub fn fn_230a14(
     rc
 }
 
-// Lane 5's fn_2b645c has landed. This adapter retains live memory on all calls.
 impl<H: crate::boot_part_b::Host> crate::boot_port_5::Host for Calls<'_, H> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.0.call(m, f, a)
@@ -655,7 +649,7 @@ fn close_data(
     }
     info(m, obj, e.begin, 0, e, h);
     let mut rc = 0;
-    // 250a3c is lane 4b's port; the two other closers are local.
+
     let block = block_environment(e, k);
     for f in [0x2b6594, 0x250a3c, 0x2b5e0c] {
         let r = match f {
@@ -672,7 +666,7 @@ fn close_data(
     info(m, obj, e.end, rc, e, h);
     rc
 }
-/// Open all three FE data roots, cleaning up partial construction on failure.
+
 pub fn fn_24ef54(
     m: &mut Memory<'_>,
     obj: u32,
@@ -732,7 +726,7 @@ impl<H: crate::boot_part_b::Host> crate::boot::Calls for Destroy<'_, H> {
     }
     fn call_wide(&mut self,_:&mut Memory<'_>,_:u32,_:&[u32])->u64 {unreachable!()}
 }
-/// Close runtime data, including array destructors and every entry buffer.
+
 pub fn fn_24d8fc(m:&mut Memory<'_>,obj:u32,e:&Environment,h:&mut impl crate::boot_part_b::FormatHost)->u32 {
     if m.word(obj+68)==0 {return crate::normalization::error_code(8);}
     info(m,obj,e.begin,0,e,h);
@@ -777,7 +771,7 @@ pub fn fn_24d8fc(m:&mut Memory<'_>,obj:u32,e:&Environment,h:&mut impl crate::boo
     info(m,obj,e.end,0,e,h);
     0
 }
-/// Release a function-data node. Flag one recursively releases child nodes.
+
 pub fn fn_2b6234(m:&mut Memory<'_>,ctx:u32,n:u32,flag:u32,h:&mut impl crate::boot_part_b::Host) {
     if n==0{return;}
     for off in [20,16,24] {
@@ -852,8 +846,7 @@ impl<H:crate::boot_part_b::Host> crate::regex::PcreHost for Compiler<'_, '_,H> {
     }
     fn free(&mut self,heap:u32,p:u32){free(self.m,heap,p,self.h);}
 }
-/// Bind the existing PCRE compiler to live guest allocation. These callers discard
-/// the compiler's local error string and offset. Output capacity is caller-owned.
+
 fn compile_pattern(m:&mut Memory<'_>,obj:u32,key:u32,pattern:&[u8],tables:&crate::regex::PcreTables<'_>,
     output:&mut [u8],h:&mut impl crate::boot_part_b::Host)->u32 {
     let heap=if obj!=0 {m.word(m.word(obj)+4)}else{0};
@@ -890,7 +883,7 @@ pub fn fn_247334(m:&mut Memory<'_>,obj:u32,tables:&crate::regex::PcreTables<'_>,
     if m.word(obj+72)!=0 {
         error(m,m.word(m.word(obj)+16),e.module,0xc353,e,h);return 0x8bf02000;
     }
-    // ABI-local literals and sprintf output do not alias guest objects.
+
     let mut local=[0u8;1024];
     let mut mem=Memory{base:0,bytes:&mut local};
     let strings:[&[u8];7]=[
@@ -933,8 +926,7 @@ impl<H:crate::boot_part_b::Host> crate::boot_part_b::Host for MapRuntime<'_,H> {
         }
     }
 }
-/// Open and populate the two-entry normalizer map. pairs is D_914a88,
-/// supplied by the regional image loader; scratch is disjoint caller memory.
+
 pub fn fn_24d3bc(m:&mut Memory<'_>,obj:u32,pairs:[[u32;2];2],key_bytes:[u8;2],e:&Environment,
     h:&mut impl crate::boot_part_b::FormatHost)->u32 {
     let saved=m.word(e.scratch);
@@ -973,8 +965,7 @@ impl<H:crate::boot_part_b::Host> crate::frontend::HeapVtableM for GroupRelease<'
         self.h.call(&mut m,f,&[obj,p]);
     }
 }
-/// Group and compile a record stream. workspace is 320 caller-owned scratch
-/// bytes. The compiler output is separate host-side caller-owned storage.
+
 pub fn fn_248688(m:&mut Memory<'_>,a:[u32;7],workspace:u32,tables:&crate::regex::PcreTables<'_>,
     output:&mut [u8],e:&Environment,h:&mut impl crate::boot_part_b::FormatHost)->u32 {
     let [obj,out,count,mode,base,limit,cursor]=a;
@@ -1029,7 +1020,7 @@ fn groups_inner(m:&mut Memory<'_>,a:[u32;7],w:u32,tables:&crate::regex::PcreTabl
             put(m,m.word(m.word(out)+i*16+8)+k*4,base.wrapping_add(position).wrapping_add(3));
             if mode==0 {
                 let src=base.wrapping_add(position).wrapping_add(3);
-                // Pattern is copied before borrowing the arena for callbacks.
+
                 let mut pattern=[0u8;512];let mut n=0;
                 while n<508 {let b=m.byte(src+n as u32);pattern[n]=b;n+=1;if b==0{break;}}
                 assert!(n<508,"pattern scratch too small");
@@ -1091,8 +1082,7 @@ fn block_environment(
         scratch: e.block_scratch,
     }
 }
-/// fn_2413c4. Open the string-map reader: read the STMC, STMF and STMR chunks
-/// of the attached reader and publish the reader object through `out`.
+
 pub fn fn_2413c4(
     m: &mut Memory<'_>,
     h: &mut impl crate::render_part_a::ReaderHost,
@@ -1108,8 +1098,7 @@ pub fn fn_2413c4(
         return 0x8a202007;
     }
     put(m, out, 0);
-    // The context pointer lives outside the compared arena, as the ROM keeps
-    // it on the stack.
+
     let ctx_slot = k.scratch + 0x140;
     let rc = crate::boot_port_1::fn_19611c(
         m,
@@ -1271,35 +1260,31 @@ fn fn_2413c4_tail(
     rc
 }
 
-/// The select_bet2 engine. The parameter keys are the guest addresses of the
-/// module's own name table; the module data is ROM data, so the caller
-/// supplies the keys, the defaults and the log formats.
 pub struct SelectEnvironment {
-    /// D_8fa504.openNames: the rate key, the wait-factor key and the end.
+
     pub open_names: [u32; 3],
-    /// D_8fa504.closeNames: four keys and the end.
+
     pub close_names: [u32; 4],
-    /// D_8fa504.defaults: the fallback values of the two open keys.
+
     pub defaults: [u32; 2],
-    /// The rate key, the same pointer as open_names[0].
+
     pub rate_name: u32,
-    /// The wait-factor key, the same pointer as open_names[1].
+
     pub wait_name: u32,
-    /// D_225118, the key the engine registers itself under.
+
     pub owner_key: u32,
-    /// D_8fa510, the module name of the log category.
+
     pub module: u32,
-    /// The "SYNTHSTREAM" resource name.
+
     pub synthstream: u32,
-    /// D_8fa504.openCbs and closeCbs: the check and set callbacks.
+
     pub open_cbs: [u32; 2],
     pub close_cbs: [u32; 2],
-    /// The log formats: the open trace, the rate and wait-factor traces, the
-    /// open leave trace, the close trace and the close leave trace.
+
     pub formats: [u32; 6],
-    /// A disjoint scratch area; its 1024 bytes are restored on return.
+
     pub scratch: u32,
-    /// D_8d7640, the default context of the engine.
+
     pub default_context: u32,
 }
 fn select_saved(m: &mut Memory<'_>, at: u32) -> [u8; 1024] {
@@ -1336,9 +1321,7 @@ fn select_error(
 ) {
     let _ = crate::render_part_a::error_log(m, h, logger, module, code, 0, 0, e.scratch);
 }
-/// fn_2271f4. Open the select_bet2 engine: resolve the context, allocate the
-/// engine, load the voice (the 2252b0 stub of lane 3b) and register the
-/// parameter owners.
+
 pub fn fn_2271f4(
     m: &mut Memory<'_>,
     h_ctx: u32,
@@ -1490,8 +1473,7 @@ fn select_int_param(
         0
     }
 }
-/// fn_226f68. Close the select_bet2 engine: drop the parameter owners, close
-/// the synth stream and release the voice blocks.
+
 pub fn fn_226f68(
     m: &mut Memory<'_>,
     engine: u32,
@@ -1570,33 +1552,14 @@ pub fn fn_226f68(
     select_restore(m, e.scratch, saved);
     rc
 }
-// ----------------------------------------------------------------------
-// Round 5: fn_2512dc, the token data loader.
-//
-// The round-4 binding plan is followed exactly:
-//   fn_243a94 forwards to fn_242fd0 (the arena-aware boot_port_3b port),
-//   fn_242c9c is render_part_a::find_reader_chunk, fn_2422ac is
-//   render_part_a::close_reader_chunk, fn_2421b0 is
-//   render_part_a::close_reader, fn_24f570 and fn_24f124 are boot_port_4b's
-//   ports, fn_175a1c is speech_part_2::fetch_parameter_m, fn_3023b0 is a
-//   memset and the string helpers are fe_text's strcat_195c90 and
-//   memcpy_195ae8. Only the named-parameter lookup stays a host service,
-//   because its tree comparator is a guest method pointer.
-// ----------------------------------------------------------------------
 
-/// The named-parameter lookup of the token loader. The caller binds it to
-/// `speech_part_2::fetch_parameter_m`, whose tree comparator is the
-/// guest's own method pointer.
 pub trait TokenHost:
     crate::boot_port_4b::Host + crate::boot_port_3b::OpenHostM + crate::boot_part_b::Host
 {
-    /// fn_175a1c. A named parameter string: the status and the guest
-    /// address of the value.
+
     fn parameter(&mut self, m: &mut Memory<'_>, params: u32, key: u32) -> (u32, u32);
 }
 
-/// The literal texts the token loader reads. Every address is a guest
-/// address of a NUL-terminated string.
 pub struct TokenTexts {
     pub lang_index: u32,
     pub max: u32,
@@ -1618,7 +1581,6 @@ pub struct TokenTexts {
     pub file: u32,
 }
 
-/// The four log formats of the token loader.
 pub struct TokenFormats {
     pub index: u32,
     pub missing: u32,
@@ -1626,32 +1588,25 @@ pub struct TokenFormats {
     pub loaded: u32,
 }
 
-/// The caller-owned data of the token data loader.
 pub struct TokenEnvironment {
-    /// The reader runtime: the category, the formats and the scratch.
+
     pub reader: crate::render_part_a::ReaderRuntime,
-    /// The block loader runtime: the tags, the messages and the scratch.
+
     pub block: crate::boot_port_4b::Environment,
-    /// The open runtime of fn_242fd0: the broker, the context and the
-    /// scratch.
+
     pub open: crate::leftovers_1::OpenRuntime,
-    /// D_914ab8, the data version the file is compared against.
+
     pub version: u32,
-    /// D_914abb, the resource type of the token file.
+
     pub kind: u32,
-    /// 256 disjoint bytes: the 128-byte path buffer, the log argument area,
-    /// the logger's parameter scratch and three words. Restored on return.
+
     pub scratch: u32,
-    /// The literal texts.
+
     pub texts: TokenTexts,
-    /// The log formats.
+
     pub formats: TokenFormats,
 }
-/// The row's stack frame. The ROM keeps fn_2512dc's locals, the reader's
-/// own locals and the reader open's locals on the stack; the port keeps
-/// them in the arena's scratch, so the whole frame is restored before the
-/// row returns. The frame runs from the row's own scratch to the
-/// character-class table that follows the open scratch: 0xb00 bytes.
+
 const TOKEN_SCRATCH: usize = 0xb00;
 const TOKEN_BUF: u32 = 0;
 const TOKEN_ARGS: u32 = 0x80;
@@ -1716,7 +1671,7 @@ fn token_trace(
         &mut Log(h),
     );
 }
-/// fn_243a94. Open the token file through the arena-aware fn_242fd0.
+
 fn token_open(
     m: &mut Memory<'_>,
     h: &mut impl TokenHost,
@@ -1738,7 +1693,7 @@ fn token_open(
     ];
     crate::boot_port_3b::fn_242fd0_m(m, args, &e.open, h)
 }
-/// fn_2512dc. Load the token data blocks of one language.
+
 pub fn fn_2512dc(
     m: &mut Memory<'_>,
     o: u32,

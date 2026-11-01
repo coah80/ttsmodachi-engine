@@ -8,8 +8,7 @@ pub struct SynthesisBoundary {
 }
 
 impl SynthesisBoundary {
-    /// fn_183398 / EU fn_183448 / KR fn_1833f4.
-    /// The host owns output storage, PCM callbacks and publication locks.
+
     pub fn finish(
         &mut self,
         output: [&mut [i16]; 2],

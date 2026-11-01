@@ -1,6 +1,6 @@
-//! Boot-path ports, lane 3. Guest addresses and state belong to the caller.
+
 use crate::boot::Memory;
-/// Query the descriptor for supported interface versions zero and one.
+
 pub fn fn_20129c(m: &mut Memory<'_>, version: u32, out: u32, descriptor: u32) -> u32 {
     if version <= 1 {
         m.put_word(out, descriptor);
@@ -10,7 +10,6 @@ pub fn fn_20129c(m: &mut Memory<'_>, version: u32, out: u32, descriptor: u32) ->
     }
 }
 
-/// Dictionary interface descriptor query. The two descriptor addresses are caller-supplied.
 pub fn fn_205f00(
     m: &mut Memory<'_>,
     engine: u32,
@@ -31,7 +30,7 @@ pub fn fn_205f00(
     m.put_word(out, value);
     0
 }
-/// Dictionary ABI descriptor query.
+
 pub fn fn_206788(m: &mut Memory<'_>, version: u32, out: u32, descriptor: u32) -> u32 {
     if version <= 1 {
         m.put_word(out, descriptor);
@@ -40,7 +39,7 @@ pub fn fn_206788(m: &mut Memory<'_>, version: u32, out: u32, descriptor: u32) ->
         0x8a802001
     }
 }
-/// Frontend dependency interface descriptor query.
+
 pub fn fn_20714c(m: &mut Memory<'_>, version: u32, out: u32, descriptor: u32) -> u32 {
     if version <= 1 {
         m.put_word(out, descriptor);
@@ -50,7 +49,6 @@ pub fn fn_20714c(m: &mut Memory<'_>, version: u32, out: u32, descriptor: u32) ->
     }
 }
 
-/// Platform/unported cross-unit calls. Every call receives the live arena.
 pub trait Host {
     fn thread_id(&mut self) -> u32 {
         panic!("platform thread id not bound")
@@ -71,13 +69,13 @@ impl<H: Host> crate::boot_part_e::Host for Calls<'_, H> {
         self.0.call(m, f, a)
     }
 }
-/// Regional immutable data and disjoint, caller-owned scratch.
+
 pub struct Environment {
     pub null_pair: [u8; 8],
     pub default_context: u32,
     pub inet_name: u32,
     pub module: u32,
-    /// Eight bytes for output temporaries, followed by 128 for registry calls.
+
     pub scratch: u32,
 }
 fn resolve(m: &Memory<'_>, object: u32, tag: u32, e: &Environment) -> (u32, u32) {
@@ -85,7 +83,7 @@ fn resolve(m: &Memory<'_>, object: u32, tag: u32, e: &Environment) -> (u32, u32)
         u32::from_le_bytes(e.null_pair[..4].try_into().unwrap()),
         u32::from_le_bytes(e.null_pair[4..].try_into().unwrap()),
     ];
-    // The ROM never dereferences an invalid-tag or cached handle.
+
     let word = if object == 0 {
         None
     } else if tag == 0x1e61 && [object, tag] != cached {
@@ -104,8 +102,7 @@ fn resolve(m: &Memory<'_>, object: u32, tag: u32, e: &Environment) -> (u32, u32)
     );
     (rc, context)
 }
-/// fn_201548. Construct the dictionary manager and optionally bind INET.
-/// The scratch range must not overlap any input, output, allocation or callback state.
+
 pub fn fn_201548(
     m: &mut Memory<'_>,
     _a: u32,
@@ -135,7 +132,7 @@ pub fn fn_201548(
     m.put_word(p, object);
     m.put_word(p + 4, tag);
     m.put_word(p + 8, ctx);
-    // Serialize the real ResourceList initializer into the guest ABI.
+
     let mut nodes = [];
     let mut list = crate::frontend_resources::ResourceList {
         nodes: &mut nodes,
@@ -236,10 +233,10 @@ fn release_name(
     }
     rc
 }
-/// Region-specific names for resource-open constructors.
+
 pub struct ConstructorEnvironment {
     pub common: Environment,
-    /// 20683c: LINGDB, FE_DCTLKP, FE_DEPES. 2198b4: SYNTHSTREAM, FE_DEPES, FE_DCTLKP.
+
     pub names: [u32; 3],
     pub section: u32,
     pub keys: [u32; 2],
@@ -255,7 +252,7 @@ fn cleanup_names(
         release_name(m, h, res, name, &e.common);
     }
 }
-/// fn_20683c. Caller scratch is 160 disjoint bytes, restored on normal return.
+
 pub fn fn_20683c(
     m: &mut Memory<'_>,
     _a: u32,
@@ -364,7 +361,7 @@ fn open_normalizer(
     }
     rc
 }
-/// fn_2198b4. Caller scratch is 160 disjoint bytes, restored on normal return.
+
 pub fn fn_2198b4(
     m: &mut Memory<'_>,
     _a: u32,
@@ -518,11 +515,10 @@ fn destroy_spelling(
     .unwrap()
 }
 
-/// Guest rodata used by the dictionary loader. Strings remain mapped by the caller.
 pub struct DictionaryEnvironment {
-    /// Four allocator and four stream entry addresses for the real lane-5 constructor.
+
     pub backend_methods: [u32; 8],
-    /// Begin/end formats, BEG, NAME, END and RETC labels.
+
     pub trace: [u32; 6],
     pub common: Environment,
     pub empty: u32,
@@ -538,8 +534,7 @@ pub struct DictionaryEnvironment {
     pub name_label: u32,
     pub type_label: u32,
     pub uri_label: u32,
-    /// The real fn_281f34 attachment scene: content types, log strings, scratch
-    /// and the regional dictionary tables.
+
     pub attach: crate::boot_port_5b::Attach,
 }
 fn strcmp(m: &Memory<'_>, a: u32, b: u32) -> i32 {
@@ -614,8 +609,7 @@ fn list_insert(m: &mut Memory<'_>, list: u32, value: u32, h: &mut impl Host) -> 
     }
     rc
 }
-/// fn_201748. INET callbacks and foreign dictionary implementation calls receive
-/// the live arena. All 320 scratch bytes are restored on normal return.
+
 pub fn fn_201748(
     m: &mut Memory<'_>,
     p: u32,
@@ -682,7 +676,7 @@ fn load_dictionary(
     let mut entry = 0;
     let mut hnd = 0;
     let mut oom = false;
-    // Inner result lets the shared cleanup observe all failures, including OOM.
+
     rc = (|| {
         if m.word(d) != 0 {
             entry = crate::boot_part_e::calloc(m, m.word(ctx + 4), 1, 44, &mut Calls(h));
@@ -934,26 +928,21 @@ fn load_dictionary(
     rc
 }
 
-/// Regional strings and caller-owned scratch for fn_1f80d4.
-/// scratch covers 768 bytes and must be disjoint from every input and callback state.
 pub struct FrontendEnvironment {
     pub scratch: u32,
     pub detach: crate::boot_port_4b::Environment,
     pub section: u32,
-    /// dtlhp2lhtts, phonlhp2lhtts, extramaintrans, lidenx,
-    /// lidenxchars, dpsmultitrans.
+
     pub keys: [u32; 6],
-    /// mlset, extclccfg, langcode, fecfg, fedatapackaging.
+
     pub parameters: [u32; 5],
-    /// language list, empty, clc, clc/, /, :, dt/, version tag, log module.
+
     pub strings: [u32; 9],
     pub version: u32,
     pub character_classes: [u16; 256],
     pub runtime: crate::leftovers_1::OpenRuntime,
 }
-// Acquire/release callbacks run outside the typed lookup's read-only borrow.
-// Its pure tree and status logic is reused after the real acquire and before
-// the real release; callback changes to the parameter object remain visible.
+
 fn fe_lock(m: &mut Memory<'_>, owner: u32, release: bool, h: &mut impl Host) -> u32 {
     let mut selected = None;
     let rc = if release {
@@ -1099,8 +1088,7 @@ fn fe_string(
         ],
     )
 }
-/// Load frontend flags and the optional dictionary table.
-/// All local byte arrays and pointer outputs use restored caller-owned scratch.
+
 pub fn fn_1f80d4(
     m: &mut Memory<'_>,
     p: u32,
@@ -1327,7 +1315,6 @@ fn fe_load(
     crate::render_part_a::close_reader(m, h, reader, &e.runtime.reader)
 }
 
-/// Frontend constructor constants. Every string remains a mapped guest address.
 pub struct FrontendConstructorEnvironment {
     pub common: Environment,
     pub frontend: FrontendEnvironment,
@@ -1342,7 +1329,7 @@ pub struct FrontendConstructorEnvironment {
     pub map_callbacks: [u32; 5],
     pub allocators: [u32; 4],
 }
-/// Map value copy callback and no-op destructor from the constructor's unit.
+
 pub fn fn_1f87b8(m: &mut Memory<'_>, value: u32, _context: u32, out: u32) -> u32 {
     m.put_word(out, value);
     0
@@ -1383,7 +1370,7 @@ impl<H: Host> crate::boot_port_5::ConfigHost for ConfigCalls<'_, H> {
         rc
     }
 }
-/// Construct the frontend, including morphology settings and the G2P map.
+
 pub fn fn_1f87c4(
     m: &mut Memory<'_>,
     _unused0: u32,
@@ -1698,29 +1685,25 @@ fn fe_construct(
     status
 }
 
-/// Constants and restored caller-owned locals for the dictionary engine loader.
 pub struct EngineDictionaryEnvironment<'a> {
     pub scratch: u32,
-    /// Begin/end formats, BEG, NAME, END and RETC labels.
+
     pub trace: [u32; 6],
     pub uri_format: u32,
     pub uri_label: u32,
-    /// fedatapackaging, langcode, fecfg, clc, clc/, /, :, loader marker, mode marker.
+
     pub strings: [u32; 9],
     pub types: [u32; 3],
     pub module: u32,
     pub runtime: crate::leftovers_1::OpenRuntime,
-    /// The real fn_2b4010 dictionary constructor and the regional archive it
-    /// opens. The frame is 48 disjoint caller-owned bytes.
+
     pub dictionary: crate::boot_port_5::DictionaryEnvironment<'a>,
     pub archive: crate::boot_part_e::ArchiveEnvironment,
     pub frame: u32,
-    /// The regional CDCT tables fn_2b22b0 publishes. The addresses are the
-    /// region's own ROM data, so every engine reads the same words.
+
     pub tables: crate::boot_port_5b::Tables,
 }
-/// The real fn_2b22b0 chain. The archive services and the CDCT table
-/// addresses stay with the lane's host and environment.
+
 struct CdtCalls<'a, H>(&'a mut H);
 impl<H: Host> crate::boot_part_f::Host for CdtCalls<'_, H> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
@@ -1743,8 +1726,7 @@ impl<H: Host> crate::boot_port_5::Host for Lane5Calls<'_, H> {
         Host::call(self.0, m, f, a)
     }
 }
-/// The real fn_2b4010 host: the archive services and the platform methods
-/// come from the archive host, every other callee from the lane's host.
+
 struct Engine5Calls<'a, H>(&'a mut H);
 impl<H: Host + crate::boot_part_e::ArchiveHost> crate::boot_port_5::Host for Engine5Calls<'_, H> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
@@ -1845,7 +1827,7 @@ impl<H: Host + crate::boot_part_e::ArchiveHost> crate::boot_part_e::ArchiveHost
         self.0.read(m, f, ctx, b)
     }
 }
-/// Load an engine dictionary. Scratch is 1152 disjoint bytes and is restored.
+
 pub fn fn_205f40(
     m: &mut Memory<'_>,
     engine: u32,
@@ -2222,8 +2204,7 @@ impl<H: Host> crate::boot_part_b::Host for Calls<'_, H> {
     }
 }
 impl<H: Host> crate::boot_part_b::FormatHost for Calls<'_, H> {}
-/// Release a dictionary entry, retaining it if the backend unload fails.
-/// The 320-byte scratch region is restored; callbacks receive the live arena.
+
 pub fn fn_2012bc(
     m: &mut Memory<'_>,
     p: u32,
@@ -2291,7 +2272,7 @@ fn release_dictionary_entry(
                 s + 32,
             );
         } else {
-            // fn_281d8c is outside this lane and has no Rust port yet.
+
             err = Host::call(h, m, 0x281d8c, &[m.word(p + 36), entry]);
             if err >= 0x80000000 {
                 trace_logger(
@@ -2346,8 +2327,6 @@ impl<H: Host> crate::boot_port_5::ContextHost for DictionaryContext<'_, H> {
     }
 }
 
-/// The real fn_281f34 attachment boundary. The lane's own engine methods and
-/// the archive services stay behind the host trait.
 struct AttachCalls<'a, H> {
     host: &'a mut H,
     env: &'a Environment,

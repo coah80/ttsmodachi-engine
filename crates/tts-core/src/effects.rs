@@ -44,7 +44,7 @@ fn write(ring: &mut RingBuffer<'_, f32>, value: f32) {
 }
 
 impl VoiceEffect {
-    /// fn_1be284 / EU fn_1be334 / KR fn_1be4b8.
+
     pub fn process(
         &mut self,
         filter: &mut crate::buffers::VoiceFilter<'_>,

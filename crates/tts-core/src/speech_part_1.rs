@@ -1,7 +1,6 @@
-//! Speech-one stream and component entry ports. All pointers are guest addresses.
+
 use crate::{boot::Memory, fe_text, frontend, normalization};
 
-/// Reentrant guest/platform calls receive the live caller-owned memory.
 pub trait Host {
     fn call(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32;
     fn get(
@@ -17,11 +16,11 @@ fn half(m: &Memory<'_>, p: u32) -> u16 {
     let i = m.offset(p);
     u16::from_le_bytes(m.bytes[i..i + 2].try_into().unwrap())
 }
-/// fn_17b7f0.
+
 pub fn fn_17b7f0(m: &mut Memory<'_>, p: u32) -> u32 {
     if p == 0 { 0 } else { m.word(p + 12) }
 }
-/// fn_196980.
+
 pub fn fn_196980(m: &mut Memory<'_>, a: u32, b: u32) -> u32 {
     if a == 0 {
         return if b == 0 { 0 } else { u32::MAX };
@@ -31,7 +30,7 @@ pub fn fn_196980(m: &mut Memory<'_>, a: u32, b: u32) -> u32 {
     }
     normalization::strcmp_at(m.bytes, m.offset(a) as u32, m.offset(b) as u32) as u32
 }
-/// fn_1770f8.
+
 pub fn fn_1770f8(m: &mut Memory<'_>, a: u32, b: u32) -> u32 {
     if a == 0 {
         return if b == 0 { 0 } else { u32::MAX };
@@ -41,7 +40,7 @@ pub fn fn_1770f8(m: &mut Memory<'_>, a: u32, b: u32) -> u32 {
     }
     fe_text::strcmp_ci_1769d0(m.bytes, m.offset(a) as u32, m.offset(b) as u32) as u32
 }
-/// fn_172de0.
+
 pub fn fn_172de0(m: &mut Memory<'_>, s: u32, v: u32, w: u32, h: &mut impl Host) -> u32 {
     if m.word(s + 12) != 0 {
         m.put_word(s + 28, v);
@@ -50,7 +49,7 @@ pub fn fn_172de0(m: &mut Memory<'_>, s: u32, v: u32, w: u32, h: &mut impl Host) 
     let inner = m.word(m.word(s) + 8);
     h.call(m, m.word(inner + 12), &[m.word(s + 16), v, w, 1])
 }
-/// fn_172d30. The get hook returns the callee's two output words.
+
 pub fn fn_172d30(
     m: &mut Memory<'_>,
     dst: u32,
@@ -84,7 +83,7 @@ pub fn fn_172d30(
         h.call(m, m.word(inner + 8), &[dst, n, count, m.word(s + 16)])
     }
 }
-/// fn_1b2760.
+
 pub fn fn_1b2760(m: &mut Memory<'_>, s: u32, offset: u32, h: &mut impl Host) -> u32 {
     let length = m.word(s + 28);
     if offset > length {
@@ -114,8 +113,6 @@ pub fn fn_1b2760(m: &mut Memory<'_>, s: u32, offset: u32, h: &mut impl Host) -> 
     }
 }
 
-/// Stream callbacks may target an arena buffer or a four-byte C stack local.
-/// A None destination represents that local, never a discarded arena write.
 pub trait StreamHost: Host {
     fn read(
         &mut self,
@@ -178,7 +175,7 @@ fn stream_read(
         unreachable!("chunk reader requires chunked stream")
     }
 }
-/// fn_1b2974.
+
 pub fn fn_1b2974(
     m: &mut Memory<'_>,
     p: u32,
@@ -201,7 +198,7 @@ pub fn fn_1b2974(
     }
     rc
 }
-/// fn_1b254c.
+
 pub fn fn_1b254c(
     m: &mut Memory<'_>,
     p: u32,
@@ -219,7 +216,6 @@ pub fn fn_1b254c(
     rc
 }
 
-/// Read-only literal inputs supplied from the caller's regional image.
 pub struct ComponentEnvironment {
     pub cached_handle: [u8; 8],
     pub input_types: [u32; 2],
@@ -230,7 +226,7 @@ fn reset_handle(m: &mut Memory<'_>, p: u32, env: &ComponentEnvironment) {
     m.put_word(p, u32::from_le_bytes(pair[..4].try_into().unwrap()));
     m.put_word(p + 4, u32::from_le_bytes(pair[4..].try_into().unwrap()));
 }
-/// fn_1d7544.
+
 pub fn fn_1d7544(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32 {
     let mut rc = frontend::validate_handle(p != 0, tag, 0xf380, 0x4c);
     if rc >= 0x80000000 {
@@ -250,7 +246,7 @@ pub fn fn_1d7544(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32
     }
     rc
 }
-/// fn_1e3e28.
+
 pub fn fn_1e3e28(
     m: &mut Memory<'_>,
     p: u32,
@@ -278,7 +274,7 @@ pub fn fn_1e3e28(
     }
     rc
 }
-/// fn_1d513c.
+
 pub fn fn_1d513c(
     m: &mut Memory<'_>,
     p: u32,
@@ -376,7 +372,7 @@ impl<H: HeapHost> crate::boot_part_b::Host for MutexHost<'_, H> {
         }
     }
 }
-/// fn_11da30. table and optional_flag are regional global addresses.
+
 pub fn fn_11da30(
     m: &mut Memory<'_>,
     x: u32,
@@ -391,7 +387,7 @@ pub fn fn_11da30(
         }
         let object = m.word(table + i * 4);
         if h.call(m, m.word(m.word(object) + 24), &[object, x]) != 0 {
-            // The accepts callback may change the selected global slot.
+
             let object = m.word(table + i * 4);
             let mut host = MutexHost(h);
             crate::boot_part_b::fn_1840fc(m, object + 88, &mut host);
@@ -401,7 +397,7 @@ pub fn fn_11da30(
         }
     }
 }
-/// fn_11db30. The real existing guest heap owns all block writes.
+
 pub fn fn_11db30(
     m: &mut Memory<'_>,
     a: u32,
@@ -440,8 +436,7 @@ impl crate::boot_part_b::Host for Resolve {
 fn chdir(m: &mut Memory<'_>, archive: u32, path: u32, locale: u32) -> u32 {
     crate::boot_part_b::fn_19ddd0(m, archive, &mut Resolve { path, locale })
 }
-/// fn_16b554. scratch needs 80 bytes plus 32 per recursive directory level.
-/// Temporary bytes are restored, as for the C stack.
+
 pub fn fn_16b554(
     m: &mut Memory<'_>,
     list: u32,
@@ -558,7 +553,7 @@ impl<H: HeapHost> crate::bridge::Live for LiveAdapter<'_, '_, H> {
         f: u32,
         a: &[u32],
     ) -> u32 {
-        // No arena capture or nested Flat: the callback sees the live staged bytes.
+
         if f == 0x1749ac {
             fn_1749ac(&mut b.memory(), a[0], a[1], &mut **self.0.borrow_mut());
             0
@@ -576,8 +571,7 @@ impl<H: HeapHost> crate::bridge::Live for LiveAdapter<'_, '_, H> {
         unreachable!("tree teardown emits no log")
     }
 }
-/// fn_174b14. Outermost entry with caller-owned bridge workspace.
-/// Existing Live callbacks must use fn_174b14_live without staging another Flat.
+
 pub fn fn_174b14(m: &mut Memory<'_>, s: u32, workspace: &mut [u8], h: &mut impl HeapHost) {
     let cell = core::cell::RefCell::new(h);
     let mut platform = PlatformAdapter(&cell);
@@ -592,7 +586,7 @@ pub fn fn_174b14(m: &mut Memory<'_>, s: u32, workspace: &mut [u8], h: &mut impl 
     fn_174b14_live(&mut flat, s, &mut live);
     flat.finish().expect("live map teardown");
 }
-/// Composition entry on the caller's already-live bridge.
+
 pub(crate) fn fn_174b14_live<P: crate::bridge::Platform>(
     flat: &mut crate::bridge::Flat<'_, '_, '_, '_, P>,
     s: u32,
@@ -603,9 +597,7 @@ pub(crate) fn fn_174b14_live<P: crate::bridge::Platform>(
         flat.put_word(s + 4, 0);
     }
 }
-/// fn_174aac. ticket contains the five regional words of D_8d7614.
-/// The legacy bridge's fn_19658c clone remains an explicit host dependency.
-/// This entry is outside the round-3 call trees; speech_part_6 has a live clone port.
+
 pub fn fn_174aac(
     m: &mut Memory<'_>,
     src: u32,
@@ -629,7 +621,7 @@ pub fn fn_174aac(
     flat.finish().expect("live attribute create");
     rc
 }
-/// Composition entry. The existing live bridge publishes only at its outer boundary.
+
 pub(crate) fn fn_174aac_live<P: crate::bridge::Platform>(
     flat: &mut crate::bridge::Flat<'_, '_, '_, '_, P>,
     src: u32,
@@ -657,7 +649,6 @@ pub(crate) fn fn_174aac_live<P: crate::bridge::Platform>(
     u32::from(rc < 0x80000000)
 }
 
-/// fn_17b9d4. Append a string after real reentrant capacity growth.
 pub fn fn_17b9d4(
     m: &mut Memory<'_>,
     p: u32,
@@ -736,7 +727,7 @@ impl<H: Host> crate::reentrant2::HooksM for ArrayHost<'_, H> {
         }
     }
 }
-/// fn_1749ac. Calls the landed reentrant array teardown and real heap release.
+
 pub fn fn_1749ac(m: &mut Memory<'_>, p: u32, owner: u32, h: &mut impl Host) {
     if p == 0 {
         return;
@@ -753,14 +744,13 @@ pub fn fn_1749ac(m: &mut Memory<'_>, p: u32, owner: u32, h: &mut impl Host) {
     release_live(m, owner, p, h);
 }
 
-/// fn_1d453c. The 1758ac setter is a marked bridge-4 pending host stub.
 pub fn fn_1d453c(m: &mut Memory<'_>, p: u32, tag: u32, key: u32, h: &mut impl Host) -> u32 {
     let mut rc = frontend::validate_handle(p != 0, tag, 0xf3c0, 0x358);
     if rc >= 0x80000000 {
         return 0x8bd02008;
     }
     if m.byte(p + 0x41) == 1 {
-        // STUB bridge-4: replace when a live set_param_uint_m lands.
+
         h.call(
             m,
             0x1758ac,
@@ -786,7 +776,6 @@ pub fn fn_1d453c(m: &mut Memory<'_>, p: u32, tag: u32, key: u32, h: &mut impl Ho
     rc
 }
 
-/// fn_1e4a3c. Scratch-free wrapper; 2401a0 is the bridge-4 pending host stub.
 pub fn fn_1e4a3c(
     m: &mut Memory<'_>,
     p: u32,
@@ -813,7 +802,7 @@ pub fn fn_1e4a3c(
         h.error(m, m.word(m.word(t) + 16), category, 0x5dd8);
         return 0x89602000;
     }
-    // STUB bridge-4: guest PCRE initialization needs a live adapter.
+
     let rc = h.call(
         m,
         0x2401a0,
@@ -896,7 +885,7 @@ fn uint_property(
             let mut m = Memory { base: 0, bytes };
             let map = m.word(object + 8);
             let f = m.word(m.word(map + 60) + 8);
-            if f == 0x196980 {
+            if crate::rom_region::to_us(crate::rom_region::Rom::from_entry(f), f) == 0x196980 {
                 fn_196980(&mut m, a, b) as i32
             } else {
                 cell.borrow_mut().call(&mut m, f, &[a, b]) as i32
@@ -931,7 +920,7 @@ fn int_property(
             let mut m = Memory { base: 0, bytes };
             let map = m.word(object + 8);
             let f = m.word(m.word(map + 60) + 8);
-            if f == 0x196980 {
+            if crate::rom_region::to_us(crate::rom_region::Rom::from_entry(f), f) == 0x196980 {
                 fn_196980(&mut m, a, b) as i32
             } else {
                 cell.borrow_mut().call(&mut m, f, &[a, b]) as i32
@@ -948,7 +937,7 @@ pub struct MarkerEnvironment {
     pub content_type: u32,
     pub ctype: [u16; 256],
 }
-/// fn_1e3938. scratch is 136 disjoint restored bytes; parameter methods are live.
+
 pub fn fn_1e3938<H: Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     p: u32,
@@ -1118,9 +1107,7 @@ fn token_cleanup<H: Host + crate::speech_part_6::Host>(m: &mut Memory<'_>, p: u3
         }
     }
 }
-/// fn_1e4b7c. Calls real sentence, heap and normalization ports.
-/// The host binds rule/diagnostic calls to fn_249cec and fn_24ac00 below.
-/// scratch is eight disjoint bytes, restored by the sentence callee.
+
 pub fn fn_1e4b7c<H: Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     handle: u32,
@@ -1198,12 +1185,12 @@ pub fn fn_1e4b7c<H: Host + crate::speech_part_6::Host>(
             if r >= 0x80000000 {
                 finished = false;
             } else {
-                // Unported outside-list engine callee.
+
                 r = Host::call(h, m, 0x249cec, &[p]);
                 if r >= 0x80000000 {
                     finished = false;
                 } else if m.byte(p + 0xc6) == 1 {
-                    // Unported outside-list diagnostic pass.
+
                     r = Host::call(h, m, 0x24ac00, &[p, end_name, 1]);
                 }
             }
@@ -1252,7 +1239,7 @@ fn string_property(
             let mut m = Memory { base: 0, bytes };
             let map = m.word(object + 8);
             let f = m.word(m.word(map + 60) + 8);
-            if f == 0x196980 {
+            if crate::rom_region::to_us(crate::rom_region::Rom::from_entry(f), f) == 0x196980 {
                 fn_196980(&mut m, a, b) as i32
             } else {
                 cell.borrow_mut().call(&mut m, f, &[a, b]) as i32
@@ -1307,8 +1294,7 @@ fn language_open(
         &[input[0], input[1], 0xbd, mime, pos, flag, out],
     )
 }
-/// fn_1d135c. Uses the live property fetch and uint getter. 1758ac remains
-/// the marked pending setter. scratch is 132 disjoint restored guest bytes.
+
 pub fn fn_1d135c<H: Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     p: u32,
@@ -1347,7 +1333,7 @@ pub fn fn_1d135c<H: Host + crate::speech_part_6::Host>(
             {
                 let i = m.offset(p + 0x41);
                 m.bytes[i] = 1;
-                // STUB bridge-4: pending live property setter.
+
                 Host::call(h, m, 0x1758ac, &[m.word(m.word(p) + 20), env.bias, 0]);
             } else {
                 m.put_word(scratch, 0);
@@ -1623,8 +1609,7 @@ impl<H: Host> normalization::NormalizationHost for FetchHost<'_, H> {
         release_live(&mut Memory { base: 0, bytes }, heap, p, self.host);
     }
 }
-/// fn_1e57d0. Real resolver and fetch table; the host binds sequence reset
-/// to fn_2643f8 below. scratch is 136 restored bytes.
+
 pub fn fn_1e57d0<H: Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     p: u32,
@@ -1721,7 +1706,7 @@ pub fn fn_1e57d0<H: Host + crate::speech_part_6::Host>(
             let i = m.offset(item + 12);
             m.bytes[i] = 0;
         }
-        // Live host binding to fn_2643f8 with the caller's regional environment.
+
         rc = Host::call(
             h,
             m,
@@ -1799,8 +1784,7 @@ pub struct TagEnvironment {
 fn tag_ling(m: &mut Memory<'_>, p: u32, slot: u32, args: &[u32], h: &mut impl Host) -> u32 {
     h.call(m, m.word(m.word(p + 4) + slot), args)
 }
-/// fn_1d9508. Full edit pass; scratch is 176 restored bytes, disjoint
-/// from every caller object and allocation.
+
 pub fn fn_1d9508<H: Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     p: u32,
@@ -1826,7 +1810,7 @@ pub fn fn_1d9508<H: Host + crate::speech_part_6::Host>(
     let mut nt = 0u16;
     let r = (|| {
         let s = scratch;
-        // count/node/len/written/hasPron/tmp/type then pv/sep/val/pron/norm
+
         for off in [0, 6, 8, 12] {
             sh(m, s + off, 0);
         }
@@ -1902,7 +1886,7 @@ pub fn fn_1d9508<H: Host + crate::speech_part_6::Host>(
                         3 => b" ** DELETE **".as_slice(),
                         _ => b"".as_slice(),
                     };
-                    // The operation literal is supplied in restored local storage.
+
                     fill(m, s + 112, 32, 0);
                     let z = m.offset(s + 112);
                     m.bytes[z..z + op.len()].copy_from_slice(op);
@@ -2739,7 +2723,7 @@ fn pause_map(
         if uint_property(m, m.word(m.word(p) + 20), key, value, scratch, h) < 0x80000000 {
             cp(m, key, prefix);
             cat(m, key, mapped);
-            // STUB bridge-4: pending live unsigned property setter.
+
             h.call(m, 0x1758ac, &[m.word(m.word(p) + 20), key, m.word(value)]);
         }
     }
@@ -3128,8 +3112,7 @@ fn process_token<H: Host + crate::speech_part_6::Host>(
         s,
     )
 }
-/// fn_1d5ba8. Real resource methods, dictionary callbacks, property lookup,
-/// token builder and sort. scratch is 768 disjoint restored guest bytes.
+
 pub fn fn_1d5ba8<H: Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     p: u32,
@@ -3153,7 +3136,7 @@ pub fn fn_1d5ba8<H: Host + crate::speech_part_6::Host>(
     let mut clean_name = false;
     let r = (|| {
         let s = scratch;
-        // root,cursor,written,finished,end; textAvailable,tokenAvailable,textData,textBytes,tokenData,tokenBytes
+
         fill(m, s, 64, 0);
         let mut current = e.normal;
         let mut fallback = e.normal;
@@ -3488,8 +3471,6 @@ pub fn fn_1d5ba8<H: Host + crate::speech_part_6::Host>(
     r
 }
 
-// Reentrant conversions of the parameter-set call tree. Every callback gets the
-// current arena, including comparison, allocation, before/after and unlock.
 struct ParamCalls<'a, H> { host: &'a mut H, scratch: u32 }
 impl<H: Host> crate::boot::Calls for ParamCalls<'_, H> {
     fn call(&mut self, m:&mut Memory<'_>, f:u32, a:&[u32])->u32 {
@@ -3572,8 +3553,7 @@ fn param_callbacks(m:&mut Memory<'_>,p:u32,key:u32,value:u32,data:u32,s:u32,befo
     }
     if before {rc}else{0}
 }
-/// Live bindings used by fn_175170 and its string/uint callers. Scratch is 512
-/// disjoint bytes; nested calls use a later range and all scratch is restored.
+
 pub fn parameter_call_m(m:&mut Memory<'_>,f:u32,a:&[u32],s:u32,h:&mut impl Host)->u32 {
     assert_eq!(m.base,0);
     let off=m.offset(s);let mut saved=[0u8;512];saved.copy_from_slice(&m.bytes[off..off+512]);
@@ -3649,8 +3629,7 @@ pub fn parameter_call_m(m:&mut Memory<'_>,f:u32,a:&[u32],s:u32,h:&mut impl Host)
     })();
     m.bytes[off..off+512].copy_from_slice(&saved);r
 }
-/// fn_175170. The lookup, callback gates, attribute propagation, insertion,
-/// storage and notification all execute on live caller memory.
+
 pub fn fn_175170(m:&mut Memory<'_>,p:u32,key:u32,data:u32,size:u32,update:u32,s:u32,h:&mut impl Host)->u32 {
     if p==0 || key==0 || data==0 {return 0x8b702007;}
     let off=m.offset(s);let mut saved=[0u8;64];saved.copy_from_slice(&m.bytes[off..off+64]);
@@ -3689,12 +3668,11 @@ pub fn fn_175170(m:&mut Memory<'_>,p:u32,key:u32,data:u32,size:u32,update:u32,s:
     m.bytes[off..off+64].copy_from_slice(&saved);rc
 }
 
-/// Regional constants needed by the sequence reset.
 pub struct SequenceEnvironment {
     pub cached_handle:[u8;8], pub default_context:u32,
     pub eos:u32, pub direct_size:u32,
 }
-/// fn_2643f8, built in fn_263384. Engine calls must be bound to live ports.
+
 pub fn fn_2643f8(m:&mut Memory<'_>,p:u32,a:u32,b:u32,e:&SequenceEnvironment,s:u32,h:&mut impl Host)->u32 {
     if p==0 {return 0x81102007;}
     let (r,t)=crate::render_part_c::resolve(m,[m.word(p),m.word(p+4)],&crate::render_part_c::Environment{cached_handle:e.cached_handle,default_context:e.default_context});
@@ -3728,7 +3706,7 @@ fn rule_io<H:Host+crate::speech_part_6::Host>(m:&mut Memory<'_>,p:u32,id:u32,val
     if r<0x80000000 && got==1 {
         second=Host::call(h,m,m.word(m.word(p+12)+84),&[m.word(p+16),m.word(p+20),id,field,1,value,s+4]);
     }
-    // Existing rule leaf consumes the actual callback results, not recordings.
+
     let mut frame=[0u8;0x530];
     for (at,v) in [(0x504,r),(0x508,got as u32),(0x518,0),(0x51c,half(m,s+4) as u32)] {
         frame[at..at+4].copy_from_slice(&v.to_le_bytes());
@@ -3746,8 +3724,7 @@ fn rule_io<H:Host+crate::speech_part_6::Host>(m:&mut Memory<'_>,p:u32,id:u32,val
 fn token_log<H:Host+crate::speech_part_6::Host>(m:&mut Memory<'_>,p:u32,level:u32,fmt:&[u8],a:&[u32],h:&mut H) {
     crate::speech_part_6::Host::log(h,m,m.word(m.word(p)+16),m.word(p+0x48),level,fmt,a);
 }
-/// fn_24ac00. Scratch is 160 disjoint bytes, restored on every exit. The
-/// stream vtable may reenter and change the arena during every query.
+
 pub fn fn_24ac00<H:Host+crate::speech_part_6::Host>(m:&mut Memory<'_>,p:u32,name:u32,mode:u32,s:u32,h:&mut H)->u32 {
     let off=m.offset(s);let mut saved=[0u8;160];saved.copy_from_slice(&m.bytes[off..off+160]);
     let rc=(||{
@@ -3788,7 +3765,7 @@ pub fn fn_24ac00<H:Host+crate::speech_part_6::Host>(m:&mut Memory<'_>,p:u32,name
                     }
                     let begin=half(m,s+4) as u32;let end=half(m,s+6) as u32;
                     if end<begin || end>half(m,p+0x60) as u32 {
-                        // Error formatting uses guest literals supplied by the host.
+
                         Host::call(h,m,0x173dc0,&[m.word(m.word(p)+16),m.word(p+0x48),0x5df7,begin,end,half(m,p+0x60) as u32]);
                         return normalization::error_code(0);
                     }
@@ -3811,8 +3788,7 @@ pub fn fn_24ac00<H:Host+crate::speech_part_6::Host>(m:&mut Memory<'_>,p:u32,name
     })();
     m.bytes[off..off+160].copy_from_slice(&saved);rc
 }
-/// fn_249cec. Uses 1152 disjoint scratch bytes, restored on return. Host
-/// engine calls are live bindings, never captured rule or preparation results.
+
 pub fn fn_249cec<H:Host+crate::speech_part_6::Host>(m:&mut Memory<'_>,p:u32,s:u32,h:&mut H)->u32 {
     let off=m.offset(s);let mut saved=[0u8;1152];saved.copy_from_slice(&m.bytes[off..off+1152]);
     let rc=(||{

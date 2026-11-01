@@ -1,6 +1,5 @@
 use crate::{math, tables::NumericTables};
 
-/// fn_1c1780 and fn_1c1824 use exactly 256 five-word entries per ring.
 pub const QUEUE_CAPACITY: usize = 256;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -12,7 +11,6 @@ pub struct VoiceEvent {
     pub delay: i32,
 }
 
-/// Caller-owned storage. Equal cursors mean empty, including after wrap.
 #[derive(Clone, Debug)]
 pub struct VoiceQueue {
     pub events: [VoiceEvent; QUEUE_CAPACITY],
@@ -47,8 +45,6 @@ impl VoiceQueue {
         delay
     }
 
-    /// fn_1c1780 / EU fn_1c179c / KR fn_1c19e8: enqueue one value, preserving the other two payload words.
-    /// C has no full-queue check; callers must reserve a free slot.
     pub fn enqueue(&mut self, base: i32, kind: i32, delay: i32, value: f32) -> u32 {
         let delay = self.relative_delay(base, delay);
         let event = &mut self.events[self.write as usize];
@@ -59,12 +55,10 @@ impl VoiceQueue {
         0
     }
 
-    /// fn_1c1768 / EU fn_1c1784 / KR fn_1c19d0: queue type 20 using the original unsigned conversion.
     pub fn enqueue_flag(&mut self, base: i32, value: u32, delay: i32) -> u32 {
         self.enqueue(base, 20, delay, value as f32)
     }
 
-    /// fn_1c1824 / EU fn_1c1840 / KR fn_1c1a8c: enqueue a value and target, preserving the duration word.
     pub fn enqueue_pair(
         &mut self,
         base: i32,
@@ -83,7 +77,6 @@ impl VoiceQueue {
         0
     }
 
-    /// fn_1bccd0 / EU fn_1bcd80 / KR fn_1bcf20: enqueue all three payload words.
     pub fn enqueue_transition(
         &mut self,
         base: i32,
@@ -105,12 +98,10 @@ impl VoiceQueue {
         0
     }
 
-    /// fn_1bd2cc / EU fn_1bd37c / KR fn_1bd51c: schedule a frequency change after a sample duration.
     pub fn schedule_frequency(&mut self, base: i32, duration: i32, frequency: f32) {
         self.enqueue_transition(base, 17, 0, 3.0, frequency, duration as f32);
     }
 
-    /// fn_1c1814 / EU fn_1c1830 / KR fn_1c1a7c: enqueue the type-11 duration parameter.
     pub fn enqueue_duration(&mut self, base: i32, delay: i32, value: f32, target: f32) -> i32 {
         self.enqueue_pair(base, 11, delay, value, target)
     }
@@ -166,7 +157,7 @@ pub struct VoiceState {
 }
 
 impl VoiceState {
-    /// fn_1c18d8 / EU fn_1c18f4 / KR fn_1c1b40: advance both transition timers in order, with wrapping ticks.
+
     pub fn advance_timers(&mut self, dt: i32) {
         for transition in &mut self.transitions {
             if transition.remaining == i32::MIN {
@@ -185,8 +176,6 @@ impl VoiceState {
         }
     }
 
-    /// fn_1bcd84 / EU fn_1bce34 / KR fn_1bcfd4: consume due events and propagate overshoot to the next slot.
-    /// `commands` is the ring at C offset 0x14f0. None consumes that ring itself.
     pub fn consume(
         &mut self,
         queue: &mut VoiceQueue,

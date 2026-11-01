@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 tts-core = { path = "../tts-core" }
 libc = "0.2"
+tts-rom = { path = "../tts-rom" }
 
 [lints.rust]
 warnings = "allow"

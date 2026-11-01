@@ -100,7 +100,7 @@ pub struct VoiceBoundary {
 }
 
 impl VoiceBoundary {
-    /// fn_1b9090 / EU fn_1b9140 / KR fn_1b92dc.
+
     pub fn distance(&self) -> i32 {
         if self.enabled {
             self.distance
@@ -126,7 +126,6 @@ impl SpeechFrame {
         }
     }
 
-    /// fn_1b7710 / EU fn_1b77c0 / KR fn_1b7960.
     pub fn group(&mut self, unvoiced: &[u8; 256]) {
         let base = self.phonemes().leading_sample();
         let mut index = 0;
@@ -158,8 +157,6 @@ impl SpeechFrame {
         }
     }
 
-    /// fn_1b0364 / EU fn_1b03b8 / KR fn_1b044c.
-    /// Storage replaces D_a7b794. Event, command and sample capacities are the ARM bounds.
     pub fn assemble(
         &mut self,
         storage: &mut [i16; AUDIO_CAPACITY],
@@ -184,7 +181,6 @@ impl SpeechFrame {
         )
     }
 
-    /// KR fn_1b044c / US fn_1b0364 / EU fn_1b03b8.
     pub fn assemble_korean(
         &mut self,
         storage: &mut [i16; AUDIO_CAPACITY],

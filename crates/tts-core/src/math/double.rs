@@ -17,7 +17,6 @@ fn signed(x: f64, sign: f64) -> f64 {
     f64::from_bits((x.to_bits() & 0x7fffffffffffffff) | (sign.to_bits() & 0x8000000000000000))
 }
 
-/// fn_7fe900: Horner evaluation, preserving separate multiply/add rounding.
 pub fn polynomial(x: f64, coefficients: &[f64]) -> f64 {
     let (&last, rest) = coefficients.split_last().expect("nonempty polynomial");
     rest.iter()
@@ -33,8 +32,6 @@ fn table_polynomial(x: f64, tables: &NumericTables<'_>, address: usize, count: u
     acc
 }
 
-/// fn_84f2e4: exponent adjustment with the ARM library's flush-to-zero rules.
-/// Subnormal input and underflow return positive zero; NaNs become default NaN.
 pub fn scale(x: f64, n: i32) -> f64 {
     let bits = x.to_bits();
     let exponent = ((bits >> 52) & 0x7ff) as i32;
@@ -79,7 +76,6 @@ fn parity(hx: i32, iy: i32, ly: u32) -> i32 {
     0
 }
 
-/// fn_7fd578: double power using the engine's split logarithm/exponential.
 pub fn pow(x: f64, y: f64, tables: &NumericTables<'_>) -> f64 {
     let hx = high(x);
     let hy = high(y);

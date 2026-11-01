@@ -1,4 +1,4 @@
-//! Live boot adapters. All temporary guest storage is caller-owned and restored.
+
 use crate::boot::{Calls, Memory};
 
 struct Db<'a, H>(&'a mut H);
@@ -12,7 +12,7 @@ impl<H: Calls> crate::db_live::DbHooksM for Db<'_, H> {
         self.0.call(m, f, a)
     }
 }
-/// fn_174e74. def is the region's D_8d7628 triple; scratch is 24 disjoint bytes.
+
 pub fn register_owner_m(m: &mut Memory<'_>, h: &mut impl Calls, p: u32, key: u32,
     owner: [u32;3], def: [u32;3], scratch: u32) -> u32 {
     if p == 0 || owner[2] == 0 { return 0x8b702007; }
@@ -35,7 +35,7 @@ pub fn register_owner_m(m: &mut Memory<'_>, h: &mut impl Calls, p: u32, key: u32
         }
     } else {target=m.word(p+12);}
     if result<0x80000000 {
-        // A null extra block is still passed to the real grow port.
+
         if crate::db_live::append_element_m(&mut Db(h),m,target,scratch+4,scratch+16)==0 {result=0x8b70200a;}
     }
     for (i,v) in saved.into_iter().enumerate() {m.put_word(scratch+i as u32*4,v);}
@@ -43,14 +43,14 @@ pub fn register_owner_m(m: &mut Memory<'_>, h: &mut impl Calls, p: u32, key: u32
     if rc>=0x80000000 && result<0x80000000 {result=rc;}
     result
 }
-/// fn_160b0c.
+
 pub fn alloc_object_m(m:&mut Memory<'_>,h:&mut impl Calls,heap:u32,out:u32)->u32 {
     if out==0 {return 0x87f66006;}
     let p=h.call(m,0x196394,&[heap,8]);
     if p==0 {return 0x87f6600a;}
     m.put_word(p+4,heap);m.put_word(p,0);m.put_word(out,p);0
 }
-/// fn_176edc. Re-read the heap after the destructor callback.
+
 pub fn release_guard_m(m:&mut Memory<'_>,h:&mut impl Calls,p:u32)->u32 {
     if p==0 {return 0x81402007;}
     let target=m.word(m.word(m.word(p)+8)+4);
@@ -58,12 +58,12 @@ pub fn release_guard_m(m:&mut Memory<'_>,h:&mut impl Calls,p:u32)->u32 {
     if rc<0x80000000 {h.call(m,0x196428,&[m.word(p+4),p]);}
     rc
 }
-/// fn_196830.
+
 pub fn release_iterator_m(m:&mut Memory<'_>,h:&mut impl Calls,p:u32)->u32 {
     if p==0 {return 0x89002007;}
     h.call(m,0x196428,&[m.word(m.word(p)+20),p]);0
 }
-/// Explicit live binding table. def and scratch are caller-owned regional inputs.
+
 pub fn dispatch(m:&mut Memory<'_>,h:&mut impl Calls,f:u32,a:&[u32],def:[u32;3],scratch:u32)->Option<u32> {
     Some(match f {
         0x175170=>set_parameter_m(m,h,a[0],a[1],a[2],a[3],a[4],scratch),
@@ -84,14 +84,13 @@ fn put_byte(m:&mut Memory<'_>,p:u32,v:u8) {let i=m.offset(p);m.bytes[i]=v;}
 fn half(m:&Memory<'_>,p:u32)->u32 {let i=m.offset(p);u16::from_le_bytes(m.bytes[i..i+2].try_into().unwrap()) as u32}
 fn read_guest(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::ArchiveHost,
     f:u32,ctx:u32,dst:u32,n:u32,workspace:&mut[u8])->u32 {
-    // Prefill preserves bytes the host does not write on short reads.
+
     let at=m.offset(dst);let n=n as usize;
     workspace[..n].copy_from_slice(&m.bytes[at..at+n]);
     let got=h.read(m,f,ctx,&mut workspace[..n]);
     m.bytes[at..at+n].copy_from_slice(&workspace[..n]);got
 }
-/// fn_1b2e04. workspace has at least max(len,4) bytes and must not alias the arena.
-/// Platform reads use ArchiveHost; checksum/error callees use their real Rust ports.
+
 pub fn stream_read_m(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::ArchiveHost,
     p:u32,buf:u32,len:u32,out:u32,a5:u32,a6:u32,workspace:&mut[u8])->u32 {
     put_byte(m,a5,if half(m,p+0x24)!=0 {0}else{2});put_byte(m,a6,0);
@@ -143,7 +142,6 @@ pub fn stream_read_m(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::ArchiveHo
     m.put_word(p+0x38,m.word(p+0x38).wrapping_sub(total));m.put_word(out,total);0
 }
 
-/// fn_17eb90. The resolver's temporary output is caller-owned scratch.
 pub fn license_token_m(m:&mut Memory<'_>,h:&mut impl Calls,object:u32,key:u32,out:u32,scratch:u32)->u32 {
     let saved=m.word(scratch);m.put_word(scratch,0);
     let result=h.call(m,0x19611c,&[object,key,scratch]);
@@ -154,10 +152,8 @@ pub fn license_token_m(m:&mut Memory<'_>,h:&mut impl Calls,object:u32,key:u32,ou
     else {m.put_word(out,0);0}
 }
 
-/// Immutable regional root inputs in literal-pool order.
 pub struct RootData { pub words:[u32;9] }
-/// fn_11cc0c after the worker returns. Scratch reserves 0xc30 disjoint bytes.
-/// The root is void. No caller observes the value left in ARM r0.
+
 pub fn root_tail_m(m:&mut Memory<'_>,h:&mut impl Calls,engine:u32,mode:u32,delta:u32,d:&RootData,s:u32) {
     let saved=core::array::from_fn::<_,0xc30,_>(|i|m.bytes[m.offset(s+i as u32)]);
     let w=d.words;
@@ -192,7 +188,7 @@ pub fn root_tail_m(m:&mut Memory<'_>,h:&mut impl Calls,engine:u32,mode:u32,delta
     h.call(m,0x194454,&[m.word(engine+0x11c+delta),m.word(engine+0x120+delta),w[6],m.word(size),buffer,engine+0x61f4+delta]);
     for i in 0..18 {m.put_word(w[3]+72+i*4,m.word(w[7]+mode*72+i*4));}
     for j in 0..4 {for i in 0..5 {
-        // KR's engine matrix follows the initial 16-byte regional addition.
+
         m.put_word(engine+0xac+delta+i*16+j*4,m.word(w[8]+mode*80+j*20+i*4));
     }}
     for (i,b) in saved.into_iter().enumerate(){put_byte(m,s+i as u32,b);}
@@ -231,7 +227,7 @@ pub fn set_out_device_m<H: SetOutDeviceHooksM>(
     let manager = mem_word(mem, object.wrapping_add(0x10));
     hooks.log_begin_m(mem, mem_word(mem, manager.wrapping_add(0x10)));
     let mut ctx = 0u32;
-    let mut result = hooks.resolve_ctx_m(mem, 
+    let mut result = hooks.resolve_ctx_m(mem,
         mem_word(mem, object.wrapping_add(8)),
         mem_word(mem, object.wrapping_add(0xc)),
         &mut ctx,
@@ -258,7 +254,6 @@ pub fn set_out_device_m<H: SetOutDeviceHooksM>(
     hooks.log_end_m(mem, mem_word(mem, manager.wrapping_add(0x10)));
     classify_code(result)
 }
-
 
 pub trait StateLockM {
  fn acquire_m(&mut self,mem:&mut[u8])->u32;
@@ -381,8 +376,7 @@ pub fn configure_voice_m(
         };
         mem_store(mem, converted + 0xb8, converted_freq);
         copy_str(mem, converted + 0xbc, voice + 0x62);
-        // voice->format is an array, so it decays to a non-null pointer
-        // and the C condition is always true; the "text" else is dead.
+
         copy_str(mem, converted + 0xf4, voice + 0x82);
         copy_str(mem, converted + 0x104, lit_pcm);
         let methods = mem_word(mem, object + 4);
@@ -833,7 +827,6 @@ pub fn set_param_list_m(
     )
 }
 
-/// Non-reentrant adapter for the certified legacy parameter callbacks.
 pub struct LegacyParamHooks<'a,L,C,Q,N,SN,SS,R,F,V> {
  pub lock:&'a mut L,pub configure:&'a mut C,pub query:&'a mut Q,pub notify:&'a mut N,
  pub set_num:&'a mut SN,pub set_str:&'a mut SS,pub resolve:&'a mut R,pub release:&'a mut F,pub set_voice:&'a mut V,
@@ -854,7 +847,6 @@ where L:crate::frontend::StateLock,
  fn set_voice_m(&mut self,a:u32,b:u32,s:Option<&[u8]>,f:u32,_:&mut[u8])->u32{(self.set_voice)(a,b,s,f)}
 }
 
-/// fn_176054 with live allocator callbacks.
 pub fn store_sized_m(m:&mut Memory<'_>,h:&mut impl Calls,slot:u32,src:u32,n:u32,heap:u32)->u32 {
  if slot==0{return 0x8b702007;}
  if n==0 {
@@ -867,7 +859,7 @@ pub fn store_sized_m(m:&mut Memory<'_>,h:&mut impl Calls,slot:u32,src:u32,n:u32,
   m.boot_copy_forward(m.word(slot),src,n);m.put_word(slot+4,n);
  }0
 }
-/// fn_176104. The real callback address is the third word of each element.
+
 pub fn element_callbacks_m(m:&mut Memory<'_>,h:&mut impl Calls,p:u32,key:u32,value:u32,data:u32,s:u32)->u32{
  if p==0 || key==0 || value==0 || data==0{return 0;}
  let saved=m.word(s);
@@ -901,7 +893,7 @@ fn before_live(m:&mut Memory<'_>,h:&mut impl Calls,p:u32,key:u32,value:u32,data:
   }
  }rc
 }
-/// fn_174b38 with live tree and heap callees. Scratch is 20 disjoint bytes.
+
 pub fn update_attr_m(m:&mut Memory<'_>,h:&mut impl Calls,o:u32,key:u32,data:u32,size:u32,update:u32,s:u32)->u32{
  let saved=core::array::from_fn::<_,5,_>(|i|m.word(s+i as u32*4));
  m.put_word(s,data);m.put_word(s+4,size);m.put_word(s+8,0);
@@ -920,7 +912,7 @@ pub fn update_attr_m(m:&mut Memory<'_>,h:&mut impl Calls,o:u32,key:u32,data:u32,
  }
  for (i,v) in saved.into_iter().enumerate(){m.put_word(s+i as u32*4,v);}rc
 }
-/// fn_175170. Scratch is 32 disjoint bytes and is restored on every return.
+
 pub fn set_parameter_m(m:&mut Memory<'_>,h:&mut impl Calls,p:u32,key:u32,data:u32,size:u32,update:u32,s:u32)->u32{
  if p==0 || key==0 || data==0{return 0x8b702007;}
  let mut rc=h.call(m,0x176f2c,&[m.word(p+4)]);if rc>=0x80000000{return rc;}
@@ -994,10 +986,8 @@ pub fn set_synth_param_m<H: SetParamHooksM>(
     r
 }
 
-
 use crate::frontend::{terminated,derive_langgroup,derive_langgroup_candidate,rec_field_matches,candidate_matches,score_candidate,copy_str_or_empty,char_class,compare_folded,compare_folded_bounded,find_byte,find_substr,copy_str_n,step_iter,next_tag_entry};
 
-/// Arena-passing dispatch used by the converted broker family.
 fn broker_call(mem:&mut [u8],h:&mut impl Calls,f:u32,a:&[u32])->u32 {
     h.call(&mut Memory {base:0,bytes:mem},f,a)
 }
@@ -1084,7 +1074,6 @@ pub fn match_wildcard_m(
     0
 }
 
-/// fn_1772b0. Arena-aware conversion of frontend::lookup_keyed_value.
 pub fn lookup_keyed_value_m(
     mem: &mut [u8],
     p: Option<u32>,
@@ -1143,7 +1132,6 @@ pub fn lookup_keyed_value_m(
     result
 }
 
-/// fn_1785c8. Arena-aware conversion of frontend::query_tag_word.
 pub fn query_tag_word_m(
     mem: &mut [u8],
     broker: Option<u32>,
@@ -1180,7 +1168,6 @@ pub fn query_tag_word_m(
     0
 }
 
-/// fn_1789b0. Arena-aware conversion of frontend::open_component_iter.
 pub fn open_component_iter_m(
     mem: &mut [u8],
     broker: Option<u32>,
@@ -1240,7 +1227,6 @@ pub fn open_component_iter_m(
     rc
 }
 
-/// fn_178c24. Arena-aware conversion of frontend::next_component_entry.
 pub fn next_component_entry_m(
     mem: &mut [u8],
     iterator: Option<u32>,
@@ -1251,7 +1237,7 @@ pub fn next_component_entry_m(
     io:u32,
     h:&mut impl Calls,
 ) -> u32 {
-    
+
     let Some(iterator) = iterator else {
         return 0x81506007;
     };
@@ -1341,7 +1327,6 @@ pub fn next_component_entry_m(
     rc
 }
 
-/// fn_17a3b8. Arena-aware conversion of frontend::open_tag_iter.
 pub fn open_tag_iter_m(
     mem: &mut [u8],
     broker: Option<u32>,
@@ -1473,7 +1458,6 @@ pub fn failed_tag_iter_m(
     rc
 }
 
-/// fn_17a2ec. Arena-aware conversion of frontend::close_tag_iter.
 pub fn close_tag_iter_m(
     mem: &mut [u8],
     p: Option<u32>,
@@ -1497,7 +1481,6 @@ pub fn close_tag_iter_m(
     0
 }
 
-/// fn_1788c0. Arena-aware conversion of frontend::close_component_iter.
 pub fn close_component_iter_m(
     mem: &mut [u8],
     p: Option<u32>,
@@ -1521,7 +1504,6 @@ pub fn close_component_iter_m(
     0
 }
 
-/// fn_15db94. Arena-aware conversion of frontend::match_voice.
 pub fn match_voice_m(
     mem: &mut [u8],
     hdr: u32,
@@ -1660,7 +1642,6 @@ pub fn match_voice_m(
     0
 }
 
-/// Arena-aware callbacks for the certified fn_15eef0 body.
 pub trait VoiceQueryHooksM {
  fn log_begin_m(&mut self,logger:u32,mem:&mut[u8]);
  fn log_end_m(&mut self,logger:u32,rc:u32,mem:&mut[u8]);
@@ -1671,7 +1652,7 @@ impl<T:crate::frontend::VoiceQueryHooks+?Sized> VoiceQueryHooksM for T {
  fn log_end_m(&mut self,logger:u32,rc:u32,_mem:&mut[u8]) {self.log_end(logger,rc)}
  fn match_voice_m(&mut self,hdr:&[u8;32],vrec:&mut[u8;296],flags:u32,_mem:&mut[u8])->u32 {self.match_voice(hdr,vrec,flags)}
 }
-/// fn_15eef0. Same body, with arena-passing callbacks.
+
 pub fn find_voice_m<H: VoiceQueryHooksM>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -1721,14 +1702,13 @@ struct ComponentCalls<'a,H>(&'a mut H);
 impl<H:Calls> crate::component_live_b::Host for ComponentCalls<'_,H> {
  fn call_m(&mut self,f:u32,a:&[u32],m:&mut Memory<'_>)->u32 {self.0.call(m,f,a)}
 }
-/// fn_196794. Bind the existing complete reentrant implementation.
+
 pub fn alloc_iterator_m(m:&mut Memory<'_>,p:u32,key:u32,ordered:u32,out:u32,h:&mut impl Calls)->u32 {
  crate::component_live_b::alloc_handle_for_key_live(m,p,key,ordered,out,&mut ComponentCalls(h))
 }
 
 use crate::frontend::{PIPE_KIND_MAP,pipe_cmp};
 
-/// Arena-aware TTSEG pipeline callbacks.
 pub trait PipeHooksM {
  fn check_open_m(&mut self, obj: u32, b: u32, mem:&mut[u8]) -> u32;
  fn resolve_ctx_m(&mut self, a: u32, b: u32, mem:&mut[u8]) -> (u32, u32);
@@ -1783,13 +1763,12 @@ impl<T:crate::frontend::PipeHooks> PipeHooksM for T {
  fn license_kind_m(&mut self,ctx:u32,obj:u32,trace:u32,mem:&mut[u8])->u32 {crate::frontend::pipe_license_kind(self,mem,ctx,obj,trace)}
 }
 
-/// fn_15ae7c. Re-read the guest state after acquiring its real lock.
 pub fn enter_pipeline_m(mem:&mut[u8],state:u32,next:u8,previous:&mut u8,lock:&mut impl crate::reentrant2::StateLockM)->u32 {
  let mut rc=lock.acquire_m(mem);if rc>=0x80000000{return rc;}
  if mem[state as usize]==1 {*previous=mem[state as usize];mem[state as usize]=next;}else {rc=0x81202011;}
  let release=lock.release_m(mem);if release>=0x80000000 && rc<0x80000000 {rc=release;}rc
 }
-/// fn_15af34.
+
 pub fn restore_pipeline_m(mem:&mut[u8],state:u32,previous:u32,lock:&mut impl crate::reentrant2::StateLockM) {
  if previous!=0 && lock.acquire_m(mem)<0x80000000 {mem[state as usize]=previous as u8;lock.release_m(mem);}
 }
@@ -1799,7 +1778,6 @@ impl<H:PipeHooksM> crate::reentrant2::StateLockM for PipeLockM<'_,H> {
  fn release_m(&mut self,mem:&mut[u8])->u32 {self.hooks.unlock_m(self.mutex,mem)}
 }
 
-/// fn_1517e8. Arena-aware existing handle/context body.
 pub fn open_pipeline_ctx_m<H: PipeHooksM>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -1824,7 +1802,6 @@ pub fn open_pipeline_ctx_m<H: PipeHooksM>(
     rc
 }
 
-/// fn_158c4c. Arena-aware existing pipeline transaction body.
 pub fn set_pipeline_m<H: PipeHooksM>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -2001,8 +1978,6 @@ fn pipe_switch_m<H: PipeHooksM>(
     hooks.unlock_m(mem_word(mem, channel.wrapping_add(0x90)), mem);
 }
 
-/// fn_196fbc. Guest-pointer form with a reentrant destructor.
-/// The defined domain excludes the ROM's overflowing one-past-end copy.
 pub fn remove_element_ptr_m(m:&mut Memory<'_>,h:&mut impl Calls,a:u32,elem:u32)->u32 {
  if a==0 {return 0;}
  let data=m.word(a);let size=m.half(a+4) as u32;
@@ -2015,7 +1990,7 @@ pub fn remove_element_ptr_m(m:&mut Memory<'_>,h:&mut impl Calls,a:u32,elem:u32)-
  crate::frontend::move_bytes(m.bytes,dst,src,end.wrapping_sub(next));
  m.put_word(a+20,m.word(a+20).wrapping_sub(1));1
 }
-/// fn_175ef0. Callback writes remain visible between lock, erase and unlock.
+
 pub fn remove_guarded_m(m:&mut Memory<'_>,h:&mut impl Calls,p:u32,elem:u32)->u32 {
  if p==0 || elem==0 {return 0x8b702007;}
  let mut rc=h.call(m,0x176f2c,&[m.word(p+4)]);
@@ -2027,7 +2002,6 @@ pub fn remove_guarded_m(m:&mut Memory<'_>,h:&mut impl Calls,p:u32,elem:u32)->u32
  rc
 }
 
-/// Arena-aware callbacks used by the two certified scheduler license bodies.
 pub trait SchedulerLicenseHooksM {
  fn acquire_m(&mut self,mutex:u32,mem:&mut[u8])->u32;
  fn release_m(&mut self,mutex:u32,mem:&mut[u8])->u32;
@@ -2036,7 +2010,7 @@ pub trait SchedulerLicenseHooksM {
  fn notify_m(&mut self,context:u32,channel:u32,kind:u32,level:u32,mem:&mut[u8]);
  fn log_usage_m(&mut self,logger:u32,level:u32,used:u32,limit:u32,threshold:u32,description:&[u8],mem:&mut[u8]);
 }
-/// Legacy callbacks remain available without lending them a stale arena.
+
 pub struct SchedulerAdapterM<'a,L,C> {pub locks:&'a mut L,pub licensing:&'a mut C}
 impl<L:crate::frontend_part_a::SchedulerHooks,C:crate::frontend_part_a::SchedulerLicenseHooks> SchedulerLicenseHooksM for SchedulerAdapterM<'_,L,C> {
  fn acquire_m(&mut self,p:u32,_:&mut[u8])->u32 {self.locks.acquire(p)}
@@ -2047,7 +2021,6 @@ impl<L:crate::frontend_part_a::SchedulerHooks,C:crate::frontend_part_a::Schedule
  fn log_usage_m(&mut self,a:u32,b:u32,c:u32,d:u32,e:u32,f:&[u8],_:&mut[u8]) {self.licensing.log_usage(a,b,c,d,e,f)}
 }
 
-/// fn_151f80. Arena-aware existing scheduler body.
 pub fn scheduler_license_usage_m(
     mem: &mut [u8],
     context: u32,
@@ -2078,7 +2051,6 @@ pub fn scheduler_license_usage_m(
         &text[..len + 1], mem);
 }
 
-/// fn_1529b4. Arena-aware existing scheduler body.
 pub fn increase_scheduler_license_m(
     mem: &mut [u8],
     context: u32,
@@ -2142,7 +2114,7 @@ pub fn increase_scheduler_license_m(
                 .wrapping_add(mem_word(mem, base.wrapping_add(12)))
                 > mem_word(mem, base.wrapping_add(8))
             {
-                // The second ports query supplies the diagnostic value, even when logging is disabled.
+
                 hooks.ports_m(feature, mem);
             }
             5

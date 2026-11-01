@@ -1,10 +1,5 @@
-//! Cold-loader archive and intrusive-list leaves.
-//!
-//! Addresses are guest u32 addresses, never host pointers. The caller owns
-//! the arena and supplies its guest base. This module does not yet implement
-//! fn_11cc0c or a complete cold boot; archive loading is only one dependency.
 
-/// Mutable caller-owned guest memory for the loader leaves.
+
 pub struct Memory<'a> {
     pub base: u32,
     pub bytes: &'a mut [u8],
@@ -34,12 +29,8 @@ impl Memory<'_> {
         self.bytes[at..at + 2].copy_from_slice(&value.to_le_bytes());
     }
 
-    /// fn_188fe8. Initialize the seven-word archive view from its header.
-    ///
-    /// Like ARM, this does not validate the archive magic or count. The arena
-    /// must contain the header and names header, and the output must be writable.
     pub fn open_archive(&mut self, blob: u32, archive: u32) -> u32 {
-        // Preserve ARM's write/read order, including aliased inputs.
+
         self.put_word(archive, blob);
         let names = blob.wrapping_add(self.word(blob.wrapping_add(16)));
         self.put_word(archive.wrapping_add(4), names);
@@ -57,7 +48,6 @@ impl Memory<'_> {
         1
     }
 
-    /// fn_16b494. Open an archive node and widen its signed-byte path.
     pub fn open_node(&mut self, node: u32, blob: u32, name: u32) -> u32 {
         if self.open_archive(blob, node.wrapping_add(8)) == 0 {
             return 0;
@@ -75,7 +65,6 @@ impl Memory<'_> {
         1
     }
 
-    /// fn_1ad07c. Insert before the sentinel and increment the wrapping count.
     pub fn append_node(&mut self, count: u32, head: u32, node: u32) -> u32 {
         let previous = self.word(head.wrapping_add(4));
         self.put_word(node, head);
@@ -87,7 +76,6 @@ impl Memory<'_> {
         node
     }
 
-    /// fn_1ad06c. The loader list has a reserved word before its count.
     pub fn append_archive(&mut self, list: u32, node: u32) -> u32 {
         self.append_node(list.wrapping_add(4), list.wrapping_add(8), node)
     }
@@ -101,43 +89,33 @@ impl Memory<'_> {
         let blob = self.word(slot);
         let node = loader.wrapping_add(node_offset);
         self.open_archive(blob, node.wrapping_add(8));
-        // The wrappers pass the ROM empty string to fn_16b494.
+
         self.put_half(node.wrapping_add(36), 0);
-        // ARM appends even if open_node reports failure.
+
         self.append_archive(loader.wrapping_add(8), node);
     }
 
-    /// fn_134318. Mount the already-loaded components archive.
-    /// manager is the object referenced by the regional D_acb550 global.
     pub fn mount_components(&mut self, loader: u32, manager: u32) {
         self.mount(loader, manager, 0x348, 0x154);
     }
 
-    /// fn_134368. Mount the already-loaded dictionary archive.
     pub fn mount_dictionary(&mut self, loader: u32, manager: u32) {
         self.mount(loader, manager, 0x34c, 0x1f8);
     }
 
-    /// fn_1342c8. Mount the already-loaded rules archive.
     pub fn mount_rules(&mut self, loader: u32, manager: u32) {
         self.mount(loader, manager, 0x350, 0x29c);
     }
 }
 
-// Round-3 routines below preserve guest addresses. Calls not implemented here
-// are explicit dependencies, NOT replacement implementations of engine routines.
-// A host must route engine addresses to faithful implementations; only SDK/SVC
-// boundaries may be supplied by a platform. No full cold-boot claim is made.
-
-/// External calls made by the boot routines. Arguments use the guest ABI.
-/// Implementations may mutate memory and return r0. fn_1abd98 and fn_1674fc
-/// receive writable output pointers, including the caller's scratch address.
 pub trait Calls {
+    fn format_address_m(&mut self,_m:&Memory<'_>,_format:&[u8])->Option<u32> {None}
+    fn real_log_args(&mut self)->bool {false}
+    fn log_variadic(&mut self,_m:&mut Memory<'_>,_entry:u32,_a:[u32;4],_format:&[u8],_varargs:&[u32])->bool {false}
     fn call(&mut self, memory: &mut Memory<'_>, address: u32, args: &[u32]) -> u32;
     fn call_wide(&mut self, memory: &mut Memory<'_>, address: u32, args: &[u32]) -> u64;
 }
 
-/// Addresses of caller-mapped globals and thread command buffer.
 pub struct Globals {
     pub manager: u32,
     pub callbacks: u32,
@@ -162,12 +140,10 @@ impl Memory<'_> {
         u16::from_le_bytes(self.bytes[at..at + 2].try_into().unwrap())
     }
 
-    /// fn_132124. Rotate the five arguments for the allocator constructor.
     pub fn fn_132124(&mut self, h: &mut impl Calls, a: [u32; 5]) -> u32 {
         h.call(self, 0x163a98, &[a[4], a[0], a[1], a[2], a[3]])
     }
 
-    /// fn_132c90. Free through the inner allocator under its lock.
     pub fn fn_132c90(&mut self, h: &mut impl Calls, obj: u32, ptr: u32) {
         let inner = self.word(obj + 4);
         let lock = inner.wrapping_add(0x58);
@@ -192,22 +168,18 @@ impl Memory<'_> {
         self.put_word(obj + at, result);
     }
 
-    /// fn_1343b8. Request the rules archive.
     pub fn fn_1343b8(&mut self, h: &mut impl Calls, g: &Globals, obj: u32, index: u32) {
         self.request(h, g, obj, index, g.rules, 0x350);
     }
 
-    /// fn_1343fc. Request the components archive.
     pub fn fn_1343fc(&mut self, h: &mut impl Calls, g: &Globals, obj: u32, index: u32) {
         self.request(h, g, obj, index, g.components, 0x348);
     }
 
-    /// fn_134440. Request the dictionary archive.
     pub fn fn_134440(&mut self, h: &mut impl Calls, g: &Globals, obj: u32, index: u32) {
         self.request(h, g, obj, index, g.dictionary, 0x34c);
     }
 
-    /// fn_136ccc. Dispatch a failed command to the error handler.
     pub fn fn_136ccc(&mut self, h: &mut impl Calls, a: [u32; 4]) {
         let bit = h.call(self, 0x1674b0, &a) >> 31;
         if bit != 0 {
@@ -215,8 +187,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_136ce8. Query a word. scratch is a caller-owned, writable four-byte
-    /// temporary disjoint from all live objects; its bytes are restored.
     pub fn fn_136ce8(&mut self, h: &mut impl Calls, scratch: u32) -> u32 {
         let saved = self.word(scratch);
         self.put_word(scratch, 0);
@@ -226,7 +196,6 @@ impl Memory<'_> {
         result
     }
 
-    /// fn_13792c. Initialize the request context before dispatch.
     pub fn fn_13792c(&mut self, h: &mut impl Calls, g: &Globals, a: u32, b: u32) {
         self.put_byte(g.context + 1, 0);
         self.put_half(g.context + 2, 0xd798);
@@ -236,7 +205,6 @@ impl Memory<'_> {
         h.call(self, 0x13795c, &[g.context]);
     }
 
-    /// fn_137afc. Unpack the signed calendar fields.
     pub fn fn_137afc(&mut self, h: &mut impl Calls, out: u32, input: u32) {
         let a = [
             out,
@@ -251,7 +219,6 @@ impl Memory<'_> {
         h.call(self, 0x1abd98, &a);
     }
 
-    /// fn_13e4d0. Initialize the voice object, retaining untouched padding.
     pub fn fn_13e4d0(&mut self, p: u32) -> u32 {
         for at in [0, 4, 8, 12, 20, 16, 432, 428] {
             self.put_word(p + at, 0);
@@ -279,9 +246,6 @@ impl Memory<'_> {
         p
     }
 
-    /// fn_160aa8. Resolve the two supported voice IDs to the regional blob.
-    /// blob is the caller-mapped address of the regional D_8d83d4 resource.
-    /// Invalid IDs leave the output word untouched.
     pub fn fn_160aa8(&mut self, id: u32, out: u32, blob: u32) -> u32 {
         if id <= 1 {
             self.put_word(out, blob);
@@ -291,13 +255,11 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_163d34. Forward the regional resource mode byte.
     pub fn fn_163d34(&mut self, h: &mut impl Calls, g: &Globals, a: [u32; 5]) -> u32 {
         let mode = self.byte(g.mode) as u32;
         h.call(self, 0x183524, &[a[0], a[1], a[2], a[3], a[4], mode])
     }
 
-    /// fn_163f20. Allocate through the inner allocator under its lock.
     pub fn fn_163f20(&mut self, h: &mut impl Calls, a: [u32; 4]) -> u32 {
         let inner = self.word(a[0] + 4);
         let lock = inner.wrapping_add(0x58);
@@ -307,7 +269,6 @@ impl Memory<'_> {
         result
     }
 
-    /// fn_16537c. Validate and invoke virtual read method zero.
     pub fn fn_16537c(&mut self, h: &mut impl Calls, a: [u32; 6]) -> u32 {
         if a[1] == 0 || a[4] == 0 {
             return 0xe0e046bc;
@@ -317,7 +278,6 @@ impl Memory<'_> {
         h.call(self, method, &[a[1], a[0], a[2], a[3], a[4], a[5]])
     }
 
-    /// fn_1653dc. Validate and invoke virtual method at offset twelve.
     pub fn fn_1653dc(&mut self, h: &mut impl Calls, a: u32, b: u32) -> u32 {
         if a == 0 || b == 0 {
             return 0xe0e046bc;
@@ -326,20 +286,15 @@ impl Memory<'_> {
         h.call(self, method, &[b, a])
     }
 
-    /// fn_165c84. Publish semaphore state one. Exclusive access to this
-    /// caller-owned arena replaces the ROM's ldrex/strex retry loop.
     pub fn fn_165c84(&mut self, p: u32) {
         self.put_word(p, 1);
     }
 
-    /// fn_165b88. Initialize the signal word, then publish the wait state.
     pub fn fn_165b88(&mut self, h: &mut impl Calls, p: u32, v: u32) {
         h.call(self, 0x165c84, &[p + 4]);
         self.put_word(p, if v != 0 { u32::MAX - 1 } else { u32::MAX });
     }
 
-    /// fn_165bbc. Wait or claim state zero. The platform call must implement
-    /// wakeups by updating the guest state, just as the kernel does.
     pub fn fn_165bbc(&mut self, h: &mut impl Calls, g: &Globals, p: u32) {
         loop {
             match self.word(p) as i32 {
@@ -361,7 +316,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_165d00. Negate the signal word and wake multiple waiters.
     pub fn fn_165d00(&mut self, h: &mut impl Calls, g: &Globals, p: u32) {
         let value = self.word(p).wrapping_neg();
         self.put_word(p, value);
@@ -371,7 +325,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_165c9c. Release or publish a semaphore signal.
     pub fn fn_165c9c(&mut self, h: &mut impl Calls, p: u32) {
         match self.word(p) {
             1 => {
@@ -384,7 +337,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_166054. Choose sleeping or short spin from signed nanoseconds.
     pub fn fn_166054(&mut self, h: &mut impl Calls, lo: u32, hi: u32) {
         let ns = (((hi as u64) << 32) | lo as u64) as i64;
         if ns >= 0x3477 {
@@ -396,8 +348,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_1670e4. Convert calendar fields using a disjoint eight-byte scratch.
-    /// Scratch is restored, including when output aliases the original data.
     pub fn fn_1670e4(&mut self, h: &mut impl Calls, a: [u32; 8], scratch: u32) -> u32 {
         let saved = [self.word(scratch), self.word(scratch + 4)];
         h.call(
@@ -413,8 +363,6 @@ impl Memory<'_> {
         a[0]
     }
 
-    /// fn_1674b0. Build the transfer command and dispatch SVC 0x32.
-    /// 0xffff0032 identifies the platform trap, not a guest engine function.
     pub fn fn_1674b0(&mut self, h: &mut impl Calls, g: &Globals, a: [u32; 4]) -> u32 {
         let q = g.command;
         self.put_word(q, 0xb00c2);
@@ -432,7 +380,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_1674fc. Query the service and write output only on success.
     pub fn fn_1674fc(&mut self, h: &mut impl Calls, g: &Globals, out: u32) -> u32 {
         self.put_word(g.command, 0xc0000);
         let service = self.word(g.service);
@@ -445,11 +392,9 @@ impl Memory<'_> {
         self.word(g.command + 4)
     }
 
-    /// fn_166f00. Copy the request to the TLS command buffer and submit it.
     pub fn fn_166f00(&mut self, h: &mut impl Calls, g: &Globals, ph: u32, src: u32) -> u32 {
         self.put_word(g.command, 0x10800);
-        // Same ordering as the original forward copy routine for valid
-        // nonoverlapping input and command-buffer storage.
+
         for i in 0..128 {
             let b = self.byte(src + i);
             self.put_byte(g.command + 4 + i, b);
@@ -463,7 +408,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_140808. Signed-high 64-bit product followed by the ROM shift helper.
     pub fn fn_140808(
         &mut self,
         h: &mut impl Calls,
@@ -477,13 +421,11 @@ impl Memory<'_> {
         let m = (lo as u64) | ((hi as u64) << 32);
         let signed = a as i64 as i128;
         let high = (signed.wrapping_mul(m as i128) >> 64) as u64;
-        // The helper has a two-register result; call via the explicit
-        // wide-return operation rather than dropping r1.
+
         let shifted = h.call_wide(self, 0x161178, &[high as u32, (high >> 32) as u32, shift]);
         shifted.wrapping_add(a >> 63)
     }
 
-    /// fn_163de0. Finish a resource slot, optionally decompressing its data.
     pub fn fn_163de0(&mut self, h: &mut impl Calls, mgr: u32, slot: u32) {
         h.call(self, 0x1840fc, &[mgr + 0x2c]);
         h.call(self, 0x132ab8, &[mgr, slot]);
@@ -532,19 +474,15 @@ impl Memory<'_> {
     }
 }
 
-/// Kernel calls preserve all four result registers. Only platform services
-/// belong here; engine routines continue through Calls.
 pub trait Kernel: Calls {
     fn svc(&mut self, memory: &mut Memory<'_>, number: u32, registers: [u32; 4]) -> [u32; 4];
 }
 
-/// fn_161178. RVCT signed doubleword shift, including register-shift limits.
-/// The initial signed subtraction uses the entire shift word, not its low byte.
 pub fn fn_161178(lo: u32, hi: u32, shift: u32) -> u64 {
     fn lsl(x: u32, n: u32) -> u32 { if n & 255 >= 32 { 0 } else { x << (n & 255) } }
     fn lsr(x: u32, n: u32) -> u32 { if n & 255 >= 32 { 0 } else { x >> (n & 255) } }
     fn asr(x: u32, n: u32) -> u32 { ((x as i32) >> (n & 255).min(31)) as u32 }
-    // SUBS shift,#32 followed by BGE compares signed shift with signed 32.
+
     let (low, high) = if (shift as i32) >= 32 {
         (asr(hi, shift.wrapping_sub(32)), ((hi as i32) >> 31) as u32)
     } else {
@@ -554,7 +492,7 @@ pub fn fn_161178(lo: u32, hi: u32, shift: u32) -> u64 {
 }
 
 impl Memory<'_> {
-    /// fn_1003dc. Thumb RVCT 16-bit wide-string length.
+
     pub fn fn_1003dc(&self, mut p: u32) -> u32 {
         let mut count = 0u32;
         while self.half(p) != 0 {
@@ -564,21 +502,18 @@ impl Memory<'_> {
         count
     }
 
-    /// fn_13095c. SVC 2d returns the output value in r1 even on failure.
     pub fn fn_13095c(&mut self, h: &mut impl Kernel, out: u32, value: u32) -> u32 {
         let r = h.svc(self, 0x2d, [out, value, 0, 0]);
         self.put_word(out, r[1]);
         r[0]
     }
 
-    /// fn_14d6a0. SVC 35 uses output pointer first, input value second.
     pub fn fn_14d6a0(&mut self, h: &mut impl Kernel, out: u32, value: u32) -> u32 {
         let r = h.svc(self, 0x35, [out, value, 0, 0]);
         self.put_word(out, r[1]);
         r[0]
     }
 
-    /// fn_137b30. Signed partial-product arithmetic in the ROM's carry order.
     pub fn fn_137b30(&mut self, acc: u32, input: u32) {
         let lo = self.word(input);
         let hi = self.word(input + 4);
@@ -599,13 +534,10 @@ impl Memory<'_> {
         self.put_word(acc + 4, (value >> 32) as u32);
     }
 
-    /// fn_16b540. Archive group-zero lookup.
     pub fn fn_16b540(&mut self, h: &mut impl Calls, loader: u32, name: u32, size: u32) -> u32 {
         h.call(self, 0x16b554, &[loader.wrapping_add(8), 0, name, size])
     }
 
-    /// fn_14d6dc. Release registered logger subsystems.
-    /// scratch must be a disjoint caller-owned word for the stack out-parameter.
     pub fn fn_14d6dc(&mut self, h: &mut impl Calls, logger: u32, scratch: u32) -> u32 {
         if logger == 0 { return 0; }
         for i in 0..5 {
@@ -627,7 +559,6 @@ impl Memory<'_> {
         rc
     }
 
-    /// fn_14dc30. Release logger instance handles, stopping on first failure.
     pub fn fn_14dc30(&mut self, h: &mut impl Calls, log: u32) -> u32 {
         if log == 0 { return 0; }
         for i in 0..5 {
@@ -645,7 +576,6 @@ impl Memory<'_> {
         0
     }
 
-    /// fn_14dc94. Allocate a log instance and open each registered interface.
     pub fn fn_14dc94(&mut self, h: &mut impl Calls, logger: u32, out: u32) -> u32 {
         if logger == 0 { self.put_word(out, 0); return 0; }
         if out == 0 { return 0x84b02006; }
@@ -690,8 +620,6 @@ impl Memory<'_> {
     }
 }
 
-
-/// Regional global addresses used by fn_13795c.
 pub struct RequestGlobals {
     pub current: u32,
     pub descriptor: u32,
@@ -700,8 +628,7 @@ pub struct RequestGlobals {
 }
 
 impl Memory<'_> {
-    /// fn_13795c. Serialize a request, retrying a transient service failure.
-    /// scratch is eight disjoint caller-owned bytes, restored on return.
+
     pub fn fn_13795c(&mut self, h: &mut impl Kernel, g: &RequestGlobals, p: u32, scratch: u32) {
         let saved = [self.word(scratch), self.word(scratch + 4)];
         loop {
@@ -739,13 +666,8 @@ impl Memory<'_> {
     }
 }
 
-
 impl Memory<'_> {
-    /// First stage of fn_11cc0c, stopping at the request engine boundary.
-    ///
-    /// This is deliberately NOT a complete root port. A composed dispatcher
-    /// must reject an unported engine call, never return a fabricated result.
-    /// US/EU use engine_delta=0; KR shifts these fields by sixteen bytes.
+
     pub fn boot_request_prefix(
         &mut self, h: &mut impl Calls, g: &Globals,
         engine: u32, mode: u8, engine_delta: u32,
@@ -759,8 +681,7 @@ impl Memory<'_> {
 }
 
 impl Memory<'_> {
-    /// fn_122364, including the delink label at 1223f4.
-    /// scratch names 128 disjoint caller-owned bytes, restored before return.
+
     pub fn fn_122364(&mut self, h: &mut impl Calls, p: u32, scratch: u32) {
         let saved: [u32; 32] = core::array::from_fn(|i| self.word(scratch + i as u32 * 4));
         self.update_calendar_rate(h, p, scratch);
@@ -798,8 +719,7 @@ impl Memory<'_> {
             if r.wrapping_sub(self.word(p + 8)) < 100 { return; }
             while (a as i64) >= (b as i64) {
                 let total = self.calendar_sum(h, s + 64, b);
-                // ARM compares against the original B saved by the parent,
-                // not A: the first iteration includes the accumulated state.
+
                 let first = b == initial_b;
                 let base = if first { self.word(p + 12) & 0xffff } else { 0 };
                 let phase = if first { self.half(p + 6) as u32 } else { 0 };
@@ -839,13 +759,9 @@ impl Memory<'_> {
     }
 }
 
-
-/// Regional tick baseline and caller-mapped shared-memory tick table.
 pub struct TickGlobals { pub baseline: u32, pub sequence: u32, pub banks: u32 }
 impl Memory<'_> {
-    /// fn_1391a4. Fixed-point tick sampling with the platform SVC behind Kernel.
-    /// scratch names 32 disjoint caller-owned bytes, restored before return.
-    /// Like the ROM's time service, frequency and calendar scale must be nonzero.
+
     pub fn fn_1391a4(&mut self, h: &mut impl Kernel, g: &TickGlobals, s: u32) -> u64 {
         let saved:[u32;8]=core::array::from_fn(|i|self.word(s+i as u32*4));
         let pa=h.call(self,0x1670e4,&[s,2000,1,1,0,0,0,0]);
@@ -861,8 +777,7 @@ impl Memory<'_> {
         let product=av.wrapping_sub(bv).wrapping_mul(1_000_000);
         self.put_word(s+16,product as u32);self.put_word(s+20,(product>>32) as u32);
         let s2=self.fn_140808(h,s+16,(product>>32) as u32,0xd7b634db,0x431bde82,18);
-        // ROM's retry compares the sampled sequence register to itself.
-        // There is exactly one tick read, followed by the bank selection.
+
         let tick=h.svc(self,0x28,[0;4]);
         let bank=g.banks+((self.word(g.sequence)&1)<<5);
         let b0=self.word(bank);let b1=self.word(bank+4);
@@ -875,28 +790,26 @@ impl Memory<'_> {
             crate::boot_part_b::fn_1992f8(n as i64,d as i64,|n,d|(n/d,n%d))
         };
         let q=divide(1000u64<<32,frequency as u64).0;
-        // The inline multiply takes bits 32..95, not bits 64..127.
+
         let fixed=|a:u64,b:u64|(((a as i64 as i128)*(b as i64 as i128))>>32) as u64;
         let elapsed=fixed(q,delta);
         let remaining=3_600_000u64.wrapping_sub(elapsed);
         let positive=if (remaining as i64)>0 {remaining}else{0};
         let q2=divide((positive as u32 as u64)<<32,3_600_000).0;
         let m=fixed(correction,q2).wrapping_add(elapsed).wrapping_add(b0 as u64|((b1 as u64)<<32));
-        // fn_1992f8 returns quotient in r0:r1 and remainder in r2:r3.
+
         let result=s1.wrapping_add(divide(m.wrapping_sub(s1),s2).1);
         for (i,v) in saved.into_iter().enumerate(){self.put_word(s+i as u32*4,v);}
         result
     }
 }
 
-
-/// Caller-mapped regional strings and logger component-name pointer table.
 pub struct LoggerGlobals {
     pub components:u32, pub logging:u32, pub wildcard:u32, pub broker_string:u32,
     pub aliases:[[u32;2];9], pub million_suffix:u32,
 }
 impl Memory<'_> {
-    /// fn_14d764. scratch names 160 disjoint caller-owned bytes, restored on return.
+
     pub fn fn_14d764(&mut self,h:&mut impl Calls,g:&LoggerGlobals,eng:[u32;2],_flags:u32,out:u32,s:u32)->u32 {
         let saved:[u32;40]=core::array::from_fn(|i|self.word(s+i as u32*4));
         let result=self.create_logger(h,g,eng,out,s);
@@ -913,7 +826,7 @@ impl Memory<'_> {
         let ctx=self.word(s);self.put_word(out,0);
         let l=h.call(self,0x1963b8,&[self.word(ctx+4),1,112]);
         if l==0{return 0x84b0200a;}
-        // The real memset leaf has no external dependencies.
+
         for i in 0..112 {self.put_byte(l+i,0);}
         self.put_word(l,eng[0]);self.put_word(l+4,eng[1]);self.put_word(l+8,ctx);
         let rc=h.call(self,0x19611c,&[eng[0],eng[1],s+4]);
@@ -960,10 +873,7 @@ impl Memory<'_> {
 }
 
 impl Memory<'_> {
-    /// Adapt the existing offset-indexed heap to an absolute guest arena.
-    /// The arena starts at guest zero. Its first 88 bytes are disjoint from
-    /// the heap object and all blocks, and are restored before returning.
-    /// Block links retain their absolute values, preserving alignment.
+
     pub fn boot_heap_allocate(&mut self, a: [u32; 6]) -> u32 {
         assert_eq!(self.base, 0);
         assert!(a[0] >= 88);
@@ -980,8 +890,6 @@ impl Memory<'_> {
         result
     }
 
-    /// fn_184f84 already exists as EngineHeap::block_release. Its argument
-    /// points to the subobject 24 bytes after the outer heap header.
     pub fn boot_heap_release(&mut self, sub: u32, pointer: u32) {
         assert_eq!(self.base, 0);
         assert!(sub >= 112);
@@ -994,8 +902,6 @@ impl Memory<'_> {
         self.bytes[..88].copy_from_slice(&saved);
     }
 
-    /// Continue the root through the three real resource requests and mounts.
-    /// The worker-open call is explicit, not a scripted success result.
     pub fn boot_archive_prefix(&mut self, h: &mut impl Calls, g: &Globals,
         engine: u32, mode: u8, delta: u32) {
         self.boot_request_prefix(h, g, engine, mode, delta);
@@ -1013,8 +919,7 @@ impl Memory<'_> {
 }
 
 impl Memory<'_> {
-    /// fn_1961d0. Allocate the 32-byte engine context through its heap interface.
-    /// The dependency must preserve the ROM argument order (32, 1).
+
     pub fn fn_1961d0(&mut self, h: &mut impl Calls, a: [u32; 5]) -> u32 {
         let [heap, resource, stream, flags, out] = a;
         if out == 0 { return 0x81602006; }
@@ -1036,12 +941,11 @@ impl Memory<'_> {
 }
 
 impl Memory<'_> {
-    /// fn_39f5e8. Same locked heap operation as fn_163f20, with pool zero.
+
     pub fn fn_39f5e8(&mut self, h: &mut impl Calls, a: [u32; 3]) -> u32 {
         self.fn_163f20(h, [a[0], a[1], a[2], 0])
     }
 
-    /// fn_4a7758. The game allocator callback clears the wrapping product.
     pub fn fn_4a7758(&mut self, h: &mut impl Calls, a: [u32; 3]) -> u32 {
         let n = a[1].wrapping_mul(a[2]);
         let method = self.word(self.word(a[0]) + 8);
@@ -1053,8 +957,6 @@ impl Memory<'_> {
     }
 }
 
-/// Regional literal pointers for the live worker. The capture verifies these
-/// against each ROM, rather than applying a US data-address delta.
 pub struct WorkerGlobals {
     pub category: u32,
     pub begin: u32,
@@ -1064,10 +966,7 @@ pub struct WorkerGlobals {
 }
 
 impl Memory<'_> {
-    /// Execute worker creation through context, logger, parameters and linguistic initialization.
-    /// Subsequent services remain explicit Calls boundaries. This helper is
-    /// intentionally a prefix, not a replacement for frontend::open_worker.
-    /// Scratch is 16 disjoint caller-owned bytes, restored on normal return.
+
     pub fn boot_worker_context_prefix(&mut self, h: &mut impl Calls,
         g: &WorkerGlobals, a: [u32; 6], scratch: u32) -> u32 {
         let saved = core::array::from_fn::<_, 4, _>(|i| self.word(scratch + i as u32 * 4));
@@ -1136,7 +1035,7 @@ impl Memory<'_> {
 }
 
 impl Memory<'_> {
-    /// fn_174ca8. Create the parameter table from its regional callback descriptor.
+
     pub fn fn_174ca8(&mut self, h: &mut impl Calls, a: [u32; 4], desc: u32) -> u32 {
         let [_flags, ctx, _tag, out] = a;
         if out == 0 { return 0x8b702007; }
@@ -1180,7 +1079,7 @@ impl Memory<'_> {
 }
 
 impl Memory<'_> {
-    /// Use the certified RVCT vsnprintf with an actual guest va_list.
+
     pub fn boot_vsnprintf(&mut self, dst: u32, capacity: u32, format: u32,
         arguments: u32) -> u32 {
         crate::boot_fmt::fn_10012c(self, dst, capacity, format,
@@ -1188,8 +1087,6 @@ impl Memory<'_> {
             &mut crate::boot_fmt::CLocale)
     }
 
-    /// Use the certified RVCT sprintf. arguments starts with promoted r2,
-    /// then r3, then stack words, retaining ARM double-word alignment holes.
     pub fn boot_sprintf(&mut self, dst: u32, format: u32, arguments: &[u32]) -> u32 {
         crate::boot_fmt::fn_100b50(self, dst, format,
             &mut RegisterVarargs { words: arguments, cursor: 0 },
@@ -1220,7 +1117,7 @@ impl crate::boot_fmt::Arguments for RegisterVarargs<'_> {
 }
 
 impl Memory<'_> {
-    /// fn_17ad98. Clone the 32-byte linguistic value through its real allocator.
+
     pub fn fn_17ad98(&mut self, h: &mut impl Calls, src: u32, heap: u32, out: u32) -> u32 {
         if src==0 || out==0 {return 0x8b602007;}
         self.put_word(out,0);
@@ -1231,8 +1128,6 @@ impl Memory<'_> {
         0
     }
 
-    /// fn_174a04. Clone a parameter value, releasing partially built state on error.
-    /// Calls preserve guest pointers and the ROM's read/write order.
     pub fn fn_174a04(&mut self, h: &mut impl Calls, src: u32, heap: u32, out: u32) -> u32 {
         if src == 0 || out == 0 { return 0; }
         self.put_word(out, 0);
@@ -1258,7 +1153,6 @@ impl Memory<'_> {
         rc
     }
 
-    /// fn_4a779c. The single-size allocator callback supplies alignment four.
     pub fn fn_4a779c(&mut self, h: &mut impl Calls, object: u32, size: u32) -> u32 {
         let target = self.word(self.word(object) + 8);
         h.call(self, target, &[object, size, 4])
@@ -1266,8 +1160,6 @@ impl Memory<'_> {
 
 }
 
-/// A real heap result passed to an offset-based frontend port after dispatch.
-/// This stores no fixture answers and checks that the port requests that call.
 struct BootHeapResult {
     object: u32,
     size: u32,
@@ -1283,15 +1175,12 @@ impl crate::frontend::HeapVtable for BootHeapResult {
 }
 
 impl Memory<'_> {
-    /// Use part b2's shared adapter rather than duplicating the context layout.
+
     pub fn boot_frontend_context_object(&mut self, a: [u32;8],
         methods: &mut impl crate::frontend::MethodTable) -> u32 {
         crate::boot_part_b2::guest_1964e0(self, a, methods)
     }
 
-    /// Bulk parameter/tree bridges. Scratch is 128 caller-owned disjoint bytes,
-    /// distinct from every ancestor call's scratch; normal return restores it.
-    /// None leaves an unbound dependency explicit at the caller.
     pub fn boot_parameter_call(&mut self, h: &mut impl Calls, f: u32, a: &[u32],
         scratch: u32) -> Option<u32> {
         assert!(self.base == 0 || matches!(f,0x17b0f8|0x17b058),
@@ -1369,9 +1258,7 @@ impl Memory<'_> {
                 h.call(self, 0x175170, &[a[0],a[1],s,n,0])
             }
             0x1759a0 => {
-                // The supplied worker defaults always have a nonnull value.
-                // Keep null-string fallback explicit until its regional empty
-                // literal is supplied by the caller.
+
                 if a[2] == 0 { return None; }
                 let at = self.offset(a[2]);
                 let n = fe::strlen_bytes(&self.bytes[at..]) + 1;
@@ -1448,8 +1335,7 @@ impl Memory<'_> {
                     fe::store_sized(self.bytes,Some(slot),src,n,heap,
                         &mut BootHeapResult {object,size:n,result:allocated})
                 } else {
-                    // Existing capacity requires no heap callback. Keep grow
-                    // and release paths unbound rather than record a result.
+
                     if (n!=0 && self.word(slot+4)<n) ||
                         (n==0 && self.word(slot)!=0 && self.word(slot+4)!=0) {return None;}
                     fe::store_sized(self.bytes,Some(slot),src,n,heap,
@@ -1458,8 +1344,7 @@ impl Memory<'_> {
             }
             0x175170 => self.boot_set_parameter(h,a.try_into().unwrap(),s),
             0x176104 => {
-                // Run the actual frontend callback traversal. Its callback
-                // bridge below deliberately faults if a nonempty list appears.
+
                 struct NoCallback;
                 impl fe::ElementCallback for NoCallback {
                     fn call_element(&mut self,_:u32,_:u32,_:u32)->u32 {panic!("nonempty boot callback list")}
@@ -1478,8 +1363,7 @@ impl Memory<'_> {
     }
 
     fn boot_tree_insert(&mut self,h:&mut impl Calls,tree:u32,node:u32,key:u32,s:u32)->u32 {
-        // Comparisons execute before key creation in the original. Cache only
-        // just-executed live comparisons so the offset API can borrow the arena.
+
         let mut path=[(0u32,0i32);64];let mut n=0;
         let mut x=self.word(tree);let vt=self.word(tree+36);
         while x!=tree {
@@ -1533,8 +1417,7 @@ impl Memory<'_> {
                 &self.bytes[bb..bb+size as usize],size)!=0
         };
         if changed {
-            // Empty callback/attribute lists are still read and checked.
-            // Nonempty branches stay explicit, never turned into success.
+
             let local=if incoming==0 {0}else{self.word(incoming+8)};
             for list in [local,self.word(params+12)] {
                 assert!(list==0 || self.word(list+20)==0,"unbound nonempty before-change callback list");
@@ -1557,7 +1440,6 @@ impl Memory<'_> {
     }
 }
 
-/// Platform forwarding for the shared bridge. Engine methods stay in bridge.rs.
 struct BridgePlatform<'a, H> { host: &'a mut H, arbiter: u32 }
 impl<H: crate::boot_part_b::Host> crate::bridge::Platform for BridgePlatform<'_, H> {
     fn thread_id(&mut self) -> u32 { self.host.thread_id() }
@@ -1567,10 +1449,7 @@ impl<H: crate::boot_part_b::Host> crate::bridge::Platform for BridgePlatform<'_,
     }
 }
 impl Memory<'_> {
-    /// Route the supported US boot bindings through the shared memory bridge.
-    /// workspace is caller-owned and at least base + bytes.len() bytes long.
-    /// Regional vtables must use the reentrant boot dispatcher until the shared
-    /// adapter supports regional method addresses. No pointers are rewritten.
+
     pub fn boot_shared_call(&mut self, host: &mut impl crate::boot_part_b::Host,
         f: u32, a: &[u32], arbiter: u32, workspace: &mut [u8])
         -> Option<Result<u32, crate::engine::Error>> {
@@ -1598,11 +1477,7 @@ impl Memory<'_> {
 }
 
 impl Memory<'_> {
-    /// Continue the existing real worker prefix through the remaining default
-    /// parameters, both linguistic properties and the voice setup dispatch.
-    /// This is not full startup.
-    /// names contains regional max-input, encoding-key/value and phonmap literals.
-    /// The 80-byte scratch is caller-owned, disjoint and restored on return.
+
     pub fn boot_worker_defaults_prefix(&mut self, h: &mut impl Calls, state: u32,
         names: [u32;4], property_key: u32, tail: [u32;3], scratch: u32) -> u32 {
         let ctx=self.word(state+16);let params=self.word(ctx+20);
@@ -1636,7 +1511,7 @@ impl Memory<'_> {
 }
 
 impl Memory<'_> {
-    /// Guest-offset bridge for frontend::copy_bytes, preserving forward overlap.
+
     pub fn boot_copy_forward(&mut self, dst: u32, src: u32, n: u32) -> u32 {
         let d=self.offset(dst);let s=self.offset(src);let n=n as usize;
         if d+n<=s {
@@ -1652,11 +1527,8 @@ impl Memory<'_> {
     }
 }
 
-
 impl Memory<'_> {
-    /// Round-10 bindings of existing certified leaves.
-    /// Returns None for unbound functions. Offset-based ports require base zero.
-    /// Void callees return an ignored zero, not an emulated ABI register value.
+
     pub fn boot_round10_call(&mut self, function: u32, a: &[u32]) -> Option<u32> {
         use crate::{frontend as fe, fe_text as ft, normalization as n};
         if self.base != 0 { return None; }
@@ -1703,8 +1575,6 @@ impl Memory<'_> {
     }
 }
 
-/// The current boot resource has no lock/unlock method. Other resources are
-/// refused by boot_lookup_pure before borrowing the arena immutably.
 struct BootPureLock<'a> { bytes: &'a [u8], owner: Option<u32> }
 impl crate::frontend::StateLock for BootPureLock<'_> {
     fn acquire(&mut self)->u32 {
@@ -1715,8 +1585,7 @@ impl crate::frontend::StateLock for BootPureLock<'_> {
     }
 }
 impl Memory<'_> {
-    /// Existing parameter lookup ports with callback-free resource locks and
-    /// the certified nullable string comparator. Unknown methods remain unbound.
+
     pub fn boot_lookup_pure(&mut self,f:u32,a:&[u32],comparator:u32)->Option<u32> {
         use crate::frontend as fe;
         if self.base!=0 || !matches!(f,0x1756d0|0x175a1c) { return None; }
@@ -1727,7 +1596,11 @@ impl Memory<'_> {
         }
         if a[0]!=0 {
             let map=self.word(a[0]+8);
-            if map!=0 && self.word(self.word(map+60)+8)!=comparator {return None;}
+            if map!=0 {
+                let got=self.word(self.word(map+60)+8);
+                let got=crate::rom_region::to_us(crate::rom_region::Rom::from_entry(got),got);
+                if got!=comparator {return None;}
+            }
         }
         let out=a[2];
         let size_out=if f==0x1756d0 {a[3]}else{0};
@@ -1753,8 +1626,6 @@ impl Memory<'_> {
         Some(rc)
     }
 
-    /// Existing logger-level port with the current two read-only callbacks.
-    /// Unknown callbacks remain unbound, not a successful default level.
     pub fn boot_log_level_pure(&self,p:u32,finish:u32,mode:u32)->Option<u32> {
         use crate::frontend as fe;
         if self.base!=0 {return None;}
@@ -1786,8 +1657,7 @@ impl Memory<'_> {
 }
 
 impl Memory<'_> {
-    /// Existing unsigned parser composed with the certified pure-lock lookup.
-    /// scratch is eight disjoint caller-owned bytes, restored on every return.
+
     pub fn boot_get_uint_pure(&mut self,a:[u32;3],comparator:u32,scratch:u32)->Option<u32> {
         if self.base!=0 || a[2]==0 {return None;}
         let saved=[self.word(scratch),self.word(scratch+4)];
@@ -1805,8 +1675,7 @@ impl Memory<'_> {
 }
 
 impl Memory<'_> {
-    /// Reuse part e's independently certified live stream/tuple adapter.
-    /// The caller supplies immutable regional tables and disjoint scratch.
+
     pub fn boot_round10_stream_call(
         &mut self,h:&mut impl crate::boot_part_e::ArchiveHost,f:u32,a:&[u32],
         e:&crate::boot_part_e::ArchiveEnvironment,

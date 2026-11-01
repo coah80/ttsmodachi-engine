@@ -1,4 +1,4 @@
-//! Large callers from fn_25552c. Pointers are caller-owned arena offsets.
+
 use crate::{frontend as f, normalization as n, render_part_a2 as a2};
 fn w(m: &[u8], p: u32) -> u32 {
     u32::from_le_bytes(m[p as usize..p as usize + 4].try_into().unwrap())
@@ -35,14 +35,13 @@ pub(crate) fn entry(m: &[u8], o: u32, i: u32) -> Result<u32, u32> {
         Ok(p as u32)
     }
 }
-/// Only indirect platform methods belong to this trait. Property-tree lookup,
-/// logging, heap validation, and runtime string operations use existing ports.
+
 pub trait Host: a2::RenderHost + crate::boot_part_b::FormatHost + f::StateLock {
     fn select_lock(&mut self, lock: u32);
     fn level(&mut self, instance: u32) -> u32;
     fn method(&mut self, m: &mut [u8], method: u32, args: &[u32]) -> u32;
 }
-/// Immutable constants and disjoint, restored caller-owned machine-stack storage.
+
 pub struct Environment<'a> {
     pub constants: u32,
     pub scratch: u32,
@@ -73,8 +72,7 @@ fn lookup(
         }
     })
 }
-/// fn_25807c / EU 258238 / KR 2582e4.
-/// Initializes plugin state, language mode, and the ten-entry marker buffer.
+
 pub fn initialize_object(
     m: &mut [u8],
     obj: u32,
@@ -133,9 +131,7 @@ pub fn initialize_object(
     ph(m, obj + 74, 10);
     0
 }
-/// fn_256e08 / EU 256fc4 / KR 257070.
-/// Runs the full-span normalizer then the existing a2 token replacement port.
-/// scratch supplies 128 restored bytes, including the callback's halfword local.
+
 pub fn normalize_full_span(
     m: &mut [u8],
     obj: u32,
@@ -245,10 +241,7 @@ fn log(m: &mut [u8], ctx: u32, code: u32, e: &Environment<'_>, host: &mut impl H
     );
     m[e.scratch as usize..e.scratch as usize + 20].copy_from_slice(&saved);
 }
-/// fn_25795c / EU 257b18 / KR 257bc4.
-/// Constructs the complete render object from the plugin's configuration.
-/// args are the fifteen original ARM arguments. scratch supplies 256 restored
-/// bytes for strings and callback outputs; it must not overlap engine objects.
+
 pub fn create_object(
     m: &mut [u8],
     args: &[u32; 15],
@@ -481,15 +474,13 @@ fn create_inner(
     r
 }
 
-/// External normalizers not owned by this lane. This boundary must be rebound
-/// when their full Rust ports land. It must never silently return success.
 pub trait RegionHost: Host + crate::render_part_c::Host + a2::NativeNormalizeHost {
-    /// Bind the certified kernel with caller-owned literals and scratch.
+
     fn normalize_kernel(&mut self,_:&mut crate::boot::Memory<'_>,_:[u32;15])->u32 {panic!("live normalizer kernel must be bound")}
 
     fn unported_normalizer(&mut self, m: &mut [u8], entry: u32, args: &[u32]) -> u32;
 }
-/// Caller-owned immutable diagnostic strings and marker-name tables.
+
 pub struct RegionData<'a> {
     pub dump: &'a crate::render_part_c::DumpData,
     pub phases: [u32; 9],
@@ -524,8 +515,7 @@ fn diagnostic(
     );
     m[scratch as usize..scratch as usize + 64].copy_from_slice(&saved);
 }
-// Live fn_1748a0. The old normalization helper uses scripted methods;
-// this adapter follows its source while keeping only indirect calls on Host.
+
 fn raw_log(
     m: &mut [u8],
     ctx: u32,
@@ -723,8 +713,7 @@ fn dump(
         host,
     );
 }
-/// fn_258220 / EU 2583dc / KR 258488.
-/// Full region pipeline. scratch is 1024 disjoint bytes, restored on every exit.
+
 pub fn normalize_regions(
     m: &mut [u8],
     obj: u32,
@@ -776,7 +765,7 @@ fn regions_inner<H: RegionHost>(
     data: &RegionData<'_>,
     host: &mut H,
 ) -> u32 {
-    // The closure lets error exits preserve both owning iterators' cleanup.
+
     let run = |m: &mut [u8], host: &mut H| -> Result<u32, u32> {
         macro_rules! check {
             ($r:expr) => {{
@@ -896,8 +885,7 @@ fn regions_inner<H: RegionHost>(
                     let j = ip.wrapping_add(1);
                     if j < cnt {
                         let ent = arr + j as u32 * 40;
-                        // The source's loop intentionally does not advance j.
-                        // A non-seven record is a nonterminating ROM input.
+
                         while h(m, ent + 10) != 7 {
                             core::hint::spin_loop();
                         }
@@ -1111,7 +1099,7 @@ fn regions_inner<H: RegionHost>(
             'spell: while i < cnt {
                 let ent = arr + i as u32 * 40;
                 if h(m, ent + 10) == 21 {
-                    // Compare the two UTF-16 strings using the existing leaf.
+
                     if tab != 0
                         && n::u16_cmp(m, e.constants + 0x7a, w(m, tab + 4) + w(m, ent + 28) * 4)
                             == 0
@@ -1240,7 +1228,7 @@ fn regions_inner<H: RegionHost>(
                 Some(&mut tab),
                 host,
             );
-            // The ROM leaves r4 zero on a fetch error, including missing 0x405.
+
             if r >= 0x80000000 {
                 return Ok(());
             }

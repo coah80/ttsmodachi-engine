@@ -1,16 +1,8 @@
-//! Frontend runtime output publication.
-//!
-//! These are the fn_18f6b8 output-publication call tree: the tag-to-record
-//! mapping (`fn_18f490`), the stopped-state transition (`fn_18f340`), the two
-//! ASCII text leaves (`fn_176460`, `fn_176740`) and the publisher itself.
-//! Every pointer in the original becomes a caller-owned id or borrow; the
-//! diagnostic logger `fn_173dc0` is host state and is not reproduced.
+
 
 use crate::frontend::StateLock;
 use crate::frontend_types::Error;
 
-/// Host operations for audio-fetch and domain ownership callbacks.
-/// Addresses are caller-owned buffer offsets; zero is a null handle.
 pub trait FrontendLifetime {
     fn validate(&mut self, object: u32, tag: u32, expected: u32, size: u32) -> u32;
     fn session(&mut self, handle: [u32; 2]) -> (u32, u32);
@@ -28,7 +20,6 @@ fn lifetime_put(memory: &mut [u8], at: u32, value: u32) {
     memory[at as usize..at as usize + 4].copy_from_slice(&value.to_le_bytes());
 }
 
-/// fn_22e220 / EU fn_22e3dc / KR fn_22e488.
 pub fn open_audio_fetch_handle(handle: [u32; 2], output: Option<&mut [u32; 2]>, host: &mut impl FrontendLifetime) -> u32 {
     let Some(output) = output else { return 0x87402007; };
     *output = [0; 2];
@@ -36,10 +27,9 @@ pub fn open_audio_fetch_handle(handle: [u32; 2], output: Option<&mut [u32; 2]>, 
     if rc < 0x80000000 { *output = [context, 0x2bd]; }
     rc
 }
-/// fn_22e260 / EU fn_22e41c / KR fn_22e4c8.
+
 pub fn close_audio_fetch_handle() -> u32 { 0 }
 
-/// fn_22e268 / EU fn_22e424 / KR fn_22e4d0.
 pub fn close_audio_fetch_object(memory: &[u8], object: u32, tag: u32, host: &mut impl FrontendLifetime) -> u32 {
     let mut rc = host.validate(object, tag, 0x2be, 44);
     if rc >= 0x80000000 { return rc; }
@@ -52,7 +42,7 @@ pub fn close_audio_fetch_object(memory: &[u8], object: u32, tag: u32, host: &mut
     host.free(lifetime_word(memory, environment + 4), object);
     rc
 }
-/// fn_22e86c / EU fn_22ea28 / KR fn_22ead4.
+
 pub fn release_audio_fetch_reference(memory: &mut [u8], object: Option<u32>, heap: u32, host: &mut impl FrontendLifetime) {
     let Some(object) = object else { return; };
     let at = object as usize;
@@ -65,33 +55,32 @@ pub fn release_audio_fetch_reference(memory: &mut [u8], object: Option<u32>, hea
     if data != 0 { host.free(heap, data); }
     host.free(heap, object);
 }
-/// fn_22fb1c / EU fn_22fcd8 / KR fn_22fd84.
+
 pub fn remove_audio_fetch_key(memory: &[u8], object: u32, tag: u32, key: u32, host: &mut impl FrontendLifetime) -> u32 {
     let rc = host.validate(object, tag, 0x2be, 44);
     if rc >= 0x80000000 { return rc; }
     host.remove_key(lifetime_word(memory, object + 20), key)
 }
-/// fn_1ff714 / EU fn_1ff8d0 / KR fn_1ff97c.
+
 pub fn domain_unsupported_operation(memory: &[u8], object: u32, tag: u32, host: &mut impl FrontendLifetime) -> u32 {
     let rc = host.validate(object, tag, 0x11d, 0x48);
     if rc >= 0x80000000 { return rc; }
     let (rc, _) = host.session([lifetime_word(memory, object), lifetime_word(memory, object + 4)]);
     if rc >= 0x80000000 { rc } else { 0x88e02001 }
 }
-/// fn_2002e0 / EU fn_20049c / KR fn_200548.
+
 pub fn domain_item_copy_enabled() -> u32 { 1 }
 
-/// fn_2002e8 / EU fn_2004a4 / KR fn_200550.
 pub fn free_domain_item_data(memory: &[u8], object: Option<u32>, heap: u32, host: &mut impl FrontendLifetime) {
     if let Some(object) = object {
         let data = lifetime_word(memory, object);
         if data != 0 { host.free(heap, data); }
     }
 }
-/// fn_200308 / EU fn_2004c4 / KR fn_200570.
+
 pub fn move_domain_item(memory: &mut [u8], source: u32, heap: u32, output: &mut u32, host: &mut impl FrontendLifetime) -> u32 {
     let Some(destination) = host.allocate(heap, 16) else { return 0x88e0200a; };
-    // fn_195ae8 copies forward, including when the host aliases the allocation.
+
     for offset in 0..16 {
         memory[destination as usize + offset] = memory[source as usize + offset];
     }
@@ -99,16 +88,11 @@ pub fn move_domain_item(memory: &mut [u8], source: u32, heap: u32, output: &mut 
     *output = destination;
     0
 }
-/// fn_20034c / EU fn_200508 / KR fn_2005b4.
+
 pub fn destroy_domain_item(object: Option<u32>, heap: u32, host: &mut impl FrontendLifetime) {
     if let Some(object) = object { host.destroy_domain_list(object); host.free(heap, object); }
 }
 
-
-/// fn_176460 / EU fn_176510 / KR fn_1764bc.
-///
-/// Writes the low byte of every UTF-16 unit of `source` up to its terminator
-/// and a terminating zero. A unit whose high byte is set becomes `?`.
 pub fn utf16_to_ascii(output: &mut [u8], source: &[u16]) -> Result<u32, Error> {
     let length = source
         .iter()
@@ -134,10 +118,6 @@ fn unit_at(text: &[u8], offset: usize) -> u16 {
     low | (high << 8)
 }
 
-/// fn_176460 in place, over the byte view of a UTF-16 string.
-///
-/// `fn_18f490` converts a tag's text inside the same buffer it reads, which is
-/// safe because byte `k` is written before unit `k` is read.
 pub fn utf16_to_ascii_in_place(text: &mut [u8], offset: usize) -> Result<u32, Error> {
     let units = (text.len().saturating_sub(offset)) / 2;
     let mut length = 0;
@@ -157,11 +137,6 @@ pub fn utf16_to_ascii_in_place(text: &mut [u8], offset: usize) -> Result<u32, Er
     Ok(length as u32)
 }
 
-/// fn_176740 / EU fn_1767f0 / KR fn_17679c.
-///
-/// Parses a signed decimal integer from a UTF-16 string, skipping leading
-/// space, tab, newline, vertical tab, form feed and carriage return. A unit
-/// whose high byte is set ends both the whitespace scan and the digit scan.
 pub fn parse_ascii_int_in_place(text: &[u8], offset: usize) -> i32 {
     let units = text.len().saturating_sub(offset) / 2;
     let mut index = 0;
@@ -211,10 +186,6 @@ pub fn parse_ascii_int_in_place(text: &[u8], offset: usize) -> i32 {
     }
 }
 
-/// One 24-byte input tag record, as `fn_18f490` receives it.
-///
-/// `field14` is the byte offset of the tag's UTF-16 text inside the caller's
-/// text buffer, not an address.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AudioTag {
     pub tag: u16,
@@ -225,7 +196,6 @@ pub struct AudioTag {
     pub field14: u32,
 }
 
-/// One 40-byte output record written by `fn_18f490`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AudioOutRecord {
     pub field00: u32,
@@ -240,10 +210,6 @@ pub struct AudioOutRecord {
     pub field24: u32,
 }
 
-/// fn_18f490 / EU fn_18f540 / KR fn_18f57c.
-///
-/// Maps the input tags into output records and returns how many were written.
-/// `mode` and `limit` come from the engine state at offsets 0x35 and 0x14c.
 pub fn map_audio_tags(
     mode: u8,
     limit: u32,
@@ -319,11 +285,6 @@ pub fn map_audio_tags(
     Ok(count as u32)
 }
 
-/// fn_18f340 / EU fn_18f3f0 / KR fn_18f42c.
-///
-/// Acquires the state lock and moves states 3 and 4 to 6. States 0..2 and any
-/// value above 6 report `0x80002011`; states 5 and 6 are unchanged. The
-/// release status is not merged, matching the original.
 pub fn stop_output_state(state: &mut u8, lock: &mut impl StateLock) -> u32 {
     let result = lock.acquire();
     if result >= 0x80000000 {
@@ -341,15 +302,12 @@ pub fn stop_output_state(state: &mut u8, lock: &mut impl StateLock) -> u32 {
     result
 }
 
-/// The two-word handle passed to the engine interface, by value.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AudioHandle {
     pub first: u32,
     pub second: u32,
 }
 
-/// The 20-byte audio buffer, which doubles as `fn_18f490`'s output buffer:
-/// `tag_count` is that buffer's record count and `tags` the record-array id.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AudioBuffer {
     pub kind: u8,
@@ -359,7 +317,6 @@ pub struct AudioBuffer {
     pub tags: u32,
 }
 
-/// The callback request, passed by value to the host callback.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AudioRequest {
     pub command: u32,
@@ -367,7 +324,6 @@ pub struct AudioRequest {
     pub buffer: AudioBuffer,
 }
 
-/// fn_18f6b8's callback: the host's `PutOutput` equivalent.
 pub trait AudioCallback {
     fn publish(
         &mut self,
@@ -378,12 +334,10 @@ pub trait AudioCallback {
     ) -> u32;
 }
 
-/// fn_18f6b8's engine interface, which only needs the stop entry point.
 pub trait AudioEngine {
     fn stop(&mut self, handle: AudioHandle) -> u32;
 }
 
-/// Borrowed state for `publish_audio` (`TtsState` in the original).
 pub struct AudioPublication<'a> {
     pub command: Option<&'a mut u32>,
     pub buffer: Option<&'a mut AudioBuffer>,
@@ -413,11 +367,6 @@ fn check_state(
     lock.release()
 }
 
-/// fn_18f6b8 / EU fn_18f768 / KR fn_18f7a4.
-///
-/// Publishes or fetches the current audio buffer. `samples`, `count` and
-/// `tag_count` are the in/out words the original receives as pointers, and
-/// `records` is the output-record array `p->tags` names.
 #[allow(clippy::too_many_arguments)]
 pub fn publish_audio(
     publication: &mut AudioPublication<'_>,

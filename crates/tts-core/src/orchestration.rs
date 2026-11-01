@@ -48,7 +48,7 @@ pub struct Setup<'a, 'b> {
 }
 
 impl Setup<'_, '_> {
-    /// fn_1be020 / EU fn_1be0d0 / KR fn_1be254.
+
     pub fn reset(&mut self, tables: &NumericTables<'_>) {
         let s = &mut self.state;
         s.active = false;
@@ -101,7 +101,6 @@ impl Setup<'_, '_> {
         self.voice_filter.reset();
     }
 
-    /// fn_1b8100 / EU fn_1b81b0 / KR fn_1b834c.
     pub fn apply_commands(&mut self, commands: &[u32], delay: i32, tables: &NumericTables<'_>) {
         for &command in commands {
             if command == 1 {

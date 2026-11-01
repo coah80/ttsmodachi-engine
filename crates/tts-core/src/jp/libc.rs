@@ -1,10 +1,5 @@
-//! ROM string subset used by the JP engine (strcpy/strcat/strlen) plus the
-//! SDK int/log formatters (`fn_6b2694`, `fn_6ae534`). All over borrowed
-//! slices; no allocation. Extra ROM libc helpers (strcmp, strtol, ...) get
-//! added back with direct-ROM rows when a ported caller needs them.
 
-/// strcpy: copies through the NUL; returns length excluding the NUL.
-/// Matches ROM `fn_303cd0` (2 args, dst return ignored here).
+
 pub fn strcpy0(dst: &mut [u8], src: &[u8]) -> usize {
     let mut w = 0usize;
     for &b in src.iter() {
@@ -17,8 +12,6 @@ pub fn strcpy0(dst: &mut [u8], src: &[u8]) -> usize {
     w - 1
 }
 
-/// strcat at known length `dlen`; returns the new length (excl. NUL).
-/// Matches ROM `fn_101228`.
 pub fn strcat0(dst: &mut [u8], dlen: usize, src: &[u8]) -> usize {
     let mut w = dlen;
     for &b in src.iter() {
@@ -31,18 +24,14 @@ pub fn strcat0(dst: &mut [u8], dlen: usize, src: &[u8]) -> usize {
     w - 1
 }
 
-/// strlen: bytes before the first NUL (or slice end).
-/// Matches ROM `fn_3034a4`.
 pub fn strlen0(s: &[u8]) -> usize {
     s.iter().position(|&b| b == 0).unwrap_or(s.len())
 }
 
-/// ROM `fn_16b53c`: zero `n` bytes.
 pub fn bzero0(dst: &mut [u8], n: usize) {
     dst[..n].fill(0);
 }
 
-/// strcmp with unsigned-char difference. Matches ROM `fn_303f78`.
 pub fn strcmp0(a: &[u8], b: &[u8]) -> i32 {
     let mut i = 0usize;
     loop {
@@ -58,16 +47,12 @@ pub fn strcmp0(a: &[u8], b: &[u8]) -> i32 {
     }
 }
 
-/// strncpy: exactly `n` bytes, NUL-padded past the source terminator.
-/// Matches ROM `fn_1935c0`.
 pub fn strncpy0(dst: &mut [u8], src: &[u8], n: usize) {
     for i in 0..n {
         dst[i] = *src.get(i).unwrap_or(&0);
     }
 }
 
-/// strncat: at most `n` non-NUL source bytes plus the terminator.
-/// Matches ROM `fn_1009ac`. Returns the new length (excl. NUL).
 pub fn strncat0(dst: &mut [u8], dlen: usize, src: &[u8], n: usize) -> usize {
     let mut w = dlen;
     let mut k = 0usize;
@@ -83,9 +68,6 @@ pub fn strncat0(dst: &mut [u8], dlen: usize, src: &[u8], n: usize) -> usize {
     w
 }
 
-/// strtol, base 10, 32-bit long, endptr NULL. Matches ROM `fn_100d9c`.
-/// Skips ASCII whitespace, takes an optional sign and digits, clamps to
-/// LONG_MAX/MIN on overflow, yields 0 when no digits follow.
 pub fn strtol10(s: &[u8]) -> i32 {
     let mut i = 0usize;
     while i < s.len() && matches!(s[i], b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r') {
@@ -122,8 +104,6 @@ pub fn strtol10(s: &[u8]) -> i32 {
     }
 }
 
-/// memcmp over exactly `n` bytes; unsigned-char difference.
-/// Matches ROM `fn_1009d0` (caller of `fn_19caa8`).
 pub fn memcmp0(a: &[u8], b: &[u8], n: usize) -> i32 {
     for i in 0..n {
         let ca = a[i];
@@ -135,8 +115,6 @@ pub fn memcmp0(a: &[u8], b: &[u8], n: usize) -> i32 {
     0
 }
 
-/// fn_6b2694: SDK int formatter with the `(s16)(0 - t)` negative quirk.
-/// Returns `dst` itself so call sites chain like the C.
 pub fn fmt_int(dst: &mut [u8], v: i32) -> &mut [u8] {
     let mut p = 0usize;
     let mut t = v;
@@ -165,9 +143,6 @@ pub fn fmt_int(dst: &mut [u8], v: i32) -> &mut [u8] {
     dst
 }
 
-/// fn_6ae534: SDK log formatter (`buf + mode/a/b/c` words, newline).
-/// Returns `(s16)len` on success, -1 when `size <= len_out + len_sp`.
-/// Total stack use stays under 212 bytes for caller-sized inputs.
 pub fn log_format(
     out: &mut [u8],
     size: i32,
@@ -205,8 +180,6 @@ pub fn log_format(
     len_sp as i16 as i32
 }
 
-/// strchr: index of the first `c` in `s`, stopping at NUL like ROM
-/// `fn_101144` (native maps it to libc `strchr`). `None` if absent.
 pub fn strchr0(s: &[u8], c: u8) -> Option<usize> {
     for (i, &b) in s.iter().enumerate() {
         if b == c {

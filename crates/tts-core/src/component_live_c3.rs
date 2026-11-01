@@ -1,30 +1,14 @@
-//! Live component root 21a25c, split from component_live_c.
-//!
-//! fn_21a25c is the language/spelling processor of the speech pipeline. The
-//! root body itself is engine_components2::process_21a25c (wire-b2). This file
-//! binds the families that no other lane binds for this root:
-//! the property fetch (fn_175a1c) through speech_part_2::fetch_parameter_m,
-//! the fe_text qsort comparators that the marker sort dispatches as code
-//! pointers, the morphology decode family (fn_26bb6c over the certified
-//! fn_26c1c0 trie) and the archive range read (fn_17c9d8) of the broker map
-//! over the game's resource file in the 3DS linear memory.
+
 
 use crate::engine::{Error, Memory};
 use crate::engine_components::InternalCalls;
 
-/// Canonical tokens for the fe_text qsort comparators.
-/// The comparator is a code pointer, so the C model, the ARM model and Rust
-/// record one token per comparator instead of a raw address.
 pub const QSORT_TOKENS: [u32; 3] = [0x9000_0000, 0x9000_0001, 0x9000_0002];
 
-/// fn_21a1fc is the marker-record comparator of the fn_2409d4 sort.
 pub const MARKER_COMPARATOR: u32 = 0x21a1fc;
 
-/// fn_196980 is the only string comparator the property tree may use.
 pub const PROPERTY_COMPARATOR: u32 = 0x196980;
 
-/// The live arena is one flat region. A flat view lets the ports that were
-/// written against the flat boot arena run against the same bytes.
 pub fn flat_view<'x, 'b>(m: &'x mut Memory<'_, 'b>) -> (u32, &'x mut [u8]) {
     let regions = &mut *m.regions;
     assert_eq!(regions.len(), 1, "the live arena must be one flat region");
@@ -32,7 +16,6 @@ pub fn flat_view<'x, 'b>(m: &'x mut Memory<'_, 'b>) -> (u32, &'x mut [u8]) {
     (first.base, &mut first.bytes[..])
 }
 
-/// The component platform and the heap platform have the same three services.
 struct PlatformAdapter<'a, P>(&'a mut P);
 impl<P: crate::engine_components2::ComponentPlatform> crate::engine::HeapPlatform
     for PlatformAdapter<'_, P>
@@ -48,15 +31,12 @@ impl<P: crate::engine_components2::ComponentPlatform> crate::engine::HeapPlatfor
     }
 }
 
-/// The property registry lock, taken by fn_1756d0 around the tree lookup.
 struct ParamLock {
     object: u32,
     error: Option<u32>,
 }
 impl ParamLock {
-    /// The registry lock of fn_176f2c/fn_176f5c (frontend acquire_lock):
-    /// a null slot is a no-op with no host call; a set slot dispatches the
-    /// lock method, which has no bound port here and fails closed.
+
     fn run(&mut self, mem: &mut [u8], slot: u32) -> u32 {
         let p = self.object;
         if p == 0 {
@@ -83,7 +63,6 @@ impl crate::reentrant2::StateLockM for ParamLock {
     }
 }
 
-/// The lock methods of the property registry object.
 struct LockHost<'a, P>(&'a mut P);
 impl<P: crate::engine_components2::ComponentPlatform> crate::boot_part_b::Host for LockHost<'_, P> {
     fn thread_id(&mut self) -> u32 {
@@ -112,7 +91,7 @@ impl<P: crate::engine_components2::ComponentPlatform> crate::boot_part_b::Host f
                 m.fn_165d00(self, &g, a[0]);
                 0
             }
-            0x172d18 => self.0.arbitrate(m, a),
+            0x172d18 => { if a.get(2) == Some(&0) { 0 } else { self.0.arbitrate(m, a) } },
             _ => 0x8000_2001,
         }
     }
@@ -121,19 +100,11 @@ impl<P: crate::engine_components2::ComponentPlatform> crate::boot::Calls for Loc
     fn call(&mut self, m: &mut crate::boot::Memory<'_>, entry: u32, a: &[u32]) -> u32 {
         crate::boot_part_b::Host::call(self, m, entry, a)
     }
-    fn call_wide(&mut self, _: &mut crate::boot::Memory<'_>, _: u32, _: &[u32]) -> u64 {
-        0
+    fn call_wide(&mut self, _: &mut crate::boot::Memory<'_>, entry: u32, _: &[u32]) -> u64 {
+        panic!("unbound wide call {entry:#x}")
     }
 }
 
-/// The live host of the archive path: the broker map, the archive read, the
-/// heap and the log.
-///
-/// The ROM's resource stream dispatches its methods through the code pointers
-/// of its own vtable (0x1b2760 seeks, 0x1b254c reads), and the stream's seek
-/// reaches the archive's own vtable (0x172de0 seeks, 0x172d30 reads, 0x4a78f0
-/// copies). Every one of those addresses is a real ROM code address, so the
-/// host dispatches them to the landed ports instead of guessing.
 struct MorphHost<'a> {
     platform: &'a mut dyn crate::engine::HeapPlatform,
     workspace: &'a core::cell::RefCell<crate::component_live_c::DictionaryWorkspace>,
@@ -143,16 +114,14 @@ struct MorphHost<'a> {
 }
 impl crate::component_live_c::Host for MorphHost<'_> {
     fn call_m(&mut self, f: u32, a: &[u32], m: &mut crate::boot::Memory<'_>) -> u32 {
-        // Nested ports pass guest/nested callee addresses raw; normalize the
-        // regional twin to the US entry the arms below dispatch on.
+
         let f = crate::rom_region::to_us_guest(self.rom, f);
         match f {
             0x1738e8 | 0x173dc0 => match crate::component_live_c::core_call_m(m, f, a) {
                 Ok(rc) => rc,
                 Err(_) => 0x8000_2001,
             },
-            // The logger's variadic argument service, not a guest call.
-            0xffff0001 => 0,
+            0xffff0001 => { *self.first = Some(f); 0x8000_2001 },
             0x196394 | 0x1963b8 | 0x196428 | 0x1963e0 | 0x4a779c | 0x4a7758 | 0x4a79b8
             | 0x4a774c | 0x39f5e8 | 0x39f5b8 | 0x184f20 | 0x1840fc | 0x18423c => {
                 match crate::component_live_c::heap_call_m(m, f, a, self.platform) {
@@ -176,10 +145,6 @@ impl crate::component_live_c::Host for MorphHost<'_> {
     }
 }
 
-/// The host of the morphology ports (lane b's fn_26c1c0 and lane b4's
-/// fn_26bb6c).  The ports reach the broker map and unmap of this lane's
-/// archive binding and the ROM's case fold; every other callee is recorded
-/// as unbound.
 struct TrieHost<'a, 'h>(&'a mut MorphHost<'h>);
 impl crate::component_live_b::Host for TrieHost<'_, '_> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut crate::boot::Memory<'_>) -> u32 {
@@ -199,10 +164,6 @@ impl crate::component_live_b::Host for TrieHost<'_, '_> {
     }
 }
 
-/// Live bindings for the fn_21a25c subtree.
-/// The bridge owns the guest heap, the stream ports and the property registry.
-/// This type adds the property fetch, the marker qsort and the morphology
-/// decode entry, and records the first callee it cannot serve.
 pub struct C3Calls<'a, P> {
     pub inner: crate::engine_components2::BridgeCalls<'a, P>,
     pub first_unbound: Option<u32>,
@@ -235,8 +196,7 @@ impl<'a, P: crate::engine_components2::ComponentPlatform> C3Calls<'a, P> {
         }
         0x8000_2001
     }
-    /// fn_175a1c. The property tree is read from the live arena and the
-    /// caller-owned out word is written with the fetched value.
+
     fn fetch_parameter(&mut self, m: &mut Memory<'_, '_>, a: &[u32]) -> Result<u32, Error> {
         self.fetch_calls += 1;
         if a.len() < 3 || a[0] == 0 || a[1] == 0 || a[2] == 0 {
@@ -245,9 +205,7 @@ impl<'a, P: crate::engine_components2::ComponentPlatform> C3Calls<'a, P> {
         let (base, bytes) = flat_view(m);
         let mut mem = crate::boot::Memory { base, bytes };
         let tree = mem.word(a[0] + 8);
-        // The comparator address is stored in the guest property tree, so the
-        // regional ROMs hold their own twin (EU 0x196a30 / KR 0x196a6c);
-        // normalize to the US entry the port below dispatches on.
+
         let comparator = if mem.word(a[0] + 4) != 0 && tree != 0 {
             let raw = mem.word(mem.word(tree + 60) + 8);
             crate::rom_region::to_us_guest(self.inner.rom, raw)
@@ -270,9 +228,7 @@ impl<'a, P: crate::engine_components2::ComponentPlatform> C3Calls<'a, P> {
         }
         Ok(rc)
     }
-    /// fn_17a1a4 / fn_179208 / fn_17c9d8. The broker map over the live
-    /// archive: the ROM's stream vtable and the archive's own vtable are read
-    /// from the arena, so the ROM's code addresses drive the landed ports.
+
     fn archive_range(&mut self, m: &mut Memory<'_, '_>, entry: u32, a: &[u32]) -> u32 {
         self.archive_calls += 1;
         let scratch = self.scratch;
@@ -294,7 +250,7 @@ impl<'a, P: crate::engine_components2::ComponentPlatform> C3Calls<'a, P> {
         };
         crate::component_live_c::broker_range_live_m(&mut mem, entry, a, scratch, &mut host)
     }
-    /// fn_26bb6c. The morphology decode over the certified fn_26c1c0 trie.
+
     fn morphology_decode(&mut self, m: &mut Memory<'_, '_>, a: &[u32]) -> Result<u32, Error> {
         self.morphology_calls += 1;
         if a.len() < 6 {
@@ -322,7 +278,7 @@ impl<'a, P: crate::engine_components2::ComponentPlatform> C3Calls<'a, P> {
             &mut mem, &mut trie, a[0], a[1], a[2], a[3], a[4], a[5],
         ))
     }
-    /// fn_26c1c0. The trie lookup of the morphology family.
+
     fn morphology_trie(&mut self, m: &mut Memory<'_, '_>, a: &[u32]) -> Result<u32, Error> {
         self.morphology_calls += 1;
         if a.len() < 5 {
@@ -351,15 +307,11 @@ impl<'a, P: crate::engine_components2::ComponentPlatform> C3Calls<'a, P> {
         );
         Ok(rc as u32)
     }
-    /// fn_1ea4e0. The dictionary lookup: the shared prefix owns the
-    /// prologue, and the ROM's decode (fn_26bb6c) owns the entry.
+
     fn dictionary_lookup(&mut self, m: &mut Memory<'_, '_>, a: &[u32]) -> Result<u32, Error> {
         match crate::engine_components2::read_call(m, 0x1ea4e0, a, &mut *self) {
             Err(Error::UnsupportedStage { entry: 0x26c1c0 }) => {
-                // The prefix probe maps one dictionary page and leaves it
-                // mapped; the ROM's found-path never maps here, so release
-                // the page before the decode. The alloc and this free are
-                // adjacent, keeping the heap neutral.
+
                 let ctx = a[0];
                 let state = ctx + 8;
                 let (buffer, broker, handle) = {
@@ -375,8 +327,7 @@ impl<'a, P: crate::engine_components2::ComponentPlatform> C3Calls<'a, P> {
             other => other,
         }
     }
-    /// The decode step of fn_1ea4e0: the ROM calls fn_26bb6c with the query
-    /// and the two halfword bounds (src/fn_1ea4e0.c).
+
     fn dictionary_decode(&mut self, m: &mut Memory<'_, '_>, a: &[u32]) -> Result<u32, Error> {
         if a.len() < 6 {
             return Ok(self.unbound(0x1ea4e0));
@@ -401,7 +352,7 @@ impl<'a, P: crate::engine_components2::ComponentPlatform> C3Calls<'a, P> {
         if found == 0 {
             return Ok(0);
         }
-        // The ROM copies the decoded entry into the result slot and counts it.
+
         let (base, bytes) = flat_view(m);
         let mut mem = crate::boot::Memory { base, bytes };
         let decoded = mem.word(state + 24);
@@ -419,9 +370,6 @@ impl<'a, P: crate::engine_components2::ComponentPlatform> C3Calls<'a, P> {
     }
 }
 
-/// The marker sort of fn_2409d4 with the fn_21a1fc comparator.
-/// The comparator is a code pointer, so the call is only served for the
-/// canonical comparator of this subtree.
 pub fn qsort_markers(arena: &mut [u8], base: u32, count: u32, size: u32) -> u32 {
     if size != 24 {
         return 0x8000_2001;
@@ -440,11 +388,7 @@ pub fn qsort_markers(arena: &mut [u8], base: u32, count: u32, size: u32) -> u32 
 
 impl<P: crate::engine_components2::ComponentPlatform> InternalCalls for C3Calls<'_, P> {
     fn call(&mut self, m: &mut Memory<'_, '_>, entry: u32, a: &[u32]) -> Result<u32, Error> {
-        // process_21a25c dispatches through invoke(), which reads the callee
-        // address raw from the guest tables: in EU/KR runs those are the
-        // relocated twins. Normalize guest-sourced pointers to the US entry
-        // the arms below dispatch on (round-8 recipe: to_us_guest). US runs
-        // pass through unchanged (genuine US keys are identity).
+
         let entry = crate::rom_region::to_us_guest(self.inner.rom, entry);
         match entry {
             0x175a1c => self.fetch_parameter(m, a),
@@ -459,8 +403,7 @@ impl<P: crate::engine_components2::ComponentPlatform> InternalCalls for C3Calls<
             0x26bb6c => self.morphology_decode(m, a),
             0x26c1c0 => self.morphology_trie(m, a),
             0x17a1a4 | 0x179208 | 0x17c9d8 => Ok(self.archive_range(m, entry, a)),
-            // The dictionary lookup runs over the live arena with this lane's
-            // host, so its broker map reaches the archive binding above.
+
             0x1ea4e0 => self.dictionary_lookup(m, a),
             _ => self.inner.call(m, entry, a),
         }

@@ -6,7 +6,6 @@ pub mod arena_mid;
 pub mod frame;
 pub mod stage;
 
-/// fn_240ba0 / EU fn_240d5c / KR fn_240e08.
 pub fn lowercase_voice_byte(value: u32) -> u32 {
     match value {
         0x9f => 0xff,
@@ -22,7 +21,6 @@ pub fn lowercase_voice_byte(value: u32) -> u32 {
     }
 }
 
-/// fn_240b28 / EU fn_240ce4 / KR fn_240d90.
 pub fn lowercase_dos_byte(value: u32) -> u32 {
     if value.wrapping_sub(0x41) <= 0x19 {
         return (value + 0x20) & 255;
@@ -40,7 +38,6 @@ pub fn lowercase_dos_byte(value: u32) -> u32 {
     }
 }
 
-/// fn_2f7bd4 / EU fn_2f7d90 / KR fn_2f7e3c.
 pub fn mix_fixed(a: i32, mut b: i32, b_bits: u32, a_bits: u32, gain: i32, output_bits: u32) -> i32 {
     let product = if a_bits < output_bits.wrapping_add(16) {
         rounded_product(
@@ -68,7 +65,6 @@ pub fn mix_fixed(a: i32, mut b: i32, b_bits: u32, a_bits: u32, gain: i32, output
     product.wrapping_add(b)
 }
 
-/// fn_2fbd28 / EU fn_2fbee4 / KR fn_2fbf90.
 pub fn search_records<T>(
     entries: &[T],
     mut compare: impl FnMut(&T) -> core::cmp::Ordering,
@@ -92,7 +88,6 @@ pub fn search_records<T>(
     None
 }
 
-/// fn_2fb288 / EU fn_2fb444 / KR fn_2fb4f0.
 pub fn lookup_byte_mapping(entries: &[[u8; 2]], key: u8, output: &mut u8) -> bool {
     let mut index = 0;
     if let Some(found) = search_records(entries, |entry| key.cmp(&entry[0]), &mut index) {
@@ -103,25 +98,20 @@ pub fn lookup_byte_mapping(entries: &[[u8; 2]], key: u8, output: &mut u8) -> boo
     }
 }
 
-/// fn_2a3c2c / EU fn_2a3de8 / KR fn_2a3e94.
 pub fn feature_format() -> u32 {
     2
 }
 
-/// fn_2a3c34 / EU fn_2a3df0 / KR fn_2a3e9c.
 pub fn feature_input_format() -> u32 {
     2
 }
 
-/// fn_2a3c3c / EU fn_2a3df8 / KR fn_2a3ea4.
 pub fn feature_output_format() -> u32 {
     2
 }
 
-/// fn_2a496c / EU fn_2a4b28 / KR fn_2a4bd4.
 pub fn finish_selection() {}
 
-/// fn_2a47ac / EU fn_2a4968 / KR fn_2a4a14.
 pub fn retain_selection(references: &mut u16) {
     *references = references.wrapping_add(1);
 }
@@ -136,7 +126,7 @@ pub struct FeatureCursor {
 }
 
 impl FeatureCursor {
-    /// fn_2a24e0 / EU fn_2a269c / KR fn_2a2748.
+
     pub fn rewind(&mut self, first_input: u32) {
         self.current_input = first_input;
         self.current_output = self.output;
@@ -151,7 +141,6 @@ pub struct FeatureSource {
     pub input_length: u32,
 }
 
-/// fn_2a3458 / EU fn_2a3614 / KR fn_2a36c0.
 pub fn loan_features(source: &mut FeatureSource, destination: &mut FeatureCursor) -> u32 {
     *destination = FeatureCursor {
         input: source.input,
@@ -174,7 +163,7 @@ pub struct PrivateHeap<'a> {
 }
 
 impl<'a> PrivateHeap<'a> {
-    /// fn_2db19c / EU fn_2db358 / KR fn_2db404.
+
     pub fn initialize(owner: u32, name: &'a [u8]) -> Self {
         Self {
             owner,
@@ -187,7 +176,6 @@ impl<'a> PrivateHeap<'a> {
     }
 }
 
-/// fn_2a93dc / EU fn_2a9598 / KR fn_2a9644.
 pub fn align_feature_cursor(position: &mut u32, limit: u32, alignment: u32) -> Result<(), Error> {
     if alignment == 0 {
         return Err(Error::InvalidResource);
@@ -197,7 +185,6 @@ pub fn align_feature_cursor(position: &mut u32, limit: u32, alignment: u32) -> R
     Ok(())
 }
 
-/// fn_2a9608 / EU fn_2a97c4 / KR fn_2a9870.
 pub fn inverse_percent(value: i32, output: &mut i32) -> u32 {
     *output = 100;
     if value != 0 {
@@ -210,12 +197,10 @@ pub fn inverse_percent(value: i32, output: &mut i32) -> u32 {
     0x84e0200f
 }
 
-/// fn_2f9818 / EU fn_2f99d4 / KR fn_2f9a80.
 pub fn voice_model_interface<T: ?Sized>(table: &T) -> &T {
     table
 }
 
-/// fn_1e33d0 / EU fn_1e358c / KR fn_1e3638.
 pub fn phoneme_map_interface<'a, T: ?Sized>(
     mode: u32,
     table: &'a T,
@@ -228,7 +213,6 @@ pub fn phoneme_map_interface<'a, T: ?Sized>(
     0
 }
 
-/// fn_29b214 / EU fn_29b3d0 / KR fn_29b47c.
 pub fn divide_fixed(numerator: i32, denominator: i32) -> Result<i32, Error> {
     if denominator == 0 {
         return Err(Error::InvalidResource);
@@ -241,28 +225,23 @@ pub fn divide_fixed(numerator: i32, denominator: i32) -> Result<i32, Error> {
         .wrapping_add(quotient.wrapping_shl(15)))
 }
 
-/// fn_244318 / EU fn_2444d4 / KR fn_244580.
 pub fn reader_position(position: Option<&u32>) -> u32 {
     position.copied().unwrap_or(0)
 }
 
-/// fn_2fb7b0 / EU fn_2fb96c / KR fn_2fba18.
 pub fn set_record_value(destination: &mut u32, value: u32) -> u32 {
     *destination = value;
     0
 }
 
-/// fn_2fb820 / EU fn_2fb9dc / KR fn_2fba88.
 pub fn record_extent(length: u32, additional: u32) -> u32 {
     length.wrapping_add(additional).wrapping_add(4)
 }
 
-/// fn_2fbe50 / EU fn_2fc00c / KR fn_2fc0b8.
 pub fn finish_record() -> u32 {
     0
 }
 
-/// fn_2fbcf0 / EU fn_2fbeac / KR fn_2fbf58.
 pub fn combine_log_weights(a: i32, b: i32, table: &[i8], origin: usize) -> Result<i32, Error> {
     let mut difference = a.wrapping_sub(b) as i16;
     let mut base = b;
@@ -290,7 +269,7 @@ pub struct PredictionHistory {
 }
 
 impl PredictionHistory {
-    /// fn_2dc784 / EU fn_2dc940 / KR fn_2dc9ec.
+
     pub fn reset(&mut self) {
         self.first_length = 0;
         self.second_length = 0;
@@ -311,22 +290,18 @@ fn right(value: i32, shift: u32) -> i32 {
     value >> (shift & 255).min(31)
 }
 
-/// fn_29b0dc / EU fn_29b298 / KR fn_29b344.
 pub fn add_i16(a: i32, b: i32) -> i16 {
     a.wrapping_add(b).clamp(i16::MIN as i32, i16::MAX as i32) as i16
 }
 
-/// fn_29b0e8 / EU fn_29b2a4 / KR fn_29b350.
 pub fn add_i32(a: i32, b: i32) -> i32 {
     a.saturating_add(b)
 }
 
-/// fn_29b118 / EU fn_29b2d4 / KR fn_29b380.
 pub fn subtract_i16(a: i32, b: i32) -> i16 {
     a.wrapping_sub(b).clamp(i16::MIN as i32, i16::MAX as i32) as i16
 }
 
-/// fn_29b154 / EU fn_29b310 / KR fn_29b3bc.
 pub fn doubled_product(a: i32, b: i32) -> i32 {
     let product = a.wrapping_mul(b);
     if product <= 0x40000000 {
@@ -336,7 +311,6 @@ pub fn doubled_product(a: i32, b: i32) -> i32 {
     }
 }
 
-/// fn_29b168 / EU fn_29b324 / KR fn_29b3d0.
 pub fn rounded_product(a: i32, b: i32, fractional_bits: u32) -> i32 {
     let shift = fractional_bits.wrapping_sub(16) as u16 as u32;
     let low = (a as u16 as u32)
@@ -357,7 +331,6 @@ pub fn rounded_product(a: i32, b: i32, fractional_bits: u32) -> i32 {
     ))
 }
 
-/// fn_29b1c4 / EU fn_29b380 / KR fn_29b42c.
 pub fn rounded_short_product(a: i32, b: i16, fractional_bits: u32) -> i32 {
     let low = (a as u16 as i32).wrapping_mul(b as i32);
     let high = (a >> 16).wrapping_mul(b as i32);
@@ -367,7 +340,6 @@ pub fn rounded_short_product(a: i32, b: i16, fractional_bits: u32) -> i32 {
     ))
 }
 
-/// fn_29b374 / EU fn_29b530 / KR fn_29b5dc.
 pub fn signed_table(x: i32, table: &[i16]) -> Result<i16, Error> {
     let index = x >> 5;
     if index == 1023 {
@@ -387,7 +359,6 @@ pub fn signed_table(x: i32, table: &[i16]) -> Result<i16, Error> {
     Ok((pair[0] as i32 + delta) as i16)
 }
 
-/// fn_29b3b4 / EU fn_29b570 / KR fn_29b61c.
 pub fn unsigned_table(x: u32, table: &[u16]) -> Result<u16, Error> {
     let index = if x >> 5 > 1024 {
         1023
@@ -406,12 +377,10 @@ pub fn unsigned_table(x: u32, table: &[u16]) -> Result<u16, Error> {
     Ok((pair[0] as i32).wrapping_add(delta) as u16)
 }
 
-/// fn_29b3e8 / EU fn_29b5a4 / KR fn_29b650.
 pub fn combine_fixed(high: i32, low: i32) -> i32 {
     high.wrapping_shl(16).wrapping_add(low.wrapping_shl(1))
 }
 
-/// fn_29b3f4 / EU fn_29b5b0 / KR fn_29b65c.
 pub fn split_fixed(value: i32) -> (i16, i16) {
     let high = value >> 16;
     (
@@ -420,7 +389,6 @@ pub fn split_fixed(value: i32) -> (i16, i16) {
     )
 }
 
-/// fn_29b40c / EU fn_29b5c8 / KR fn_29b674.
 pub fn half_square_root(value: u32) -> u16 {
     let mut root = 0u16;
     let mut step = 0x8000u16;
@@ -440,7 +408,6 @@ pub fn half_square_root(value: u32) -> u16 {
     root
 }
 
-/// fn_29b458 / EU fn_29b614 / KR fn_29b6c0.
 pub fn rounded_square_root(value: u32) -> u32 {
     match value {
         0xdc0 => 59,
@@ -457,7 +424,6 @@ pub fn rounded_square_root(value: u32) -> u32 {
     }
 }
 
-/// fn_29b528 / EU fn_29b6e4 / KR fn_29b790.
 pub fn square_root(value: u32) -> u16 {
     let mut root = 0u16;
     let mut step = 0x8000u16;
@@ -475,7 +441,6 @@ pub fn square_root(value: u32) -> u16 {
     root
 }
 
-/// fn_29b570 / EU fn_29b72c / KR fn_29b7d8.
 pub fn prediction_square_root(value: u32) -> i32 {
     square_root(value) as i32
 }
@@ -491,7 +456,7 @@ pub struct AcousticControls {
 }
 
 impl AcousticControls {
-    /// fn_2a9d5c / EU fn_2a9f18 / KR fn_2a9fc4.
+
     pub fn set_rate(&mut self, value: u32) -> i32 {
         if value > 200 {
             return -1;
@@ -505,7 +470,6 @@ impl AcousticControls {
         0
     }
 
-    /// fn_2a9da0 / EU fn_2a9f5c / KR fn_2aa008.
     pub fn set_duration(&mut self, value: u32) -> i32 {
         if value > 200 {
             return -1;
@@ -527,7 +491,6 @@ impl AcousticControls {
         0
     }
 
-    /// fn_2a9e20 / EU fn_2a9fdc / KR fn_2aa088.
     pub fn set_frequency(&mut self, value: u32) -> i32 {
         if value > 200 {
             return -1;
@@ -536,7 +499,6 @@ impl AcousticControls {
         0
     }
 
-    /// fn_2a9e48 / EU fn_2aa004 / KR fn_2aa0b0.
     pub fn set_pitch(&mut self, value: i32) -> i32 {
         if value.wrapping_add(250) as u32 > 500 {
             return -1;
@@ -545,7 +507,6 @@ impl AcousticControls {
         0
     }
 
-    /// fn_2a9e64 / EU fn_2aa020 / KR fn_2aa0cc.
     pub fn set_pitch_scale(&mut self, value: u32) -> i32 {
         if value.wrapping_sub(11) > 189 {
             return -1;
@@ -558,33 +519,27 @@ impl AcousticControls {
         0
     }
 
-    /// fn_2a9ea0 / EU fn_2aa05c / KR fn_2aa108.
     pub fn rate(&self) -> i32 {
         (self.rate >> 14).wrapping_mul(100)
     }
 
-    /// fn_2a9ebc / EU fn_2aa078 / KR fn_2aa124.
     pub fn duration(&self) -> i32 {
         (self.duration >> 14).wrapping_mul(100)
     }
 
-    /// fn_2a9ed8 / EU fn_2aa094 / KR fn_2aa140.
     pub fn frequency(&self) -> u32 {
         (self.frequency >> 14).wrapping_mul(100)
     }
 
-    /// fn_2a9ef4 / EU fn_2aa0b0 / KR fn_2aa15c.
     pub fn pitch(&self) -> i32 {
         (self.pitch >> 6) as i32
     }
 
-    /// fn_2a9f08 / EU fn_2aa0c4 / KR fn_2aa170.
     pub fn pitch_scale(&self) -> i32 {
         (self.pitch_scale >> 14).wrapping_mul(100)
     }
 }
 
-/// fn_2db63c / EU fn_2db7f8 / KR fn_2db8a4.
 pub fn fill_samples(output: &mut [i16], value: i16, count: i32) -> Result<(), Error> {
     let count = count.max(0) as usize;
     let available = output.len();
@@ -598,7 +553,6 @@ pub fn fill_samples(output: &mut [i16], value: i16, count: i32) -> Result<(), Er
     Ok(())
 }
 
-/// fn_2db574 / EU fn_2db730 / KR fn_2db7dc.
 pub fn convolve(
     signal: &[i16],
     history: usize,
@@ -632,7 +586,6 @@ pub fn convolve(
     Ok(())
 }
 
-/// fn_2dbb2c / EU fn_2dbce8 / KR fn_2dbd94.
 pub fn prediction_coefficients(
     input: &[i32],
     output: &mut [i32],
@@ -665,7 +618,6 @@ pub fn prediction_coefficients(
     Ok(())
 }
 
-/// fn_2a3760 / EU fn_2a391c / KR fn_2a39c8.
 pub fn scale_features(input: &[i32], output: &mut [i32], count: i32) -> Result<(), Error> {
     let required = count.max(0) as usize;
     if input.len() < required {
@@ -686,7 +638,6 @@ pub fn scale_features(input: &[i32], output: &mut [i32], count: i32) -> Result<(
     Ok(())
 }
 
-/// fn_2a37f4 / EU fn_2a39b0 / KR fn_2a3a5c.
 pub fn feature_delta(
     enabled: bool,
     input: &[i32],
@@ -714,7 +665,6 @@ pub fn feature_delta(
     Ok(())
 }
 
-/// fn_2a38d8 / EU fn_2a3a94 / KR fn_2a3b40.
 pub fn smooth_features(
     mode: i32,
     samples: &mut [i32],
@@ -771,7 +721,6 @@ pub fn smooth_features(
     Ok(())
 }
 
-/// fn_2db574 / EU fn_2db730 / KR fn_2db7dc, with overlapping source and destination.
 pub fn convolve_in_place(
     storage: &mut [i16],
     source: usize,
@@ -892,7 +841,6 @@ fn lookup_handle(
     directory.lookup(key, output)
 }
 
-/// fn_241a5c / EU fn_241c18 / KR fn_241cc4.
 pub fn lookup_primary_wide(
     handle: Option<&DirectoryHandle<'_>>,
     key: Option<DirectoryUnits<'_>>,
@@ -901,7 +849,6 @@ pub fn lookup_primary_wide(
     lookup_handle(handle, key, output, false)
 }
 
-/// fn_241acc / EU fn_241c88 / KR fn_241d34.
 pub fn lookup_extended_wide(
     handle: Option<&DirectoryHandle<'_>>,
     key: Option<DirectoryUnits<'_>>,
@@ -940,7 +887,6 @@ fn prefix_handle(
     status
 }
 
-/// fn_241b3c / EU fn_241cf8 / KR fn_241da4.
 pub fn prefix_primary_byte(
     handle: Option<&DirectoryHandle<'_>>,
     key: Option<DirectoryUnits<'_>>,
@@ -950,7 +896,6 @@ pub fn prefix_primary_byte(
     prefix_handle(handle, key, prefix, value, false, false)
 }
 
-/// fn_241bc4 / EU fn_241d80 / KR fn_241e2c.
 pub fn prefix_primary_wide(
     handle: Option<&DirectoryHandle<'_>>,
     key: Option<DirectoryUnits<'_>>,
@@ -960,7 +905,6 @@ pub fn prefix_primary_wide(
     prefix_handle(handle, key, prefix, value, true, false)
 }
 
-/// fn_241c4c / EU fn_241e08 / KR fn_241eb4.
 pub fn prefix_secondary_byte(
     handle: Option<&DirectoryHandle<'_>>,
     key: Option<DirectoryUnits<'_>>,
@@ -970,7 +914,6 @@ pub fn prefix_secondary_byte(
     prefix_handle(handle, key, prefix, value, false, true)
 }
 
-/// fn_241ccc / EU fn_241e88 / KR fn_241f34.
 pub fn prefix_secondary_wide(
     handle: Option<&DirectoryHandle<'_>>,
     key: Option<DirectoryUnits<'_>>,
@@ -980,7 +923,6 @@ pub fn prefix_secondary_wide(
     prefix_handle(handle, key, prefix, value, true, true)
 }
 
-/// fn_241d4c / EU fn_241f08 / KR fn_241fb4.
 pub fn describe_primary_bytes<'a>(
     handle: Option<&DirectoryHandle<'a>>,
     length: Option<&mut u32>,
@@ -1004,7 +946,7 @@ pub fn describe_primary_bytes<'a>(
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DirectoryMatch {
     pub prefix: u16,
-    /// Index into the byte or UTF-16 entries slice.
+
     pub value: Option<usize>,
 }
 
@@ -1031,7 +973,6 @@ impl VoiceDirectory<'_> {
         }
     }
 
-    /// fn_241dbc / EU fn_241f78 / KR fn_242024.
     pub fn lookup(&self, key: DirectoryUnits<'_>, output: &mut Option<usize>) -> Result<(), Error> {
         if self.entries.wide() != key.wide() || self.count == i32::MIN {
             return Err(Error::InvalidResource);
@@ -1056,7 +997,6 @@ impl VoiceDirectory<'_> {
         output.map_or(Err(Error::Engine(0x8a202014)), |_| Ok(()))
     }
 
-    /// fn_240dcc / EU fn_240f88 / KR fn_241034.
     pub fn prefix_lookup(
         &self,
         key: DirectoryUnits<'_>,
@@ -1144,7 +1084,6 @@ impl VoiceDirectory<'_> {
     }
 }
 
-/// fn_2f7b2c / EU fn_2f7ce8 / KR fn_2f7d94.
 pub fn mix_nonnegative_fixed(
     a: i32,
     mut b: u32,
@@ -1245,7 +1184,6 @@ fn smooth_feature_window(
     Ok(())
 }
 
-/// fn_2a39ec / EU fn_2a3ba8 / KR fn_2a3c54.
 pub fn smooth_features_wide(
     mode: i32,
     samples: &mut [i32],
@@ -1256,7 +1194,6 @@ pub fn smooth_features_wide(
     smooth_feature_window(mode, samples, middle, count, output, [9, 62, 114, 62, 9])
 }
 
-/// fn_2a3b18 / EU fn_2a3cd4 / KR fn_2a3d80.
 pub fn smooth_features_narrow(
     mode: i32,
     samples: &mut [i32],
@@ -1303,7 +1240,7 @@ impl BandSystem<'_> {
             .map(|v| v.quotient)
             .map_err(|_| Error::InvalidResource)
     }
-    /// fn_2a3c44 / EU fn_2a3e00 / KR fn_2a3eac.
+
     pub fn forward(&self, a: u32, b: u32, c: u32, output: &mut [i32]) -> Result<(), Error> {
         self.validate(output, self.width.max(1))?;
         output[0] = left(
@@ -1339,7 +1276,7 @@ impl BandSystem<'_> {
         }
         Ok(())
     }
-    /// fn_2a3d84 / EU fn_2a3f40 / KR fn_2a3fec.
+
     pub fn forward_three(&self, output: &mut [i32]) -> Result<(), Error> {
         self.validate(output, 3)?;
         let x = self.input[0];
@@ -1368,7 +1305,7 @@ impl BandSystem<'_> {
         }
         Ok(())
     }
-    /// fn_2a3ec4 / EU fn_2a4080 / KR fn_2a412c.
+
     pub fn backward(&self, a: u32, b: u32, c: u32, output: &mut [i32]) -> Result<(), Error> {
         self.validate(output, self.width.max(1))?;
         let n = self.input.len();
@@ -1404,7 +1341,7 @@ impl BandSystem<'_> {
         }
         Ok(())
     }
-    /// fn_2a3fe4 / EU fn_2a41a0 / KR fn_2a424c.
+
     pub fn backward_three(&self, output: &mut [i32]) -> Result<(), Error> {
         self.validate(output, 3)?;
         let n = self.input.len();
@@ -1434,7 +1371,6 @@ impl BandSystem<'_> {
     }
 }
 
-/// fn_2a4510 / EU fn_2a46cc / KR fn_2a4778.
 pub fn validate_window_counts(
     f0_count: i32,
     expected_f0: i32,
@@ -1453,7 +1389,6 @@ pub fn validate_window_counts(
     })
 }
 
-/// fn_2db66c / EU fn_2db828 / KR fn_2db8d4.
 pub fn window_table_index(
     kind: i32,
     index: u32,
@@ -1491,7 +1426,6 @@ pub struct WindowSettings {
     pub parameters: [u8; 6],
 }
 
-/// fn_2db744 / EU fn_2db900 / KR fn_2db9ac.
 pub fn parse_window_settings(
     index: usize,
     value: u32,
@@ -1533,7 +1467,6 @@ pub fn parse_window_settings(
     Ok(0)
 }
 
-/// fn_2db87c / EU fn_2dba38 / KR fn_2dbae4.
 pub fn window_settings(
     available: bool,
     index: i32,
@@ -1569,7 +1502,7 @@ pub struct PredictionSmoother {
     pub result: u16,
 }
 impl PredictionSmoother {
-    /// fn_2dca78 / EU fn_2dcc34 / KR fn_2dcce0.
+
     pub fn update(
         &mut self,
         mut value: i32,
@@ -1671,7 +1604,7 @@ impl<'a> AcousticTable<'a> {
         }
         Ok(samples)
     }
-    /// fn_2f850c / EU fn_2f86c8 / KR fn_2f8774.
+
     pub fn read_three(
         &self,
         block: u32,
@@ -1709,7 +1642,7 @@ impl<'a> AcousticTable<'a> {
         );
         Ok(record.status)
     }
-    /// fn_2f86e0 / EU fn_2f889c / KR fn_2f8948.
+
     pub fn read_outer(
         &self,
         block: u32,
@@ -1759,7 +1692,7 @@ pub struct DurationTable<'a> {
     pub offset: u32,
 }
 impl<'a> DurationTable<'a> {
-    /// fn_2f7f90 / EU fn_2f814c / KR fn_2f81f8.
+
     pub fn read_pair(
         &self,
         row: u32,
@@ -1836,7 +1769,7 @@ pub trait PoolHost {
     fn report(&mut self, heap: &PrivateHeap<'_>, label: &[u8], blocks: u32);
 }
 impl PrivateHeap<'_> {
-    /// fn_2db308 / EU fn_2db4c4 / KR fn_2db570.
+
     pub fn report(&self, label: &[u8], host: &mut impl PoolHost) {
         if self.owner == 0 {
             return;
@@ -1849,7 +1782,7 @@ impl PrivateHeap<'_> {
         }
         host.report(self, label, count);
     }
-    /// fn_2db1d0 / EU fn_2db38c / KR fn_2db438.
+
     pub fn allocate(&mut self, size: u32, host: &mut impl PoolHost) -> Option<PoolAllocation> {
         let aligned = size.wrapping_add(3) & !3;
         let mut block = self.first_block;
@@ -1905,7 +1838,7 @@ impl PrivateHeap<'_> {
             address: base,
         })
     }
-    /// fn_2db3c8 / EU fn_2db584 / KR fn_2db630.
+
     pub fn reset(&mut self, host: &mut impl PoolHost) {
         if self.owner == 0 {
             return;
@@ -1921,7 +1854,7 @@ impl PrivateHeap<'_> {
         }
         self.allocated = 0;
     }
-    /// fn_2db4a0 / EU fn_2db65c / KR fn_2db708.
+
     pub fn free(&mut self, host: &mut impl PoolHost) {
         if self.owner == 0 {
             return;
@@ -1939,7 +1872,7 @@ impl PrivateHeap<'_> {
 }
 
 impl BandSystem<'_> {
-    /// fn_2a2224 / EU fn_2a23e0 / KR fn_2a248c.
+
     pub fn forward_lattice(
         &self,
         input_bits: u32,
@@ -1987,7 +1920,7 @@ impl BandSystem<'_> {
         }
         Ok(())
     }
-    /// fn_2a23c4 / EU fn_2a2580 / KR fn_2a262c.
+
     pub fn backward_lattice(&self, bits: i32, output: &mut [i32]) -> Result<(), Error> {
         self.validate(output, 3)?;
         let shift = bits.wrapping_sub(11) as u32;
@@ -2023,7 +1956,6 @@ pub struct DecisionNode {
     pub hit: i16,
 }
 
-/// Parses `raw` little-endian triplets into `out`, returning the node count.
 pub fn parse_decision_nodes(raw: &[u8], out: &mut [DecisionNode]) -> Result<usize, Error> {
     if raw.len() % 6 != 0 || out.len() * 6 < raw.len() {
         return Err(Error::InvalidResource);
@@ -2050,7 +1982,7 @@ pub struct DecisionTree<'a> {
 }
 
 impl DecisionTree<'_> {
-    /// fn_2d9dc0 / EU fn_2d9f7c / KR fn_2da028.
+
     pub fn select(&self, features: SelectionFeatures<'_>, position: usize) -> Result<u16, Error> {
         if position >= features.count || features.count > i16::MAX as usize {
             return Err(Error::InvalidResource);
@@ -2232,12 +2164,10 @@ impl BandFactorization<'_> {
         Ok(true)
     }
 
-    /// fn_2a1c54 / EU fn_2a1e10 / KR fn_2a1ebc.
     pub fn factor_three(&mut self, precision: u32) -> Result<bool, Error> {
         self.factor(precision, false)
     }
 
-    /// fn_2a1f50 / EU fn_2a210c / KR fn_2a21b8.
     pub fn factor_lattice(&mut self) -> Result<bool, Error> {
         self.factor(16, true)
     }
@@ -2316,7 +2246,7 @@ pub struct PdfTable<'a> {
 }
 
 impl<'a> PdfTable<'a> {
-    /// fn_2f6f94 / EU fn_2f7150 / KR fn_2f71fc.
+
     pub fn read_pair(
         &self,
         block: u32,
@@ -2428,7 +2358,6 @@ impl<'a> QuantizedPdfTable<'a> {
             .decode(row, element, precision)
     }
 
-    /// fn_2f7420 / EU fn_2f75dc / KR fn_2f7688.
     pub fn read_pair(
         &self,
         block: u32,
@@ -2463,7 +2392,6 @@ impl<'a> QuantizedPdfTable<'a> {
         Ok(0)
     }
 
-    /// fn_2f760c / EU fn_2f77c8 / KR fn_2f7874.
     pub fn read_first(
         &self,
         block: u32,
@@ -2485,19 +2413,18 @@ impl<'a> QuantizedPdfTable<'a> {
     }
 }
 
-/// fn_2a90c4 / EU fn_2a9280 / KR fn_2a932c.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BlockCache<'a> {
-    /// The buffer of the most recent load, or `None` when nothing is held.
+
     pub data: Option<&'a [u8]>,
-    /// Offset the held buffer starts at.
+
     pub position: u32,
-    /// Length of the held buffer.
+
     pub length: u32,
 }
 
 impl<'a> BlockCache<'a> {
-    /// Returns the requested window, releasing a held buffer that does not cover it.
+
     pub fn read(
         &mut self,
         offset: u32,
@@ -2531,8 +2458,6 @@ impl<'a> BlockCache<'a> {
     }
 }
 
-/// The zeroed synthesis frame `fn_2a4740` builds. The five block spans are
-/// caller-owned; the original stores pointers to them, so Rust keeps slices.
 pub struct SynthesisFrame<'a> {
     pub version: u16,
     pub owner: u32,
@@ -2548,11 +2473,6 @@ pub struct SynthesisFrame<'a> {
     pub f568: i32,
 }
 
-/// fn_2a4740 / EU fn_2a48fc / KR fn_2a49a8.
-///
-/// Zeroes the synthesis frame and links it to its five caller-owned blocks in
-/// the original's order. `blocks` holds five 0x34-byte entries; the frame's
-/// remaining storage is zero in the original and zero here.
 pub fn initialize_frame<'a>(owner: u32, blocks: &'a [u8; 0x34 * 5]) -> SynthesisFrame<'a> {
     SynthesisFrame {
         version: 1,
@@ -2570,9 +2490,6 @@ pub fn initialize_frame<'a>(owner: u32, blocks: &'a [u8; 0x34 * 5]) -> Synthesis
     }
 }
 
-/// The persistent reader `fn_2a9420` keeps across calls: the block `base` and
-/// `limit`, the current `pos`, the last load's `origin` and byte count, and the
-/// window that load returned. `window` is `None` until a successful load.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WindowState<'a> {
     pub kind: u8,
@@ -2584,14 +2501,6 @@ pub struct WindowState<'a> {
     pub lastlen: u32,
 }
 
-/// fn_2a9420 / EU fn_2a95dc / KR fn_2a9688.
-///
-/// Copies `count` records of `size` bytes into `destination` from the caller's
-/// cached block. `size` also selects the position alignment the original
-/// applies first: 1, 2, 4 for 3..7, and 8. A `kind` of 2 reloads the window
-/// through `cache`; otherwise the previous window is reused. `release` and
-/// `load` stand in for `fn_179208` and `fn_17a1a4`. A failed reload leaves the
-/// window cleared and returns 0, like the original.
 pub fn read_window<'a>(
     destination: &mut [u8],
     size: u32,
@@ -2662,25 +2571,25 @@ pub fn read_window<'a>(
     Ok(count)
 }
 
-/// fn_2a9690 / EU fn_2a984c / KR fn_2a98f8.
-///
-/// The table is 320 entries; the caller supplies the one loaded for the voice.
-/// Indices outside it are rejected rather than reading neighbouring data.
 pub fn dequantize(
+    m: &crate::boot::Memory<'_>,
     flags: u8,
     stereo: bool,
     left: &[i32],
     left_position: &mut usize,
     right: &[i32],
     right_position: &mut usize,
-    table: &[i32],
+    table_base: u32,
     output: &mut [u16; 2],
 ) -> Result<(), Error> {
-    fn interpolate(table: &[i32], value: u32) -> Result<u32, Error> {
-        let index = (value >> 12) as usize;
-        let low = *table.get(index).ok_or(Error::InvalidResource)? as u32;
-        let high = (*table.get(160 + index).ok_or(Error::InvalidResource)? >> 6) as u32;
-        Ok(high.wrapping_mul((value >> 6) & 0x3f).wrapping_add(low))
+    fn interpolate(m: &crate::boot::Memory<'_>, base: u32, value: u32) -> u32 {
+        let index = value >> 12;
+        let low = m.word(base.wrapping_add(index.wrapping_mul(4))) as u32;
+        let high = (m.word(
+            base.wrapping_add(160u32.wrapping_mul(4))
+                .wrapping_add(index.wrapping_mul(4)),
+        ) >> 6) as u32;
+        high.wrapping_mul((value >> 6) & 0x3f).wrapping_add(low)
     }
     output[0] = if flags & 2 == 0 {
         0
@@ -2688,7 +2597,7 @@ pub fn dequantize(
         let sample = *left.get(*left_position).ok_or(Error::InvalidResource)?;
         *left_position += 1;
         let value = sample.wrapping_shr(12).wrapping_add(-5056) as u32;
-        (interpolate(table, value)? << 6 >> 16) as u16
+        (interpolate(m, table_base, value) << 6 >> 16) as u16
     };
     if stereo {
         output[1] = if flags & 4 == 0 {
@@ -2697,19 +2606,12 @@ pub fn dequantize(
             let sample = *right.get(*right_position).ok_or(Error::InvalidResource)?;
             *right_position += 1;
             let value = sample.wrapping_shr(8) as u32;
-            (interpolate(table, value)? >> 16) as u16
+            (interpolate(m, table_base, value) >> 16) as u16
         };
     }
     Ok(())
 }
 
-/// fn_2dc4cc / EU fn_2dc688 / KR fn_2dc734.
-///
-/// Advances the SELECT_BET2 parameter ramp one sample at a time and filters
-/// each sample through `fn_2dbc3c`. `current` and `step` are the caller's ramp
-/// state, `parameters` is the frame the filter reads and this rewrites, `last`
-/// bounds the ramp, `table` is the borrowed gain table and `input`/`output`
-/// are the sample spans.
 pub fn advance_prediction(
     filter: &mut PredictionFilter<'_>,
     current: &mut [i32],
@@ -2783,8 +2685,6 @@ pub fn advance_prediction(
     Ok(())
 }
 
-/// The three trailing passes and the copy-back shared by every filter stage
-/// of `fn_2dbc3c`. `value` is the running sample at `buffer + 5`.
 fn prediction_tail(
     memory: &mut [i32],
     buffer: usize,
@@ -2848,8 +2748,6 @@ fn prediction_tail(
     acc
 }
 
-/// One whole-band pass of `fn_2dbc3c`: the seed pair, the three weighted
-/// passes and the copy-back, returning the accumulated excitation.
 fn prediction_block(
     memory: &mut [i32],
     buffer: usize,
@@ -2889,11 +2787,6 @@ fn prediction_block(
     prediction_tail(memory, buffer, order, alpha, parameters, value, acc)
 }
 
-/// fn_2dbc3c / EU fn_2dbdf8 / KR fn_2dbea4.
-///
-/// One frame of the SELECT_BET2 prediction filter. `memory` is the caller's
-/// interleaved history, `coefficients` and `gains` are borrowed voice tables
-/// and `parameters` is the parameter frame being filtered.
 pub struct PredictionFilter<'a> {
     pub order: i32,
     pub memory: &'a mut [i32],
@@ -2907,7 +2800,7 @@ pub struct PredictionFilter<'a> {
 }
 
 impl PredictionFilter<'_> {
-    fn required(&self) -> usize {
+    pub(crate) fn required(&self) -> usize {
         let index = self.index as usize;
         let count = self.count as usize;
         let order = (self.order.max(0) as usize).max(10);
@@ -2920,7 +2813,6 @@ impl PredictionFilter<'_> {
         required
     }
 
-    /// fn_2dbc3c / EU fn_2dbdf8 / KR fn_2dbea4.
     pub fn filter(&mut self, input: i32, parameters: &[i16]) -> Result<i32, Error> {
         let required = self.required();
         if self.memory.len() < required {
@@ -3087,11 +2979,6 @@ impl PredictionFilter<'_> {
     }
 }
 
-/// fn_2dde50 / EU fn_2de00c / KR fn_2de0b8.
-///
-/// Lehmer noise generator for the SELECT_BET2 band synthesis. `seed` is the
-/// caller's state word, advanced in place; `output` is the caller-owned
-/// sample span, written for `count` entries; `gain` is the band noise gain.
 pub fn generate_noise(
     seed: &mut u32,
     output: &mut [i16],
@@ -3126,9 +3013,6 @@ pub fn generate_noise(
     Ok(())
 }
 
-/// One band of the caller's voice state read by `fn_2dcb84`: the band sample
-/// and filter tables, the frequency threshold that selects it and the two
-/// band gains.
 #[derive(Clone, Copy)]
 pub struct VoiceBand<'a> {
     pub samples: &'a [i16],
@@ -3138,14 +3022,8 @@ pub struct VoiceBand<'a> {
     pub noise_gain: u16,
 }
 
-/// fn_2dcb84 / EU fn_2dcd40 / KR fn_2dcdec.
-///
-/// One band-synthesis frame. Every field is caller-owned state borrowed for
-/// the call: `seed` is the noise generator's word, `bands` the voice's band
-/// table, and `cached_samples`, `noise`, `overlap` and `history` are the four
-/// work buffers. `cached_gain`, `cached_length`, `cached_band`, `position`,
-/// `step` and `overlap_count` are updated in place.
 pub struct VoiceSynthesis<'a> {
+    pub voiced_threshold: u32,
     pub frequency_scale: u32,
     pub gain: i32,
     pub noise_gain: i32,
@@ -3167,7 +3045,7 @@ pub struct VoiceSynthesis<'a> {
 }
 
 impl VoiceSynthesis<'_> {
-    /// fn_2dcb84 / EU fn_2dcd40 / KR fn_2dcdec.
+
     pub fn synthesize(
         &mut self,
         length: i32,
@@ -3199,7 +3077,7 @@ impl VoiceSynthesis<'_> {
             });
         }
         let scaled = self.frequency_scale.wrapping_mul(frequency as u32);
-        if scaled > 0x7a_e148 {
+        if scaled > self.voiced_threshold {
             let mut band = 0usize;
             for (index, candidate) in self.bands.iter().enumerate() {
                 if candidate.threshold >= scaled {
@@ -3288,13 +3166,6 @@ impl VoiceSynthesis<'_> {
     }
 }
 
-/// fn_2dda54 / EU fn_2ddc10 / KR fn_2ddcbc.
-///
-/// The SELECT_BET2 all-pole lattice filter. `buffer` is the caller's work
-/// span, `history` the previous frame's `order` tail, `coefficients` the
-/// `taps` Q14 prediction coefficients. A frame longer than `cap` reallocates
-/// through `replacement` (the caller's substitute for `fn_1963b8`) and
-/// returns -1 so the caller can retry.
 pub struct LatticeFilter<'a> {
     pub bypass: i32,
     pub cap: i32,
@@ -3307,7 +3178,7 @@ pub struct LatticeFilter<'a> {
 }
 
 impl<'a> LatticeFilter<'a> {
-    /// fn_2dda54 / EU fn_2ddc10 / KR fn_2ddcbc.
+
     pub fn apply(
         &mut self,
         samples: &mut [i16],

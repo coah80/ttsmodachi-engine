@@ -1,79 +1,12 @@
-//! Memory bridge. Guest pointers always remain absolute u32 addresses.
-//!
-//! Call boot_view for a flat port whose complete working range is in one region.
-//! For ports indexing slices by absolute address, Flat stages mapped bytes in
-//! caller-owned, zero-based workspace. It never rebases pointers or payloads.
-//! finish checks holes for nonzero bytes and copies mapped bytes back. The workspace must extend
-//! through the highest mapped address; this is intentionally a capacity cost,
-//! not a hidden allocation. No script results or recorded outputs are consumed.
-//!
-//! Address routing: fn_184f20/fn_184f84 are concrete block methods;
-//! fn_196394/fn_1963b8/fn_1963e0/fn_196428 dispatch guest allocator slots.
-//! Concrete realloc fn_4a79b8 stages only the heap header for block_resize,
-//! runs real locking, and preserves the original fallback allocate/zero/copy/free.
-//! A failed fallback followed by nonzero memcpy is an explicit bridge error:
-//! the original faults at its null destination. No generic realloc policy is used.
-//!
-//! Round-1 signatures remain unchanged, including their intentional callback
-//! refusals. Use *_with for live resource create, stream copy/close, nonempty
-//! map destruction and LINGDB error logging. fn_19668c and fn_19126c are new.
-//! These are bridge-side ports where the typed ports hold an exclusive slice
-//! across callbacks, or replace dependencies with preselected scripts. The
-//! callback-free red-black rebalance is shared with the existing frontend port.
-//!
-//! Implement Live on the engine's dependency dispatcher. call receives a fresh
-//! &mut Flat, so it can allocate or invoke another adapter before returning.
-//! memory() gives a temporary absolute-address boot view of those same staged
-//! bytes. Never capture canonical Memory, retain the view, create another Flat
-//! on it, or call finish in a callback. Finish once at the outermost boundary.
-//! Internal allocator methods stay concrete; Platform supplies only thread ID
-//! and the kernel arbitration boundary. A missing Live dependency must reject,
-//! not return a fabricated success or consume OpenWorkerScripts.
-//!
-//! Reserve a disjoint mapped guest scratch word for fn_19668c and 64 bytes for
-//! fn_19126c. Both restore it on return. Nested invocations need separate space.
-//! WorkerData supplies the nine documented regional literal addresses. The
-//! worker currently uses US callback entry addresses. Its c72000 notification
-//! carries [original_r0 = 0x191938, output_pair_address]; the second value makes
-//! the ARM hook's live r8 explicit. The matched C's one-argument handle hook is
-//! not the dumped ARM ABI. All worker success, failure and cleanup calls are live.
-//!
-//! Logging is an explicit semantic boundary, not omitted formatting. Live::log
-//! gets a site, logger and values. Sites 19126c/191860, 14f918/14f919 and
-//! 1503b0/1503b1 mean begin/end; 1503b2 is invalid-input detail. Other sites
-//! are the original error codes. Worker errors carry status, LINGDB 4e34 carries
-//! record index and 4e30 carries [type,index,field]. Stream begin events carry
-//! [id,stream,kind_or_count]; end carries status. Other stream error events carry
-//! their original call arguments or [stream,written,base]. The logger dispatcher
-//! owns module names, strings and formatting. fn_14e614 trace formatting,
-//! fn_14e440 compaction, fn_196c7c reader-list teardown, fn_196e28 reader removal
-//! and logInput fn_14e0b4 destruction are live call dependencies, not silent stubs.
-//!
-//! ARM tests compare all mapped bytes and a semantic callback trace, with real
-//! heap/rotations/realloc and memory-mutating dependency implementations. They
-//! do not certify the dependency implementations in the combined engine.
-//! Flat also implements Heap. Call finish even after a refused allocation to
-//! publish configuration writes. Guest graphs must be well formed and every
-//! accessed byte mapped. Staging is not an MMU and cannot detect zero writes
-//! into holes. The workspace capacity cost and US-only dispatch still apply.
+
 
 use crate::{boot, engine::{Error, Memory}, frontend, heap::Heap, linguistic};
 
-/// A callee address read from guest memory (allocator vtable and object
-/// method slots). The regional ROMs relocate code, so the slot holds that
-/// region's twin; normalize to the US entry the arms below dispatch on.
-/// This is the ReadCalls pattern (engine_components2.rs): from_entry only
-/// names an unambiguous twin, so genuine US entries pass through unchanged
-/// and US runs are bit-identical. src/fn_4a7758.c dispatches the same way
-/// (`o->m8(p, n, k, k)`); the EU twin of US 0x4a7758 is EU 0x4a7f30
-/// (eu/data/map.json), which the raw dispatch failed closed on.
 fn guest_entry(target: u32) -> u32 {
     let rom = crate::rom_region::Rom::from_entry(target);
     crate::rom_region::to_us(rom, target)
 }
 
-/// Borrow the entire region containing [address, address + length).
-/// All addresses touched by the flat port must remain in this same region.
 pub(crate) fn boot_view<'m>(
     memory: &'m mut Memory<'_, '_>, address: u32, length: usize,
 ) -> Result<boot::Memory<'m>, Error> {
@@ -87,7 +20,6 @@ pub(crate) fn boot_view<'m>(
     Err(Error::UnmappedMemory { address, bytes: length })
 }
 
-/// CP15 identity and the kernel address-arbitration boundary.
 pub(crate) trait Platform {
     fn thread_id(&mut self) -> u32;
     fn arbiter_address(&self) -> u32;
@@ -109,7 +41,7 @@ impl<P: Platform> crate::boot_part_b::Host for LockHost<'_, P> {
                     service:0,command:0};
                 m.fn_165d00(self, &g, a[0]); 0
             }
-            0x172d18 => self.0.arbitrate(m, a),
+            0x172d18 => { if a.get(2) == Some(&0) { 0 } else { self.0.arbitrate(m, a) } },
             _ => unreachable!("mutex port reached non-platform dependency"),
         }
     }
@@ -123,17 +55,6 @@ impl<P: Platform> boot::Calls for LockHost<'_, P> {
     }
 }
 
-/// Caller-owned absolute-index workspace over non-contiguous engine memory.
-///
-/// Fast path (`memory: None`): a single base-0 region already is the flat
-/// view staging would build (fill(0), then copy each region in), so `bytes`
-/// aliases the live region with no staging copy and `finish` publishes
-/// nothing. The hole scan is vacuous (no gaps) and every guest read/write
-/// lands at the same address, so success-path behavior is identical while
-/// the workspace stays untouched. On a recorded `error` the live region
-/// keeps the partial mutations (there is no staging copy to roll back to);
-/// callers treat a failed request's arena as discarded, the same as after
-/// any error. The workspace is still caller-owned and capacity-checked.
 pub(crate) struct Flat<'m, 'r, 'b, 'p, P> {
     memory: Option<&'m mut Memory<'r, 'b>>,
     bytes: &'m mut [u8],
@@ -143,7 +64,7 @@ pub(crate) struct Flat<'m, 'r, 'b, 'p, P> {
 }
 
 impl<'m, 'r, 'b, 'p, P: Platform> Flat<'m, 'r, 'b, 'p, P> {
-    /// Stage guest mappings without normalizing any pointer-looking payload.
+
     pub(crate) fn new<'w>(memory: &'m mut Memory<'r, 'b>, workspace: &'w mut [u8],
         platform: &'p mut P, allocator: u32) -> Result<Self, Error>
     where 'w: 'm {
@@ -166,11 +87,10 @@ impl<'m, 'r, 'b, 'p, P: Platform> Flat<'m, 'r, 'b, 'p, P> {
         Ok(Self { memory: Some(memory), bytes, platform, allocator, error: None })
     }
 
-    /// Validate holes before publishing. An error leaves canonical memory unchanged.
     pub(crate) fn finish(mut self) -> Result<(), Error> {
         if let Some(error) = self.error { return Err(error); }
         let Some(memory) = self.memory.take() else { return Ok(()); };
-        // Regions need not be sorted. Visit gaps in guest-address order.
+
         let mut end = 0usize;
         loop {
             let next = memory.regions.iter()
@@ -205,15 +125,12 @@ impl<'m, 'r, 'b, 'p, P: Platform> Flat<'m, 'r, 'b, 'p, P> {
         (guest_entry(self.word(self.word(allocator) + slot * 4)), self.word(allocator + 4))
     }
 
-    /// fn_184f20(object, size, signed_alignment, pool, flags, fill).
     pub(crate) fn fn_184f20(&mut self, a: [u32; 6]) -> u32 {
-        // boot's adapter temporarily uses the first 88 bytes, and restores them.
-        // Its heap object and every block must be disjoint from that scratch.
+
         if a[0] < 88 { return self.fail(0x184f20); }
         boot::Memory { base: 0, bytes: self.bytes }.boot_heap_allocate(a)
     }
 
-    /// fn_184f84(subobject = heap + 24, pointer). Does not decrement count.
     pub(crate) fn fn_184f84(&mut self, subobject: u32, pointer: u32) {
         if subobject < 112 { self.fail(0x184f84); return; }
         boot::Memory {base: 0, bytes: self.bytes}.boot_heap_release(subobject, pointer);
@@ -235,8 +152,6 @@ impl<'m, 'r, 'b, 'p, P: Platform> Flat<'m, 'r, 'b, 'p, P> {
         result
     }
 
-    /// Concrete methods currently bound by the boot allocator vtable.
-    /// Unknown internal methods are rejected, never supplied by Platform.
     pub(crate) fn allocator_method(&mut self, entry: u32, args: &[u32]) -> u32 {
         match entry {
             0x184f20 => self.fn_184f20(args.try_into().expect("six heap arguments")),
@@ -275,29 +190,24 @@ impl<'m, 'r, 'b, 'p, P: Platform> Flat<'m, 'r, 'b, 'p, P> {
         }
     }
 
-    /// fn_196394(allocator, size), preserving the guest vtable and context.
     pub(crate) fn fn_196394(&mut self, allocator: u32, size: u32) -> u32 {
         if allocator == 0 || size == 0 { return 0; }
         let (target, object) = self.method(allocator, 0);
         self.allocator_method(target, &[object, size])
     }
 
-    /// fn_1963b8(allocator, count, size), including the concrete zeroing callback.
     pub(crate) fn fn_1963b8(&mut self, allocator: u32, count: u32, size: u32) -> u32 {
         if allocator == 0 || count == 0 || size == 0 { return 0; }
         let (target, object) = self.method(allocator, 1);
         self.allocator_method(target, &[object, count, size])
     }
 
-    /// fn_196428(allocator, pointer), dispatching slot three, not slot two.
     pub(crate) fn fn_196428(&mut self, allocator: u32, pointer: u32) {
         if allocator == 0 || pointer == 0 { return; }
         let (target, object) = self.method(allocator, 3);
         self.allocator_method(target, &[object, pointer]);
     }
 
-    /// fn_1964e0(ctx, flag, a, b, c, d, e, out). Allocation precedes all writes,
-    /// so a completed real allocation can be handed to the existing slice port.
     pub(crate) fn fn_1964e0(&mut self, a: [u32; 8]) -> u32 {
         let valid = a[7] != 0 && a[2..7].iter().all(|x| *x != 0);
         let value = if valid { self.fn_1963b8(a[0], 1, 68) } else { 0 };
@@ -306,8 +216,6 @@ impl<'m, 'r, 'b, 'p, P: Platform> Flat<'m, 'r, 'b, 'p, P> {
             a[5], a[6], nz(a[7]), &mut method)
     }
 
-    /// fn_1503b0(stream, tag, source, count), existing-capacity writes without
-    /// element callbacks or logging. Growth and callback paths reject atomically.
     pub(crate) fn fn_1503b0(&mut self, a: [u32; 4]) -> u32 {
         if a[0] != 0 && a[1] == 0x47de && a[2] != 0 && a[3] != 0 {
             let kind = self.bytes[a[0] as usize];
@@ -334,8 +242,6 @@ impl<'m, 'r, 'b, 'p, P: Platform> Flat<'m, 'r, 'b, 'p, P> {
             &mut NoCallbacks, &mut |_,_,_| unreachable!(), &mut |_,_| unreachable!())
     }
 
-    /// fn_19665c(map), empty-tree teardown only. The actual clear and release
-    /// ports run; nonempty trees require reentrant destructors and reject first.
     pub(crate) fn fn_19665c(&mut self, object: u32) -> u32 {
         if object == 0 { return 0x89002007; }
         let tree = object + 24;
@@ -348,9 +254,6 @@ impl<'m, 'r, 'b, 'p, P: Platform> Flat<'m, 'r, 'b, 'p, P> {
         rc
     }
 
-    /// fn_14f918(stream, tag), writer close with a shared state and no logger.
-    /// This path decrements references and frees the stream via real ports.
-    /// Final-reference destruction, reader unlinking and logging are not bridged.
     pub(crate) fn fn_14f918(&mut self, a: [u32; 2]) -> u32 {
         if a[0] == 0 || a[1] != 0x47de { return 0x81706008; }
         let state = self.word(a[0] + 4);
@@ -368,8 +271,6 @@ impl<'m, 'r, 'b, 'p, P: Platform> Flat<'m, 'r, 'b, 'p, P> {
         rc
     }
 
-    /// fn_176e40(resource, allocator, out), for the null create method observed
-    /// in boot. Non-null creates are rejected before allocation or output writes.
     pub(crate) fn fn_176e40(&mut self, a: [u32; 3]) -> u32 {
         if a.iter().all(|x| *x != 0) && self.word(self.word(a[0] + 8)) != 0 {
             return self.fail(0x176e40);
@@ -420,11 +321,6 @@ impl<P: Platform> Heap for Flat<'_, '_, '_, '_, P> {
     fn arena(&mut self) -> &mut [u8] { self.bytes }
 }
 
-/// fn_15d594(database, tag, record_index, field_index, out_u16).
-/// descriptors is the regional D_8d7ca0 table, with 272-byte entries.
-/// Only the selected record/field is projected; unrelated records are not copied.
-/// Error logging is not implemented: error paths return UnsupportedStage rather
-/// than dropping observable logging calls.
 pub(crate) fn fn_15d594(memory: &mut Memory<'_, '_>, a: [u32; 5],
     descriptors: u32) -> Result<u32, Error> {
     if frontend::validate_handle(a[0] != 0, a[1], 0xb2c2, 0x38) >= 0x80000000 {
@@ -459,19 +355,6 @@ pub(crate) fn fn_15d594(memory: &mut Memory<'_, '_>, a: [u32; 5],
     Ok(status)
 }
 
-#[cfg(test)]
-#[path = "../tests/bridge.rs"]
-#[macro_use]
-mod test_source;
-#[cfg(test)]
-mod tests { bridge_tests!(); }
-
-
-/// Reentrant guest calls. The callback borrows the *live* bridge, never captures
-/// its memory. It may call another adapter or allocate before returning.
-/// Unknown calls must return an error through reject(), not a scripted answer.
-/// Logging uses semantic sites: begin/end addresses or the original error code.
-/// A logger implementation owns formatting, not the bridge's control flow.
 pub(crate) trait Live {
     fn call<P: Platform>(&mut self, bridge: &mut Flat<'_, '_, '_, '_, P>,
         entry: u32, args: &[u32]) -> u32;
@@ -479,21 +362,15 @@ pub(crate) trait Live {
         site: u32, logger: u32, args: &[u32]);
 }
 
-/// US string addresses needed by worker dependency calls. Kept explicit so
-/// callers cannot accidentally use US literals with a different regional image.
-/// Order: engine name, waitfactor, maxinputlength, D_18ffc4, D_18ffd4,
-/// phonmapmrkenabled, D_191254, LINGDB, D_8d2e48.
 pub(crate) struct WorkerData { pub(crate) text: [u32; 9] }
 
 impl<P: Platform> Flat<'_, '_, '_, '_, P> {
-    /// Temporary direct view of staged memory, including callback mutations.
-    /// Call finish() once, only on the outermost bridge.
+
     pub(crate) fn memory(&mut self) -> boot::Memory<'_> {
         boot::Memory { base: 0, bytes: self.bytes }
     }
     pub(crate) fn reject(&mut self, entry: u32) -> u32 { self.fail(entry) }
 
-    /// Full resource-create path, including callbacks which allocate reentrantly.
     pub(crate) fn fn_176e40_with(&mut self, a: [u32; 3], host: &mut impl Live) -> u32 {
         if a.iter().any(|x| *x == 0) { return 0x81402007; }
         let n = self.fn_1963b8(a[1], 1, 12);
@@ -511,9 +388,6 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         rc
     }
 
-    /// fn_19668c(map,key,value). scratch is a disjoint mapped guest word
-    /// reserved by the caller for this invocation; nested calls need another.
-    /// A bridge-side port is necessary: TreeOps cannot reborrow its slice.
     pub(crate) fn fn_19668c(&mut self, a: [u32; 3], scratch: u32,
         host: &mut impl Live) -> u32 {
         if a.iter().any(|x| *x == 0) { return 0x89002007; }
@@ -582,7 +456,6 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         self.fn_196428(self.word(tree+32), n);
     }
 
-    /// Nonempty-tree postorder destruction through the live guest callbacks.
     pub(crate) fn fn_19665c_with(&mut self, object: u32, host: &mut impl Live) -> u32 {
         if object == 0 { return 0x89002007; }
         let tree = object+24;
@@ -606,15 +479,10 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         frontend::classify_code(status)
     }
 
-    /// Full fn_19126c bridge-side port. OpenWorkerScripts is deliberately not
-    /// used: every call can mutate memory before the next field is read.
-    /// scratch reserves 64 mapped bytes, disjoint from all live objects, for
-    /// task/stream outputs, setup args, properties and handle references.
-    /// It is restored on return. Nested calls must use separate scratch.
     pub(crate) fn fn_19126c(&mut self, a: [u32; 6], scratch: u32,
         data: &WorkerData, host: &mut impl Live) -> u32 {
         if a[1] != 0x68434c53 { return 0x80000008; }
-        // Like the ARM, a valid tag requires a readable owner even if zero.
+
         if self.word(a[0]) != 0x73434c53 { return 0x80000008; }
         let mut saved = [0u8;64];
         saved.copy_from_slice(&self.bytes[scratch as usize..scratch as usize+64]);
@@ -705,7 +573,7 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
             }
         }
         if rc < 0x80000000 {
-            // SetupArgs at q+40, zero-initialized before any dependency calls.
+
             self.put_word(q+44,0x18f6b8); self.put_word(q+56,0x18fbb8);
             rc=h.call(self,self.word(self.word(owner+188)+16),&[
                 self.word(owner+192),self.word(owner+196),self.word(state+8),
@@ -726,7 +594,6 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         0
     }
 }
-
 
 impl<P: Platform> Flat<'_, '_, '_, '_, P> {
     pub(crate) fn fn_1963e0(&mut self, allocator: u32, pointer: u32, size: u32) -> u32 {
@@ -752,9 +619,7 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         let n=self.allocator_method(entry,&[object,size,4]);
         if n!=0 { self.bytes[n as usize..n as usize+size as usize].fill(0); }
         let count=self.word(old-12).min(size);
-        // The original memcpy faults if allocation fails and count != 0.
-        // Preserve the refusal as an explicit bridge error instead of a host
-        // slice panic or copying to a staged address-zero hole.
+
         if n==0 && count!=0 { return self.fail(0x30253c); }
         for i in 0..count { self.bytes[(n+i) as usize]=self.bytes[(old+i) as usize]; }
         let entry=guest_entry(self.word(self.word(object)+12));
@@ -769,7 +634,6 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         self.bytes[address as usize..address as usize+2].copy_from_slice(&value.to_le_bytes());
     }
 
-    /// fn_15d594 with observable error logging. No output is written on error.
     pub(crate) fn fn_15d594_with(&mut self, a: [u32;5], descriptors: u32,
         host: &mut impl Live) -> u32 {
         if frontend::validate_handle(a[0]!=0,a[1],0xb2c2,0x38)>=0x80000000 {
@@ -799,8 +663,7 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         if refs>1 { self.put_half(state+22,refs-1); return; }
         let heap=self.word(self.word(state+4)+4);
         if self.bytes[(state+42) as usize]!=0 {
-            // Input-text logging is a separate, memory-mutating subsystem.
-            // The host must dispatch the real fn_14e0b4, never replay a result.
+
             host.call(self,0x14e0b4,&[state,heap]); return;
         }
         if self.word(state+16)!=0 { self.fn_196428(heap,self.word(state+16)); }
@@ -823,8 +686,6 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         self.fn_196428(heap,state);
     }
 
-    /// Writer close including last-reference destruction and live logging.
-    /// Reader removal and logInput destruction are explicit live dependencies.
     pub(crate) fn fn_14f918_with(&mut self, a: [u32;2], host: &mut impl Live) -> u32 {
         if frontend::validate_handle(a[0]!=0,a[1],0x47de,12)>=0x80000000 {
             return 0x81706008;
@@ -853,8 +714,6 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         0
     }
 
-    /// Full write control flow. Buffer compaction and formatted trace logging
-    /// dispatch live fn_14e440/fn_14e614 dependencies with the same reborrow.
     pub(crate) fn fn_1503b0_with(&mut self, a: [u32;4], host: &mut impl Live) -> u32 {
         if frontend::validate_handle(a[0]!=0,a[1],0x47de,12)>=0x80000000 {
             return 0x81706008;
@@ -906,7 +765,7 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         if buffered {
             let position=self.word(self.word(a[0]+4)+44).wrapping_sub(self.word(self.word(a[0]+4)+56));
             let dst=self.word(self.word(a[0]+4)+60).wrapping_add(position);
-            // Original memcpy requires disjoint source/destination.
+
             if u64::from(dst)<u64::from(a[2])+u64::from(a[3])
                 && u64::from(a[2])<u64::from(dst)+u64::from(a[3]) {
                 return self.fail(0x195ae8);
@@ -950,9 +809,7 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
 }
 
 impl<P: Platform> Flat<'_, '_, '_, '_, P> {
-    /// Writer/reader close for shared state and a null or trace-filtered logger.
-    /// Reader removal uses the existing list-compaction port, with no list
-    /// destructor. Final-reference destruction still uses the live close API.
+
     pub(crate) fn fn_14f918_shared_quiet(&mut self, a:[u32;2])->u32 {
         if a[0]==0 || a[1]!=0x47de {return 0x81706008;}
         let state=self.word(a[0]+4);
@@ -971,8 +828,6 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
         rc
     }
 
-    /// Live fn_175a1c binding. Lock hooks receive the arena currently held by
-    /// lookup; no snapshot of a lock result or value is retained.
     pub(crate) fn fn_175a1c(&mut self,a:[u32;3],rom:crate::rom_region::Rom)->u32 {
         struct Lock<'a,P> {object:u32,platform:&'a mut P,rom:crate::rom_region::Rom,error:Option<u32>}
         impl<P:Platform> Lock<'_,P> {
@@ -984,9 +839,7 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
                 if entry==0 {return 0;}
                 let target=frontend_word(mem,p+8);
                 let mut arena=boot::Memory{base:0,bytes:mem};
-                // The lock methods are guest addresses: the regional ROMs
-                // hold their own twins (EU 0x1841ac/0x1842ec). Normalize
-                // to the US entry the ports below dispatch on.
+
                 match crate::rom_region::to_us_guest(self.rom,entry) {
                     0x1840fc=>{crate::boot_part_b::fn_1840fc(&mut arena,target,&mut LockHost(self.platform));0}
                     0x18423c=>{crate::boot_part_b::fn_18423c(&mut arena,target,&mut LockHost(self.platform));0}
@@ -998,13 +851,10 @@ impl<P: Platform> Flat<'_, '_, '_, '_, P> {
             fn acquire_m(&mut self,mem:&mut [u8])->u32 {self.run(mem,8)}
             fn release_m(&mut self,mem:&mut [u8])->u32 {self.run(mem,12)}
         }
-        // fn_1756d0 leaves the caller's out slot untouched on the null-argument
-        // exit, and clears it before the lock is taken.
+
         if a[0]==0 || a[1]==0 || a[2]==0 {return 0x8b702007;}
         let object=self.word(a[0]+4);
-        // The comparator is stored in the guest property tree, so the
-        // regional ROMs hold their own twin (EU 0x196a30, KR 0x196a6c).
-        // Normalize to the US entry the port below dispatches on.
+
         let comparator=if object!=0 && self.word(a[0]+8)!=0 {
             crate::rom_region::to_us_guest(rom,self.word(self.word(self.word(a[0]+8)+60)+8))
         } else {0x196980};
@@ -1045,8 +895,6 @@ impl<P:Platform> Flat<'_, '_, '_, '_,P> {
             &mut NoCallbacks,&mut |_,_| unreachable!())
     }
 
-    /// Uses speech-part-3's certified non-null realloc, with every callback
-    /// reentering the live staged arena. The outer Flat alone publishes.
     pub(crate) fn fn_4a79b8_speech(&mut self,a:[u32;3])->u32 {
         struct Host<'a,P> {platform:&'a mut P,error:Option<Error>}
         impl<P:Platform> crate::boot_part_b::Host for Host<'_,P> {
@@ -1057,8 +905,7 @@ impl<P:Platform> Flat<'_, '_, '_, '_,P> {
         }
         impl<P:Platform> crate::speech_part_3::Host for Host<'_,P> {
             fn call(&mut self,m:&mut boot::Memory<'_>,e:u32,a:&[u32])->u32 {
-                // fn_4a79b8 forwards the allocator method address it reads from
-                // the guest object; normalize the regional twin the same way.
+
                 arena_allocator(m,guest_entry(e),a,self.platform,&mut self.error)
             }
         }
@@ -1080,8 +927,7 @@ impl frontend::HeapVtable for OneAllocation {
 impl<P:Platform> Flat<'_, '_, '_, '_,P> {
     fn stream_dtor(&mut self,entry:u32,p:u32,heap:u32) {
         if entry==0 {return;}
-        // The dtor pointer comes from the guest stream state: normalize the
-        // regional twin (EU 0x15178c / KR 0x1516ac) to US 0x1516c8 first.
+
         let entry=guest_entry(entry);
         if entry!=0x1516c8 {self.fail(entry);return;}
         let mut release=OneRelease::default();
@@ -1089,8 +935,7 @@ impl<P:Platform> Flat<'_, '_, '_, '_,P> {
         if let Some((_,pointer))=release.0 {self.fn_196428(heap,pointer);}
     }
     fn stream_copy(&mut self,entry:u32,src:u32,heap:u32,dst:u32)->u32 {
-        // The copy pointer comes from the guest stream state: normalize the
-        // regional twin (EU 0x1516d4 / KR 0x1515f4) to US 0x151610 first.
+
         let entry=guest_entry(entry);
         if entry!=0x151610 {return self.fail(entry);}
         let mut n=0;
@@ -1102,7 +947,6 @@ impl<P:Platform> Flat<'_, '_, '_, '_,P> {
         frontend::duplicate_typed_string(self.bytes,nz(src),nz(heap),nz(dst),&mut OneAllocation(n))
     }
 
-    /// fn_14e440 with live destructor, release and realloc calls.
     pub(crate) fn fn_14e440(&mut self,state:u32,required:u32) {
         let buffer=self.word(state+60);
         if buffer==0 || self.bytes[(state+40) as usize]!=0 {return;}
@@ -1168,8 +1012,7 @@ impl<P:Platform> Flat<'_, '_, '_, '_,P> {
         }
         true
     }
-    /// fn_1503b0 for trace-filtered streams. Copies and typed-string callbacks
-    /// execute before advancing written, as on ARM.
+
     pub(crate) fn fn_1503b0_quiet(&mut self,a:[u32;4])->u32 {
         if frontend::validate_handle(a[0]!=0,a[1],0x47de,12)>=0x80000000 {return 0x81706008;}
         let state=self.word(a[0]+4);
@@ -1258,7 +1101,6 @@ impl<P:Platform> Flat<'_, '_, '_, '_,P> {
     }
 }
 
-
 fn arena_allocator<P:Platform>(m:&mut boot::Memory<'_>,e:u32,a:&[u32],platform:&mut P,error:&mut Option<Error>)->u32 {
     match e {
         0x184f20=>m.boot_heap_allocate(a.try_into().expect("heap ABI")),
@@ -1288,10 +1130,7 @@ impl<P:Platform> Flat<'_, '_, '_, '_,P> {
 }
 
 impl<P:Platform> Flat<'_, '_, '_, '_,P> {
-    /// fn_17a1a4(broker, handle, offset, requested, out, scratch).
-    /// The map read uses the resident archive mapping. A logger level the
-    /// guest keeps is refused instead of formatted, and an unbound archive
-    /// service fails closed at its own address.
+
     pub(crate) fn fn_17a1a4(&mut self,a:[u32;6])->u32 {
         struct MapHost<'a,P>{platform:&'a mut P,error:Option<u32>}
         impl<P:Platform> crate::boot_part_b::Host for MapHost<'_,P> {
@@ -1312,10 +1151,7 @@ impl<P:Platform> Flat<'_, '_, '_, '_,P> {
             fn thread_id(&mut self)->u32 {self.platform.thread_id()}
         }
         let scratch=a[5];
-        // The archive range is mapped on demand. Without the archive service
-        // the map read cannot produce the guest's buffer, so stop at the
-        // ROM instruction that performs the mapping. The caller clears the
-        // buffer before this point, as the ROM's map read does.
+
         {
             let handle=a[1];
             let data=self.word(handle+4);

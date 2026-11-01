@@ -1,12 +1,10 @@
-//! Live database entries with caller-owned memory.
+
 use crate::boot::Memory;
 
-/// Platform logging for the pool reset. Guest strings remain guest addresses.
 pub trait PoolHooksM {
     fn log_pool_m(&mut self, pool: u32, blocks: u32, mem: &mut Memory<'_>);
 }
 
-/// fn_180d00. Initialize the seven-word pool descriptor.
 pub fn fn_180d00(mem: &mut Memory<'_>, p: u32, ctx: u32, name: u32, initial: u32, grow: u32) {
     crate::frontend::fill_bytes(mem.bytes, p.wrapping_sub(mem.base), 0, 28);
     mem.put_word(p, ctx);
@@ -15,7 +13,6 @@ pub fn fn_180d00(mem: &mut Memory<'_>, p: u32, ctx: u32, name: u32, initial: u32
     mem.put_word(p.wrapping_add(16), grow);
 }
 
-/// fn_180ea0. Rewind and clear every block, retaining the allocated chain.
 pub fn fn_180ea0(hooks: &mut impl PoolHooksM, mem: &mut Memory<'_>, p: u32) {
     if p == 0 || mem.word(p) == 0 {
         return;
@@ -43,20 +40,14 @@ pub fn fn_180ea0(hooks: &mut impl PoolHooksM, mem: &mut Memory<'_>, p: u32) {
     mem.put_word(p.wrapping_add(24), 0);
 }
 
-/// Reentrant dependency dispatcher. Internal targets must call their existing
-/// Rust ports; only platform services may be supplied by the host.
-/// The live getter dispatches 176f2c/176f5c and the guest tree comparator
-/// through this trait, rather than dispatching 175944 as an opaque call.
 pub trait DbHooksM: PoolHooksM {
-    /// Map a US diagnostic literal address for the caller's ROM region.
+
     fn literal_m(&self, us: u32) -> u32 {
         us
     }
     fn call_m(&mut self, entry: u32, args: &[u32], mem: &mut Memory<'_>) -> u32;
 }
 
-/// Run the landed getter on the live zero-based arena. The lock wrapper and
-/// comparator are re-read for each callback, including after host writes.
 pub(crate) fn get_uint(h: &mut impl DbHooksM, mem: &mut Memory<'_>, obj: u32, key: u32, out: u32) -> u32 {
     assert_eq!(mem.base, 0, "open_db_m requires a zero-based arena");
     struct Lock<'a, H> {
@@ -92,8 +83,6 @@ pub(crate) fn get_uint(h: &mut impl DbHooksM, mem: &mut Memory<'_>, obj: u32, ke
     )
 }
 
-/// Regional guest addresses, obtained from the verified entry's literal pool.
-/// All strings stay addresses across mutable callbacks.
 pub struct DbData {
     pub module: u32,
     pub open_begin: u32,
@@ -123,8 +112,6 @@ fn error(h: &mut impl DbHooksM, mem: &mut Memory<'_>, log: u32, module: u32, cod
     h.call_m(0x173dc0, &[log, module, code, 0], mem);
 }
 
-/// fn_15bab0, using the current arena at every dependency boundary.
-/// `scratch` is a disjoint caller-owned guest word, restored before return.
 pub fn ld_reset_m(
     h: &mut impl DbHooksM,
     mem: &mut Memory<'_>,
@@ -198,11 +185,6 @@ fn reset_inner(
     r
 }
 
-/// fn_15bc18. Memory-passing open, including its real pool initializer/reset.
-/// `mem` must be zero-based, as required by reentrant2::get_param_uint_m.
-/// `scratch` is four disjoint guest words, restored on every normal return.
-/// a[0..2] are the unused incoming handle; a[2..4] are the environment
-/// pair; a[4] is the output pair. Scratch must not alias those objects.
 pub fn open_db_m(
     h: &mut impl DbHooksM,
     mem: &mut Memory<'_>,
@@ -284,7 +266,6 @@ fn open_inner(h: &mut impl DbHooksM, mem: &mut Memory<'_>, a: [u32; 5], d: &DbDa
     r
 }
 
-/// fn_180d3c. Pool allocation with the current arena at its heap callback.
 pub fn arena_alloc_m(h: &mut impl DbHooksM, mem: &mut Memory<'_>, arena: u32, size: u32) -> u32 {
     let n = size.wrapping_add(3) & !3;
     let mut prev = 0u32;
@@ -332,7 +313,6 @@ pub fn arena_alloc_m(h: &mut impl DbHooksM, mem: &mut Memory<'_>, arena: u32, si
     result
 }
 
-/// fn_15b758. Sizes and layouts are guest table addresses, never retained slices.
 pub fn create_record_m(
     h: &mut impl DbHooksM,
     mem: &mut Memory<'_>,
@@ -479,11 +459,11 @@ impl<H: DbHooksM> crate::reentrant::HooksM for VecHooks<'_, H> {
         self.0.call_m(f, a, m)
     }
 }
-/// fn_196cfc, using bridge-3's live vector growth.
+
 pub fn append_slot_m(h: &mut impl DbHooksM, m: &mut Memory<'_>, p: u32, out: u32) -> u32 {
     crate::reentrant::vec_grow_m(m, &mut VecHooks(h), p, out)
 }
-/// fn_196db0. Scratch is one disjoint caller-owned guest word, restored.
+
 pub fn append_element_m(
     h: &mut impl DbHooksM,
     m: &mut Memory<'_>,
@@ -500,7 +480,7 @@ pub fn append_element_m(
         let n = half(m, p + 4);
         let dst = m.offset(blk);
         let from = m.offset(src);
-        // The real byte-copy port, without retaining source across a hook.
+
         if dst < from {
             let (lo, hi) = m.bytes.split_at_mut(from);
             crate::frontend::copy_bytes(&mut lo[dst..dst + n as usize], &hi[..n as usize], n);
@@ -519,7 +499,7 @@ pub fn append_element_m(
     m.put_word(scratch, saved);
     rc
 }
-/// fn_175c40. Scratch holds a transient pair and one slot word, restored.
+
 pub fn append_owner_m(
     h: &mut impl DbHooksM,
     m: &mut Memory<'_>,
@@ -556,7 +536,7 @@ pub fn append_owner_m(
     }
     rc
 }
-/// fn_1964e0. Allocate with live memory, then reuse the existing initializer.
+
 pub fn fn_1964e0_m(h: &mut impl DbHooksM, m: &mut Memory<'_>, a: [u32; 8]) -> u32 {
     let valid = a[7] != 0 && a[2..7].iter().all(|v| *v != 0);
     let value = if valid {
@@ -584,7 +564,7 @@ pub fn fn_1964e0_m(h: &mut impl DbHooksM, m: &mut Memory<'_>, a: [u32; 8]) -> u3
         &mut Completed(value),
     )
 }
-/// fn_174aac. Regional ticket words stay guest addresses.
+
 pub fn fn_174aac_m(
     h: &mut impl DbHooksM,
     m: &mut Memory<'_>,
@@ -616,7 +596,6 @@ pub fn fn_174aac_m(
     u32::from(rc < 0x80000000)
 }
 
-/// fn_180f8c. Free the pool through live heap release callbacks.
 pub fn free_pool_m(h: &mut impl DbHooksM, m: &mut Memory<'_>, p: u32) {
     if p == 0 || m.word(p) == 0 {
         return;
@@ -654,7 +633,7 @@ pub fn free_pool_m(h: &mut impl DbHooksM, m: &mut Memory<'_>, p: u32) {
     m.put_word(p + 24, 0);
     m.put_word(p + 20, 0);
 }
-/// fn_15b5f0. Close with live pool reset/release; diagnostics use regional data.
+
 pub fn close_db_m(h: &mut impl DbHooksM, m: &mut Memory<'_>, p: u32, tag: u32, d: &DbData) -> u32 {
     if crate::frontend::validate_handle(p != 0, tag, 0xb2c2, 0x38) >= 0x80000000 {
         return 0x89202008;

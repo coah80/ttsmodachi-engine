@@ -1,4 +1,4 @@
-//! Render-path command and resource helpers. Pointers are caller-arena offsets.
+
 use crate::normalization::{self as n, NormalizationHost};
 
 fn word(m: &[u8], p: u32) -> u32 {
@@ -14,7 +14,6 @@ fn put_half(m: &mut [u8], p: u32, v: u16) {
     m[p as usize..p as usize + 2].copy_from_slice(&v.to_le_bytes());
 }
 
-/// fn_2ffb64. RVCT unbounded byte printf output callback.
 pub fn write_byte(m: &mut [u8], value: u32, state: u32) -> u32 {
     let dst = word(m, state);
     m[dst as usize] = value as u8;
@@ -22,8 +21,6 @@ pub fn write_byte(m: &mut [u8], value: u32, state: u32) -> u32 {
     value
 }
 
-/// fn_2ffba0. RVCT bounded wide printf output callback. The bound is
-/// checked before the two-byte write, just as in the ROM.
 pub fn write_wide_bounded(m: &mut [u8], value: u32, state: u32) -> u32 {
     let dst = word(m, state);
     if dst < word(m, state + 4) {
@@ -33,9 +30,6 @@ pub fn write_wide_bounded(m: &mut [u8], value: u32, state: u32) -> u32 {
     value
 }
 
-/// fn_2e66cc, EU fn_2e6888, KR fn_2e6934. Adjust the caller's byte end
-/// after trimming a pattern. `scratch` is a disjoint caller-owned two-byte
-/// temporary, restored before return. `separators` maps D_9e0990.
 #[allow(clippy::too_many_arguments)]
 pub fn trim_end(
     m: &mut [u8],
@@ -65,8 +59,6 @@ pub fn trim_end(
     }
 }
 
-/// fn_2ef3c4, EU fn_2ef580, KR fn_2ef62c. Find the next command backslash,
-/// respecting escaped characters and the command's quote rules.
 pub fn command_end(m: &mut [u8], text: u32, end: u32, start: u32, out: u32, mode: u32) -> u32 {
     let limit = end >> 1;
     let mut i = (start >> 1) as u16;
@@ -108,7 +100,6 @@ pub fn command_end(m: &mut [u8], text: u32, end: u32, start: u32, out: u32, mode
     0
 }
 
-/// fn_2ed010, EU fn_2ed1cc, KR fn_2ed278. Copy and unescape a command value.
 #[allow(clippy::too_many_arguments)]
 pub fn copy_value(
     m: &mut [u8],
@@ -166,8 +157,6 @@ pub fn copy_value(
     0
 }
 
-/// fn_2ed188, EU fn_2ed344, KR fn_2ed3f0. Resolve a default string.
-/// `fallback` is the mapped, terminated UTF-16 D_a093e6 constant.
 pub fn default_value(
     m: &mut [u8],
     ctx: u32,
@@ -215,8 +204,6 @@ pub fn default_value(
     0
 }
 
-/// fn_2ed314, EU fn_2ed4d0, KR fn_2ed57c. Replace a matching choice
-/// string with its numeric value, releasing the old allocation.
 pub fn choice_value(
     m: &mut [u8],
     ctx: u32,
@@ -247,7 +234,6 @@ pub fn choice_value(
     0
 }
 
-/// fn_2ee264, EU fn_2ee420, KR fn_2ee4cc. Decode the string/choice table.
 pub fn read_choices(m: &mut [u8], ctx: u32, src: u32, host: &mut impl NormalizationHost) -> u32 {
     put_half(m, ctx + 56, half(m, src));
     let heap = word(m, word(m, ctx) + 4);
@@ -297,7 +283,6 @@ pub fn read_choices(m: &mut [u8], ctx: u32, src: u32, host: &mut impl Normalizat
     0
 }
 
-/// fn_2ee49c, EU fn_2ee658, KR fn_2ee704. Decode default strings and keys.
 pub fn read_defaults(m: &mut [u8], ctx: u32, src: u32, host: &mut impl NormalizationHost) -> u32 {
     put_half(m, ctx + 64, half(m, src));
     let heap = word(m, word(m, ctx) + 4);
@@ -344,9 +329,6 @@ pub fn read_defaults(m: &mut [u8], ctx: u32, src: u32, host: &mut impl Normaliza
     0
 }
 
-/// fn_2ef034, EU fn_2ef1f0, KR fn_2ef29c. Build the initial 40-record
-/// value table. `scratch` names nine disjoint caller-owned bytes for the
-/// temporary message and found flag, restored before return.
 pub fn initial_values(
     m: &mut [u8],
     ctx: u32,
@@ -412,14 +394,11 @@ pub fn initial_values(
     0
 }
 
-/// Chunk resource callbacks. ResourceAdapter supplies the real fn_243d50.
 pub trait ResourceHost: NormalizationHost {
-    /// fn_243d50. Use ResourceAdapter for guest chunk records.
+
     fn release_chunk(&mut self, m: &mut [u8], record: u32) -> u32;
 }
 
-/// fn_2edbf0, EU fn_2eddac, KR fn_2ede58. Release all configured resources.
-/// A chunk-release error retains the handle and skips the final state clear.
 pub fn clear_resources(m: &mut [u8], ctx: u32, host: &mut impl ResourceHost) -> u32 {
     if m[(ctx + 20) as usize] != 1 {
         return 0;
@@ -497,15 +476,13 @@ pub fn clear_resources(m: &mut [u8], ctx: u32, host: &mut impl ResourceHost) -> 
     rc
 }
 
-/// Indirect methods only. Context, heap, lock and registry dispatchers run
-/// their existing Rust ports; callers route the concrete guest method address.
 pub trait DictionaryHost {
     fn heap_method(&mut self, m: &mut [u8], method: u32, object: u32, args: &[u32]) -> u32;
     fn lock_method(&mut self, m: &mut [u8], method: u32, target: u32) -> u32;
     fn compare_key(&mut self, m: &[u8], method: u32, key: u32, stored: u32) -> i32;
-    /// Adapter for fn_198f1c after the real fn_19672c lookup.
+
     fn remove_node(&mut self, m: &mut [u8], tree: u32, node: u32);
-    /// Invoke an indirect key/value destructor from fn_198f1c.
+
     fn tree_callback(&mut self, _m: &mut [u8], _method: u32, _args: &[u32]) {
         panic!("missing tree destructor callback host");
     }
@@ -531,9 +508,6 @@ pub trait DictionaryHost {
     ) -> u32;
 }
 
-/// Registry name and a disjoint, writable word for the acquired-entry output.
-/// The word is restored before return. The cached handle and default context
-/// correspond to fn_19611c's immutable globals.
 pub struct DictionaryEnvironment {
     pub registry_name: u32,
     pub temporary_word: u32,
@@ -568,8 +542,7 @@ fn dictionary_heap(
     operation: u32,
     host: &mut impl DictionaryHost,
 ) -> u32 {
-    // The existing dispatcher port forwards the context through HeapVtable.
-    // Resolve its actual guest method before borrowing mutable arena memory.
+
     let slot = if operation == 2 && pointer == 0 {
         0
     } else {
@@ -672,8 +645,6 @@ pub(crate) fn dictionary_registry(
     )
 }
 
-/// fn_198f1c adapter. The balancing and heap dispatchers are existing ports;
-/// only guest key/value function pointers cross the callback host.
 pub(crate) fn dictionary_release_node(m: &mut [u8], tree: u32, node: u32, host: &mut impl DictionaryHost) {
     crate::normalization::rb_erase(m, tree, node);
     let table = word(m, tree + 36);
@@ -688,7 +659,6 @@ pub(crate) fn dictionary_release_node(m: &mut [u8], tree: u32, node: u32, host: 
     dictionary_heap(m, word(m, tree + 32), node, 0, 3, host);
 }
 
-/// fn_2eca2c. Release a dictionary session and its owned name.
 pub fn dictionary_free(
     m: &mut [u8],
     session: u32,
@@ -764,7 +734,6 @@ pub fn dictionary_free(
     0
 }
 
-/// fn_2ecaac. Allocate a session and open its named dictionary.
 pub fn dictionary_new(
     m: &mut [u8],
     name: u32,
@@ -868,7 +837,6 @@ pub fn dictionary_new(
     result
 }
 
-/// fn_2ecc3c. Resize and replace a dictionary session's name.
 pub fn dictionary_rename(
     m: &mut [u8],
     session: u32,
@@ -896,9 +864,6 @@ pub fn dictionary_rename(
     0
 }
 
-/// fn_2eccb4. Try successively shorter dictionary prefixes, at most 8 bytes.
-/// The callback's returned halfword is a presence flag, not the consumed size.
-/// The consumed size is the successful prefix's length.
 pub fn dictionary_match(
     m: &mut [u8],
     session: u32,
@@ -945,19 +910,17 @@ pub fn dictionary_match(
     0
 }
 
-/// External reader calls in fn_2ee920 and fn_2ee6a8.
 pub trait EscapeReaderHost: ResourceHost {
-    /// fn_24277c, returning status, tag bytes, size and data.
+
     fn next_chunk(&mut self, m: &mut [u8], reader: u32, size: u32, data: u32)
         -> (u32, [u8; 8], u32, u32);
-    /// fn_2422ac.
+
     fn advance_chunk(&mut self, m: &mut [u8], reader: u32) -> u32;
-    /// fn_243ad4, returning status, owned chunk and data.
+
     fn detach_chunk(&mut self, m: &mut [u8], reader: u32, chunk: u32, data: u32)
         -> (u32, u32, u32);
 }
 
-/// fn_2ee6a8. Decode the two halves of the EPAT table and retain its data.
 pub fn read_patterns(
     m: &mut [u8], ctx: u32, reader: u32, src: u32, mode: u32,
     host: &mut impl EscapeReaderHost,
@@ -1004,7 +967,6 @@ pub fn read_patterns(
     rc
 }
 
-/// fn_2ee920. ESCD resource callback, using the shared table decoders.
 pub fn read_escape_chunk(
     m: &mut [u8], ctx: u32, reader: u32, mut size: u32, mut data: u32,
     mode: u32, host: &mut impl EscapeReaderHost,
@@ -1083,7 +1045,6 @@ pub fn read_escape_chunk(
     rc
 }
 
-/// Caller-owned constants and disjoint temporary storage for fn_2eee7c.
 pub struct EscapeEnvironment<'a> {
     pub cached_handle: [u8; 8],
     pub default_context: u32,
@@ -1093,12 +1054,10 @@ pub struct EscapeEnvironment<'a> {
     pub callback: u32,
     pub destructor: u32,
     pub parameter_name: u32,
-    /// Arena-sized caller-owned immutable comparison view.
+
     pub snapshot: &'a mut [u8],
 }
 
-/// fn_2eee7c. Allocate an escape context and register its ESCD callback.
-/// Runs the existing context resolver, descriptor and parameter lookup ports.
 #[allow(clippy::too_many_arguments)]
 pub fn escape_new<H>(
     m: &mut [u8], handle: [u32; 2], a: u32, b: u32, out: u32, source: u32,
@@ -1158,24 +1117,18 @@ where H: NormalizationHost + crate::render_part_c::Host + crate::frontend::State
     0
 }
 
-/// fn_2ffb28. The locale table address is an immutable caller ROM mapping.
 pub fn locale_table(address: u32) -> u32 { address }
 
-/// Escape matching calls the real regex::pcre_match, including bridge-4's
-/// failure-side subject-pointer writes. Strict replays compare every arena byte.
-/// Caller-owned representation buffers for the guest PCRE frame arena.
-/// Program and subject buffers hold only immutable match inputs, never an
-/// arena clone. Allocator hooks receive the live arena on every call.
 pub struct EscapeScratch<'a> {
     pub program: &'a mut [u8],
     pub subject: &'a mut [u8],
     pub frames: &'a mut [crate::regex::MatchFrame],
     pub tags: &'a mut [u8],
     pub blocks: &'a mut [crate::regex::FrameBlockState],
-    /// Disjoint guest stack workspace, at least 128 bytes; restored on return.
+
     pub stack: u32,
     pub fallback: u32,
-    /// D_a09390, D_a09394 and D_a093da, terminated byte strings.
+
     pub toi_names: [u32; 3],
 }
 
@@ -1211,9 +1164,6 @@ fn frame_pointer(blocks: &[crate::regex::FrameBlockState], r: Option<crate::rege
     r.map_or(0, |r| blocks[r.block as usize].code_id.wrapping_add(r.offset).wrapping_add(bias))
 }
 
-/// Bidirectional frame conversion preserves untouched fields, including stale
-/// code/subject pointers. Guest pointers and Rust offsets differ by a fixed
-/// wrapping displacement, so arbitrary stale words round-trip unchanged.
 pub(crate) fn load_match_frame(m:&[u8], p:u32, code:u32, delta:u32, blocks:&[crate::regex::FrameBlockState],span:u32) -> crate::regex::MatchFrame {
     let mut f=crate::regex::MatchFrame::default();
     let w=|i:u32| word(m,p+i*4);
@@ -1259,14 +1209,12 @@ pub(crate) fn save_match_frame(m:&mut [u8], p:u32, f:&crate::regex::MatchFrame, 
     }
 }
 
-/// Guest fn_23fe54 adapter. The caller supplies capacity for every configured
-/// frame block and immutable input. Heap callbacks reenter through MatchHost.
 #[allow(clippy::too_many_arguments)]
 pub fn exec_escape_pattern(m:&mut [u8], ctx:u32, pattern:u32, text:u32, len:u32, start:u32, options:u32,
     offsets:&mut [i32;100], scratch:&mut EscapeScratch<'_>, tables:&crate::regex::PcreTables<'_>,
     host:&mut impl NormalizationHost) -> i32 {
     let object=word(m,ctx+12); let key=word(m,ctx+16);
-    // Invalid handles are rejected before dereferencing the frame store.
+
     if crate::frontend::validate_handle(object!=0,key,0xdd57,24)>=0x80000000 {return -16;}
     let entries=word(m,object+4);
     let count=half(m,object+8); let per=half(m,object+10); let size=half(m,object+12); let max=half(m,object+14);
@@ -1327,9 +1275,6 @@ pub fn exec_escape_pattern(m:&mut [u8], ctx:u32, pattern:u32, text:u32, len:u32,
     rc
 }
 
-// The compatibility parser API has no configured output-method dispatcher.
-// Null loggers still execute the real fn_173dc0 port, as in the ROM. Reject
-// non-null loggers instead of silently suppressing a live callback.
 struct EscapeNullOutput;
 impl crate::boot_part_b::Host for EscapeNullOutput {
     fn thread_id(&mut self)->u32 { unreachable!("null logger needs no thread ID") }
@@ -1344,7 +1289,7 @@ fn escape_error(m:&mut [u8],ctx:u32,code:u32) {
     crate::render_part_a::error_log(&mut crate::boot::Memory{base:0,bytes:m},
         &mut EscapeNullOutput,logger,1,code,0,0,0);
 }
-/// fn_2ecdb8, EU fn_2ecf74, KR fn_2ed020.
+
 #[allow(clippy::too_many_arguments)]
 pub fn match_escape(m:&mut [u8], name:&[u8], ctx:u32,text:u32,mut count:u32,start:u32,options:u32,
     found:u32,out:u32,fallback:u32,index:u32,scratch:&mut EscapeScratch<'_>,
@@ -1398,7 +1343,6 @@ fn default_command(m:&mut [u8],ctx:u32,out:u32)->bool {
     m[out as usize]=0;false
 }
 
-/// fn_2ef4f4. Parse a command's optional string, numeric or pattern value.
 #[allow(clippy::too_many_arguments)]
 fn parse_escape_value_inner(m:&mut [u8],ctx:u32,out:u32,text:u32,size:u32,start:u32,end:u32,
     handled:u32,incomplete:u32,next:u32,scratch:&mut EscapeScratch<'_>,tables:&crate::regex::PcreTables<'_>,
@@ -1495,7 +1439,6 @@ fn command_name_equal(m:&[u8],a:u32,b:u32,n:u32)->bool {
     true
 }
 
-/// fn_2ed440. Dispatch enhanced and text-output-interface escape commands.
 fn parse_escape_inner(m:&mut [u8],ctx:u32,text:u32,size:u32,out:u32,state:u32,
     scratch:&mut EscapeScratch<'_>,tables:&crate::regex::PcreTables<'_>,host:&mut impl NormalizationHost)->u32 {
     let s=scratch.stack;
@@ -1567,8 +1510,6 @@ fn parse_escape_inner(m:&mut [u8],ctx:u32,text:u32,size:u32,out:u32,state:u32,
     m[state as usize]=2;rc
 }
 
-/// fn_2ef300. Public escape parser. Internal scratch bytes are restored even
-/// when a callee returns an error, so only guest-visible state survives.
 pub fn escape_parse(m:&mut [u8],ctx:u32,text:u32,size:u32,record:u32,scratch:&mut EscapeScratch<'_>,
     tables:&crate::regex::PcreTables<'_>,host:&mut impl NormalizationHost)->u32 {
     if ctx==0||text==0||size==0||record==0 {return 0x80002007;}
@@ -1585,11 +1526,6 @@ pub fn escape_parse(m:&mut [u8],ctx:u32,text:u32,size:u32,record:u32,scratch:&mu
     rc
 }
 
-/// fn_243d50. Close and release a detached chunk through the existing owner
-/// close port. Free still runs when close returns an error.
-/// STUB: not live-certified. Bridge-4 owns fn_244324's missing broker/logger
-/// hooks. Retain this legacy adapter until its memory-last entry is published
-/// in E2E.md; the full replay explicitly reports this one stub.
 pub fn release_chunk(m:&mut [u8],record:u32,host:&mut impl NormalizationHost)->u32 {
     if record==0 || word(m,record+16)==0 {return 0x8a202007;}
     let rc=n::close_owner_pair(m,record,host);
@@ -1597,8 +1533,6 @@ pub fn release_chunk(m:&mut [u8],record:u32,host:&mut impl NormalizationHost)->u
     rc
 }
 
-/// Resource callback adapter for clear_resources/read_escape_chunk. Other
-/// host methods preserve the live memory-passing allocator interface.
 pub struct ResourceAdapter<'a,H>(pub &'a mut H);
 impl<H:NormalizationHost> NormalizationHost for ResourceAdapter<'_,H> {
     fn calloc(&mut self,m:&mut [u8],h:u32,n:u32,s:u32)->Option<u32>{self.0.calloc(m,h,n,s)}

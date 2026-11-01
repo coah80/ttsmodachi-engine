@@ -1,48 +1,36 @@
 use crate::frontend_types::Error;
 
-/// Borrowed PCRE character tables. All bytes come from the caller (the
-/// engine image); no table data is stored here.
 #[derive(Clone, Copy)]
 pub struct PcreTables<'a> {
-    /// D_914092: 256 bytes. Entries 0..80 are compiled-opcode lengths;
-    /// several walkers index the table with full-range bytes, reading the
-    /// following ROM bytes by historical accident. Callers pass all 256.
+
     pub op_lengths: &'a [u8; 256],
-    /// D_91426c: digit/xdigit flags, 256 entries (the C's `digitab`).
-    /// Only 0-9/A-F/a-f are nonzero. Named `ctypes` for history; it is
-    /// not the 1088-block ctypes at `CompileData.ctypes`.
+
     pub ctypes: &'a [u8; 256],
-    /// D_91436c: default 1088-byte tables (lcc/fcc/cbits/ctypes).
+
     pub default_tables: &'a [u8; 1088],
-    /// D_9140e4: backslash escape codes indexed by `c - '0'`, 75 entries.
+
     pub escapes: &'a [i16; 75],
-    /// D_9147ac: UTF-8 encoding limits, 6 entries.
+
     pub utf8_limits: &'a [i32; 6],
-    /// D_9147c4: UTF-8 lead-byte bases, 6 entries used.
+
     pub utf8_first: &'a [i32; 6],
-    /// D_9147f4: UTF-8 continuation counts indexed by `byte & 63`.
+
     pub utf8_cont: &'a [u8; 64],
-    /// D_9147dc: UTF-8 lead-byte masks, 6 entries.
+
     pub utf8_mask: &'a [u32; 6],
-    /// D_914044/D_91404a: repetition minima/maxima for the six
-    /// short quantifier opcodes.
+
     pub rep_min: &'a [u8; 6],
     pub rep_max: &'a [u8; 6],
-    /// D_9141b4: POSIX class name lengths, NUL-terminated.
+
     pub posix_lengths: &'a [u8],
-    /// D_91417c: POSIX class names, parallel to `posix_lengths`.
+
     pub posix_names: &'a [&'a [u8]],
-    /// D_9141c4: POSIX class bitmap triples.
+
     pub posix_maps: &'a [i32],
-    /// Bytes following the 1088 default block in the image. The matcher
-    /// reads `ctypes[c]` for decoded codepoints above 255 (site 44),
-    /// which lands here; index `i` is image byte `default + 1088 + i`.
+
     pub ctypes_overspill: &'a [u8],
 }
 
-/// Compile error identities. Each variant names one distinct C error string;
-/// the strings themselves stay in the image and are resolved by the caller.
-/// Shared by the compiler and its escape/quantifier helpers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CompileError {
     BackslashAtEnd,
@@ -95,45 +83,29 @@ pub enum CompileError {
 }
 
 impl CompileError {
-    /// Stable identity for differential tests, matching C error-site order.
+
     pub fn id(self) -> u32 {
         self as u32
     }
 }
 
-/// Host engine services needed by the PCRE port: handle validation,
-/// object resolution and allocation. Logging stays host work.
 pub trait PcreHost {
-    /// fn_176f94.
+
     fn validate(&mut self, object: u32, key: u32, tag: u32, size: u32) -> u32;
-    /// fn_19611c: resolve the owning engine object. Returns the status
-    /// and the owner identity (meaningful only below `0x8000_0000`).
+
     fn resolve_owner(&mut self, handle: u32, key: i32) -> (u32, u32);
-    /// Owner heap identity (the C `owner->heap`). The engine looks the
-    /// resolved owner up; open/init allocate from the returned heap.
+
     fn heap_of(&mut self, owner: u32) -> u32;
-    /// fn_1963b8/fn_196394: allocate `count * size` zeroed bytes.
-    /// Returns an opaque allocation identity, or `None` on failure.
+
     fn alloc(&mut self, heap: u32, count: u32, size: u32) -> Option<u32>;
-    /// fn_196428.
+
     fn free(&mut self, heap: u32, id: u32);
-    /// Game-level PCRE callout (fn_2b6afc): the matcher reached OP_CALLOUT
-    /// with no pure [`CalloutFn`] installed. The default continues the match,
-    /// which is the historical behaviour for hosts without a guest binding.
-    /// Hosts with a guest engine (the token root) materialize the C
-    /// `pcre_callout_block` in guest memory, run the guest callout, and
-    /// return its status: positive fails the current path (NOMATCH),
-    /// negative returns directly.
+
     fn guest_callout(&mut self, _block: &CalloutBlock) -> i32 {
         0
     }
 }
 
-/// fn_2327f8, EU fn_2329b4, KR fn_232a60.
-///
-/// Encode `value` as UTF-8 into the start of `buffer`, returning the byte
-/// count. The C loop can only stop at index 5 or below: the largest table
-/// limit is `0x7fffffff`, so every `i32` value selects an index in range.
 pub fn encode_utf8(value: i32, buffer: &mut [u8], tables: &PcreTables<'_>) -> Result<usize, Error> {
     let mut i = 0;
     while i < 6 && value > tables.utf8_limits[i] {
@@ -159,10 +131,6 @@ fn byte_at(pattern: &[u8], offset: usize) -> Result<u8, Error> {
     pattern.get(offset).copied().ok_or(Error::InvalidResource)
 }
 
-/// fn_232fa4, EU fn_233160, KR fn_23320c.
-///
-/// Test whether the pattern at `offset` (just past `{`) holds a decimal
-/// range quantifier body ending in `}`.
 pub fn is_range_quantifier(
     pattern: &[u8],
     offset: usize,
@@ -196,19 +164,12 @@ pub fn is_range_quantifier(
     Ok(byte_at(pattern, p)? == b'}')
 }
 
-/// Outcome of [`read_range`]: the offset just past the range body plus the
-/// parsed bounds, or the offset plus the compile error. The C always returns
-/// the advanced offset, even on error.
 pub struct RangeRead {
     pub offset: usize,
     pub min: i32,
     pub max: i32,
 }
 
-/// fn_233048, EU fn_233204, KR fn_2332b0.
-///
-/// Parse `{min,max}` at `offset` (just past `{`). Integer accumulation wraps
-/// exactly like the ARM build; only the final bounds are range-checked.
 pub fn read_range(
     pattern: &[u8],
     offset: usize,
@@ -252,20 +213,12 @@ pub fn read_range(
     }))
 }
 
-/// Outcome of [`read_escape`]: the advanced offset, the decoded value
-/// (negative for symbolic escapes) and any error the C reports through its
-/// out-parameter. The C returns the value even when it also sets an error.
 pub struct EscapeRead {
     pub offset: usize,
     pub value: i32,
     pub error: Option<CompileError>,
 }
 
-/// fn_232c3c, EU fn_232df8, KR fn_232ea4.
-///
-/// Decode the escape at `offset` (pointing at the backslash). Positive
-/// values are literal characters; negative values are `-(ESC + 20)` codes
-/// for backreferences and symbolic escapes, matching the compiler's enum.
 pub fn read_escape(
     pattern: &[u8],
     offset: usize,
@@ -424,7 +377,7 @@ pub fn read_escape(
             p += 1;
             c = byte_at(pattern, p)? as i32;
             if c == 0 {
-                // The C returns here without writing back the offset.
+
                 return Ok(EscapeRead {
                     offset,
                     value: 0,
@@ -445,9 +398,7 @@ pub fn read_escape(
             }
         }
     };
-    // The backref-taken, `c >= '8'` and `\c`-at-end paths return directly
-    // above. Every other arm falls through here with the final `p`, `c`
-    // and error, exactly like the C `done` label.
+
     Ok(EscapeRead {
         offset: p,
         value: c,
@@ -455,14 +406,6 @@ pub fn read_escape(
     })
 }
 
-/// Decode one XCLASS UTF-8 character at `cursor`, advancing past it.
-/// Follows the ROM: bytes below `0xc0` are literal values; lead bytes at
-/// or above `0xc0` run the multibyte decode gated on `n > 0` (`cmp n,
-/// #0; ble skip`, US `0x237ddc`/`0x237df4`, with `n` =
-/// `D_9147f4[b & 63]`). The port is gate-free, which is equivalent:
-/// with `n == 0` the continuation loop is empty and the `v`
-/// recomputation matches. The C gates on `n > 0` too
-/// (`src/fn_237d48.c:18`, fixed in `0f9b70a`).
 fn decode_xclass_char(
     program: &[u8],
     cursor: &mut usize,
@@ -479,8 +422,7 @@ fn decode_xclass_char(
             .get(n as usize)
             .ok_or(Error::InvalidResource)? as i32;
         v = (b & mask).wrapping_shl(shift as u32);
-        // The ARM pairs continuation bytes; the shifts below match its
-        // sequence exactly, including the odd/even split.
+
         let mut q = *cursor - 1;
         shift -= 6;
         if n & 1 != 0 {
@@ -502,17 +444,6 @@ fn decode_xclass_char(
     Ok(v)
 }
 
-/// fn_237d48, EU fn_237f04, KR fn_237fb0.
-///
-/// Test character `c` against an XCLASS program: flag byte, optional 32-byte
-/// bitmap, then `XCL_SINGLE`/`XCL_RANGE` items terminated by `XCL_END`.
-///
-/// The continuation decode is gated on `n > 0` on all three sides:
-/// the ROM (`cmp n, #0; ble`, US `0x237ddc`/`0x237df4`), the C
-/// (`src/fn_237d48.c:18`, fixed from `v > 0` in src commit `0f9b70a`),
-/// and this port (gate-free but equivalent: with `n == 0` the loop is
-/// empty). (The old C multibyte condition `!(b & 0xc0)` was fixed to
-/// `!(~b & 0xc0)` in src commit `dd73888`.) Rust follows the ROM.
 pub fn xclass_match(c: i32, program: &[u8], tables: &PcreTables<'_>) -> Result<bool, Error> {
     let flags = byte_at(program, 0)?;
     let neg = flags & 1 != 0;
@@ -547,30 +478,23 @@ pub fn xclass_match(c: i32, program: &[u8], tables: &PcreTables<'_>) -> Result<b
     }
 }
 
-/// One heap match frame. The C lays this out as 284 bytes; Rust keeps
-/// the same fields with offsets instead of pointers. Allocation and
-/// release only select slots; the matcher owns the fields.
 #[derive(Clone, Copy)]
 pub struct MatchFrame {
-    /// Xprevframe: enclosing frame, `None` for the root.
+
     pub prev: Option<FrameRef>,
-    /// Xeptr: current subject offset, absolute into the guarded subject.
-    /// Signed: backtracking stores transient below-start positions that
-    /// only ever reach unsigned comparisons before the frame returns.
+
     pub eptr: i64,
-    /// Xecode: current code offset.
+
     pub ecode: usize,
-    /// Xoffset_top.
+
     pub offset_top: i32,
-    /// Xims: active option bits.
+
     pub ims: u32,
-    /// Xeptrb: owner of the current saved-eptr block, `None` for null.
+
     pub eptrb: Option<FrameRef>,
-    /// Xflags: `match_condassert`/`match_isgroup` bits.
+
     pub flags: u32,
-    /// Xcallpat/Xcharptr/Xdata/Xnext/Xpp/Xprev/Xsaved_eptr code or subject
-    /// offsets. Code offsets use `usize::MAX` for the C null; subject
-    /// offsets are signed absolute positions like [`MatchFrame::eptr`].
+
     pub callpat: usize,
     pub charptr: usize,
     pub data: usize,
@@ -578,7 +502,7 @@ pub struct MatchFrame {
     pub pp: i64,
     pub prev_code: usize,
     pub saved_eptr: i64,
-    /// Xnew_recursive fields plus the inline `Xstacksave` rescue area.
+
     pub rec_prev: Option<FrameRef>,
     pub rec_group: i32,
     pub rec_after: usize,
@@ -586,18 +510,16 @@ pub struct MatchFrame {
     pub rec_saved_max: i32,
     pub rec_scratch: bool,
     pub rec_scratch_base: usize,
-    /// Backing for a heap-allocated `offset_save` (`saved_max` entries).
-    /// The C mallocs per recursion; the port keeps one rescue area per
-    /// frame and still calls the host allocator so counts match.
+
     pub rec_spill: [i32; 1024],
-    /// Xcur_is_word/Xcondition/Xminimize/Xprev_is_word (C ints).
+
     pub cur_is_word: i32,
     pub condition: i32,
     pub minimize: i32,
     pub prev_is_word: i32,
-    /// Xoriginal_ims.
+
     pub original_ims: u32,
-    /// Xctype/Xfc/Xfi/Xlength/Xmax/Xmin/Xnumber/Xoffset/Xop.
+
     pub ctype: i32,
     pub fc: i32,
     pub fi: i32,
@@ -607,17 +529,17 @@ pub struct MatchFrame {
     pub number: i32,
     pub offset: i32,
     pub op: i32,
-    /// Xsave_capture_last/Xsave_offset1..3.
+
     pub save_capture_last: i32,
     pub save_offset1: i32,
     pub save_offset2: i32,
     pub save_offset3: i32,
-    /// Xstacksave rescue area for small offset vectors.
+
     pub stacksave: [i32; 30],
-    /// Xnewptrb: this frame's own saved-eptr block.
+
     pub block_eptr: i64,
     pub block_prev: Option<FrameRef>,
-    /// Xresult.
+
     pub result: i32,
 }
 
@@ -672,39 +594,24 @@ impl Default for MatchFrame {
     }
 }
 
-/// Per-block allocation state, mirroring the C `FrameBlock` header fields
-/// that allocation and release touch. `present` is false exactly when the
-/// C block pointer is null; `live` is false for the dangling zeroed header
-/// a failed allocation leaves behind (non-null pointer, nulled buffers).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FrameBlockState {
     pub present: bool,
     pub live: bool,
     pub used: u32,
     pub count: u8,
-    /// Host allocation identities of the data, types and header buffers
-    /// (the C `code`, `extra` and entry pointers). Zero means nulled.
-    /// Preexisting caller blocks carry caller-chosen identities.
+
     pub code_id: u32,
     pub extra_id: u32,
     pub entry_id: u32,
 }
 
-/// Caller-owned PCRE match frame store, backing both [`FrameStore::alloc`]
-/// (fn_238088) and [`FrameStore::pop`] (fn_237fd8). The C keeps separately
-/// allocated blocks; here the frames and their entry tags live in two flat
-/// caller buffers and block boundaries are computed arithmetically, which
-/// reproduces every observable counter, offset and tag byte. This is the
-/// same memory the lifecycle code calls `PcreObject`: `block_count`,
-/// `frames_per_block`, `frame_size`, `max_blocks`, `current_block`,
-/// `highest_block` and `max_frames` sit at the same offsets as `count`,
-/// `width`, `blockSize`, `capacity`, `a`, `active` and `b`.
 pub struct FrameStore<'a> {
-    /// Frame slots, `frames_per_block` per block.
+
     pub frames: &'a mut [MatchFrame],
-    /// Entry tag per frame slot, parallel to `frames`.
+
     pub tags: &'a mut [u8],
-    /// Block headers, one per block slot.
+
     pub blocks: &'a mut [FrameBlockState],
     pub frames_per_block: u16,
     pub frame_size: u16,
@@ -713,22 +620,14 @@ pub struct FrameStore<'a> {
     pub current_block: u16,
     pub highest_block: u16,
     pub max_frames: u16,
-    /// Fresh-slot template mirroring the C calloc's zeroed buffers. New
-    /// spill slots read as this frame; it must be the zero-loaded frame
-    /// (guest zeros through the caller's code/delta), never Rust-default,
-    /// whose zero fields would save back as code/subject pointers.
+
     pub fresh: MatchFrame,
-    /// Heap identity passed to the host allocator (the C `owner->heap`).
+
     pub heap: u32,
-    /// Host identity of the block-pointer array (the C `entries`).
-    /// `None` is the null array: caller-owned-slice mode for match/exec
-    /// fixtures, or a genuinely missing array for deinit/init cases.
+
     pub blocks_id: Option<u32>,
 }
 
-/// Location of an allocated frame: block index plus byte offset of the
-/// frame within the block's data. The C hands out `data + offset`; the
-/// slot is `offset / frame_size`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrameRef {
     pub block: u16,
@@ -750,13 +649,6 @@ impl FrameStore<'_> {
         Ok(base)
     }
 
-    /// fn_238088, EU fn_238244, KR fn_2382f0.
-    ///
-    /// Allocate one frame in the current block, spilling to a fresh block
-    /// when full. Returns the frame location and writes its entry tag.
-    /// Allocation failures return the C status `0x8a50200a`; an empty
-    /// store or a full block table returns `0x8a502000`. Logging stays
-    /// host work.
     pub fn alloc(&mut self, entry: u8, host: &mut impl PcreHost) -> Result<FrameRef, u32> {
         if self.block_count == 0 {
             return Err(0x8a502000);
@@ -816,10 +708,6 @@ impl FrameStore<'_> {
         })
     }
 
-    /// The C `allocateBlock` helper: three host allocations plus the exact
-    /// partial-failure unwind. A null block header still lands in the slot;
-    /// a later failure leaves the zeroed header behind, matching the freed
-    /// C memory the slot keeps pointing at.
     fn allocate_block(&mut self, host: &mut impl PcreHost) -> u32 {
         let at = self.block_count as usize;
         if self.blocks.get(at).is_none() {
@@ -884,8 +772,7 @@ impl FrameStore<'_> {
             extra_id: types_id,
             entry_id: created,
         };
-        // The C calloc's the new buffers; the fresh slots read as zero
-        // through the caller's template (see `fresh`).
+
         if let Ok(base) = self.block_base(self.block_count) {
             let per = self.frames_per_block as usize;
             for slot in self.frames.iter_mut().skip(base).take(per) {
@@ -899,11 +786,6 @@ impl FrameStore<'_> {
         0
     }
 
-    /// fn_237fd8, EU fn_238194, KR fn_238240.
-    ///
-    /// Release the most recent frame, returning its entry tag. An empty
-    /// store or an empty first block leaves the output untouched and
-    /// returns `None` (the C logs and returns void).
     pub fn pop(&mut self) -> Option<u8> {
         if self.block_count == 0 {
             return None;
@@ -926,7 +808,6 @@ impl FrameStore<'_> {
         Some(tag)
     }
 
-    /// Flat slot index of an allocated frame for the matcher.
     pub fn slot(&self, frame: FrameRef) -> Result<usize, Error> {
         let per = self.frames_per_block as usize;
         let base = self.block_base(frame.block)?;
@@ -941,12 +822,6 @@ impl FrameStore<'_> {
     }
 }
 
-/// fn_2404b8, EU fn_240674, KR fn_240720.
-///
-/// Skip option and assertion-prefix opcodes at `offset`, tracking the
-/// live option mask. With `flag` set, assertions are skipped over their
-/// whole extent; otherwise scanning stops before them. A null C mask is
-/// `None`; it is only touched when `bits > 0`.
 pub fn skip_options(
     code: &[u8],
     offset: usize,
@@ -1001,9 +876,6 @@ pub fn skip_options(
     }
 }
 
-/// fn_2403f8, EU fn_2405b4, KR fn_240660.
-///
-/// Map a PCRE match return code to the engine status.
 pub fn error_status(code: i32) -> u32 {
     match code {
         -2 => 0x8a50210d,
@@ -1023,14 +895,6 @@ pub fn error_status(code: i32) -> u32 {
     }
 }
 
-/// fn_2328cc, EU fn_232a88, KR fn_232b34.
-///
-/// Convert an opposite-endian compiled pattern into `output`, byte-swapping
-/// the header words and study sizes. There is no C source: this is
-/// reconstructed from the ARM, which returns null unless the byte-reversed
-/// magic is `0x50435245`. The magic itself is copied unchanged; the
-/// seven header halfwords at 16..30 and the study size/options words are
-/// swapped; every other byte is copied raw. Both buffers hold 40 bytes.
 pub fn byteswap_pattern(
     code: &[u8],
     output: &mut [u8],
@@ -1090,12 +954,6 @@ fn link_at(code: &[u8], offset: usize) -> Result<u16, Error> {
     Ok((hi << 8) | lo)
 }
 
-/// fn_236300, EU fn_2364bc, KR fn_236568.
-///
-/// Test whether the branches starting at `offset` are anchored: every
-/// alternative must open with a start assertion or a group that is. `state`
-/// carries the live option bits across the walk; `x`/`y` are the caller
-/// flag words. Recursion follows nested groups.
 pub fn is_anchored(
     code: &[u8],
     offset: usize,
@@ -1171,11 +1029,6 @@ pub fn is_anchored(
     }
 }
 
-/// fn_240580, EU fn_24073c, KR fn_2407e8.
-///
-/// Test whether the branches at `offset` open with a fixed first
-/// character, returning false for anything variable. `mask`/`bits` select
-/// the character class under test. Recursion follows nested groups.
 pub fn first_char_is_fixed(
     code: &[u8],
     offset: usize,
@@ -1248,11 +1101,6 @@ pub fn first_char_is_fixed(
     }
 }
 
-/// fn_2406bc, EU fn_240878, KR fn_240924.
-///
-/// Find the character every branch at `offset` must contain, or -1 when
-/// the branches disagree or hold nothing fixed. `mask` tracks the live
-/// option bits; `mode` gates whether plain characters count.
 pub fn find_required_char(
     code: &[u8],
     offset: usize,
@@ -1263,14 +1111,13 @@ pub fn find_required_char(
     let mut acc = -1;
     let mut p = offset;
     'outer: loop {
-        // `bits` is 1 at every option check: the only reassignment feeds
-        // the recursive call and then leaves the inner loop.
+
         let bits = 1u32;
         let mut q = p.wrapping_add(3);
         loop {
             let c = byte_at(code, q)?;
             if c == 70 {
-                // len
+
                 loop {
                     let link = link_at(code, q)? as usize;
                     q = q.wrapping_add(link);
@@ -1297,7 +1144,7 @@ pub fn find_required_char(
                 }
             } else {
                 if c == 71 || c == 72 {
-                    // len
+
                     loop {
                         let link = link_at(code, q)? as usize;
                         q = q.wrapping_add(link);
@@ -1343,7 +1190,7 @@ pub fn find_required_char(
                 }
                 continue 'outer;
             }
-            // val
+
             if mode == 0 {
                 return Ok(-1);
             }
@@ -1365,12 +1212,6 @@ pub fn find_required_char(
     }
 }
 
-/// fn_233150, EU fn_23330c, KR fn_2333b8.
-///
-/// Measure the fixed length of the branches at `offset` (pointing at the
-/// group op), or -1 when branches disagree or hold anything variable and
-/// -2 for `ANYBYTE`, which the caller treats as "can't be in a lookbehind".
-/// Recursion follows nested groups.
 pub fn fixed_branch_length(
     code: &[u8],
     offset: usize,
@@ -1458,7 +1299,7 @@ pub fn fixed_branch_length(
             }
             12 => return Ok(-2),
             61 => {
-                // `cc += GET - 33` in one step, then the shared class tail.
+
                 let link = link_at(code, cc)? as usize;
                 cc = cc.wrapping_add(link).wrapping_sub(33);
                 cc = cc.wrapping_add(33);
@@ -1504,12 +1345,6 @@ fn class_tail(code: &[u8], cc: usize) -> Result<ClassTail, Error> {
     }
 }
 
-/// fn_23345c, EU fn_233618, KR fn_2336c4.
-///
-/// Test whether the branches between `offset` (pointing at the group op)
-/// and `end` can match without consuming input. Recursion follows nested
-/// groups; the entry and tail skips reuse [`skip_options`]'s dispatch for
-/// the option/assertion prefixes.
 pub fn branch_can_be_empty(
     code: &[u8],
     offset: usize,
@@ -1604,12 +1439,6 @@ fn class_can_be_empty(code: &[u8], ccode: usize) -> Result<bool, Error> {
     }
 }
 
-/// fn_240854, EU fn_240a10, KR fn_240abc.
-///
-/// Validate `text` as UTF-8, returning the offset of the first invalid
-/// byte or -1 when valid. A negative `len` validates the NUL-terminated
-/// prefix instead; the slice always holds a NUL by construction. The
-/// overlong checks follow the original's per-length ladder exactly.
 pub fn validate_utf8(text: &[u8], len: i32, tables: &PcreTables<'_>) -> i32 {
     let mut len = len;
     if len < 0 {
@@ -1618,8 +1447,7 @@ pub fn validate_utf8(text: &[u8], len: i32, tables: &PcreTables<'_>) -> i32 {
             .position(|&b| b == 0)
             .map_or(text.len() as i32, |p| p as i32);
     }
-    // The C reads `len` bytes unchecked; clamp to the slice so oversized
-    // lengths validate what is there instead of overrunning.
+
     if len as usize > text.len() {
         len = text.len() as i32;
     }
@@ -1664,11 +1492,6 @@ pub fn validate_utf8(text: &[u8], len: i32, tables: &PcreTables<'_>) -> i32 {
     -1
 }
 
-// ---------------------------------------------------------------------------
-// Batch D: the pattern compiler (fn_233a44 tree + fn_236490 entry).
-// ---------------------------------------------------------------------------
-
-/// Opcode numbers shared by the compiler and the matcher.
 pub mod op {
     pub const END: u8 = 0;
     pub const SOD: u8 = 1;
@@ -1753,7 +1576,6 @@ pub mod op {
     pub const BRA: u8 = 80;
 }
 
-/// Public PCRE option bits accepted by [`compile`].
 pub mod pcre {
     pub const CASELESS: u32 = 0x0001;
     pub const MULTILINE: u32 = 0x0002;
@@ -1782,7 +1604,6 @@ pub mod pcre {
     pub const REQ_NONE: i32 = -1;
 }
 
-/// Backslash escape codes, matching [`read_escape`].
 pub mod esc {
     pub const A: i32 = 1;
     pub const G: i32 = 2;
@@ -1831,7 +1652,6 @@ fn emit(code: &mut [u8], pos: &mut usize, byte: u8) -> Result<(), Error> {
     Ok(())
 }
 
-/// Checked `memmove` for the compiler's block shifts.
 fn shift(code: &mut [u8], src: usize, len: usize, dst: usize) -> Result<(), Error> {
     let (Some(end), Some(dend)) = (src.checked_add(len), dst.checked_add(len)) else {
         return Err(Error::InvalidResource);
@@ -1846,10 +1666,6 @@ fn shift(code: &mut [u8], src: usize, len: usize, dst: usize) -> Result<(), Erro
     Ok(())
 }
 
-/// A pattern error: which message plus the pattern offset, mirroring the
-/// C `*errorptr`/`*ptrptr` pair. `brackets` captures the abort-time group
-/// count for the post-compile backref check; pre-scan failures leave it
-/// zero (never read on that path).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CompileFailure {
     pub error: CompileError,
@@ -1857,9 +1673,6 @@ pub struct CompileFailure {
     pub brackets: i32,
 }
 
-/// Failure of a compiler entry: a pattern error or a resource overrun.
-/// The C overruns its pre-scanned buffer on overflow (undefined); Rust
-/// reports [`Error`] instead.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CompileFail {
     Invalid(CompileFailure),
@@ -1888,21 +1701,15 @@ fn fail_at(error: CompileError, offset: usize, brackets: i32) -> CompileFail {
     })
 }
 
-/// Compile-phase raise: capture the abort-time group count.
 fn fail_st(error: CompileError, st: &BranchState) -> CompileFail {
     fail_at(error, st.ptr, st.brackets)
 }
 
-/// Open-branch chain for the empty-repeat check, as a borrow chain: each
-/// nested group pushes a node that borrows its parent.
 pub struct BranchChain<'a> {
     pub outer: Option<&'a BranchChain<'a>>,
     pub current: usize,
 }
 
-/// Shared compilation state. Table slices borrow the caller's tables;
-/// `name_table` borrows the caller's name area. Code positions are indices
-/// into the caller's code buffer, whose start is the `start_code` origin.
 pub struct CompileData<'a, 't> {
     pub tables: &'t PcreTables<'t>,
     pub lcc: &'a [u8],
@@ -1921,8 +1728,7 @@ pub struct CompileData<'a, 't> {
 }
 
 impl<'a, 't> CompileData<'a, 't> {
-    /// Split the 1088-byte table block the way the C lays out its
-    /// `compile_data` pointers.
+
     pub fn new(
         tables: &'t PcreTables<'t>,
         block: &'a [u8; 1088],
@@ -1948,7 +1754,6 @@ impl<'a, 't> CompileData<'a, 't> {
     }
 }
 
-/// Output positions of one compiled branch or group.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CompileOut {
     pub code: usize,
@@ -1959,8 +1764,6 @@ pub struct CompileOut {
     pub brackets: i32,
 }
 
-/// `find_bracket` in fn_233a44.c: locate group `number` at or after
-/// `start`, or `None` at `OP_END`.
 fn find_bracket(
     code: &[u8],
     mut pos: usize,
@@ -2001,8 +1804,7 @@ fn find_bracket(
                         }
                     }
                     op::XCLASS => {
-                        // Length is read after the zero-length step, so at
-                        // the op itself; the +1 overshoot is original.
+
                         pos = pos
                             .wrapping_add(link_at(code, pos)? as usize)
                             .wrapping_add(1);
@@ -2014,8 +1816,6 @@ fn find_bracket(
     }
 }
 
-/// `find_recurse` in fn_233a44.c: locate the next `OP_RECURSE` at or
-/// after `start`, or `None` at `OP_END`.
 fn find_recurse(
     code: &[u8],
     mut pos: usize,
@@ -2061,8 +1861,6 @@ fn find_recurse(
     }
 }
 
-/// `could_be_empty` in fn_233a44.c: every open branch at or after
-/// `start` must be able to match empty.
 fn could_be_empty(
     code: &[u8],
     start: usize,
@@ -2084,8 +1882,6 @@ fn could_be_empty(
     Ok(true)
 }
 
-/// `check_posix_syntax` in fn_233a44.c: validate a `[:...:]`/etc.
-/// opener at `pos`, returning the terminator position.
 fn check_posix_syntax(pattern: &[u8], pos: usize, ctypes: &[u8]) -> Result<Option<usize>, Error> {
     let mut p = pos.wrapping_add(1);
     let terminator = byte_at(pattern, p)?;
@@ -2103,8 +1899,6 @@ fn check_posix_syntax(pattern: &[u8], pos: usize, ctypes: &[u8]) -> Result<Optio
     }
 }
 
-/// `check_posix_name` in fn_233a44.c: index of `name` in the POSIX
-/// table, or -1.
 fn check_posix_name(name: &[u8], tables: &PcreTables<'_>) -> i32 {
     let mut yield_ = 0;
     while tables.posix_lengths.get(yield_).copied().unwrap_or(0) != 0 {
@@ -2118,8 +1912,6 @@ fn check_posix_name(name: &[u8], tables: &PcreTables<'_>) -> i32 {
     -1
 }
 
-/// `adjust_recurse` in fn_233a44.c: shift the offsets of the `OP_RECURSE`
-/// items at or after `group` by `adjust`.
 fn adjust_recurse(
     code: &mut [u8],
     group: usize,
@@ -2138,8 +1930,6 @@ fn adjust_recurse(
     Ok(())
 }
 
-/// `auto_callout` in fn_233a44.c: emit an automatic callout item for
-/// pattern offset `ptr`.
 fn auto_callout(code: &mut [u8], pos: usize, ptr: usize) -> Result<usize, Error> {
     let mut pos = pos;
     emit(code, &mut pos, op::CALLOUT)?;
@@ -2151,10 +1941,8 @@ fn auto_callout(code: &mut [u8], pos: usize, ptr: usize) -> Result<usize, Error>
     Ok(pos)
 }
 
-/// `complete_callout` in fn_233a44.c: backpatch the length of the
-/// callout item at `callout`.
 fn complete_callout(code: &mut [u8], callout: usize, ptr: usize) -> Result<(), Error> {
-    // C `GET(previous_callout, 2)`; `link_at` reads one past its offset.
+
     let start = link_at(code, callout.wrapping_add(1))? as usize;
     put(
         code,
@@ -2163,8 +1951,6 @@ fn complete_callout(code: &mut [u8], callout: usize, ptr: usize) -> Result<(), E
     )
 }
 
-/// `GETCHARLEN` in fn_233a44.c: decode the UTF-8 character at `pos`,
-/// returning the value and advancing past it.
 fn getchar(pattern: &[u8], pos: &mut usize, tables: &PcreTables<'_>) -> Result<i32, Error> {
     let mut c = byte_at(pattern, *pos)? as i32;
     if (c & 0xc0) == 0xc0 {
@@ -2180,7 +1966,6 @@ fn getchar(pattern: &[u8], pos: &mut usize, tables: &PcreTables<'_>) -> Result<i
     Ok(c)
 }
 
-/// Mutable cursor shared by the `compile_branch` item parsers.
 struct BranchState {
     code: usize,
     ptr: usize,
@@ -2198,15 +1983,6 @@ struct BranchState {
     req_caseopt: i32,
 }
 
-/// fn_233a44, EU fn_233c00, KR fn_233cac.
-///
-/// Compile one branch (up to `|`, `)` or NUL) at `ptr_pos`, emitting
-/// into `code` at `code_pos`. `pattern` must be NUL-terminated with at
-/// least 4 spare zero bytes: the C peeks up to 4 ahead. Two
-/// mistranslations in the decompiled `(?(` conditional are fixed to the
-/// ARM behavior: the digit test is a bit test, and the
-/// assertion-condition check reads `ptr[0]`/`ptr[1]` after the advance
-/// with no extra offset on error.
 pub fn compile_branch(
     code: &mut [u8],
     code_pos: usize,
@@ -2481,8 +2257,6 @@ pub fn compile_branch(
     }
 }
 
-/// `ONE_CHAR` in fn_233a44.c with the pattern lookahead: gather a
-/// (possibly multibyte) character at `st.ptr` into `mcbuffer`.
 fn one_char(
     code: &mut [u8],
     st: &mut BranchState,
@@ -2507,7 +2281,6 @@ fn one_char(
     Ok(())
 }
 
-/// `ONE_CHAR` in fn_233a44.c: emit the gathered character.
 fn one_char_fixed(
     code: &mut [u8],
     st: &mut BranchState,
@@ -2550,7 +2323,6 @@ fn one_char_fixed(
     Ok(())
 }
 
-/// `case '['` in fn_233a44.c: compile a character class.
 #[allow(clippy::too_many_arguments)]
 fn compile_class(
     code: &mut [u8],
@@ -2659,8 +2431,7 @@ fn compile_class(
             }
             posix_class *= 3;
             for i in 0..3 {
-                // Five raw bytes, whatever the name length: a memcmp, not
-                // a name comparison.
+
                 let blankclass = pattern
                     .get(st.ptr..st.ptr.wrapping_add(5))
                     .is_some_and(|w| w == b"blank");
@@ -2718,7 +2489,7 @@ fn compile_class(
                     } else {
                         st.inescq = true;
                     }
-                    // Falls to the loop foot: nothing more this round.
+
                     st.ptr = st.ptr.wrapping_add(1);
                     c = byte_at(pattern, st.ptr)? as i32;
                     if c == b']' as i32 && !st.inescq {
@@ -2863,7 +2634,6 @@ fn compile_class(
     Ok(())
 }
 
-/// Range-or-lone dispatch shared by the class item paths.
 #[allow(clippy::too_many_arguments)]
 fn class_item_tail(
     code: &mut [u8],
@@ -2910,7 +2680,6 @@ fn class_item_tail(
     }
 }
 
-/// `LONE_SINGLE_CHARACTER` in fn_233a44.c: add one class character.
 #[allow(clippy::too_many_arguments)]
 fn lone_class_char(
     code: &mut [u8],
@@ -2950,7 +2719,6 @@ fn lone_class_char(
     Ok(())
 }
 
-/// The `x-y` class range in fn_233a44.c.
 #[allow(clippy::too_many_arguments)]
 fn class_range(
     code: &mut [u8],
@@ -3013,8 +2781,7 @@ fn class_range(
             cd,
         );
     }
-    // NOTE: no out-of-order check here; the pre-scan rejects `d < c`
-    // first, so this path only sees ordered ranges.
+
     if utf8 && (d > 255 || (st.options & pcre::CASELESS != 0 && d > 127)) {
         *class_utf8 = true;
         emit(code, utf8data, XCL_RANGE)?;
@@ -3053,8 +2820,6 @@ fn class_range(
     Ok(())
 }
 
-/// `REPEAT` in fn_233a44.c: apply a `{min,max}`/`*`/`+`/`?` quantifier
-/// to the previous item.
 #[allow(clippy::too_many_arguments)]
 fn emit_repeat(
     code: &mut [u8],
@@ -3250,8 +3015,6 @@ fn emit_repeat(
     Ok(())
 }
 
-/// `OUTPUT_SINGLE_REPEAT` in fn_233a44.c: rewrite the previous single
-/// item as a repeated prefix op.
 #[allow(clippy::too_many_arguments)]
 fn emit_single_repeat(
     code: &mut [u8],
@@ -3265,8 +3028,7 @@ fn emit_single_repeat(
     utf8: bool,
     cd: &mut CompileData<'_, '_>,
 ) -> Result<bool, Error> {
-    // True when the C takes `goto END_REPEAT`, skipping the possessive
-    // wrap: `{0}`/`{0,0}` deletes the item, `{1}`/`{1,1}` keeps it bare.
+
     let previous = st.previous.unwrap_or(st.code);
     let prop_type =
         if byte_at(code, previous)? == op::PROP || byte_at(code, previous)? == op::NOTPROP {
@@ -3359,7 +3121,6 @@ fn emit_single_repeat(
     Ok(false)
 }
 
-/// The repeated-group expansion in `REPEAT`.
 #[allow(clippy::too_many_arguments)]
 fn repeat_group(
     code: &mut [u8],
@@ -3371,14 +3132,12 @@ fn repeat_group(
     utf8: bool,
     cd: &mut CompileData<'_, '_>,
 ) -> Result<bool, CompileFail> {
-    // True when the C takes `goto END_REPEAT` (`{0}` deletes the group),
-    // skipping the possessive wrap.
+
     let tables = cd.tables;
     let mut ketoffset = 0;
     let len = st.code.wrapping_sub(previous);
     let mut bralink: Option<usize> = None;
-    // The C advances its `previous` past the inserted prefix; later
-    // copies read the group from there.
+
     let mut src = previous;
     let mut repeat_max = repeat_max;
     if repeat_max == -1 {
@@ -3474,15 +3233,11 @@ fn repeat_group(
     Ok(false)
 }
 
-/// Control effect of `compile_paren`: C `continue` (with the loop's
-/// trailing advance) or `break` out of the item switch.
 enum ParenAction {
     Next,
     Break,
 }
 
-/// `case '('` in fn_233a44.c: compile a group, assertion, comment,
-/// callout, conditional, option-setting or recursion item.
 #[allow(clippy::too_many_arguments)]
 fn compile_paren(
     code: &mut [u8],
@@ -3527,11 +3282,7 @@ fn compile_paren(
                     skipbytes = 3;
                     st.ptr = st.ptr.wrapping_add(3);
                 } else if tables.ctypes[byte_at(pattern, st.ptr.wrapping_add(1))? as usize] != 0 {
-                    // The C tests `(digitab[x] && ctype_digit) != 0`: any
-                    // nonzero entry takes the CREF path, not just digits.
-                    // Proven faithful by a direct ARM fn_233a44 call, which
-                    // compiles `(?(a)b|c)` with CREF 49. Unreachable through
-                    // `compile`: the pre-scan rejects non-digit conditions.
+
                     st.ptr = st.ptr.wrapping_add(1);
                     let mut condref = byte_at(pattern, st.ptr)? as i32 - '0' as i32;
                     loop {
@@ -3555,9 +3306,7 @@ fn compile_paren(
                     )?;
                     skipbytes = 3;
                 } else {
-                    // No advance and no check: the pre-scan has already
-                    // validated the assertion form, and this `(` is the
-                    // assertion's own paren, compiled as group content.
+
                 }
             }
             b'=' => {
@@ -3573,8 +3322,7 @@ fn compile_paren(
                 bravalue = match byte_at(pattern, st.ptr)? {
                     b'=' => op::ASSERTBACK,
                     b'!' => op::ASSERTBACK_NOT,
-                    // Unreachable via compile: the pre-scan rejects this
-                    // with BadLookbehindOpen first.
+
                     _ => return Err(fail_st(CompileError::BadLookbehindOpen, st)),
                 };
                 st.ptr = st.ptr.wrapping_add(1);
@@ -3705,8 +3453,7 @@ fn compile_paren(
                     }
                     return Ok(ParenAction::Next);
                 } else {
-                    // Unreachable via compile: the pre-scan rejects this
-                    // with BadNameSyntax first.
+
                     return Err(fail_st(CompileError::BadNameSyntax, st));
                 }
             }
@@ -3872,7 +3619,6 @@ fn compile_paren(
     Ok(ParenAction::Break)
 }
 
-/// `NUMBERED_GROUP` in fn_233a44.c: assign the next bracket number.
 fn numbered_group(
     code: &mut [u8],
     st: &mut BranchState,
@@ -3897,8 +3643,6 @@ fn numbered_group(
     }
 }
 
-/// `HANDLE_RECURSION` in fn_233a44.c: emit a whole-pattern or numbered
-/// recursion item.
 fn handle_recursion(
     code: &mut [u8],
     st: &mut BranchState,
@@ -3929,7 +3673,6 @@ fn handle_recursion(
     Ok(ParenAction::Next)
 }
 
-/// `memcmp` over equal-length slices, as an ordering value.
 fn memcmp(a: &[u8], b: &[u8]) -> i32 {
     for (&x, &y) in a.iter().zip(b.iter()) {
         if x != y {
@@ -3939,12 +3682,6 @@ fn memcmp(a: &[u8], b: &[u8]) -> i32 {
     0
 }
 
-/// fn_233728, EU fn_2338e4, KR fn_233990.
-///
-/// Compile the branch list of the group opening at `code_pos` (whose op
-/// byte the caller already wrote), consuming pattern from `ptr_pos`.
-/// `options` are the group's entry options, `oldims` the caller's
-/// case/multiline/dotall bits for the option-restore item.
 #[allow(clippy::too_many_arguments)]
 pub fn compile_group(
     code: &mut [u8],
@@ -3973,7 +3710,7 @@ pub fn compile_group(
         .wrapping_add(1)
         .wrapping_add(LINK_SIZE)
         .wrapping_add(skipbytes);
-    // Open-branch cursor: the group op, then the latest ALT.
+
     let mut bc_current = start_bracket;
     loop {
         if options & pcre::IMS != oldims {
@@ -4086,13 +3823,11 @@ pub fn compile_group(
     }
 }
 
-/// Outcome of a successful [`compile`]: bytes written to the output.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Compiled {
     pub size: usize,
 }
 
-/// Length pre-scan results shared with the emitter.
 struct Prescan {
     length: i32,
     name_count: i32,
@@ -4102,16 +3837,6 @@ struct Prescan {
     options: i32,
 }
 
-/// fn_236490, EU fn_23664c, KR fn_2366f8.
-///
-/// Compile `pattern` (NUL-terminated with at least 4 spare zero bytes)
-/// into `out`, returning the block size or `None` when the host rejects
-/// the object. `heap` is the engine heap identity (`o->vt[1]`); the
-/// host records the single block allocation and its release on pattern
-/// errors. `error_offset` mirrors the C `*erroroffset` exactly,
-/// including its -1-on-success UTF-8 sentinel and its stale values on
-/// the size/allocation failures. Custom tables are not supported: the
-/// game always compiles against the default block.
 #[allow(clippy::too_many_arguments)]
 pub fn compile(
     host: &mut impl PcreHost,
@@ -4167,8 +3892,7 @@ pub fn compile(
             return Err(fail(CompileError::NoMemory, **off as usize));
         }
     };
-    // Header block. First/required bytes stay zero unless the analysis
-    // below sets them; the caller zeroes `out` per compile.
+
     if out.len() < 40 {
         return Err(CompileFail::Resource(Error::Capacity {
             required: 40,
@@ -4199,9 +3923,7 @@ pub fn compile(
     cd.top_backref = pre.top_backref;
     *code.get_mut(0).ok_or(Error::InvalidResource)? = op::BRA;
     cd.bracount = 0;
-    // The C ignores the compile return value: a raised error flows into
-    // the checks below, which overwrite it (overflow, then bad backref).
-    // Abort-time positions come back in the failure itself.
+
     let (outc, mut error) = match compile_group(
         code,
         0,
@@ -4224,9 +3946,7 @@ pub fn compile(
             (outc, error)
         }
         Err(CompileFail::Invalid(f)) => {
-            // The C never writes back `codeptr` on failure, so the
-            // overflow check below always sees code 1 (not the abort
-            // position); only the bracket count is live, via pointer.
+
             let outc = CompileOut {
                 code: 0,
                 ptr: f.offset,
@@ -4245,7 +3965,7 @@ pub fn compile(
     if error.is_none() {
         *code.get_mut(outc.code).ok_or(Error::InvalidResource)? = op::END;
     }
-    // Post-write position: the C checks after `*code++ = 0`.
+
     if outc.code.wrapping_add(1) as i32 > pre.length {
         error = Some((CompileError::CodeOverflow, outc.ptr));
     }
@@ -4276,8 +3996,7 @@ pub fn compile(
             }
             if cd.firstbyte >= 0 {
                 let fb = cd.firstbyte;
-                // C defect note: the decomp strips to the low byte here,
-                // dropping REQ_VARY; ARM clears only the caseless bit.
+
                 let first = if fb & pcre::REQ_CASELESS != 0
                     && tables.default_tables[256 + (fb & 0xff) as usize] == (fb & 0xff) as u8
                 {
@@ -4293,7 +4012,7 @@ pub fn compile(
         }
     }
     if reqbyte >= 0 && (flags & pcre::ANCHORED == 0 || reqbyte & pcre::REQ_VARY != 0) {
-        // Same REQ_VARY-preserving strip as first_byte above.
+
         let req = if reqbyte & pcre::REQ_CASELESS != 0
             && tables.default_tables[256 + (reqbyte & 0xff) as usize] == (reqbyte & 0xff) as u8
         {
@@ -4310,10 +4029,6 @@ pub fn compile(
     }))
 }
 
-/// The length pre-scan in fn_236490: measure the bytecode size, count
-/// named groups and record backreferences. All length arithmetic wraps
-/// like the ARM build; the game pays for an undercount with a
-/// `CodeOverflow` from the emitter.
 fn prescan(pattern: &[u8], options: i32, tables: &PcreTables<'_>) -> Result<Prescan, CompileFail> {
     let ctypes = &tables.default_tables[832..1088];
     let mut options = options;
@@ -4427,8 +4142,7 @@ fn prescan(pattern: &[u8], options: i32, tables: &PcreTables<'_>) -> Result<Pres
                         match read_range(pattern, ptr.wrapping_add(2), tables)? {
                             Ok(read) => {
                                 ptr = read.offset;
-                                // C defect note: the decomp tests
-                                // `max == 1` here; ARM tests `max == -1`.
+
                                 if (read.min == 0 && (read.max == 1 || read.max == -1))
                                     || (read.min == 1 && read.max == -1)
                                 {
@@ -4592,7 +4306,6 @@ fn prescan(pattern: &[u8], options: i32, tables: &PcreTables<'_>) -> Result<Pres
     })
 }
 
-/// `NORMAL_CHAR` in the pre-scan: a literal's size contribution.
 fn prescan_normal_char(
     pattern: &[u8],
     mut ptr: usize,
@@ -4618,7 +4331,6 @@ fn prescan_normal_char(
     Ok(ptr.wrapping_add(1))
 }
 
-/// `POSESSIVE` in the pre-scan: an item followed by `+`.
 fn prescan_possessive(pattern: &[u8], ptr: usize, length: &mut i32) -> Result<usize, Error> {
     if byte_at(pattern, ptr.wrapping_add(1))? == b'+' {
         *length = length.wrapping_add(2 + 2 * LINK_SIZE as i32);
@@ -4628,8 +4340,6 @@ fn prescan_possessive(pattern: &[u8], ptr: usize, length: &mut i32) -> Result<us
     }
 }
 
-/// The quantifier after `)`/`(?R` in the pre-scan: parse `{min,max}` or
-/// a short form, returning the bounds and the new position.
 fn prescan_bracket_quantifier(
     pattern: &[u8],
     ptr: usize,
@@ -4652,14 +4362,11 @@ fn prescan_bracket_quantifier(
     }
 }
 
-/// Control effect of `prescan_paren`: plain advance, or a `(?R`
-/// item with a quantifier tail to measure.
 enum PrescanParen {
     Advance(usize),
     Quantified(usize),
 }
 
-/// `case '('` in the pre-scan: measure a group opening.
 #[allow(clippy::too_many_arguments)]
 fn prescan_paren(
     pattern: &[u8],
@@ -4843,7 +4550,7 @@ fn prescan_paren(
                                 unset = 0;
                                 *item_count -= 1;
                             }
-                            // Fall through to the shared `:` handling.
+
                             if (set | unset) & pcre::IMS != 0 {
                                 *length = length.wrapping_add(4);
                                 *branch_newextra = 2;
@@ -4891,7 +4598,6 @@ fn prescan_paren(
     Ok(PrescanParen::Advance(ptr.wrapping_add(1)))
 }
 
-/// The `(?R`/`(?digits` pre-scan: measure a recursion item.
 fn prescan_recurse(
     pattern: &[u8],
     mut ptr: usize,
@@ -4920,7 +4626,6 @@ fn prescan_recurse(
     }
 }
 
-/// `case '['` in the pre-scan: measure a character class.
 #[allow(clippy::too_many_arguments)]
 fn prescan_class(
     pattern: &[u8],
@@ -5022,9 +4727,7 @@ fn prescan_class(
                     ptr = p.wrapping_add(1);
                     class_optcount = 10;
                 } else {
-                    // C defect note: the decomp ignores a `[` that fails
-                    // the POSIX check; ARM falls through and counts it as
-                    // a normal class character.
+
                     let (c, next) = prescan_class_char(pattern, ptr, utf8, tables)?;
                     ptr = next;
                     ptr = prescan_class_nonspecial(
@@ -5075,8 +4778,7 @@ fn prescan_class(
             match read_range(pattern, ptr.wrapping_add(2), tables)? {
                 Ok(read) => {
                     ptr = read.offset;
-                    // C defect note: the decomp tests `max == 1` here,
-                    // as after a backreference; ARM tests `max == -1`.
+
                     if (read.min == 0 && (read.max == 1 || read.max == -1))
                         || (read.min == 1 && read.max == -1)
                     {
@@ -5098,7 +4800,6 @@ fn prescan_class(
     Ok(ptr.wrapping_add(1))
 }
 
-/// `GET_ONE_CHARACTER` in the pre-scan class: decode one character.
 fn prescan_class_char(
     pattern: &[u8],
     mut ptr: usize,
@@ -5130,8 +4831,6 @@ fn prescan_class_char(
     }
 }
 
-/// `NON_SPECIAL_CHARACTER` in the pre-scan class: count one character
-/// plus any `-range` tail.
 #[allow(clippy::too_many_arguments)]
 fn prescan_class_nonspecial(
     pattern: &[u8],
@@ -5205,7 +4904,6 @@ fn prescan_class_nonspecial(
     Ok(ptr)
 }
 
-/// `HANDLE_QUANTIFIED_BRACKETS` in the pre-scan.
 fn prescan_quantified_brackets(
     pattern: &[u8],
     ptr: usize,
@@ -5237,26 +4935,19 @@ fn prescan_quantified_brackets(
     prescan_possessive(pattern, ptr, length)
 }
 
-// ---------------------------------------------------------------------------
-// Match (fn_238344) and execute (fn_23f598, fn_23fe54).
-// ---------------------------------------------------------------------------
-
 impl FrameStore<'_> {
-    /// Mutable access to an allocated frame for the matcher. Slots never
-    /// move, so a bad reference panics: only a port bug produces one.
+
     pub fn frame_mut(&mut self, frame: FrameRef) -> &mut MatchFrame {
         let slot = self.slot(frame).expect("match frame slot");
         &mut self.frames[slot]
     }
 
-    /// Shared access to an allocated frame for the matcher.
     pub fn frame_ref(&self, frame: FrameRef) -> &MatchFrame {
         let slot = self.slot(frame).expect("match frame slot");
         &self.frames[slot]
     }
 }
 
-/// Match result codes shared by [`pcre_match`] and [`pcre_exec`].
 const MATCH_MATCH: i32 = 1;
 const MATCH_NOMATCH: i32 = 0;
 const MATCH_UNKNOWN_NODE: i32 = -5;
@@ -5264,10 +4955,6 @@ const MATCH_NOMEMORY: i32 = -6;
 const MATCH_MATCHLIMIT: i32 = -8;
 const MATCH_INTERNAL: i32 = -14;
 
-/// `match_data` plus the `pcre_exec` temporary offset vector. Caller
-/// owned: the user vector is borrowed, the temp area is inline.
-/// Subject positions are absolute `i64` offsets into the guarded
-/// subject buffer; data runs `subj_start..subj_end`.
 pub struct ExecState<'a> {
     pub call_count: u32,
     pub match_limit: u32,
@@ -5317,8 +5004,6 @@ impl ExecState<'_> {
     }
 }
 
-/// One `pcre_callout_block`. Positions are relative to the subject data,
-/// matching the C ints.
 pub struct CalloutBlock<'a> {
     pub version: i32,
     pub number: i32,
@@ -5333,10 +5018,8 @@ pub struct CalloutBlock<'a> {
     pub next_item_length: i32,
 }
 
-/// Caller callout for [`pcre_match`]; the game passes none.
 pub type CalloutFn = fn(&CalloutBlock) -> i32;
 
-/// GETCHAR: decode the UTF-8 character at `eptr` without advancing.
 fn getchar_at(subject: &[u8], eptr: i64, tables: &PcreTables<'_>) -> i32 {
     let c = subject[eptr as usize] as i32;
     if c & 0xc0 != 0xc0 {
@@ -5352,7 +5035,6 @@ fn getchar_at(subject: &[u8], eptr: i64, tables: &PcreTables<'_>) -> i32 {
     out
 }
 
-/// GETCHARINC: decode and advance past the character.
 fn getchar_inc(subject: &[u8], eptr: &mut i64, tables: &PcreTables<'_>) -> i32 {
     let c = subject[*eptr as usize] as i32;
     *eptr += 1;
@@ -5371,7 +5053,6 @@ fn getchar_inc(subject: &[u8], eptr: &mut i64, tables: &PcreTables<'_>) -> i32 {
     out
 }
 
-/// GETCHARINCTEST: the UTF-8-gated advancing decode.
 fn getchar_inc_test(subject: &[u8], eptr: &mut i64, utf8: bool, tables: &PcreTables<'_>) -> i32 {
     if !utf8 {
         let c = subject[*eptr as usize] as i32;
@@ -5381,7 +5062,6 @@ fn getchar_inc_test(subject: &[u8], eptr: &mut i64, utf8: bool, tables: &PcreTab
     getchar_inc(subject, eptr, tables)
 }
 
-/// GETCHARLEN: decode without advancing, adding the extra bytes to `len`.
 fn getchar_len(subject: &[u8], eptr: i64, len: &mut i32, tables: &PcreTables<'_>) -> i32 {
     let c = getchar_at(subject, eptr, tables);
     if (subject[eptr as usize] as i32) & 0xc0 == 0xc0 {
@@ -5390,15 +5070,12 @@ fn getchar_len(subject: &[u8], eptr: i64, len: &mut i32, tables: &PcreTables<'_>
     c
 }
 
-/// BACKCHAR: step back over UTF-8 continuation bytes.
 fn back_char(subject: &[u8], eptr: &mut i64) {
     while subject[*eptr as usize] & 0xc0 == 0x80 {
         *eptr -= 1;
     }
 }
 
-/// The C `match_ref`: compare the `length` bytes at `eptr` against
-/// capture `offset`, caselessly when `ims` says so.
 #[allow(clippy::too_many_arguments)]
 fn match_ref(
     offset: i32,
@@ -5411,9 +5088,7 @@ fn match_ref(
     lcc: &[u8],
     ims: u32,
 ) -> bool {
-    // Unset captures read out of range here; the C value is unused on
-    // that path (the length check below always fails), so any value
-    // reproduces the outcome.
+
     let base = vector.get(offset as usize).copied().unwrap_or(0) as i64;
     let p = subj_start + base;
     if length as i64 > subj_end - eptr {
@@ -5447,17 +5122,13 @@ fn match_ref(
     true
 }
 
-/// Frame-flag bits (`match_condassert` / `match_isgroup`).
 const FLAG_CONDATTR: u32 = 0x01;
 const FLAG_ISGROUP: u32 = 0x02;
 
-/// Big-endian 16-bit link (`GET`/`GET2`).
 fn get2(code: &[u8], at: usize) -> i32 {
     ((code[at] as i32) << 8) | code[at + 1] as i32
 }
 
-/// The C `RMATCH`: push a frame tagged `rw`, or return no-memory.
-/// Always diverges to `run` (frame head) or through `rreturn`.
 macro_rules! rmatch {
     ($store:expr, $host:expr, $status:expr, $cur:expr, $st:expr, $rrc:expr, $entry:expr, $eptr:expr, $ecode:expr, $top:expr, $ims:expr, $eptrb:expr, $flags:expr, $rw:expr, $outer:lifetime, $run:lifetime) => {{
         let want: u8 = $rw;
@@ -5486,8 +5157,6 @@ macro_rules! rmatch {
     }};
 }
 
-/// The C `RRETURN`: pop the frame and dispatch to its tag, or return
-/// the value when the last frame pops. Always diverges.
 macro_rules! rreturn {
     ($store:expr, $cur:expr, $st:expr, $rrc:expr, $entry:expr, $ra:expr, $outer:lifetime) => {{
         let back = $ra;
@@ -5508,19 +5177,6 @@ macro_rules! rreturn {
     }};
 }
 
-/// fn_238344, EU fn_238500, KR fn_2385ac.
-///
-/// Match `code` (one compiled pattern, offsets from its start) against
-/// the guarded subject at `eptr`, capturing into `st`. Frames come
-/// from `store`, recursion rescues from the host. Returns 1 on match,
-/// 0 on no-match, or a negative error. `entry` selects the entry
-/// point: 99 allocates and starts; the small tags resume continuations
-/// (only 99 is used externally).
-///
-/// Preconditions (upheld by [`pcre_exec`] and the fuzz harness):
-/// the subject carries at least 256 zero bytes of headroom before
-/// `st.subj_start` and 256 past `st.subj_end`; `start` positions stay
-/// within the data plus headroom; the program is well formed.
 #[allow(clippy::too_many_arguments)]
 #[allow(unused_assignments)]
 pub fn pcre_match(
@@ -5549,9 +5205,7 @@ pub fn pcre_match(
         (eptr, 0usize, top, options, blocks, frame_flags);
     'outer: loop {
         let mut dispatched = false;
-        // Continuations that fall out of dispatch resume the op loop
-        // directly; fresh frames (RMATCH, entries 99/0/default) run the
-        // frame-start head first.
+
         let mut skip_head = false;
         'run: loop {
             if !dispatched {
@@ -5674,7 +5328,7 @@ pub fn pcre_match(
                         let live = cur.expect("match dispatch without frame");
                         let fslot = store.slot(live).expect("match frame slot");
                         if rrc == MATCH_MATCH {
-                            // Break out of the alt loop to the tail below.
+
                         } else if rrc != MATCH_NOMATCH {
                             rreturn!(store, cur, st, rrc, entry, rrc, 'outer);
                         } else {
@@ -5786,7 +5440,7 @@ pub fn pcre_match(
                         let live = cur.expect("match dispatch without frame");
                         let fslot = store.slot(live).expect("match frame slot");
                         if rrc == MATCH_MATCH {
-                            // Break out of the alt loop to the tail below.
+
                         } else if rrc != MATCH_NOMATCH {
                             rreturn!(store, cur, st, rrc, entry, rrc, 'outer);
                         } else {
@@ -6203,8 +5857,7 @@ pub fn pcre_match(
                         let length = store.frames[fslot].length as usize;
                         let charptr = store.frames[fslot].charptr;
                         let a = eptr as usize;
-                        // (The C's `oclength` other-case is dead: it is
-                        // never assigned nonzero, so mismatch is no-match.)
+
                         if subject_full[a..a + length] == code[charptr..charptr + length] {
                             store.frames[fslot].eptr = eptr + length as i64;
                         } else {
@@ -6589,8 +6242,7 @@ pub fn pcre_match(
                             op::NOT_WORDCHAR => c < 256 && st.ctypes[c as usize] & 0x10 != 0,
                             op::WORDCHAR => {
                                 if c < 256 {
-                                    // The C reads `ctypes[c]` only when
-                                    // `c >= 256` (`&&`); ARM confirms.
+
                                     false
                                 } else {
                                     let idx = (c - 256) as usize;
@@ -7168,7 +6820,7 @@ pub fn pcre_match(
                                         store.frames[fslot].ecode = after;
                                         let orig = store.frames[fslot].original_ims;
                                         store.frames[fslot].ims = orig;
-                                        // break: next op iteration.
+
                                         continue;
                                     }
                                 }
@@ -7218,7 +6870,7 @@ pub fn pcre_match(
                             let ecode = store.frames[fslot].ecode;
                             store.frames[fslot].ecode = ecode + 1;
                         } else {
-                            // Falls through to SOD in the C.
+
                             if eptr != st.subj_start {
                                 rreturn!(
                                     store, cur, st, rrc, entry, MATCH_NOMATCH,
@@ -7289,7 +6941,7 @@ pub fn pcre_match(
                                 let ecode = store.frames[fslot].ecode;
                                 store.frames[fslot].ecode = ecode + 1;
                             } else {
-                                // Falls through to EOD in the C.
+
                                 if eptr < st.subj_end {
                                     rreturn!(
                                         store, cur, st, rrc, entry,
@@ -7600,7 +7252,7 @@ pub fn pcre_match(
                             }
                         }
                         if store.frames[fslot].length == 0 {
-                            // continue: next op iteration.
+
                         } else {
                             let min = store.frames[fslot].min;
                             i = 1;
@@ -7960,12 +7612,7 @@ pub fn pcre_match(
                                     'outer
                                 );
                             }
-                            // The C tests and decrements the frame field
-                            // itself (`while (length-- > 0)`), so every
-                            // iteration writes the frame back, including
-                            // the failing test that exits the loop and the
-                            // mismatch return. A local counter would leave
-                            // a stale length in abandoned frames.
+
                             loop {
                                 let old = store.frames[fslot].length;
                                 store.frames[fslot].length = old - 1;
@@ -8103,7 +7750,7 @@ pub fn pcre_match(
                                 store.frames[fslot].ecode = ecode + 1;
                             }
                         }
-                        // REPEATCHAR body.
+
                         if st.utf8 {
                             let mut length = 1;
                             let charptr = store.frames[fslot].ecode;
@@ -8128,7 +7775,7 @@ pub fn pcre_match(
                                     if subject_full[a..a + lu] == code[charptr..charptr + lu] {
                                         store.frames[fslot].eptr = eptr + lu as i64;
                                     } else {
-                                        // (Dead `oclength` else dropped.)
+
                                         rreturn!(
                                             store, cur, st, rrc, entry,
                                             MATCH_NOMATCH, 'outer
@@ -8369,7 +8016,7 @@ pub fn pcre_match(
                                 store.frames[fslot].ecode = ecode + 1;
                             }
                         }
-                        // REPEATNOTCHAR body.
+
                         let min = store.frames[fslot].min;
                         if min as i64 > st.subj_end - store.frames[fslot].eptr {
                             rreturn!(
@@ -8618,7 +8265,7 @@ pub fn pcre_match(
                                 store.frames[fslot].ecode = ecode + 1;
                             }
                         }
-                        // REPEATTYPE body.
+
                         let ecode = store.frames[fslot].ecode;
                         store.frames[fslot].ctype = code[ecode] as i32;
                         store.frames[fslot].ecode = ecode + 1;
@@ -8716,9 +8363,7 @@ pub fn pcre_match(
                                                     'outer
                                                 );
                                             }
-                                            // (The C's `*eptr++` advances
-                                            // only when the lead byte is
-                                            // below 128.)
+
                                             let b = subject_full[eptr as usize];
                                             if b < 128 {
                                                 store.frames[fslot].eptr = eptr + 1;
@@ -8771,9 +8416,7 @@ pub fn pcre_match(
                                                     'outer
                                                 );
                                             }
-                                            // (The C's `*eptr++` advances
-                                            // only when the lead byte is
-                                            // below 128.)
+
                                             let b = subject_full[eptr as usize];
                                             if b < 128 {
                                                 store.frames[fslot].eptr = eptr + 1;
@@ -8957,7 +8600,7 @@ pub fn pcre_match(
                         }
                         let max = store.frames[fslot].max;
                         if min == max {
-                            // continue: next op iteration.
+
                         } else if store.frames[fslot].minimize != 0 {
                             store.frames[fslot].fi = min;
                             let site = if st.utf8 { 44 } else { 45 };
@@ -9165,8 +8808,7 @@ pub fn pcre_match(
                                                 i += 1;
                                             }
                                         } else {
-                                            // Falls through to ANYBYTE
-                                            // in the C.
+
                                             c = max - min;
                                             if c as i64 > st.subj_end - store.frames[fslot].eptr {
                                                 c = (st.subj_end - store.frames[fslot].eptr) as i32;
@@ -9293,18 +8935,14 @@ pub fn pcre_match(
     }
 }
 
-/// Studied data for [`pcre_exec`] (`pcre_study_data` minus its size,
-/// which execute never reads).
 #[derive(Clone, Copy)]
 pub struct ExecStudy<'a> {
     pub options: u32,
     pub start_bits: &'a [u8; 32],
-    /// Study data size; only the info call reads it.
+
     pub size: u32,
 }
 
-/// Extra data for [`pcre_exec`] (`pcre_extra`). Only the flagged
-/// fields are read.
 #[derive(Clone, Copy)]
 pub struct ExecExtra<'a> {
     pub flags: u32,
@@ -9314,9 +8952,6 @@ pub struct ExecExtra<'a> {
     pub tables: Option<&'a [u8]>,
 }
 
-/// The C `clear_entries_23f598`: release blocks 1.., reset the store
-/// head. `PcreState` fields alias the frame-store head (`count` is
-/// the block count; `a`/`b`/`c` are current/highest/max-frames).
 fn clear_store_entries(host: &mut impl PcreHost, store: &mut FrameStore) {
     let heap = store.heap;
     let count = store.block_count as usize;
@@ -9342,20 +8977,6 @@ fn clear_store_entries(host: &mut impl PcreHost, store: &mut FrameStore) {
     store.max_frames = 0;
 }
 
-/// fn_23f598, EU fn_23f754, KR fn_23f800.
-///
-/// Execute a compiled pattern against the subject data window
-/// `subject_full[subj_start..][..subj_len]`, writing captures to
-/// `offsets` (which must hold at least `offsetcount` entries when
-/// non-null). Returns the match count, 0 on offset overflow, or a
-/// negative error. `store` is the caller's `PcreState`-as-frame-store;
-/// `object`/`key` identify it to the host validator.
-///
-/// Preconditions: the subject carries 256 zero guard bytes on each
-/// side of the data window; `offsetcount <= offsets.len()` when
-/// offsets is non-null; the program is a well-formed compile output
-/// (its embedded tables pointer is null); recursion rescues need at
-/// most 1024 vector entries.
 #[allow(clippy::too_many_arguments)]
 pub fn pcre_exec(
     host: &mut impl PcreHost,
@@ -9375,7 +8996,7 @@ pub fn pcre_exec(
     callout: Option<CalloutFn>,
 ) -> i32 {
     const MAGIC: u32 = 0x5043_5245;
-    // The C takes the address of a .bss word as the default limit.
+
     const DEFAULT_MATCH_LIMIT: u32 = 0x0098_9680;
     let status = host.validate(object, key, 0xdd57, 0x18);
     if status >= 0x8000_0000 {
@@ -9389,7 +9010,7 @@ pub fn pcre_exec(
         return -2;
     }
     if program.len() < 40 {
-        // The C's `re == 0` null arm: a missing header reads as -2.
+
         return -2;
     }
     if offsetcount < 0 {
@@ -9417,7 +9038,7 @@ pub fn pcre_exec(
         panic!("exec program carries a tables pointer");
     }
     let table_block: &[u8] = custom_tables.unwrap_or(tables.default_tables.as_slice());
-    // Reconstituted header on magic mismatch (the 2328cc path).
+
     let mut internal_re = [0u8; 40];
     let mut internal_study_bits = [0u8; 32];
     let re_magic = read_u32(program, 0);
@@ -9427,8 +9048,7 @@ pub fn pcre_exec(
             _ => return -4,
         }
         if let Some(s) = study {
-            // 2328cc byte-swaps size/options and copies the bits; only
-            // options and bits are read afterwards.
+
             internal_study_bits.copy_from_slice(s.start_bits);
             study = Some(ExecStudy {
                 options: s.options.swap_bytes(),
@@ -9530,7 +9150,7 @@ pub fn pcre_exec(
         temp_len,
         using_temp,
     };
-    // First reset: tail of the vector.
+
     {
         let ovec = st.ovec_mut();
         let mut idx = ocount as i64;
@@ -9571,7 +9191,7 @@ pub fn pcre_exec(
     let mut start_match = subj_start64 + start_offset as i64;
     let mut req_byte_ptr = start_match - 1;
     loop {
-        // Per-position reset: head of the vector.
+
         {
             let ovec = st.ovec_mut();
             let end = resetcount as usize;
@@ -9704,9 +9324,6 @@ pub fn pcre_exec(
     }
 }
 
-/// fn_23fe54, EU fn_240010, KR fn_2400bc.
-///
-/// [`pcre_exec`] without a callout.
 #[allow(clippy::too_many_arguments)]
 pub fn pcre_exec_simple(
     host: &mut impl PcreHost,
@@ -9757,9 +9374,6 @@ fn read_u16(bytes: &[u8], at: usize) -> u16 {
         .unwrap_or(0)
 }
 
-/// Selector results for [`pcre_info`]. Word selectors yield 32-bit
-/// values; pointer selectors yield the borrowing Rust equivalent (a
-/// table offset, borrowed start bits, or the borrowed default tables).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InfoValue<'a> {
     Word(u32),
@@ -9769,15 +9383,6 @@ pub enum InfoValue<'a> {
     DefaultTables(&'a [u8; 1088]),
 }
 
-/// fn_232a54, EU fn_232c10, KR fn_232cbc.
-///
-/// Read one header field out of a compiled pattern: options word (0),
-/// size (1), capture count (2), backref max (3), first byte (4), study
-/// start bits (5), required byte (6), name entry size (7), name count
-/// (8), name table (9), study size (10), or the default tables (11).
-/// Opposite-endian patterns convert through [`byteswap_pattern`]
-/// first. Errors mirror the C: `-2` for a missing pattern, `-4` for
-/// an unconvertible header, `-3` for a bad selector.
 pub fn pcre_info<'a>(
     program: &'a [u8],
     extra: Option<&ExecExtra<'a>>,
@@ -9792,8 +9397,7 @@ pub fn pcre_info<'a>(
     let mut internal_re = [0u8; 40];
     let mut internal_study = [0u8; 40];
     let re_magic = read_u32(program, 0);
-    // Converted study size/options when the header converts; the
-    // selector-5 bits always come from the caller's original study.
+
     let mut study_size = 0u32;
     let mut study_options = 0u32;
     let mut have_study = false;
@@ -9873,21 +9477,12 @@ pub fn pcre_info<'a>(
     }
 }
 
-/// Opened-handle out value for [`pcre_open`]: the host identity of the
-/// allocated head plus the `0xdd57` key, both zeroed on failure.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PcreHandleOut {
     pub object: Option<u32>,
     pub key: u32,
 }
 
-/// fn_23fe84, EU fn_240040, KR fn_2400ec.
-///
-/// Open a PCRE engine object: resolve the owner, allocate the 24-byte
-/// head from the owner heap, and report it with the `0xdd57` key. A
-/// missing out slot returns `0x8a502007`; resolve failures pass
-/// through; a failed allocation returns `0x8a50200a`. Logging stays
-/// host work.
 pub fn pcre_open(
     host: &mut impl PcreHost,
     handle_ptr: u32,
@@ -9915,11 +9510,6 @@ pub fn pcre_open(
     rc
 }
 
-/// fn_23ff90, EU fn_24014c, KR fn_2401f8.
-///
-/// Read the store's high-water counters: `a` takes highest-block plus
-/// one, `b` the max frames. Validation failures return the status and
-/// leave both slots untouched.
 pub fn pcre_counters(
     host: &mut impl PcreHost,
     object: u32,
@@ -9937,14 +9527,6 @@ pub fn pcre_counters(
     rc
 }
 
-/// fn_23ffd4, EU fn_240190, KR fn_24023c.
-///
-/// Deinitialize a PCRE engine object: release blocks 1.., reset the
-/// counters, then release block 0 and the block-pointer array itself.
-/// Returns 0; validation failures return the status untouched. Block
-/// identities zero as their frees land, mirroring the C's nulling.
-/// A null array (`blocks_id` zero) with more than one block is out of
-/// contract: the C dereferences the null array and faults.
 pub fn pcre_deinit(host: &mut impl PcreHost, object: u32, key: u32, store: &mut FrameStore) -> u32 {
     let status = host.validate(object, key, 0xdd57, 0x18);
     if status >= 0x8000_0000 {
@@ -9974,10 +9556,7 @@ pub fn pcre_deinit(host: &mut impl PcreHost, object: u32, key: u32, store: &mut 
     store.max_frames = 0;
     if let Some(array_id) = store.blocks_id {
         if let Some(head) = store.blocks.first_mut() {
-            // Unlike the loop above, the header release sits inside
-            // the present check (merged C/ARM; the standalone
-            // fn_23ffd4.c frees it unconditionally, which the ROM
-            // refutes).
+
             if head.present {
                 host.free(heap, head.code_id);
                 head.code_id = 0;
@@ -9995,10 +9574,6 @@ pub fn pcre_deinit(host: &mut impl PcreHost, object: u32, key: u32, store: &mut 
     0
 }
 
-/// fn_240344, EU fn_240500, KR fn_2405ac.
-///
-/// Close a PCRE engine object: validate, then release the head
-/// allocation. Returns 0; validation failures return the status.
 pub fn pcre_close(host: &mut impl PcreHost, heap: u32, object: u32, key: u32) -> u32 {
     let status = host.validate(object, key, 0xdd57, 0x18);
     if status >= 0x8000_0000 {
@@ -10008,14 +9583,6 @@ pub fn pcre_close(host: &mut impl PcreHost, heap: u32, object: u32, key: u32) ->
     0
 }
 
-/// fn_2401a0, EU fn_24035c, KR fn_240408.
-///
-/// Initialize an opened PCRE engine object for `capacity` blocks of
-/// `width` frames: fix the 284-byte frame size, allocate the
-/// block-pointer array, the first block header, its frame data, and
-/// its tag bytes. Any allocation failure runs [`pcre_deinit`] over
-/// the partial state and returns `0x8a50200a`; validation failures
-/// return the status.
 pub fn pcre_init(
     host: &mut impl PcreHost,
     object: u32,

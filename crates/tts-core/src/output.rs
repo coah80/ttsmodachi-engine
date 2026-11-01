@@ -45,7 +45,7 @@ pub struct FrameSynthesis<'a, 'b, 'c> {
 }
 
 impl FrameSynthesis<'_, '_, '_> {
-    /// fn_1b0a64 / EU fn_1b0ab8. KR fn_1b0aac uses render_korean.
+
     pub fn render(
         &mut self,
         resources: &mut EngineResources<'_>,
@@ -61,7 +61,6 @@ impl FrameSynthesis<'_, '_, '_> {
         )
     }
 
-    /// KR fn_1b0aac / US fn_1b0a64 / EU fn_1b0ab8.
     pub fn render_korean(
         &mut self,
         resources: &mut EngineResources<'_>,
@@ -408,7 +407,6 @@ pub trait SpeechBackend {
     fn filter(&mut self, samples: &mut [i16]);
 }
 
-/// fn_1a18c4 / EU fn_1a1918 / KR fn_1a19b0.
 pub fn synthesize_stream(
     backend: &mut impl SpeechBackend,
     mut samples: &[i16],
@@ -450,7 +448,6 @@ pub fn synthesize_stream(
     made
 }
 
-/// fn_199404 / EU fn_1994b4 / KR fn_1994f0, bytes written by the clear helper.
 pub fn clear_output(output: &mut [u8]) {
     output.fill(0);
 }
@@ -473,7 +470,7 @@ pub struct OutputList<'a> {
 }
 
 impl OutputList<'_> {
-    /// fn_1b5b8c / EU fn_1b5be0 / KR fn_1b5ddc.
+
     pub fn notify(&mut self, index: usize) {
         let mut current = self.head;
         while let Some(node) = current {
@@ -488,7 +485,6 @@ impl OutputList<'_> {
     }
 }
 
-/// fn_1994d0 / EU fn_199580 / KR fn_1995bc, including RVCT unsigned-division leaves.
 pub fn unsigned_division(
     numerator: u32,
     denominator: u32,
@@ -513,8 +509,7 @@ pub struct OutputState {
 }
 
 impl OutputState {
-    /// fn_1a1b68 / EU fn_1a1bbc / KR fn_1a1c54.
-    /// The host holds the engine/output-list locks while borrowing this state.
+
     pub fn publish(
         &mut self,
         buffers: &[u32],
@@ -573,7 +568,7 @@ impl SpeechFrame<'_> {
 }
 
 impl crate::queue::SpeechFrame {
-    /// fn_1a16a4 / EU fn_1a16f8 / KR fn_1a1790.
+
     pub fn reset_for_output(&mut self) {
         self.started = false;
         self.start_value = 0;

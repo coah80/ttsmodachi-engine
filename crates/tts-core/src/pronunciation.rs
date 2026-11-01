@@ -2,7 +2,6 @@ pub use crate::frontend_types::Error;
 
 pub const UNCHANGED: u32 = 0x8a802014;
 
-/// fn_283188, EU fn_283344, KR fn_2833f0.
 pub fn is_dictionary_space(c: u32, characters: &[u16]) -> bool {
     for &character in characters {
         if u32::from(character) == c {
@@ -15,17 +14,14 @@ pub fn is_dictionary_space(c: u32, characters: &[u16]) -> bool {
     false
 }
 
-/// fn_2831a4, EU fn_283360, KR fn_28340c.
 pub fn is_quote(c: u32) -> bool {
     c == 34
 }
 
-/// fn_2831b4, EU fn_283370, KR fn_28341c.
 pub fn is_digit(c: u32) -> bool {
     c.wrapping_sub(0x30) <= 9
 }
 
-/// fn_2831c8, EU fn_283384, KR fn_283430.
 pub fn is_latin_punctuation(c: u32) -> bool {
     c.wrapping_sub(33) <= 14
         || c.wrapping_sub(58) <= 6
@@ -33,32 +29,26 @@ pub fn is_latin_punctuation(c: u32) -> bool {
         || c.wrapping_sub(123) <= 68
 }
 
-/// fn_2831fc, EU fn_2833b8, KR fn_283464.
 pub fn is_general_punctuation(c: u32) -> bool {
     c.wrapping_sub(0x2000) <= 0x6f
 }
 
-/// fn_283210, EU fn_2833cc, KR fn_283478.
 pub fn is_cjk_punctuation(c: u32) -> bool {
     c.wrapping_sub(0x3000) <= 0x3f
 }
 
-/// fn_283224, EU fn_2833e0, KR fn_28348c.
 pub fn is_presentation_punctuation(c: u32) -> bool {
     c.wrapping_sub(0xfe30) < 0x120
 }
 
-/// fn_28323c, EU fn_2833f8, KR fn_2834a4.
 pub fn is_small_punctuation(c: u32) -> bool {
     c.wrapping_sub(0xfe50) <= 31
 }
 
-/// fn_283254, EU fn_283410, KR fn_2834bc.
 pub fn is_fullwidth_punctuation(c: u32) -> bool {
     c.wrapping_sub(0xff00) <= 0xef
 }
 
-/// fn_283268, EU fn_283424, KR fn_2834d0.
 pub fn is_punctuation(c: u32) -> bool {
     is_latin_punctuation(c)
         || is_general_punctuation(c)
@@ -68,12 +58,10 @@ pub fn is_punctuation(c: u32) -> bool {
         || is_fullwidth_punctuation(c)
 }
 
-/// fn_2832d8, EU fn_283494, KR fn_283540.
 pub fn is_word_character(c: u32) -> bool {
     !is_punctuation(c)
 }
 
-/// fn_283348, EU fn_283504, KR fn_2835b0.
 pub fn lowercase(c: i32) -> u16 {
     let even = c & 1 == 0;
     let delta =
@@ -126,14 +114,13 @@ pub struct WordSpan {
 }
 
 impl WordSpan {
-    /// fn_2826f8, EU fn_2828b4, KR fn_282960.
+
     pub fn reset(&mut self, length: u16) -> u32 {
         self.start = 0;
         self.length = length;
         0
     }
 
-    /// fn_282718, EU fn_2828d4, KR fn_282980.
     pub fn trim_punctuation(&mut self, text: &[u16], length: u32) -> Result<u32, Error> {
         let old = *self;
         if self.length == 0 {
@@ -167,7 +154,6 @@ impl WordSpan {
         Ok(if *self != old { 0 } else { UNCHANGED })
     }
 
-    /// fn_282810, EU fn_2829cc, KR fn_282a78.
     pub fn trim_quotes(&mut self, text: &[u16], length: u32, spaces: &[u16]) -> Result<u32, Error> {
         if self.length == 0 {
             return Ok(UNCHANGED);
@@ -213,7 +199,6 @@ impl WordSpan {
         })
     }
 
-    /// fn_2829a0, EU fn_282b5c, KR fn_282c08.
     pub fn trim_periods(&mut self, text: &[u16]) -> Result<u32, Error> {
         if self.length == 0 {
             return Ok(UNCHANGED);
@@ -236,7 +221,6 @@ impl WordSpan {
         Ok(if changed { 0 } else { UNCHANGED })
     }
 
-    /// fn_282a28, EU fn_282be4, KR fn_282c90.
     pub fn lowercase(&mut self, text: &mut [u16]) -> Result<u32, Error> {
         if self.length == 0 {
             return Ok(UNCHANGED);
@@ -277,7 +261,7 @@ pub struct DictionaryCursor {
 }
 
 impl DictionaryCursor {
-    /// fn_202970, EU fn_202b2c, KR fn_202bd8.
+
     pub fn read(
         &mut self,
         data: &[u8],
@@ -311,7 +295,6 @@ impl DictionaryCursor {
         })
     }
 
-    /// fn_202900, EU fn_202abc, KR fn_202b68.
     pub fn seek(&mut self, offset: u32, origin: u32) -> bool {
         match origin {
             0 => {
@@ -331,7 +314,6 @@ impl DictionaryCursor {
     }
 }
 
-/// fn_2e1664, EU fn_2e1820, KR fn_2e18cc.
 pub fn valid_language_list(language: Option<&[u8]>) -> bool {
     let Some(language) = language else {
         return false;
@@ -343,7 +325,6 @@ pub fn valid_language_list(language: Option<&[u8]>) -> bool {
     length >= 3 && (3..length).step_by(4).all(|i| language[i] == b'|')
 }
 
-/// fn_2028c4, EU fn_202a80, KR fn_202b2c.
 pub fn dictionary_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     if selector <= 2 {
         Ok(table)
@@ -352,7 +333,6 @@ pub fn dictionary_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     }
 }
 
-/// fn_1f11ec, EU fn_1f13a8, KR fn_1f1454.
 pub fn g2p_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     if selector <= 1 {
         Ok(table)
@@ -361,37 +341,30 @@ pub fn g2p_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     }
 }
 
-/// fn_1f87b8, EU fn_1f8974, KR fn_1f8a20.
 pub fn copy_g2p_value(value: u32, output: &mut u32) -> u32 {
     *output = value;
     0
 }
 
-/// fn_2b331c, EU fn_2b34d8, KR fn_2b3584.
 pub fn copy_dictionary_value(value: u32, output: &mut u32) -> u32 {
     *output = value;
     0
 }
 
-/// fn_1f11e0, EU fn_1f139c, KR fn_1f1448.
 pub fn finish_g2p() -> u32 {
     0
 }
 
-/// fn_1f87b4, EU fn_1f8970, KR fn_1f8a1c.
 pub fn release_g2p_value() {}
 
-/// fn_2028f0, EU fn_202aac, KR fn_202b58.
 pub fn close_dictionary_callback() -> u32 {
     0
 }
 
-/// fn_2028f8, EU fn_202ab4, KR fn_202b60.
 pub fn flush_dictionary_callback() -> u32 {
     0
 }
 
-/// fn_2b3ffc, EU fn_2b41b8, KR fn_2b4264.
 pub fn finish_dictionary() -> u32 {
     0
 }
@@ -404,12 +377,11 @@ pub struct DictionaryQueue<'a, T> {
 }
 
 impl<T: Copy> DictionaryQueue<'_, T> {
-    /// fn_2e1ce8, EU fn_2e1ea4, KR fn_2e1f50.
+
     pub fn is_empty(&self) -> bool {
         self.count == 0
     }
 
-    /// fn_2e1d38, EU fn_2e1ef4, KR fn_2e1fa0.
     pub fn front(&self) -> Result<Option<T>, Error> {
         if self.count == 0 {
             Ok(None)
@@ -422,7 +394,6 @@ impl<T: Copy> DictionaryQueue<'_, T> {
         }
     }
 
-    /// fn_2e1d7c, EU fn_2e1f38, KR fn_2e1fe4.
     pub fn push(&mut self, value: T) -> Result<u32, Error> {
         if !self.growing && self.count == self.limit {
             return Ok(7);
@@ -440,7 +411,6 @@ impl<T: Copy> DictionaryQueue<'_, T> {
         Ok(0)
     }
 
-    /// fn_2e1ddc, EU fn_2e1f98, KR fn_2e2044.
     pub fn pop(&mut self) -> Result<u32, Error> {
         if self.count == 0 {
             return Ok(2);
@@ -455,7 +425,6 @@ impl<T: Copy> DictionaryQueue<'_, T> {
     }
 }
 
-/// fn_1f9310, EU fn_1f94cc, KR fn_1f9578.
 pub fn reset_one_word(check: impl FnOnce(u32, u32) -> u32) -> u32 {
     let status = check(0xf384, 0x4c8);
     if status >= 0x80000000 {
@@ -465,7 +434,6 @@ pub fn reset_one_word(check: impl FnOnce(u32, u32) -> u32) -> u32 {
     }
 }
 
-/// fn_1fd6d0, EU fn_1fd88c, KR fn_1fd938.
 pub fn finish_one_word(check: impl FnOnce(u32, u32) -> u32) -> u32 {
     let status = check(0xf384, 0x4c8);
     if status >= 0x80000000 {
@@ -475,7 +443,6 @@ pub fn finish_one_word(check: impl FnOnce(u32, u32) -> u32) -> u32 {
     }
 }
 
-/// fn_1fd6ec, EU fn_1fd8a8, KR fn_1fd954.
 pub fn one_word_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     if selector <= 1 {
         Ok(table)
@@ -484,7 +451,6 @@ pub fn one_word_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     }
 }
 
-/// fn_21cdfc, EU fn_21cfb8, KR fn_21d064.
 pub fn transliteration_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     if selector <= 1 {
         Ok(table)
@@ -533,7 +499,6 @@ fn transcription_append(output: &mut [u16], text: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
-/// fn_282324, EU fn_2824e0, KR fn_28258c.
 pub fn lookup_transcriptions<'a>(
     available: bool,
     language: &mut Option<&'a [u8]>,
@@ -709,7 +674,6 @@ fn restore_dictionary_text(
     Ok(0)
 }
 
-/// fn_282af0, EU fn_282cac, KR fn_282d58.
 pub fn lookup_word<'a, D: TranscriptionDictionary<'a>, C: WideDictionaryLookup>(
     config: DictionaryLookupConfig<'_>,
     target: &mut DictionaryLookupTarget<'_, D, C>,
@@ -895,16 +859,10 @@ pub fn lookup_word<'a, D: TranscriptionDictionary<'a>, C: WideDictionaryLookup>(
     Ok(UNCHANGED)
 }
 
-/// fn_1eb978, EU fn_1ebb34, KR fn_1ebbe0.
-///
-/// Refreshes the cached canonical map for `key`. The original loads dictionary
-/// pages, allocates its 176-entry cache and calls the dictionary lookup; that
-/// storage and lookup belong to the caller here.
 pub trait CanonicalLoader {
     fn refresh(&mut self, key: &[u8]) -> u32;
 }
 
-/// The fe_dctlkp text-object fields the canonicalization methods read.
 #[derive(Clone, Copy)]
 pub struct CanonicalTables<'a> {
     pub character_class: &'a [u8],
@@ -912,12 +870,10 @@ pub struct CanonicalTables<'a> {
     pub mode: u16,
 }
 
-/// fn_195d90, EU fn_195e40, KR fn_195e7c.
 pub(crate) fn terminated_len(text: &[u8]) -> u32 {
     text.iter().position(|&c| c == 0).unwrap_or(text.len()) as u32
 }
 
-/// fn_195d30, EU fn_195de0, KR fn_195e1c. `None` when the character is absent.
 pub(crate) fn class_index(set: &[u8], c: u8) -> Option<usize> {
     let end = set.iter().position(|&b| b == 0).unwrap_or(set.len());
     if c == 0 {
@@ -926,14 +882,12 @@ pub(crate) fn class_index(set: &[u8], c: u8) -> Option<usize> {
     set[..end].iter().position(|&b| b == c)
 }
 
-/// fn_195d58, EU fn_195e08, KR fn_195e44. True when the terminated strings differ.
 pub(crate) fn string_differs(a: &[u8], b: &[u8]) -> bool {
     let an = terminated_len(a) as usize;
     let bn = terminated_len(b) as usize;
     a.get(..an) != b.get(..bn)
 }
 
-/// fn_195cd0, EU fn_195d80, KR fn_195dbc. Copies the source including its terminator.
 pub(crate) fn copy_terminated(dst: &mut [u8], src: &[u8]) -> Result<(), Error> {
     let length = terminated_len(src) as usize + 1;
     if dst.len() < length {
@@ -946,8 +900,6 @@ pub(crate) fn copy_terminated(dst: &mut [u8], src: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
-/// fn_195e38, EU fn_195ee8, KR fn_195f24. Copies up to `count` bytes, zero-filling
-/// the tail when the source terminates early.
 fn copy_padded(dst: &mut [u8], src: &[u8], count: u32) -> Result<(), Error> {
     let count = count as usize;
     if dst.len() < count {
@@ -969,7 +921,6 @@ fn copy_padded(dst: &mut [u8], src: &[u8], count: u32) -> Result<(), Error> {
     Ok(())
 }
 
-/// fn_195b38, EU fn_195be8, KR fn_195c24. Overlap-safe copy within one buffer.
 pub(crate) fn move_within(
     text: &mut [u8],
     destination: usize,
@@ -991,8 +942,6 @@ pub(crate) fn move_within(
     Ok(())
 }
 
-/// Shared body of fn_1ed520 and fn_1ed0c4: replace one byte with its expansion and
-/// return the new loop bound, or `None` when the expansion exceeds `capacity`.
 fn expand_replacement(
     text: &mut [u8],
     index: u16,
@@ -1059,7 +1008,6 @@ fn fold_range(text: &mut [u8], start: u16) -> Result<(), Error> {
     Ok(())
 }
 
-/// fn_1ed520, EU fn_1ed6dc, KR fn_1ed788.
 pub fn canonical_trim(
     text: &mut [u8],
     capacity: u32,
@@ -1102,7 +1050,6 @@ pub fn canonical_trim(
     move_within(text, 0, usize::from(start), tail).map(|()| 0)
 }
 
-/// fn_1ed0c4, EU fn_1ed280, KR fn_1ed32c.
 pub fn canonical_replace(
     text: &mut [u8],
     capacity: u32,
@@ -1132,12 +1079,10 @@ pub fn canonical_replace(
     Ok(0)
 }
 
-/// fn_1edd3c, EU fn_1edef8, KR fn_1edfa4.
 pub fn class_contains(character_class: &[u8], c: u8) -> bool {
     c != 0 && class_index(character_class, c).is_some()
 }
 
-/// fn_1ed6c4, EU fn_1ed880, KR fn_1ed92c.
 pub fn canonical_word(
     text: &mut [u8],
     key: &[u8],
@@ -1175,7 +1120,6 @@ pub fn canonical_word(
     Ok(0)
 }
 
-/// fn_1ed1d0, EU fn_1ed38c, KR fn_1ed438.
 pub fn canonical_token(
     text: &mut [u8],
     input: &[u8],
@@ -1206,7 +1150,6 @@ pub fn canonical_token(
     Ok(0)
 }
 
-/// fn_1ed3b0, EU fn_1ed56c, KR fn_1ed618.
 pub fn g2p_canonical_token(
     text: &mut [u8],
     capacity: u32,
@@ -1227,7 +1170,6 @@ pub fn g2p_canonical_token(
     canonical_replace(text, capacity, replacements, mode)
 }
 
-/// fn_1ed954, EU fn_1edb10, KR fn_1edbbc.
 pub fn g2p_canonical_word(
     text: &mut [u8],
     capacity: u32,
@@ -1249,7 +1191,6 @@ pub fn g2p_canonical_word(
 
 use crate::heap::Heap;
 
-/// `fn_195c90`, EU fn_195d40, KR fn_195d7c: append `src` at `dst`'s terminator.
 pub(crate) fn append_terminated(dst: &mut [u8], src: &[u8]) {
     let at = terminated_len(dst) as usize;
     let length = terminated_len(src) as usize + 1;
@@ -1258,7 +1199,6 @@ pub(crate) fn append_terminated(dst: &mut [u8], src: &[u8]) {
     }
 }
 
-/// `fn_195e38`, EU fn_195ee8, KR fn_195f24: copy `n` bytes, NUL-padded.
 pub(crate) fn copy_fixed(dst: &mut [u8], src: &[u8], n: u32) {
     let mut i = 0u32;
     while i < n {
@@ -1275,8 +1215,6 @@ pub(crate) fn copy_fixed(dst: &mut [u8], src: &[u8], n: u32) {
     }
 }
 
-/// `fn_195dac`, EU fn_195e5c, KR fn_195e98: append at most `n` bytes of `src`
-/// at `dst`'s terminator, then terminate.
 pub(crate) fn append_fixed(dst: &mut [u8], src: &[u8], n: i32) {
     let mut at = 0usize;
     while dst[at] != 0 {
@@ -1297,7 +1235,6 @@ pub(crate) fn append_fixed(dst: &mut [u8], src: &[u8], n: i32) {
     dst[at] = 0;
 }
 
-/// `fn_1960a8`, EU fn_196158, KR fn_196194: offset of `needle` in `haystack`.
 pub(crate) fn find_substring(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     let needle_length = terminated_len(needle) as usize;
     if needle_length == 0 {
@@ -1318,7 +1255,6 @@ pub(crate) fn find_substring(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     None
 }
 
-/// `fn_1769d0`, EU fn_176a80, KR fn_176a2c: ASCII case-insensitive comparison.
 pub(crate) fn caseless_differs(a: &[u8], b: &[u8]) -> bool {
     let mut i = 0usize;
     loop {
@@ -1334,7 +1270,6 @@ pub(crate) fn caseless_differs(a: &[u8], b: &[u8]) -> bool {
     }
 }
 
-/// `fn_17c550`, EU fn_17c600, KR fn_17c5ac: ASCII `atoi` with wrapping arithmetic.
 pub(crate) fn parse_int(text: &[u8]) -> i32 {
     let mut i = 0usize;
     while i < text.len() && matches!(text[i], b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r' | b' ') {
@@ -1358,7 +1293,6 @@ pub(crate) fn parse_int(text: &[u8]) -> i32 {
     }
 }
 
-/// `fn_176624`, EU fn_1766d4, KR fn_176680: length of a terminated `u16` string.
 pub(crate) fn terminated_len16(text: &[u16]) -> u32 {
     let mut length = 0u32;
     while text.get(length as usize).copied().unwrap_or(0) != 0 {
@@ -1367,13 +1301,11 @@ pub(crate) fn terminated_len16(text: &[u16]) -> u32 {
     length
 }
 
-/// `fn_195df8`, EU fn_195ea8, KR fn_195ee4: true when the first `size` bytes differ.
 fn prefix_differs(a: &[u8], b: &[u8], size: u32) -> bool {
     let size = size as usize;
     a.get(..size) != b.get(..size)
 }
 
-/// `fn_176ac8`, EU fn_176b78, KR fn_176b24: render `value` in `base`, terminated.
 pub(crate) fn render_number(value: u32, buffer: &mut [u8], base: u32) {
     const DIGITS: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
     let mut digits = [0u8; 32];
@@ -1403,14 +1335,12 @@ pub(crate) fn write_offset(arena: &mut [u8], offset: u32, value: u32) {
     arena[at..at + 4].copy_from_slice(&value.to_le_bytes());
 }
 
-/// A terminated string at `offset`, terminator included.
 pub(crate) fn text_at(arena: &[u8], offset: u32) -> &[u8] {
     let at = offset as usize;
     let end = arena[at..].iter().position(|&b| b == 0).unwrap_or(0) + at;
     &arena[at..=end]
 }
 
-/// The host services `fn_19611c`'s owner carries.
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
 pub struct LookupOwner {
     pub heap: u32,
@@ -1418,7 +1348,6 @@ pub struct LookupOwner {
     pub logger: u32,
 }
 
-/// The per-dictionary state `fn_26b5f0` and `fn_26b7ec` fill in.
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
 pub struct LookupDictionaryState {
     pub bit_byte: u32,
@@ -1430,14 +1359,12 @@ pub struct LookupDictionaryState {
     pub output: u32,
 }
 
-/// One `LookupDictionary`: its resource size and its state.
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
 pub struct LookupDictionary {
     pub size: u32,
     pub state: LookupDictionaryState,
 }
 
-/// Which of the three dictionaries a lookup selected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Which {
     Main,
@@ -1445,16 +1372,13 @@ enum Which {
     Language,
 }
 
-/// The `fe_dctlkp` object `fn_1ec070` allocates and `fn_1ea4e0` drives.
-///
-/// Every buffer field is an offset into the caller's heap arena.
 #[derive(Clone, Copy)]
 pub struct LookupContext {
     pub owner: LookupOwner,
     pub main: LookupDictionary,
     pub system: LookupDictionary,
     pub language: LookupDictionary,
-    /// Word at `0x64`: `fn_1edabc` reads it as its character class.
+
     pub field64: u32,
     pub keys: u32,
     pub tables: u32,
@@ -1467,13 +1391,13 @@ pub struct LookupContext {
     pub query_capacity: i16,
     pub mode9c: u16,
     pub flag29e: u8,
-    /// `fn_1eb978`'s first 176-entry canonical cache.
+
     pub table90: u32,
-    /// `fn_1eb978`'s second 176-entry canonical cache.
+
     pub table2a0: u32,
-    /// `fn_1ebe84`'s resource name.
+
     pub name: [u8; 256],
-    /// `fn_1edabc`'s cached dictionary name.
+
     pub name2: [u8; 256],
 }
 
@@ -1522,24 +1446,16 @@ impl LookupContext {
     }
 }
 
-/// `fn_176f94`, `fn_179f30`, `fn_179f3c` and `fn_179208`.
 pub trait LookupHost {
-    /// `fn_176f94`: validate a handle of `tag` and `size`.
+
     fn check(&mut self, handle: u32, tag: u32, size: u32) -> u32;
-    /// `fn_179f30`. Writes the resource handle. Loading a resource allocates
-    /// working storage from the engine heap, so the heap is provided.
+
     fn resource_open(&mut self, heap: &mut impl Heap, name: &[u8], handle: &mut u32) -> u32;
-    /// `fn_179f3c`. Closing a resource releases its working storage back to
-    /// the engine heap, so the heap is provided.
+
     fn resource_close(&mut self, heap: &mut impl Heap, handle: u32);
-    /// `fn_179208`.
+
     fn resource_release(&mut self, handle: u32, buffer: u32);
-    /// Read a replacement-table slot the way the ARM does: `word` is the raw
-    /// slot value, which the original dereferences as a native pointer when
-    /// nonzero, even past the end of `fn_1eb978`'s 176-entry cache. `arena`
-    /// is the heap image, for words that address it. The default resolves
-    /// arena offsets and drops the rest; hosts whose address space satisfies
-    /// out-of-range words override this.
+
     fn resolve_replacement<'a>(&'a self, word: u32, arena: &'a [u8]) -> Option<&'a [u8]> {
         if word == 0 || word as usize >= arena.len() {
             return None;
@@ -1548,14 +1464,8 @@ pub trait LookupHost {
     }
 }
 
-/// `fn_26b7ec`, `fn_26bb28`, `fn_26bb44`, `fn_26bb54` and `fn_26bb6c`.
-///
-/// `state` is mutable: the dictionary implementations advance the bit
-/// cursor (`bit_byte`, `bit_index`) and relocate `buffer` behind the
-/// caller's back, and the C observes those writes through its dictionary
-/// pointer. The callers below write the state back after every seam call.
 pub trait LookupDictionaries {
-    /// `fn_26b7ec`. `state.tables` is a heap offset; the tables land there.
+
     fn load(
         &mut self,
         arena: &mut [u8],
@@ -1564,14 +1474,14 @@ pub trait LookupDictionaries {
         size: u32,
         resource: u32,
     ) -> u32;
-    /// `fn_26bb28`.
+
     fn unload(&mut self, arena: &mut [u8], state: &mut LookupDictionaryState, resource: u32)
         -> u32;
-    /// `fn_26bb44`.
+
     fn result_capacity(&mut self, arena: &[u8], state: &mut LookupDictionaryState) -> u16;
-    /// `fn_26bb54`.
+
     fn separator(&mut self, arena: &[u8], state: &mut LookupDictionaryState) -> u8;
-    /// `fn_26bb6c`.
+
     #[allow(clippy::too_many_arguments)]
     fn lookup(
         &mut self,
@@ -1585,7 +1495,6 @@ pub trait LookupDictionaries {
     ) -> bool;
 }
 
-/// A host that refuses every handle and resource.
 pub struct NoHost;
 
 impl LookupHost for NoHost {
@@ -1599,7 +1508,6 @@ impl LookupHost for NoHost {
     fn resource_release(&mut self, _handle: u32, _buffer: u32) {}
 }
 
-/// A dictionary set that refuses everything.
 pub struct NoDictionaries;
 
 impl LookupDictionaries for NoDictionaries {
@@ -1636,7 +1544,6 @@ impl LookupDictionaries for NoDictionaries {
     }
 }
 
-/// The tail of `fn_1ea4e0`'s `cleanup` and `failure` labels.
 struct LookupCleanup {
     dictionary: LookupDictionary,
     which: Which,
@@ -1677,7 +1584,7 @@ impl LookupCleanup {
                     let mut state = self.dictionary.state;
                     state.tables = read_offset(heap.arena(), ctx.tables + slot);
                     let resource = read_offset(heap.arena(), ctx.resources + slot);
-                    // The C writes through its `dictionary` pointer here.
+
                     let mut selected = ctx.dictionary(self.which);
                     selected.state.tables = state.tables;
                     ctx.set_dictionary(self.which, selected);
@@ -1720,10 +1627,6 @@ fn find_dictionary(ctx: &LookupContext, arena: &[u8], lookup_key: u32, key: &[u8
     -1
 }
 
-/// fn_1ea4e0, EU fn_1ea69c, KR fn_1ea748: `fe_dctlkp_Lookup`.
-///
-/// `out` receives the result-array offset, `count` the number of transcriptions
-/// and `separator` the dictionary's separator byte.
 #[allow(clippy::too_many_arguments)]
 pub fn lookup_dictionary(
     ctx: &mut LookupContext,
@@ -1847,8 +1750,7 @@ pub fn lookup_dictionary(
         };
         write_offset(heap.arena(), ctx.tables + slot, pointer);
         dictionary.state.tables = pointer;
-        // The C holds `dictionary` as a pointer into `ctx`, so this store is
-        // visible on every later path, including the early returns below.
+
         ctx.set_dictionary(which, dictionary);
         cleanup.dictionary = dictionary;
         rc = dictionaries.load(
@@ -1858,9 +1760,7 @@ pub fn lookup_dictionary(
             dictionary.size,
             resource,
         );
-        // The seam may have advanced the bit cursor or relocated the buffer;
-        // the C sees that through its dictionary pointer, including on the
-        // early returns below.
+
         ctx.set_dictionary(which, dictionary);
         cleanup.dictionary = dictionary;
         if rc >= 0x80000000 {
@@ -1882,8 +1782,7 @@ pub fn lookup_dictionary(
         let arena = heap.arena();
         write_offset(arena, ctx.keys + slot, 0);
         write_offset(arena, ctx.keys + slot + 4, 0);
-        // The C sizes and copies `lookup_key` (the `C`-suffixed key when
-        // `*count == 1`, otherwise `key`).
+
         let mut source = [0u8; 512];
         let source_length = if lookup_key != 0 {
             let borrowed = text_at(heap.arena(), lookup_key);
@@ -2017,7 +1916,6 @@ pub fn lookup_dictionary(
     cleanup.finish(ctx, heap, host, dictionaries, *count, out, rc)
 }
 
-/// fn_1ec7cc, EU fn_1ec988, KR fn_1eca34: `Lookup` repeated `total` times.
 #[allow(clippy::too_many_arguments)]
 pub fn lookup_dictionary_count(
     ctx: &mut LookupContext,
@@ -2050,7 +1948,7 @@ pub fn lookup_dictionary_count(
     let mut result = 0u32;
     let mut name = [0u8; 256];
     let mut number = [0u8; 4];
-    // The counter is `u8` in the original and wraps past 255.
+
     let mut i = 0u8;
     while u32::from(i) < total {
         name[..key.len()].copy_from_slice(&key[..key.len()]);
@@ -2080,11 +1978,6 @@ pub fn lookup_dictionary_count(
     result
 }
 
-/// fn_1eb978, EU fn_1ebb34, KR fn_1ebbe0: `fe_dctlkp_CanonicalMap`.
-///
-/// Fills the object's two 176-entry canonical caches and reads the
-/// `canonmapusage` mode. `table90` and `table2a0` are heap offsets of the
-/// pointer tables; they are allocated on first use.
 pub fn canonical_map_refresh(
     ctx: &mut LookupContext,
     heap: &mut impl Heap,
@@ -2283,7 +2176,7 @@ pub fn canonical_map_refresh(
         let borrowed = text_at(heap.arena(), record);
         let length = borrowed.len();
         value[..length].copy_from_slice(borrowed);
-        // The original truncates the result at the separator in place.
+
         if let Some(index) = value[..length].iter().position(|&byte| byte == separator) {
             heap.arena()[record as usize + index] = 0;
             value[index] = 0;
@@ -2303,15 +2196,6 @@ pub fn canonical_map_refresh(
     rc
 }
 
-/// fn_1edabc, EU fn_1edc78, KR fn_1edd24: `fe_dctlkp_LookupMultiword`.
-///
-/// Refreshes the canonical map when the cached name differs, strips the
-/// leading character-class run, canonicalizes or folds `text` in place,
-/// shifts it down and looks it up. `text` is modified in place and must carry
-/// its terminator; `key` and `name` are terminated. The character class comes
-/// from the arena word at `ctx.field64` and the 256-entry replacement table
-/// from `ctx.table90` (an empty table when it is null). `&mut` references
-/// stand in for the C's null-tested pointers.
 #[allow(clippy::too_many_arguments)]
 pub fn lookup_multiword(
     ctx: &mut LookupContext,
@@ -2348,9 +2232,7 @@ pub fn lookup_multiword(
         let capacity = terminated_len(text).wrapping_add(1) as u16 as u32;
         let mut storage: [Option<&[u8]>; 256] = [None; 256];
         let arena: &[u8] = heap.arena();
-        // The table may be fn_1eb978's 176-entry cache read past its end;
-        // the host resolves each raw slot value the way the ARM's address
-        // space does, including out-of-range words.
+
         if ctx.table90 != 0 {
             for (slot, entry) in storage.iter_mut().enumerate() {
                 let pointer = read_offset(arena, ctx.table90 + slot as u32 * 4);

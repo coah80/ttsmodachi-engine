@@ -13,8 +13,6 @@ fn width(unit: u16) -> usize {
     }
 }
 
-/// fn_17bdc4, EU fn_17be74, KR fn_17be20. Encodes code units independently,
-/// including surrogates. Positions are source byte offsets for each output byte.
 pub fn encode(input: &[u16], output: &mut [u8], mut positions: Option<&mut [u32]>) -> Conversion {
     if let Some(map) = positions.as_ref() {
         assert!(map.len() >= output.len());
@@ -51,7 +49,6 @@ pub fn encode(input: &[u16], output: &mut [u8], mut positions: Option<&mut [u32]
     }
 }
 
-/// fn_17bff4, EU fn_17c0a4, KR fn_17c050. Includes the terminating zero byte.
 pub fn encoded_len(input: &[u16]) -> u32 {
     let end = input
         .iter()
@@ -62,8 +59,6 @@ pub fn encoded_len(input: &[u16]) -> u32 {
         .fold(1u32, |size, &unit| size.wrapping_add(width(unit) as u32))
 }
 
-/// fn_17bf70, EU fn_17c020, KR fn_17bfcc. The caller supplies the complete
-/// destination, including space for the terminating zero byte.
 pub fn encode_terminated(input: &[u16], output: &mut [u8]) -> u32 {
     let end = input
         .iter()

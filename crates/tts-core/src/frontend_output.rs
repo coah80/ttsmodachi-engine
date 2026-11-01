@@ -8,12 +8,7 @@ pub use handoff::{
     EqualizerView, PumpBuffers, PumpHost, RebuildHost, Synth, SynthEnvironment, SynthHost,
     SynthMarker,
 };
-// NOTE: handoff::handle_callback and its Callback* types are the exact
-// fn_163a98 stage port; they stay behind the handoff:: path because the
-// root CallbackHost name belongs to the abstract synthesis-callback API
-// above, a different (host-abstracted) seam for the same entry.
 
-/// fn_22ad74 / EU fn_22af30 / KR fn_22afdc.
 pub fn synthesis_interface<'a, T: ?Sized>(
     index: u32,
     table: &'a T,
@@ -68,7 +63,7 @@ pub trait CallbackHost {
 }
 
 impl SynthesisCallback {
-    /// fn_163a98 / EU fn_163b5c / KR fn_163a7c.
+
     pub fn handle(
         &mut self,
         event: u32,
@@ -118,7 +113,6 @@ impl SynthesisCallback {
         Ok(0)
     }
 
-    /// fn_163a98 / EU fn_163b5c / KR fn_163a7c, streaming synthesis and PCM publication.
     pub fn render_stream(
         &mut self,
         output: [&mut [i16]; 2],
@@ -173,7 +167,7 @@ pub struct DecodedBatch<'a> {
 }
 
 impl SynthesisBatch<'_> {
-    /// fn_163a98 / EU fn_163b5c / KR fn_163a7c, adapting 40-byte markers for fn_1a18c4.
+
     pub fn decode<'a>(
         &self,
         samples: &'a mut [i16],
@@ -231,7 +225,7 @@ impl SynthesisBatch<'_> {
 }
 
 impl DecodedBatch<'_> {
-    /// fn_163a98 / EU fn_163b5c / KR fn_163a7c, calling the existing fn_1a18c4 stream backend.
+
     pub fn render(
         &self,
         state: &mut SynthesisCallback,
@@ -258,7 +252,6 @@ impl DecodedBatch<'_> {
     }
 }
 
-/// fn_2289b0 / EU fn_228b6c / KR fn_228c18.
 pub fn validate_parameter(name: &[u8], value: &[u8], valid: &mut u8) -> u32 {
     let name = &name[..name.iter().position(|&b| b == 0).unwrap_or(name.len())];
     let value = crate::prosody_rules::signed_decimal(value);
@@ -289,7 +282,7 @@ pub trait ParameterHost {
 }
 
 impl SynthesisParameters {
-    /// fn_228780 / EU fn_22893c / KR fn_2289e8.
+
     pub fn set(&mut self, name: &[u8], value: u32, host: &mut impl ParameterHost) -> u32 {
         let name = &name[..name.iter().position(|&b| b == 0).unwrap_or(name.len())];
         if name == b"audiooutputbufsamples" {
@@ -339,7 +332,6 @@ impl SynthesisParameters {
         status
     }
 
-    /// fn_228aac / EU fn_228c68 / KR fn_228d14.
     pub fn set_text(&mut self, name: &[u8], value: &[u8], host: &mut impl ParameterHost) -> u32 {
         let name = &name[..name.iter().position(|&b| b == 0).unwrap_or(name.len())];
         if matches!(
@@ -363,7 +355,6 @@ pub trait ParameterRegistry {
     fn subscribe(&mut self, name: &[u8]) -> u32;
 }
 
-/// fn_228b48 / EU fn_228d04 / KR fn_228db0.
 pub fn register_parameter(
     name: &[u8],
     minimum: i32,
@@ -392,7 +383,6 @@ pub fn register_parameter(
     registry.subscribe(name)
 }
 
-/// fn_229c0c / EU fn_229dc8 / KR fn_229e74.
 pub fn reopen_synthesis(present: bool, tag: u32, configure: impl FnOnce() -> u32) -> u32 {
     if !present || tag != 0x4e7 {
         return 0x84e02008;
@@ -411,7 +401,7 @@ pub struct SynthesisStreams {
 }
 
 impl SynthesisStreams {
-    /// fn_229cc0 / EU fn_229e7c / KR fn_229f28.
+
     pub fn close(
         &mut self,
         present: bool,

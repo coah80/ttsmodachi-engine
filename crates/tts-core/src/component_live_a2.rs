@@ -1,29 +1,16 @@
-//! Reentrant component group a2. Guest pointers refer to caller-owned memory.
-//!
-//! These bindings cover the four first-entry speech_1 captures, not every later
-//! pump or rule configuration. LiveCalls requires a zero-based arena and 4096
-//! disjoint scratch bytes. Each root takes separate restored scratch: 16 bytes
-//! for 22b3bc, 64 for 229de4/22b518, 256 for 22a0a8. The host is HeapPlatform;
-//! dependency calls run existing Rust ports, never captured outputs.
-//!
-//! Uncovered paths fail explicitly: active stream/rule logging, unordered
-//! iterator lookup, typed rule application, drained-pump marker forwarding,
-//! parameter markers, and empty-rule-list stream copying. Voice work buffers
-//! and PCRE stores must satisfy the fixed capacities asserted below. The
-//! integration test uses an 8 MiB stack for the typed-kernel projection arrays.
-//! Only fn_2aa124_m also supports nonzero Memory.base.
+
+
 use crate::{boot::Memory, frontend};
 use crate::rom_region::{Rom, addr, to_us};
-/// Internal calls receive the same arena. Implementors must dispatch real ports.
+
 pub trait Calls {
     fn call(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32;
-    /// The ROM whose guest memory is live. US by default; region-aware
-    /// hosts (the b dispatch) carry Eu/Kr so data literals follow it.
+
     fn rom(&self) -> Rom {
         Rom::Us
     }
 }
-/// fn_22b3bc. Scratch is 16 disjoint guest bytes, restored on return.
+
 pub fn fn_22b3bc_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -80,8 +67,6 @@ pub fn fn_22b3bc_m(
     rc
 }
 
-/// Reentrant allocator and map host for the component adapters.
-/// Scratch spans 4096 disjoint guest bytes and is restored by each entry.
 fn terminated(m: &[u8], p: u32) -> &[u8] {
     let s = &m[p as usize..];
     &s[..s.iter().position(|v| *v == 0).unwrap() + 1]
@@ -103,8 +88,7 @@ impl<'a> LiveCalls<'a> {
             rom: Rom::Us,
         }
     }
-    /// Region-aware construction: data literals (D_8d7764 and friends)
-    /// follow the running region through rom_region.
+
     pub fn with_rom(mut self, rom: Rom) -> Self {
         self.rom = rom;
         self
@@ -165,12 +149,7 @@ impl Calls for LiveCalls<'_> {
         self.rom
     }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
-        // Guest-sourced code pointers (vtable slots, comparator callbacks
-        // read from the live heap) arrive in the running region's numbering.
-        // Map them back to the US entries the arms below dispatch on; the
-        // mapping is US-identity, and unknown addresses pass through to
-        // their own unbound entry, so US behavior is bit-identical. The
-        // inferred region also selects data twins below.
+
         let rom = Rom::from_entry(f);
         let f = to_us(rom, f);
         if let Some(r) = m.boot_round10_call(f, a) {
@@ -186,18 +165,18 @@ impl Calls for LiveCalls<'_> {
                     &mut arena, self, a[0], a[1], a[2], a[3], a[4],
                 )
             }
-            0x2dbb2c | 0x2dca78 | 0x2dcb84 | 0x2dc4cc => numeric_call(m, f, a),
+            0x2dbb2c | 0x2dca78 | 0x2dcb84 | 0x2dc4cc => numeric_call(m, f, a, self.rom),
             0x195ae8 => frontend::move_bytes(m.bytes, a[0], a[1], a[2]),
             0x175a1c => m
                 .boot_lookup_pure(f, a, 0x196980)
                 .expect("reentrant string getter required"),
-            0x17bdc4 => crate::normalization::transcode_u16(
-                m.bytes, a[0], a[1], a[2], a[3], a[4], a[5], a[6],
+            0x17bdc4 => crate::normalization::transcode_u16_with_lead(
+                m.bytes, a[0], a[1], a[2], a[3], a[4], a[5], a[6], addr(self.rom, 0x8dc1e0)+12,
             ),
             0x17bb44 => {
-                let extra: [u8; 256] = core::array::from_fn(|i| m.byte(0x8dc1f3 + i as u32));
-                let mask: [u8; 16] = core::array::from_fn(|i| m.byte(0x8dc1e0 + i as u32));
-                let base: [u8; 1024] = core::array::from_fn(|i| m.byte(0x8dc2f4 + i as u32));
+                let extra: [u8; 256] = core::array::from_fn(|i| m.byte(addr(self.rom, 0x8dc1f3) + i as u32));
+                let mask: [u8; 16] = core::array::from_fn(|i| m.byte(addr(self.rom, 0x8dc1e0) + i as u32));
+                let base: [u8; 1024] = core::array::from_fn(|i| m.byte(addr(self.rom, 0x8dc2f4) + i as u32));
                 let t = crate::normalization::DecoderTables {
                     extra: &extra,
                     mask: &mask,
@@ -232,9 +211,7 @@ impl Calls for LiveCalls<'_> {
             0x2ac0ac => apply_rules_live(m, a[0], a[1], a[2], s + 512, self),
             0x14f918 => close_stream_m(m, a[0], a[1], self),
             0x2312fc|0x231ba0 => {
-                // fn_2312fc/fn_231ba0 text/marker xcoders (round 17: heap
-                // teardown dispatches 0x231ba0 through here; the live Host
-                // binds the same entries). 1:1 with engine_live's arm.
+
                 let mut args = [0u32; 7];
                 args[..a.len().min(7)].copy_from_slice(&a[..a.len().min(7)]);
                 let call = crate::engine::StageCall { entry: f, args };
@@ -276,9 +253,7 @@ impl Calls for LiveCalls<'_> {
             }
             0x225138 => crate::speech_part_2::fn_225138(m, a[0], a[1], a[2], s, self),
             0x2289b0 => {
-                // fn_2289b0: the parameter check the global callbacks run
-                // (mirrors engine_live's arm): validate name/value, report
-                // through the valid flag.
+
                 let mut valid = 0u8;
                 let rc = crate::frontend_output::validate_parameter(
                     terminated(m.bytes, a[1]),
@@ -290,9 +265,7 @@ impl Calls for LiveCalls<'_> {
             }
             0x228aac => crate::speech_part_2::fn_228aac(m, a[0], a[1], a[2], s, self),
             0x22c6dc => {
-                // fn_22c6dc: the inserter's parameter change (mirrors
-                // engine_live's arm). Only the field the name selects is
-                // written back.
+
                 let mut p = crate::prosody_rules::InserterParameters {
                     input_active: m.word(a[0] + 0x10),
                     output_active: m.word(a[0] + 0x18),
@@ -325,8 +298,7 @@ impl Calls for LiveCalls<'_> {
                 rc
             }
             0x22c5f0 => {
-                // fn_22c5f0: the inserter's parameter check (mirrors
-                // engine_live's arm).
+
                 let p = crate::prosody_rules::InserterParameters {
                     input_active: m.word(a[0] + 0x10),
                     output_active: m.word(a[0] + 0x18),
@@ -341,22 +313,16 @@ impl Calls for LiveCalls<'_> {
             0x2aea98 => replace_live(m, a.try_into().unwrap(), s + 256, self),
             0x4a79b8 => crate::speech_part_3::fn_4a79b8(m, a[0], a[1], a[2], self),
             0x19611c => {
-                let pair = core::array::from_fn(|i| m.byte(0x8d7660 + i as u32));
+                let pair = core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom(),0x8d7660) + i as u32));
                 let half = if a[0] == 0 { None } else { Some(m.half(a[0])) };
                 let mut ctx = 0;
                 let r =
-                    frontend::resolve_engine_context(a[0], half, a[1], &pair, 0x8d7640, &mut ctx);
+                    frontend::resolve_engine_context(a[0], half, a[1], &pair, crate::rom_region::addr(self.rom(),0x8d7640), &mut ctx);
                 m.put_word(a[2], ctx);
                 r
             }
             0x151df8 => {
-                // fn_151df8: the parameter change callback (round 17:
-                // the lex-teardown flush applies pending edits here).
-                // 1:1 with src/fn_151914.c fn_151df8 and engine_live's arm:
-                // log, then store the parsed number in the field the name
-                // selects. Scratch is LiveCalls' own (saved/restored).
-                // The __NUAN_alternative_esc_seq__ path stays loud
-                // (unbound 0x15af9c, as in engine_live).
+
                 let (p, name, value) = (a[0], a[1], a[2]);
                 if value == 0 || m.byte(value) == 0 || p == 0 {
                     return 0;
@@ -381,8 +347,7 @@ impl Calls for LiveCalls<'_> {
                             crate::normalization::atoi_scan(m.bytes, value),
                         );
                     } else if self.call(m, 0x195d58, &[name, 0x151f60]) == 0 {
-                        // fn_15af9c: the alternative escape sequence handler is
-                        // not bound in the live path.
+
                         self.boot.fault =
                             Some(crate::engine::Error::MissingStreamAdapter { entry: 0x15af9c });
                         m.put_word(s, saved);
@@ -394,11 +359,7 @@ impl Calls for LiveCalls<'_> {
             }
             0x195d58 => crate::frontend::compare_str(&m.bytes[a[0] as usize..], &m.bytes[a[1] as usize..]) as u32,
             0x151840 => {
-                // fn_151840: the parameter check the value callbacks run
-                // (round 17: unblocks the lex-teardown flush, whose
-                // set_parameter path validates values here). 1:1 with
-                // src/fn_151840.c; digit parse matches fn_17c550 (leading
-                // whitespace 9-13/32, optional sign, decimal digits).
+
                 let (p, name, s, out) = (a[0], a[1], a[2], a[3]);
                 let mut ret = 0u32;
                 let mut flag = 1u8;
@@ -406,15 +367,14 @@ impl Calls for LiveCalls<'_> {
                     let h0 = m.word(p);
                     let h1 = m.word(p.wrapping_add(4));
                     let pair =
-                        core::array::from_fn(|i| m.byte(0x8d7660 + i as u32));
+                        core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom(),0x8d7660) + i as u32));
                     let half = if h0 == 0 { None } else { Some(m.half(h0)) };
                     let mut ctx = 0u32;
                     let r = frontend::resolve_engine_context(
-                        h0, half, h1, &pair, 0x8d7640, &mut ctx,
+                        h0, half, h1, &pair, crate::rom_region::addr(self.rom(),0x8d7640), &mut ctx,
                     );
                     if r < 0x80000000 {
-                        // NUL-terminated name vs literal: C fn_195d58
-                        // returns 0 exactly on equality.
+
                         let nm = terminated(m.bytes, name);
                         let nm = &nm[..nm.len() - 1];
                         let parse = |mut at: u32| -> i32 {
@@ -560,7 +520,7 @@ impl Calls for LiveCalls<'_> {
         }
     }
 }
-/// fn_196794 with memory-passing comparison and allocation.
+
 pub fn alloc_handle_for_key_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -584,7 +544,7 @@ pub fn alloc_handle_for_key_m(
         })
         .unwrap_or(0)
     } else {
-        // Ordered-map clients here always request a lower-bound iterator.
+
         panic!("unordered fn_196794 needs reentrant search")
     };
     if key != 0 && node == 0 {
@@ -600,7 +560,7 @@ pub fn alloc_handle_for_key_m(
     m.put_word(object + 8, node);
     0
 }
-/// fn_196a64. Reentrant allocation, original field stores unchanged.
+
 pub fn create_block_m(m: &mut Memory<'_>, a: [u32; 6], h: &mut impl Calls) -> u32 {
     let [heap, b, c, d, e, out] = a;
     if (c == 0) != (d == 0) || out == 0 {
@@ -625,7 +585,7 @@ pub fn create_block_m(m: &mut Memory<'_>, a: [u32; 6], h: &mut impl Calls) -> u3
     m.put_half(p + 24, e as u16);
     1
 }
-/// fn_14e0b4. All destruction callbacks receive the current arena.
+
 pub fn release_stream_state_m(m: &mut Memory<'_>, p: u32, _heap: u32, h: &mut impl Calls) {
     if p == 0 {
         return;
@@ -665,7 +625,7 @@ fn term<'a>(m: &'a Memory<'_>, p: u32) -> &'a [u8] {
     let s = &m.bytes[m.offset(p)..];
     &s[..s.iter().position(|&b| b == 0).unwrap()]
 }
-/// fn_14f010. Scratch spans 256 bytes and is restored, including early returns.
+
 pub fn fn_14f010_m(m: &mut Memory<'_>, a: [u32; 7], s: u32, h: &mut impl Calls) -> u32 {
     let saved = core::array::from_fn::<_, 256, _>(|i| m.byte(s + i as u32));
     let r = open_stream_inner(m, a, s, h);
@@ -685,7 +645,7 @@ fn open_stream_inner(m: &mut Memory<'_>, a: [u32; 7], s: u32, h: &mut impl Calls
         return r;
     }
     let context = m.word(s);
-    // The trace is filtered at the logger before it can read its format or arguments.
+
     assert!(
         m.word(context + 16) == 0 || m.byte(m.word(context + 16) + 48) < 3,
         "active StreamOpen logging needs format literals"
@@ -789,8 +749,7 @@ fn open_stream_inner(m: &mut Memory<'_>, a: [u32; 7], s: u32, h: &mut impl Calls
         }
         let markers = term(m, s + 32) == b"application/x-realspeak-markers-pp;version=4.0";
         if elements == 0 && markers {
-            // D_8d77a8 (the SYNTHSTREAM element callbacks) moves per
-            // region; the table carries the twin (lane c3 round 11).
+
             elements = addr(h.rom(), 0x8d77a8);
         }
         m.put_word(state, p);
@@ -857,7 +816,6 @@ impl crate::db_live::DbHooksM for LiveCalls<'_> {
     }
 }
 
-/// fn_2aa124. Reset the SELECT_BET2 engine's caller-owned work buffers.
 pub fn fn_2aa124_m(m: &mut Memory<'_>, pp: u32) -> u32 {
     if pp == 0 || m.word(pp) == 0 {
         return u32::MAX;
@@ -919,7 +877,7 @@ pub fn fn_2aa124_m(m: &mut Memory<'_>, pp: u32) -> u32 {
     }
     0
 }
-/// fn_229de4. Scratch is 64 disjoint bytes, restored before return.
+
 pub fn fn_229de4_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1374,7 +1332,7 @@ fn store_i32(m: &mut Memory<'_>, p: u32, x: &[i32]) {
         m.put_word(p + i as u32 * 4, *v as u32);
     }
 }
-fn numeric_call(m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+fn numeric_call(m: &mut Memory<'_>, f: u32, a: &[u32], rom: Rom) -> u32 {
     let p = a[0];
     match f {
         0x2dbb2c => {
@@ -1395,7 +1353,7 @@ fn numeric_call(m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
             let n = m.word(p + 0x110) as usize;
             let clear = m.word(p + 0x114) as usize;
             let mut history = load_i16::<64>(m, ptr);
-            let weights = load_i32::<8>(m, 0x9c8830);
+            let weights = load_i32::<8>(m, addr(rom, 0x9c8830));
             let mut state = crate::selection::PredictionSmoother {
                 limit: m.word(p + 8),
                 scale: m.word(p + 0x2c),
@@ -1419,7 +1377,7 @@ fn numeric_call(m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
             let mut current = load_i32::<42>(m, m.word(p + 0x44));
             let step = load_i32::<42>(m, m.word(p + 0x6c));
             let mut params = load_i16::<42>(m, m.word(p + 0x54));
-            let table = load_i32::<256>(m, 0x9c832c);
+            let table = load_i32::<256>(m, addr(rom, 0x9c832c));
             let input = load_i16::<2048>(m, a[1]);
             let mut output = [0i16; 2048];
             let mut filter = crate::selection::PredictionFilter {
@@ -1444,7 +1402,8 @@ fn numeric_call(m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
                 &mut output[..n as usize],
             )
             .unwrap();
-            store_i32(m, m.word(p + 0x18c), &memory[..m.word(p + 0x194) as usize]);
+            let keep = filter.required().min(memory.len());
+            store_i32(m, m.word(p + 0x18c), &memory[..keep]);
             store_i32(m, m.word(p + 0x44), &current[..order.max(11) as usize + 1]);
             store_i16(m, m.word(p + 0x54), &params[..order.max(11) as usize + 1]);
             store_i16(m, a[2], &output[..n as usize]);
@@ -1483,6 +1442,7 @@ fn numeric_call(m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
             let mut history = load_i16::<2048>(m, m.word(p + 0xcc));
             let mut output = load_i16::<2048>(m, m.word(a[3] + 4));
             let mut v = crate::selection::VoiceSynthesis {
+                voiced_threshold: addr(rom, 0x7ae148),
                 frequency_scale: m.word(p + 0xc),
                 gain: m.word(p + 0x18) as i32,
                 noise_gain: m.word(p + 0x1c) as i32,
@@ -1551,7 +1511,7 @@ fn pump_stream(
     a[2..2 + tail.len()].copy_from_slice(tail);
     h.call(m, m.word(m.word(p + 16) + method), &a[..2 + tail.len()])
 }
-/// fn_22a0a8, live synthesis pump. Scratch is 256 disjoint bytes, restored.
+
 pub fn fn_22a0a8_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1583,14 +1543,7 @@ fn pump_inner(m: &mut Memory<'_>, p: u32, tag: u32, state: u32, s: u32, h: &mut 
             m.put_byte(state, 0);
             return result;
         }
-        // Drained with pending markers (last pump iteration): close the
-        // audio output, clear its handles, read pending markers, copy
-        // them to the marker output with the run's sample stamps, commit
-        // and consume them if any, then close and clear the marker
-        // output. Mirrors ARM 0x22a1d4-0x22a41c (src/fn_228780.c): the
-        // marker-output-absent early-out precedes the read, and the
-        // write is followed by the memcpy, the sample/reserved stamping,
-        // the 0x3c commit and the 0x30 consume from the main path.
+
         if m.word(p + 0x48) != 0 {
             h.call(
                 m,
@@ -1598,7 +1551,7 @@ fn pump_inner(m: &mut Memory<'_>, p: u32, tag: u32, state: u32, s: u32, h: &mut 
                 &[m.word(p + 0x48), m.word(p + 0x4c)],
             );
             for i in 0..8 {
-                m.put_byte(p + 0x48 + i as u32, m.byte(0x8d7660 + i as u32));
+                m.put_byte(p + 0x48 + i as u32, m.byte(crate::rom_region::addr(h.rom(),0x8d7660) + i as u32));
             }
         }
         if m.word(p + 0x58) == 0 {
@@ -1649,7 +1602,7 @@ fn pump_inner(m: &mut Memory<'_>, p: u32, tag: u32, state: u32, s: u32, h: &mut 
                 &[m.word(p + 0x58), m.word(p + 0x5c)],
             );
             for i in 0..8 {
-                m.put_byte(p + 0x58 + i as u32, m.byte(0x8d7660 + i as u32));
+                m.put_byte(p + 0x58 + i as u32, m.byte(crate::rom_region::addr(h.rom(),0x8d7660) + i as u32));
             }
         }
         return 0;
@@ -1708,18 +1661,13 @@ fn pump_inner(m: &mut Memory<'_>, p: u32, tag: u32, state: u32, s: u32, h: &mut 
             {
                 break;
             }
-            // Parameter markers (src/fn_228780.c pump loop): unlock, set
-            // the named voice parameter to the marker value, relock. The
-            // names are the pump's ROM literals (0x22a86c "volume" for
-            // 0x18, 0x22a874 "rate" for 0x12, 0x22a87c "pitch" for
-            // 0x10, each the target of the ARM `add r1, pc` at its call
-            // site). Like the C code the call results are not consulted.
+
             match typ {
                 0x18 | 0x12 | 0x10 => {
                     let name = match typ {
-                        0x18 => 0x22a86c,
-                        0x12 => 0x22a874,
-                        _ => 0x22a87c,
+                        0x18 => crate::rom_region::addr(h.rom(), 0x22a86c),
+                        0x12 => crate::rom_region::addr(h.rom(), 0x22a874),
+                        _ => crate::rom_region::addr(h.rom(), 0x22a87c),
                     };
                     h.call(m, 0x176f5c, &[m.word(p + 12)]);
                     h.call(
@@ -1739,18 +1687,25 @@ fn pump_inner(m: &mut Memory<'_>, p: u32, tag: u32, state: u32, s: u32, h: &mut 
         let stereo = m.byte(p + 0x26) == 0;
         let left = load_i32::<4096>(m, m.word(frames + 0x2e0));
         let right = load_i32::<4096>(m, m.word(frames + 0x370));
-        let table = load_i32::<320>(m, 0x91736c);
         let mut pe = [0u16; 2];
         crate::selection::dequantize(
-            flags, stereo, &left, &mut pp, &right, &mut ep, &table, &mut pe,
+            &*m,
+            flags,
+            stereo,
+            &left,
+            &mut pp,
+            &right,
+            &mut ep,
+            crate::rom_region::addr(h.rom(), 0x91736c),
+            &mut pe,
         )
         .unwrap();
         let source = m.word(m.word(frames + 0x298) + m.word(p + 0x64) * 4);
         for i in 0..=order {
             let mut c = m.word(source + i as u32 * 4);
             let adjust = match m.word(p + 0x1c) {
-                16000 => 0x8fa5ec,
-                22050 => 0x8fa650,
+                16000 => crate::rom_region::addr(h.rom(), 0x8fa5ec),
+                22050 => crate::rom_region::addr(h.rom(), 0x8fa650),
                 _ => 0,
             };
             if adjust != 0 {
@@ -1786,7 +1741,8 @@ fn pump_inner(m: &mut Memory<'_>, p: u32, tag: u32, state: u32, s: u32, h: &mut 
                 let dst = m.word(s + 20) + samples * 2;
                 frontend::move_bytes(m.bytes, dst, m.word(engine + 0xac), produced as u32 * 2);
                 let mut audio = load_i16::<2048>(m, dst);
-                let gains: [u16; 101] = core::array::from_fn(|i| m.half(0x917ae6 + i as u32 * 2));
+                let gains: [u16; 101] = core::array::from_fn(|i| m.half(crate::rom_region::addr(h.rom(), 0x917ae6) + i as u32 * 2));
+
                 crate::prosody_rules::apply_gain(
                     &mut audio[..produced as usize],
                     m.half(p + 0x24) as u32,
@@ -1833,7 +1789,6 @@ fn pump_inner(m: &mut Memory<'_>, p: u32, tag: u32, state: u32, s: u32, h: &mut 
     result
 }
 
-/// fn_196e28 with live destructor.
 pub fn remove_element_m(m: &mut Memory<'_>, p: u32, i: u32, h: &mut impl Calls) -> u32 {
     if p == 0 || i >= m.word(p + 20) {
         return 0;
@@ -1850,7 +1805,7 @@ pub fn remove_element_m(m: &mut Memory<'_>, p: u32, i: u32, h: &mut impl Calls) 
     m.put_word(p + 20, n - 1);
     1
 }
-/// fn_14f918 with reentrant destruction.
+
 pub fn close_stream_m(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Calls) -> u32 {
     if validate_handle(p != 0, tag, 0x47de, 12) >= 0x80000000 {
         return 0x81706008;
@@ -1890,7 +1845,7 @@ fn rule_stream(
     a[2..2 + tail.len()].copy_from_slice(tail);
     h.call(m, m.word(m.word(p + 32) + method), &a[..2 + tail.len()])
 }
-/// fn_22b518. Scratch is 64 disjoint bytes, restored on return.
+
 pub fn fn_22b518_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1899,9 +1854,10 @@ pub fn fn_22b518_m(
     lang_key: u32,
     s: u32,
     h: &mut impl Calls,
+    d: u32,
 ) -> u32 {
     let saved = core::array::from_fn::<_, 64, _>(|i| m.byte(s + i as u32));
-    let rc = process_inner(m, p, tag, out, lang_key, s, h);
+    let rc = process_inner(m, p, tag, out, lang_key, s, h, d);
     for (i, b) in saved.into_iter().enumerate() {
         m.put_byte(s + i as u32, b);
     }
@@ -1915,6 +1871,7 @@ fn process_inner(
     lang_key: u32,
     s: u32,
     h: &mut impl Calls,
+    d: u32,
 ) -> u32 {
     let r = validate_handle(p != 0, tag, 0x10d, 0x38);
     if r >= 0x80000000 {
@@ -1980,7 +1937,7 @@ fn process_inner(
         for pass in 0..3 {
             if pass == 1 {
                 m.put_word(s + 24, 0);
-                let d = 0x8fa74c;
+
                 let ok = h.call(
                     m,
                     0x196a64,
@@ -2156,14 +2113,8 @@ fn arena_strstr(arena: &Arena<'_>, start: usize, needle: &[u8]) -> Option<usize>
         .find(|&at| bytes[at..at + needle_len] == needle[..needle_len])
 }
 
-/// Tag prefix scanned by `fn_2ac0ac` (`D_91786f`).
 const RULE_TAG: &[u8] = b"\x1b\\tn";
 
-/// fn_2ac0ac / EU fn_2ac268 / KR fn_2ac314.
-///
-/// Applies the rule set to the arena string at `input`, writing the result
-/// arena offset to `out`. On the typed path the underlying applier statuses
-/// are discarded and `0x88602007` is returned, matching the original.
 pub fn apply_rules_m(
     arena: &mut Arena<'_>,
     item: Option<&RuleItem>,
@@ -2538,7 +2489,7 @@ fn replace_live(m: &mut Memory<'_>, a: [u32; 5], s: u32, h: &mut impl Calls) -> 
             .copy_from_slice(&m.bytes[m.offset(old)..m.offset(old) + capacity as usize + 1]);
         m.put_word(out, 0);
     }
-    let lengths = core::array::from_fn::<_, 64, _>(|i| m.byte(0x917aa6 + i as u32));
+    let lengths = core::array::from_fn::<_, 64, _>(|i| m.byte(crate::rom_region::addr(h.rom(), 0x917aa6) + i as u32));
     let engine = [m.word(p + 8), m.word(p + 12)];
     let heap = m.word(ctx + 4);
     let mut matcher = ReplacementAdapter {
@@ -2677,17 +2628,17 @@ fn pcre_exec_live(
     let n = term(m, input).len();
     let mut subject = [0u8; 66048];
     subject[256..256 + n + 1].copy_from_slice(&m.bytes[m.offset(input)..m.offset(input) + n + 1]);
-    let op = core::array::from_fn(|i| m.byte(0x914092 + i as u32));
-    let ctypes = core::array::from_fn(|i| m.byte(0x91426c + i as u32));
-    let defaults = core::array::from_fn(|i| m.byte(0x91436c + i as u32));
-    let escapes: [i16; 75] = load_i16(m, 0x9140e4);
-    let limits = load_i32(m, 0x9147ac);
-    let first = load_i32(m, 0x9147c4);
-    let cont = core::array::from_fn(|i| m.byte(0x9147f4 + i as u32));
-    let mask = core::array::from_fn(|i| m.word(0x9147dc + i as u32 * 4));
-    let min = core::array::from_fn(|i| m.byte(0x914044 + i as u32));
-    let max = core::array::from_fn(|i| m.byte(0x91404a + i as u32));
-    let overspill: [u8; 4096] = core::array::from_fn(|i| m.byte(0x91436c + 1088 + i as u32));
+    let op = core::array::from_fn(|i| m.byte(crate::rom_region::addr(h.rom(), 0x914092) + i as u32));
+    let ctypes = core::array::from_fn(|i| m.byte(crate::rom_region::addr(h.rom(), 0x91426c) + i as u32));
+    let defaults = core::array::from_fn(|i| m.byte(crate::rom_region::addr(h.rom(), 0x91436c) + i as u32));
+    let escapes: [i16; 75] = load_i16(m, crate::rom_region::addr(h.rom(), 0x9140e4));
+    let limits = load_i32(m, crate::rom_region::addr(h.rom(), 0x9147ac));
+    let first = load_i32(m, crate::rom_region::addr(h.rom(), 0x9147c4));
+    let cont = core::array::from_fn(|i| m.byte(crate::rom_region::addr(h.rom(), 0x9147f4) + i as u32));
+    let mask = core::array::from_fn(|i| m.word(crate::rom_region::addr(h.rom(), 0x9147dc) + i as u32 * 4));
+    let min = core::array::from_fn(|i| m.byte(crate::rom_region::addr(h.rom(), 0x914044) + i as u32));
+    let max = core::array::from_fn(|i| m.byte(crate::rom_region::addr(h.rom(), 0x91404a) + i as u32));
+    let overspill: [u8; 4096] = core::array::from_fn(|i| m.byte(crate::rom_region::addr(h.rom(), 0x91436c) + 1088 + i as u32));
     let tables = PcreTables {
         op_lengths: &op,
         ctypes: &ctypes,

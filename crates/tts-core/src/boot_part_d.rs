@@ -1,14 +1,13 @@
-//! Boot file/resource wrappers. Guest pointers remain absolute addresses.
-//! The frontend heap adapters require a zero-based caller-owned arena.
+
+
 use crate::{boot::Memory, frontend};
 const INVALID: u32 = 0x80602007;
 const MISSING: u32 = 0x80602001;
 const NOMEM: u32 = 0x8060200a;
-/// Dynamic methods receive the current arena, including during heap callbacks.
+
 pub trait Host {
     fn call_m(&mut self, method: u32, args: &[u32], m: &mut Memory<'_>) -> u32;
-    /// fn_17cbb4 is not yet ported. Owner: boot part e.
-    /// This explicit dependency receives copies of the wrapper's stack locals.
+
     fn params_call_m(
         &mut self,
         q: u32,
@@ -69,8 +68,7 @@ fn heap<H>(m: &Memory<'_>, p: u32, host: H) -> (H, [u32; 4]) {
         },
     )
 }
-// call_method has an immutable-memory legacy hook. Record its scalar request,
-// then dispatch with the live arena after the immutable borrow ends.
+
 struct Request(Option<[u32; 3]>);
 impl frontend::MethodTable for Request {
     fn call_at(&mut self, obj: u32, a: u32, b: u32) -> u32 {
@@ -120,12 +118,12 @@ fn realloc(m: &mut Memory<'_>, p: u32, q: u32, n: u32, h: &mut impl Host) -> u32
         &mut Heap { host, methods },
     )
 }
-/// fn_176fd4. The ROM's immutable pair is supplied by the caller.
+
 pub fn fn_176fd4(m: &mut Memory<'_>, out: u32, pair: [u32; 2]) {
     m.put_word(out, pair[0]);
     m.put_word(out + 4, pair[1]);
 }
-/// fn_172eac.
+
 pub fn fn_172eac(
     m: &mut Memory<'_>,
     src: u32,
@@ -159,7 +157,7 @@ pub fn fn_172eac(
     }
     r
 }
-/// fn_172f64.
+
 pub fn fn_172f64(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return INVALID;
@@ -170,14 +168,14 @@ pub fn fn_172f64(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     }
     r
 }
-/// fn_172fac.
+
 pub fn fn_172fac(m: &mut Memory<'_>, p: u32, x: u32, y: u32, h: &mut impl Host) -> u32 {
     if p == 0 || x == 0 || y == 0 {
         return INVALID;
     }
     h.call_m(method(m, m.word(p), 0x5c), &[m.word(p + 8), x, y], m)
 }
-/// fn_173000. rb is the caller-mapped immutable "rb" string.
+
 pub fn fn_173000(
     m: &mut Memory<'_>,
     src: u32,
@@ -220,7 +218,7 @@ pub fn fn_173000(
     }
     r
 }
-/// fn_1730fc.
+
 pub fn fn_1730fc(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return INVALID;
@@ -241,7 +239,7 @@ pub fn fn_1730fc(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     }
     r
 }
-/// fn_173180.
+
 pub fn fn_173180(
     m: &mut Memory<'_>,
     dst: u32,
@@ -260,7 +258,7 @@ pub fn fn_173180(
     }
     h.call_m(f, &[m.word(dst + 12), m.word(dst + 4), path, n, flags], m)
 }
-/// fn_1731c4.
+
 pub fn fn_1731c4(
     m: &mut Memory<'_>,
     s: u32,
@@ -322,7 +320,7 @@ pub fn fn_1731c4(
     m.bytes[at] = 1;
     r
 }
-/// fn_17331c.
+
 pub fn fn_17331c(m: &mut Memory<'_>, p: u32, a: u32, h: &mut impl Host) -> u32 {
     if p == 0 || a == 0 {
         return INVALID;
@@ -345,7 +343,7 @@ pub fn fn_17331c(m: &mut Memory<'_>, p: u32, a: u32, h: &mut impl Host) -> u32 {
     m.bytes[at] = 0;
     r
 }
-/// fn_1733a0.
+
 pub fn fn_1733a0(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return INVALID;
@@ -366,7 +364,7 @@ pub fn fn_1733a0(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     }
     0
 }
-/// fn_17340c.
+
 pub fn fn_17340c(
     m: &mut Memory<'_>,
     o: u32,
@@ -401,7 +399,7 @@ pub fn fn_17340c(
     }
     r
 }
-/// fn_173510.
+
 pub fn fn_173510(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return INVALID;
@@ -412,8 +410,7 @@ pub fn fn_173510(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     }
     r
 }
-/// fn_1735e0. The immutable D_8d75bc quad is a caller-supplied input.
-/// The unported fn_17cbb4 dependency belongs to boot part e.
+
 pub fn fn_1735e0(m: &mut Memory<'_>, p: u32, q: u32, params: [u32; 4], h: &mut impl Host) -> u32 {
     let mut copied = params;
     let mut out = 0;
@@ -422,7 +419,7 @@ pub fn fn_1735e0(m: &mut Memory<'_>, p: u32, q: u32, params: [u32; 4], h: &mut i
     }
     h.params_call_m(q, &mut copied, p, &mut out, 0, m)
 }
-/// fn_1734e8. Resolve both vtables and pass the live arena into m4c.
+
 pub fn fn_1734e8(m: &mut Memory<'_>, s: u32, arg: u32, h: &mut impl Host) -> u32 {
     if s == 0 || arg == 0 {
         return INVALID;

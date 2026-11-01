@@ -12,29 +12,24 @@ pub struct RuleSetLabels<'a> {
     pub enabled: u8,
 }
 
-/// fn_2ab65c / EU fn_2ab818 / KR fn_2ab8c4.
 pub fn rule_set_name<'a>(rules: Option<&RuleSetLabels<'a>>) -> Option<&'a [u8]> {
     rules.and_then(|rules| rules.name)
 }
 
-/// fn_2ab668 / EU fn_2ab824 / KR fn_2ab8d0.
 pub fn rule_set_source<'a>(rules: Option<&RuleSetLabels<'a>>) -> Option<&'a [u8]> {
     rules.and_then(|rules| rules.source)
 }
 
-/// fn_2ab674 / EU fn_2ab830 / KR fn_2ab8dc.
 pub fn set_rule_set_enabled(rules: Option<&mut RuleSetLabels<'_>>, value: u32) {
     if let Some(rules) = rules {
         rules.enabled = value as u8;
     }
 }
 
-/// fn_2ab680 / EU fn_2ab83c / KR fn_2ab8e8.
 pub fn rule_set_enabled(rules: Option<&RuleSetLabels<'_>>) -> u32 {
     rules.map_or(0, |rules| rules.enabled as u32)
 }
 
-/// fn_2aeab8 / EU fn_2aec74 / KR fn_2aed20.
 pub fn apply_gain(samples: &mut [i16], index: u32, gains: &[u16]) -> Result<(), Error> {
     if index == 80 {
         return Ok(());
@@ -76,7 +71,6 @@ pub(crate) fn signed_decimal(bytes: &[u8]) -> i32 {
     }
 }
 
-/// fn_22ada0 / EU fn_22af5c / KR fn_22b008.
 pub fn set_markup_rules(enabled: &mut u8, name: &[u8], value: Option<&[u8]>) -> u32 {
     if c_string(name) == b"rulesetsfrommarkup" {
         *enabled = value.is_some_and(|v| {
@@ -87,7 +81,6 @@ pub fn set_markup_rules(enabled: &mut u8, name: &[u8], value: Option<&[u8]>) -> 
     0
 }
 
-/// fn_2ab68c / EU fn_2ab848 / KR fn_2ab8f4.
 pub fn matches_language(
     enabled: u8,
     language: Option<&mut [u8]>,
@@ -128,7 +121,6 @@ pub fn matches_language(
         && language[2] == b'*')
 }
 
-/// fn_2ac648 / EU fn_2ac804 / KR fn_2ac8b0.
 pub fn read_rule_line(
     source: &[u8],
     position: &mut usize,
@@ -196,7 +188,7 @@ pub struct InserterParameters {
 }
 
 impl InserterParameters {
-    /// fn_22c5f0 / EU fn_22c7ac / KR fn_22c858.
+
     pub fn validate(&self, name: &[u8], value: &[u8], valid: &mut u8) -> u32 {
         *valid = 1;
         let status = match c_string(name) {
@@ -211,7 +203,6 @@ impl InserterParameters {
         status
     }
 
-    /// fn_22c6dc / EU fn_22c898 / KR fn_22c944.
     pub fn set(&mut self, name: &[u8], value: &[u8]) -> u32 {
         match c_string(name) {
             b"frequencyhz" => {
@@ -236,10 +227,6 @@ impl InserterParameters {
     }
 }
 
-/// Engine calls reached by `fn_2ac0ac`. String contents live in the shared
-/// `Arena`; pointer arguments are arena offsets with 0 as null. The indexed
-/// (`fn_2aacf0`) and per-rule (`fn_2aea98`) appliers are host calls so this
-/// entry is testable before those leaves land.
 pub trait ApplyRuleHost {
     fn resolve(&mut self, h0: u32, h1: u32) -> (u32, Option<RuleContext>);
     fn alloc(&mut self, arena: &mut Arena<'_>, size: u32) -> u32;
@@ -300,14 +287,8 @@ fn arena_strstr(arena: &Arena<'_>, start: usize, needle: &[u8]) -> Option<usize>
         .find(|&at| bytes[at..at + needle_len] == needle[..needle_len])
 }
 
-/// Tag prefix scanned by `fn_2ac0ac` (`D_91786f`).
 const RULE_TAG: &[u8] = b"\x1b\\tn";
 
-/// fn_2ac0ac / EU fn_2ac268 / KR fn_2ac314.
-///
-/// Applies the rule set to the arena string at `input`, writing the result
-/// arena offset to `out`. On the typed path the underlying applier statuses
-/// are discarded and `0x88602007` is returned, matching the original.
 pub fn apply_rules(
     arena: &mut Arena<'_>,
     item: Option<&RuleItem>,
@@ -466,11 +447,6 @@ pub fn apply_rules(
     status
 }
 
-/// fn_2aacf0 / EU fn_2aaeac / KR fn_2aaf58.
-///
-/// Applies rule `index` (or the final pass when `flag` is nonzero) to the
-/// arena string at `input`, writing the result arena offset to `out`. The
-/// per-segment engine application (`fn_2aea98`) is a host call.
 #[allow(clippy::too_many_arguments)]
 pub fn apply_rule_indexed(
     arena: &mut Arena<'_>,
@@ -588,19 +564,13 @@ pub fn apply_rule_indexed(
     status
 }
 
-/// Stream tags checked by the rule-file scanners (`D_9178b8`, `D_9178f0`,
-/// `D_917924`).
 pub const RULE_CHECK_A: &[u8] = b"ERCP7";
 pub const RULE_CHECK_B: &[u8] = b"ERCP3";
 pub const RULE_CHECK_C: &[u8] = b"ERCP4";
 
-/// Whitespace sets scanned by the header/rule drivers (`D_2acb84`, `D_2acb88`).
 pub const RULE_WS: &[u8] = b"\t ";
 pub const RULE_WS_BRACKET: &[u8] = b"\t ]";
 
-/// Engine calls reached by the rule-file scanner ports (`fn_2aaa20`,
-/// `fn_2ac810`, `fn_2acfc8`). Stream bytes are borrowed; `pos`/`rem` are
-/// indices into them. String scratch (`buf`) is caller-owned.
 pub trait RuleScanHost {
     fn resolve(&mut self, h0: u32, h1: u32) -> (u32, Option<RuleContext>);
     fn check_stream(&mut self, stream: [u32; 2], tag: &[u8], buf: &[u8]) -> u32;
@@ -623,8 +593,6 @@ pub trait RuleScanHost {
     fn error(&mut self, log: u32, level: u32);
 }
 
-/// `fn_1769d0`: ASCII case-insensitive comparison of two NUL-terminated
-/// strings.
 fn nocase_eq(left: &[u8], right: &[u8]) -> bool {
     let left = &left[..left.iter().position(|&b| b == 0).unwrap_or(left.len())];
     let right = &right[..right.iter().position(|&b| b == 0).unwrap_or(right.len())];
@@ -635,9 +603,6 @@ pub(crate) fn scan_strlen(buf: &[u8]) -> usize {
     buf.iter().position(|&b| b == 0).unwrap_or(buf.len())
 }
 
-/// The bounded line copy shared by the rule-file entry: at most `max - 1`
-/// bytes, NUL-terminated when `i < max`. Reads come from the borrowed stream
-/// image; the caller guarantees `pos`/`rem` stay inside it.
 fn scan_copy(data: &[u8], pos: &mut u32, rem: &mut u32, buf: &mut [u8], max: u32) -> (u32, u16) {
     let mut n = *rem;
     let mut p = *pos;
@@ -660,9 +625,6 @@ fn scan_copy(data: &[u8], pos: &mut u32, rem: &mut u32, buf: &mut [u8], max: u32
     (n, i)
 }
 
-/// The fixed `fn_2ac648` line reader underlying `fn_2aaa20`: at most 1023
-/// bytes per copy (`0x400`), NUL-terminated, with first-line diagnostics.
-/// Reads come from the borrowed stream image.
 fn read_bounded(
     data: &[u8],
     pos: &mut u32,
@@ -712,10 +674,6 @@ fn read_bounded(
     0x88602004
 }
 
-/// fn_2aaa20 / EU fn_2aabdc / KR fn_2aac88.
-///
-/// Reads one rule-file line into the caller `buf` (at most `max - 1` bytes),
-/// running each line through the `ERCP7`/`ERCP3` stream checks.
 pub fn scan_entry(
     stream: [u32; 2],
     pos: &mut u32,
@@ -801,10 +759,6 @@ fn buf_memcmp(buf: &[u8], at: usize, text: &[u8], count: usize) -> bool {
     at + count <= buf.len() && text.len() >= count && buf[at..at + count] == text[..count]
 }
 
-/// fn_2ac810 / EU fn_2ac9cc / KR fn_2aca78.
-///
-/// Scans the `[header]` section for `language`/`type` keys, storing them in
-/// the item's language/kind arena strings.
 #[allow(clippy::too_many_arguments)]
 pub fn scan_header(
     arena: &mut Arena<'_>,
@@ -842,7 +796,7 @@ pub fn scan_header(
                     p += 1;
                 }
                 if buf[p] == 0 {
-                    // next1
+
                 } else {
                     p = skip_set(buf, p, RULE_WS);
                     if buf[p] == b']' && rc < 0x80000000 {
@@ -996,8 +950,6 @@ fn skip_blanks(buf: &[u8], mut at: usize) -> usize {
     at
 }
 
-/// Copies the NUL-terminated string at `buf[src..]` into the arena allocation
-/// at `dest`, mirroring `fn_195cd0` into a heap buffer.
 fn arena_copy_from(arena: &mut Arena<'_>, dest: u32, buf: &[u8], src: usize) {
     let len = scan_strlen(&buf[src..]);
     let bytes = arena.bytes_mut();
@@ -1005,11 +957,6 @@ fn arena_copy_from(arena: &mut Arena<'_>, dest: u32, buf: &[u8], src: usize) {
     bytes[dest as usize + len] = 0;
 }
 
-/// fn_2acfc8 / EU fn_2ad184 / KR fn_2ad230.
-///
-/// Scans the `[data]` section, compiling each `sep pattern opts --> target`
-/// rule through the host PCRE compiler and inserting it into the item's rule
-/// list. Returns the first error seen, or 0 at clean end-of-stream.
 #[allow(clippy::too_many_arguments)]
 pub fn scan_rules(
     arena: &mut Arena<'_>,
@@ -1089,8 +1036,6 @@ pub fn scan_rules(
     scan_rules_out(first_err, rc)
 }
 
-/// One `[data]` line: 0 on success, 6 when rule insertion fails (fatal),
-/// anything else for a logged line error. All logging happens inside.
 fn scan_one_rule(
     arena: &mut Arena<'_>,
     item: &mut RuleItem,
@@ -1219,7 +1164,6 @@ fn scan_rules_out(first_err: u32, rc: u32) -> u32 {
     rc
 }
 
-/// fn_22bddc / EU fn_22bf98 / KR fn_22c044.
 pub fn rule_interface<'a, T: ?Sized>(
     present: bool,
     tag: u32,
@@ -1249,7 +1193,6 @@ pub trait PatternEngineHost {
     fn release(&mut self);
 }
 
-/// fn_2ae690 / EU fn_2ae84c / KR fn_2ae8f8.
 pub fn create_pattern_engine(
     context: [u32; 2],
     output: Option<&mut Option<PatternEngine>>,
@@ -1282,7 +1225,6 @@ pub fn create_pattern_engine(
     status
 }
 
-/// fn_2ae784 / EU fn_2ae940 / KR fn_2ae9ec.
 pub fn close_pattern_engine(
     engine: Option<&PatternEngine>,
     host: &mut impl PatternEngineHost,
@@ -1305,7 +1247,6 @@ pub fn close_pattern_engine(
     0
 }
 
-/// Caller-owned prosody rule-set instance (`fn_22ae34`, `fn_22b238`).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RuleSet {
     pub id: u32,
@@ -1319,7 +1260,6 @@ pub struct RuleSet {
     pub f2c: [u32; 2],
 }
 
-/// Environment view resolved through `fn_19611c` for the rule-set unit.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RuleEnv {
     pub heap: u32,
@@ -1336,7 +1276,6 @@ pub trait RuleSetHost {
     fn free(&mut self, heap: u32, object: u32);
 }
 
-/// fn_22ae34 / EU fn_22aff0 / KR fn_22b09c.
 pub fn destroy_rule_set(p: Option<&RuleSet>, host: &mut impl RuleSetHost) -> u32 {
     let Some(p) = p else { return 0x88602007 };
     let (_, env) = host.resolve_env(p.h0, p.h1);
@@ -1365,7 +1304,6 @@ pub trait RuleStreamHost {
     fn close_stream(&mut self, handle: [u32; 2]) -> u32;
 }
 
-/// fn_22b238 / EU fn_22b3f4 / KR fn_22b4a0.
 pub fn release_rule_streams(
     p: Option<&mut RuleSet>,
     arg: u32,
@@ -1402,7 +1340,7 @@ pub struct ReplacementBuffer<'a> {
 }
 
 impl ReplacementBuffer<'_> {
-    /// fn_2ada10 / EU fn_2adbcc / KR fn_2adc78.
+
     pub fn append(
         &mut self,
         text: &[u8],
@@ -1557,7 +1495,6 @@ fn append_replacement(
     Ok(0)
 }
 
-/// fn_2adba8 / EU fn_2add64 / KR fn_2ade10.
 pub fn replace_pattern(
     present: bool,
     pattern_present: bool,
@@ -1646,7 +1583,6 @@ pub fn replace_pattern(
     output.append(tail, |capacity| matcher.reserve(capacity, true))
 }
 
-/// fn_2aea98 / EU fn_2aec54 / KR fn_2aed00.
 pub fn replace_pattern_global(
     present: bool,
     pattern_present: bool,

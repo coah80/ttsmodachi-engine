@@ -1,30 +1,17 @@
-//! Component processor control flow on caller-owned guest memory.
-//!
-//! InternalCalls is a dependency boundary, not a platform service. Implementors
-//! must run the corresponding Rust port, not replay captured return values.
-//! The four routines here are NOT a complete live component adapter. Several
-//! internal dependencies remain unwired. Language identification and spelling
-//! belong to engine_components2. See evidence/rust-wire-b-round4.json.
+
+
 use crate::engine::{Error, Memory};
 use crate::rom_region::{Rom, addr, to_us};
 
-/// ABI calls needed by these processors. Only an explicitly wired Rust callee
-/// may return success. An unwired callee must return UnsupportedStage.
 pub trait InternalCalls {
     fn call(&mut self, memory: &mut Memory<'_, '_>, entry: u32, args: &[u32])
     -> Result<u32, Error>;
-    /// The ROM whose guest memory is live. US by default so US-only hosts
-    /// are unchanged; region-aware hosts (RegionalCalls, C4Calls, ...) carry
-    /// Eu/Kr and every data literal below follows it.
+
     fn rom(&self) -> Rom {
         Rom::Us
     }
 }
 
-/// Partial live bindings over initialized guest state. Reuses environment,
-/// stream-remaining, child-lookup and target-free logger ports. Active logger
-/// callbacks and formatting, other stream/LINGDB methods, allocator, property,
-/// dictionary, resource and backend methods remain unwired and fail closed.
 pub struct CoreCalls;
 impl InternalCalls for CoreCalls {
     fn call(&mut self, m: &mut Memory<'_, '_>, entry: u32, a: &[u32]) -> Result<u32, Error> {
@@ -35,10 +22,6 @@ impl InternalCalls for CoreCalls {
     }
 }
 
-/// Caller-owned region override for an existing [`InternalCalls`] host.
-/// `call` forwards transparently; `rom` reports the override. Dispatch
-/// boundaries wrap the caller's host in this so nested ports read the
-/// entry's region without a global and without changing any signature.
 pub struct RomHost<'a> {
     pub inner: &'a mut dyn InternalCalls,
     pub rom: Rom,
@@ -57,9 +40,6 @@ impl InternalCalls for RomHost<'_> {
     }
 }
 
-/// Region-aware form of [`CoreCalls`]. The caller builds it with the live
-/// region; code entries are normalized with [`to_us`] and every data
-/// literal follows `rom`. US behaviour is identical to [`CoreCalls`].
 pub struct RegionalCalls {
     pub rom: Rom,
 }
@@ -99,9 +79,6 @@ impl InternalCalls for RegionalCalls {
     }
 }
 
-/// fn_1738e8 binding for null, filtered and target-free loggers. The existing
-/// port's scripted target callbacks are never used here. Active targets fail
-/// closed at their real method address until a platform logger is connected.
 fn log_binding(m: &Memory<'_, '_>, a: &[u32]) -> Result<u32, Error> {
     let p = a[0];
     let mut arena = [0u8; 128];
@@ -112,7 +89,7 @@ fn log_binding(m: &Memory<'_, '_>, a: &[u32]) -> Result<u32, Error> {
             arena[64 + 0x31] = byte(m, p + 0x31)?;
             if (arena[64 + 0x31] == 0 || a[2] <= 4) && a[4] != 0 && a[1] != 0 {
                 for i in 0..6 {
-                    // The extra target starts at +0x34, after the level bytes.
+
                     let slot = if i == 5 { 0x38 } else { 12 + i * 8 };
                     let methods = m.word(p + slot)?;
                     if methods != 0 {
@@ -130,9 +107,6 @@ fn log_binding(m: &Memory<'_, '_>, a: &[u32]) -> Result<u32, Error> {
     ))
 }
 
-/// StreamPosition uses scalar fields, so no guest pointer rebasing or copied
-/// result buffer is needed. Only the port's declared outputs are written back.
-/// Logging targets must be inactive; enabled platform targets fail closed.
 fn remaining_binding(m: &mut Memory<'_, '_>, a: &[u32], rom: Rom) -> Result<u32, Error> {
     let validation = crate::normalization::quad_check(a[0], a[1], 0x47de, 12);
     if bad(validation) {
@@ -142,8 +116,7 @@ fn remaining_binding(m: &mut Memory<'_, '_>, a: &[u32], rom: Rom) -> Result<u32,
     let logger = m.word(m.word(state + 4)? + 16)?;
     log_binding(m, &[logger, addr(rom, 0x8d7764), 4, 0, 1])?;
     let kind = byte(m, a[0])?;
-    // Error formatting can allocate even if the logger has no output targets.
-    // Do not silently discard those writes.
+
     if (a[2] == 0 || kind != 0) && logger != 0 {
         return Err(Error::UnsupportedStage { entry: 0x173c70 });
     }
@@ -172,7 +145,7 @@ fn remaining_binding(m: &mut Memory<'_, '_>, a: &[u32], rom: Rom) -> Result<u32,
         m.put_word(a[2], output)?;
     }
     if a[3] != 0 {
-        // The ARM reads EOF after writing remaining, including aliasing.
+
         if kind == 0 && a[2] != 0 {
             finished = byte(m, state + 68)?;
         }
@@ -182,8 +155,6 @@ fn remaining_binding(m: &mut Memory<'_, '_>, a: &[u32], rom: Rom) -> Result<u32,
     Ok(rc)
 }
 
-/// Project just the parent and its two child headers into Database::find_child.
-/// All inputs come from live guest memory; no capture output is consulted.
 fn child_binding(m: &mut Memory<'_, '_>, a: &[u32], rom: Rom) -> Result<u32, Error> {
     use crate::linguistic::{Database, Record};
     let p = a[0];
@@ -247,7 +218,7 @@ fn child_binding(m: &mut Memory<'_, '_>, a: &[u32], rom: Rom) -> Result<u32, Err
     let mut output = 0;
     let rc = db.find_child(a[2], 0, &mut output);
     if bad(rc) {
-        // Validation errors are not logged. Other errors format parameters.
+
         if valid && m.word(m.word(p)? + 16)? != 0 {
             return Err(Error::UnsupportedStage { entry: 0x173c70 });
         }
@@ -257,7 +228,6 @@ fn child_binding(m: &mut Memory<'_, '_>, a: &[u32], rom: Rom) -> Result<u32, Err
     Ok(rc)
 }
 
-/// Fail closed at the first dependency without touching its outputs.
 pub struct Unwired;
 impl InternalCalls for Unwired {
     fn call(&mut self, _: &mut Memory<'_, '_>, entry: u32, _: &[u32]) -> Result<u32, Error> {
@@ -279,7 +249,7 @@ fn put_half(m: &mut Memory<'_, '_>, a: u32, v: u16) -> Result<(), Error> {
     m.write(a, &v.to_le_bytes())
 }
 fn copy(m: &mut Memory<'_, '_>, dst: u32, src: u32, n: u32) -> Result<(), Error> {
-    // memcpy, not memmove. Callers must supply disjoint loans.
+
     for i in 0..n {
         let v = byte(m, src + i)?;
         m.write(dst + i, &[v])?;
@@ -310,7 +280,7 @@ fn log(
     code: u32,
     rc: u32,
 ) -> Result<(), Error> {
-    // The formatting strings are the ROM addresses loaded at this call site.
+
     let rom = h.rom();
     h.call(
         m,
@@ -320,10 +290,6 @@ fn log(
     Ok(())
 }
 
-/// fn_1e3b14. (p, key, unused, unused, active*) -> status.
-/// scratch is a disjoint, writable 32-byte ABI-local frame, not persistent state.
-/// Maps 24-byte marker records through the phoneme resource interface and
-/// commits/consumes matching byte counts; closes output on end of input.
 pub(crate) fn process_1e3b14(
     m: &mut Memory<'_, '_>,
     p: u32,
@@ -396,7 +362,7 @@ pub(crate) fn process_1e3b14(
                     &[phonemes[0], phonemes[1], 0, s + 16, s + 20, 0],
                 )?;
                 if bad(rc) {
-                    // Unlike input/output errors, map failure is recoverable.
+
                     h.call(
                         m,
                         0x173dc0,
@@ -445,10 +411,6 @@ fn free_buffers(m: &mut Memory<'_, '_>, p: u32, h: &mut impl InternalCalls) -> R
     Ok(0)
 }
 
-/// fn_1e5bbc. (p, key, unused, unused, state*) -> status.
-/// scratch is a disjoint 16-byte ABI-local frame.
-/// Coordinates backend progress, marker flags and buffer release. The backend,
-/// property and fetch callbacks are dependencies, NOT success stubs.
 pub(crate) fn process_1e5bbc(
     m: &mut Memory<'_, '_>,
     p: u32,
@@ -540,10 +502,6 @@ pub(crate) fn process_1e5bbc(
     Ok(rc)
 }
 
-/// fn_206be4. (p, key, node_handle by value, changed*) -> status.
-/// scratch is a disjoint 32-byte ABI-local frame. Expands normalization spans
-/// via fn_284bc0, then removes covered/duplicate intervals and types 0..3.
-/// Node methods and tokenize_span must be wired to their existing Rust ports.
 pub(crate) fn process_206be4(
     m: &mut Memory<'_, '_>,
     p: u32,
@@ -710,11 +668,6 @@ pub(crate) fn process_206be4(
     Ok(rc)
 }
 
-/// fn_1f0a90. (p, key, unused, unused, active*) -> status.
-/// scratch is a disjoint 128-byte ABI-local frame. Copies text and markers,
-/// optionally rewrites voice/language spans, updates positions, and frees
-/// temporary/owned allocations on every engine-status exit.
-/// Allocation, position/stream, voice-config and rewrite calls remain explicit.
 pub(crate) fn process_1f0a90(
     m: &mut Memory<'_, '_>,
     p: u32,
@@ -777,17 +730,14 @@ pub(crate) fn process_1f0a90(
         return Ok(rc);
     }
     let heap = m.word(m.word(p)? + 4)?;
-    // ABI-local slots: text** +16, text byte count +20, original events*
-    // +24, original bytes +28, events** +32, owned** +36, count* +40,
-    // stream position* +44, config** +48.
+
     let mut text_length = 0;
     let mut original_count = 0;
     let mut event_count = 0;
     let mut text = 0;
     let mut events = 0;
     let mut owned = 0;
-    // This closure models the C cleanup label. Unsupported dependencies return
-    // Err immediately and are not reported as completed engine execution.
+
     let result = (|| -> Result<u32, Error> {
         rc = invoke(h, m, streams, 44, &[input0[0], input0[1], s + 12, s + 20])?;
         if bad(rc) {
@@ -1048,10 +998,6 @@ fn equals(m: &Memory<'_, '_>, a: u32, text: &[u8]) -> Result<bool, Error> {
     Ok(byte(m, a + text.len() as u32)? == 0)
 }
 
-/// Dispatch the implemented processor control flow. args are the original
-/// four integer registers followed by the fifth ABI argument. For fn_206be4,
-/// args[2:4] are the by-value node handle. scratch must be disjoint from every
-/// reachable guest object, stream buffer and resource.
 pub fn process(
     m: &mut Memory<'_, '_>,
     entry: u32,
@@ -1059,8 +1005,7 @@ pub fn process(
     scratch: u32,
     host: &mut impl InternalCalls,
 ) -> Result<u32, Error> {
-    // Regional entries name the same processor: normalize before dispatch.
-    // Data literals inside follow `host.rom()` at each use site.
+
     let entry = to_us(host.rom().or(Rom::from_entry(entry)), entry);
     m.check(scratch, if entry == 0x1f0a90 { 128 } else { 32 })?;
     match entry {

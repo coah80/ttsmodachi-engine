@@ -7,7 +7,7 @@ pub struct MemoryStream<'a> {
 }
 
 impl MemoryStream<'_> {
-    /// fn_281b30 / EU fn_281cec / KR fn_281d98.
+
     pub fn read(&mut self, size: u32, count: u32, output: &mut [u8]) -> Result<u32, Error> {
         if size == 0 {
             return Err(Error::InvalidResource);
@@ -33,7 +33,6 @@ impl MemoryStream<'_> {
         Ok(bytes / size)
     }
 
-    /// fn_281b8c / EU fn_281d48 / KR fn_281df4.
     pub fn seek(&mut self, offset: i32, origin: u32) -> u32 {
         let distance = offset.unsigned_abs();
         let position = match origin {
@@ -51,7 +50,6 @@ impl MemoryStream<'_> {
     }
 }
 
-/// fn_281564 / EU fn_281720 / KR fn_2817cc.
 pub fn read_word(
     data: &[u8],
     end: u32,
@@ -80,7 +78,6 @@ fn terminated(text: &[u8]) -> &[u8] {
         .expect("unterminated resource string")]
 }
 
-/// fn_28165c / EU fn_281818 / KR fn_2818c4.
 pub fn contains_name(list: Option<&[u8]>, name: Option<&[u8]>) -> u32 {
     let (Some(list), Some(name)) = (list, name) else {
         return 0;
@@ -107,7 +104,6 @@ pub fn contains_name(list: Option<&[u8]>, name: Option<&[u8]>) -> u32 {
     0
 }
 
-/// fn_2816e4 / EU fn_2818a0 / KR fn_28194c.
 pub fn contains_wide_name(list: Option<&[u8]>, name: Option<&[u16]>) -> u32 {
     let Some(name) = name else { return 0 };
     let length = name
@@ -124,7 +120,6 @@ pub fn contains_wide_name(list: Option<&[u8]>, name: Option<&[u16]>) -> u32 {
     contains_name(list, Some(&text[..=length]))
 }
 
-/// fn_2815c0 / EU fn_28177c / KR fn_281828.
 pub fn copy_name(
     output: Option<&mut [u8]>,
     source: Option<&[u8]>,
@@ -152,7 +147,6 @@ pub fn copy_name(
     Ok(0)
 }
 
-/// fn_230308 / EU fn_2304c4 / KR fn_230570.
 pub fn retain_audio(references: Option<&mut u16>) -> u32 {
     match references {
         Some(references) => {
@@ -163,12 +157,10 @@ pub fn retain_audio(references: Option<&mut u16>) -> u32 {
     }
 }
 
-/// fn_281498 / EU fn_281654 / KR fn_281700.
 pub fn domain_flag(value: Option<u8>) -> u32 {
     value.unwrap_or(0) as u32
 }
 
-/// fn_2814a4 / EU fn_281660 / KR fn_28170c.
 pub fn set_domain_flag(output: Option<&mut u8>, value: u32) -> u32 {
     match output {
         Some(output) => {
@@ -187,42 +179,34 @@ fn interface(selector: u32, table: &[u8], error: u32) -> Result<&[u8], u32> {
     }
 }
 
-/// fn_15174c / EU fn_151810 / KR fn_151730.
 pub fn stream_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     interface(selector, table, 0x88f02001)
 }
 
-/// fn_15db5c / EU fn_15dc20 / KR fn_15db40.
 pub fn linguistic_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     interface(selector, table, 0x89202001)
 }
 
-/// fn_2113b0 / EU fn_21156c / KR fn_211618.
 pub fn initializer_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     interface(selector, table, 0x89a02001)
 }
 
-/// fn_1f446c / EU fn_1f4628 / KR fn_1f46d4.
 pub fn prompt_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     interface(selector, table, 0x8ba02001)
 }
 
-/// fn_1f4d58 / EU fn_1f4f14 / KR fn_1f4fc0.
 pub fn prompt_processor_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     interface(selector, table, 0x8c802001)
 }
 
-/// fn_22e1f8 / EU fn_22e3b4 / KR fn_22e460.
 pub fn audio_inserter_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     interface(selector, table, 0x8b902001)
 }
 
-/// fn_2304f0 / EU fn_2306ac / KR fn_230758.
 pub fn audio_resource_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     interface(selector, table, 0x87402001)
 }
 
-/// fn_157a54 / EU fn_157b18 / KR fn_157a38.
 pub fn callback_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     if matches!(selector, 0 | 3) {
         Ok(table)
@@ -231,12 +215,10 @@ pub fn callback_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     }
 }
 
-/// fn_200374 / EU fn_200530 / KR fn_2005dc. The ARM error is 0x88e02001.
 pub fn domain_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     interface(selector, table, 0x88e02001)
 }
 
-/// fn_27dc3c / EU fn_27ddf8 / KR fn_27dea4.
 pub fn prompt_word_boundary(text: &[u8]) -> u32 {
     let end = text
         .iter()
@@ -252,7 +234,6 @@ pub fn prompt_word_boundary(text: &[u8]) -> u32 {
         .map_or(0xffff, |index| index as u32)
 }
 
-/// fn_27de8c's packed prompt record, as laid out in the APDB entry table.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PackedPrompt {
     pub data_offset: u32,
@@ -264,8 +245,6 @@ pub struct PackedPrompt {
     pub suffix_offset: u16,
 }
 
-/// Offsets are relative to the domain data block; `0xffff` selects no auxiliary
-/// or suffix text. This is the decoded form the expansion walkers consume.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DecodedPrompt {
     pub kind: u8,
@@ -279,7 +258,7 @@ pub struct DecodedPrompt {
 }
 
 impl PackedPrompt {
-    /// fn_27de8c / EU fn_27e048 / KR fn_27e0f4.
+
     pub fn decode(&self, kind: u8) -> DecodedPrompt {
         let data = self.data_offset;
         let relative = |offset: u16| (offset != 0xffff).then(|| data.wrapping_add(offset as u32));
@@ -310,14 +289,13 @@ pub struct ResourceList<'a> {
 }
 
 impl ResourceList<'_> {
-    /// fn_2817ac / EU fn_281968 / KR fn_281a14.
+
     pub fn initialize(&mut self) -> u32 {
         self.head = None;
         self.tail = None;
         0
     }
 
-    /// fn_2817c0 / EU fn_28197c / KR fn_281a28.
     pub fn remove(&mut self, value: u32, mut release: impl FnMut(usize)) -> u32 {
         let mut previous: Option<usize> = None;
         let mut current = self.head;
@@ -341,7 +319,6 @@ impl ResourceList<'_> {
         0x85002014
     }
 
-    /// fn_281864 / EU fn_281a20 / KR fn_281acc.
     pub fn clear(&mut self, mut release: impl FnMut(usize)) -> u32 {
         while let Some(index) = self.head {
             self.head = self.nodes[index].next;
@@ -353,7 +330,6 @@ impl ResourceList<'_> {
         0
     }
 
-    /// fn_2818b8 / EU fn_281a74 / KR fn_281b20.
     pub fn insert(&mut self, free: Option<usize>, value: u32) -> u32 {
         let Some(index) = free else { return 0x8500200a };
         self.nodes[index] = ResourceListNode {
@@ -379,7 +355,6 @@ impl ResourceList<'_> {
         0
     }
 
-    /// fn_281948 / EU fn_281b04 / KR fn_281bb0.
     pub fn set_key(&mut self, value: u32, key: u32) -> u32 {
         let Some(mut node) = self.head else {
             return 0x85002014;
@@ -449,14 +424,12 @@ impl ResourceList<'_> {
         0
     }
 
-    /// fn_281aa4 / EU fn_281c60 / KR fn_281d0c.
     pub fn next(&self, cursor: &mut Option<usize>) -> u32 {
         *cursor = cursor.map_or(self.head, |index| self.nodes[index].next);
         cursor.map_or(0, |index| self.nodes[index].value)
     }
 }
 
-/// fn_1f3da4 / EU fn_1f3f60 / KR fn_1f400c.
 pub fn validate_prompt(validation: u32) -> u32 {
     if validation >= 0x80000000 {
         0x8ba02008
@@ -465,7 +438,6 @@ pub fn validate_prompt(validation: u32) -> u32 {
     }
 }
 
-/// fn_21037c / EU fn_210538 / KR fn_2105e4.
 pub fn validate_initializer(validation: u32) -> u32 {
     if validation >= 0x80000000 {
         0x89a02008
@@ -474,7 +446,6 @@ pub fn validate_initializer(validation: u32) -> u32 {
     }
 }
 
-/// fn_200e10 / EU fn_200fcc / KR fn_201078.
 pub fn validate_prompt_orthography(validation: u32) -> u32 {
     if validation >= 0x80000000 {
         0x8bb02008
@@ -483,24 +454,20 @@ pub fn validate_prompt_orthography(validation: u32) -> u32 {
     }
 }
 
-/// fn_22e260 / EU fn_22e41c / KR fn_22e4c8.
 pub fn finish_audio_fetcher() -> u32 {
     0
 }
 
-/// fn_2002e0 / EU fn_20049c / KR fn_200548.
 pub fn retain_domain_key() -> u32 {
     1
 }
 
-/// fn_2002e8 / EU fn_2004a4 / KR fn_200550.
 pub fn release_domain_key<T>(key: Option<T>, mut release: impl FnMut(T)) {
     if let Some(key) = key {
         release(key);
     }
 }
 
-/// fn_1ff714 / EU fn_1ff8d0 / KR fn_1ff97c.
 pub fn unsupported_domain_operation(validation: u32, mut context: impl FnMut() -> u32) -> u32 {
     if validation >= 0x80000000 {
         return validation;
@@ -513,7 +480,6 @@ pub fn unsupported_domain_operation(validation: u32, mut context: impl FnMut() -
     }
 }
 
-/// fn_1ff754 / EU fn_1ff910 / KR fn_1ff9bc.
 pub fn domain_resource_types<'a>(
     validation: u32,
     mut context: impl FnMut() -> u32,
@@ -526,7 +492,7 @@ pub fn domain_resource_types<'a>(
 }
 
 impl MemoryStream<'_> {
-    /// fn_281afc / EU fn_281cb8 / KR fn_281d64.
+
     pub fn close(&mut self, owned: bool, mut release: impl FnMut(&[u8])) -> u32 {
         if let Some(data) = self.data.take() {
             if owned {
@@ -664,12 +630,10 @@ impl PromptDomain<'_> {
         status
     }
 
-    /// fn_27f7cc / EU fn_27f988 / KR fn_27fa34. Game-unreachable without an APDB resource.
     pub fn expand_original(&mut self, runtime: &mut impl PromptExpansion) -> u32 {
         self.process(runtime, PromptTextMode::Original)
     }
 
-    /// fn_27feb4 / EU fn_280070 / KR fn_28011c. Game-unreachable without an APDB resource.
     pub fn expand_normalized(
         &mut self,
         first: u32,

@@ -5,7 +5,6 @@ fn rounded_high(x: f32) -> f32 {
     f32::from_bits(x.to_bits().wrapping_add(0x800) & 0xfffff000)
 }
 
-/// fn_1b90d0: table-reduced single-precision exponential.
 pub fn expf(x: f32, tables: &NumericTables<'_>) -> f32 {
     let bits = x.to_bits();
     let mut special = false;
@@ -49,7 +48,6 @@ pub fn expf(x: f32, tables: &NumericTables<'_>) -> f32 {
     f32::from_bits((1065353216.0 + exponent as f32 * 8388608.0) as u32) * p
 }
 
-/// fn_1b9300: table-reduced single-precision natural logarithm.
 pub fn logf(mut x: f32, tables: &NumericTables<'_>) -> f32 {
     let mut bits = x.to_bits();
     let mut exponent = 0;
@@ -166,7 +164,6 @@ fn special_pow(x: f32, y: f32) -> f32 {
     }
 }
 
-/// fn_1b94c0: table-reduced single-precision power with ARM saturating casts.
 pub fn powf(x: f32, y: f32, tables: &NumericTables<'_>) -> f32 {
     let result = power_inner(x, y, tables);
     if result.is_nan() && !x.is_nan() && !y.is_nan() {

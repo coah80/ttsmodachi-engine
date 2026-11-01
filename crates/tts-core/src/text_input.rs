@@ -1,8 +1,4 @@
-//! Text- and marker-parsing leaves reached by the enu corpus.
-//!
-//! These are the small members of slice 2's text/marker parsing section.
-//! Pointer fields are byte offsets into the caller's borrowed arena, with 0
-//! meaning null.
+
 
 use crate::depes::HandleValidator;
 use crate::normalization::{
@@ -12,10 +8,8 @@ use crate::normalization::{
     NormalizationHost,
 };
 
-/// Host operations for dictionary chunk attachment (`fn_243ad4`,
-/// `fn_243d50`), owned by another slice. Arena offsets with 0 meaning null.
 pub trait ChunkHost {
-    /// `fn_243ad4`: detach a chunk record for `reader`.
+
     fn detach(
         &mut self,
         arena: &mut [u8],
@@ -23,7 +17,7 @@ pub trait ChunkHost {
         out_record: &mut u32,
         out_data: &mut u32,
     ) -> u32;
-    /// `fn_243d50`: release a chunk record.
+
     fn release(&mut self, record: u32) -> u32;
 }
 
@@ -63,7 +57,6 @@ fn put_word(data: &mut [u8], offset: u32, value: u32) {
     }
 }
 
-/// fn_2c4750, EU fn_2c490c, KR fn_2c49b8. Sets the +0x15 marker byte.
 pub fn mark_flag(object: Option<&mut [u8]>) -> u32 {
     match object {
         Some(object) => {
@@ -76,8 +69,6 @@ pub fn mark_flag(object: Option<&mut [u8]>) -> u32 {
     }
 }
 
-/// fn_2c2408, EU fn_2c25c4, KR fn_2c2670. Collapses the three window words when
-/// the middle one is the smallest.
 pub fn normalize_window(object: &mut [u8]) -> u32 {
     let first = word(object, 0x54);
     let middle = word(object, 0x58);
@@ -89,7 +80,6 @@ pub fn normalize_window(object: &mut [u8]) -> u32 {
     0
 }
 
-/// fn_2bd7d8, EU fn_2bd994, KR fn_2bda40. Equality of the +0x0a keys.
 pub fn keys_equal(a: Option<&[u8]>, b: Option<&[u8]>) -> u32 {
     match (a, b) {
         (Some(a), Some(b)) if half(a, 10) == half(b, 10) => 1,
@@ -97,7 +87,6 @@ pub fn keys_equal(a: Option<&[u8]>, b: Option<&[u8]>) -> u32 {
     }
 }
 
-/// fn_2bd800, EU fn_2bd9bc, KR fn_2bda68. Less-than of the +0x14 keys.
 pub fn key_less(a: Option<&[u8]>, b: Option<&[u8]>) -> u32 {
     match (a, b) {
         (Some(a), Some(b)) if word(a, 20) < word(b, 20) => 1,
@@ -105,7 +94,6 @@ pub fn key_less(a: Option<&[u8]>, b: Option<&[u8]>) -> u32 {
     }
 }
 
-/// fn_2bd828, EU fn_2bd9e4, KR fn_2bda90. Greater-than of the +0x14 keys.
 pub fn key_greater(a: Option<&[u8]>, b: Option<&[u8]>) -> u32 {
     match (a, b) {
         (Some(a), Some(b)) if word(a, 20) > word(b, 20) => 1,
@@ -113,9 +101,6 @@ pub fn key_greater(a: Option<&[u8]>, b: Option<&[u8]>) -> u32 {
     }
 }
 
-/// Table cursor shared by the segment and marker iterators: the table header
-/// at `+0x0c`, the element size at header `+0x02`, the base at header `+0x04`,
-/// the count at header `+0x08` and the cursor at object `+0x10`.
 fn table_params(arena: &[u8], obj: u32) -> (u16, i32, u16, u16) {
     let tab = word(arena, obj.wrapping_add(12));
     (
@@ -126,8 +111,6 @@ fn table_params(arena: &[u8], obj: u32) -> (u16, i32, u16, u16) {
     )
 }
 
-/// fn_2c2450, EU fn_2c260c, KR fn_2c26b8. Maps an input position through the
-/// segment table.
 pub fn map_position(arena: &[u8], owner: u32, position: u32, out: &mut u32) -> u32 {
     if owner == 0 {
         return 0x8110_2007;
@@ -190,8 +173,6 @@ pub fn map_position(arena: &[u8], owner: u32, position: u32, out: &mut u32) -> u
     0
 }
 
-/// fn_2bdca4, EU fn_2bde60, KR fn_2bdf0c. Normalizes a marker span and inserts
-/// it unless an identical span is already stored.
 pub fn insert_span(
     arena: &mut [u8],
     obj: u32,
@@ -222,7 +203,7 @@ pub fn insert_span(
         put_word(arena, span.wrapping_add(0x10), end.wrapping_sub(start));
     }
     if flag == 1 {
-        // Skip the ordered scan.
+
     } else {
         let (size, base, count, index) = table_params(arena, obj);
         let base_addr = base as u32 as usize;
@@ -285,9 +266,6 @@ fn is_boundary(arena: &[u8], event: u32) -> bool {
     ((kind == 2 || kind == 3) && value == 1) || kind == 12 || kind == 20
 }
 
-/// fn_2bdecc, EU fn_2be088, KR fn_2be134. Checks whether a boundary decision
-/// changes at `position`. `scratch` is 1026 caller-owned bytes: a 1024-byte
-/// narrow buffer plus two halfword slots the stop scan uses.
 pub fn check_boundary(
     arena: &mut [u8],
     timeline: u32,
@@ -332,7 +310,7 @@ pub fn check_boundary(
             i = i.wrapping_add(1);
         }
     }
-    // The stop scan borrows its two halfword slots from the scratch tail.
+
     let scan_base = scratch.wrapping_add(1024);
     if i < half(arena, list.wrapping_add(8)) {
         loop {
@@ -387,8 +365,6 @@ fn event_has_text(kind: u16) -> bool {
     )
 }
 
-/// fn_2c4328, EU fn_2c44e4, KR fn_2c4590. Appends an event, interning its
-/// text when the type carries one.
 pub fn append_event(
     arena: &mut [u8],
     obj: u32,
@@ -485,10 +461,6 @@ pub fn append_event(
     0
 }
 
-/// fn_2c3e78, EU fn_2c4034, KR fn_2c40e0. Splits the leading span into
-/// per-word events. `defaults` is the borrowed 52-byte span-default struct
-/// (six separator units, then the template event); `scratch` is 40
-/// caller-owned bytes holding the event under construction.
 pub fn split_spans(
     arena: &mut [u8],
     handles: u32,
@@ -775,8 +747,6 @@ fn next_marker(arena: &[u8], list: u32, index: &mut u16) -> u32 {
     0
 }
 
-/// fn_2bd880, EU fn_2bda3c, KR fn_2bdae8. Finds the timeline window covering
-/// the indexed marker. The timeline scale must be nonzero.
 pub fn timeline_window(
     arena: &[u8],
     timeline: u32,
@@ -946,8 +916,6 @@ pub fn timeline_window(
     0
 }
 
-/// fn_2bf244, EU fn_2bf400, KR fn_2bf4ac. Reads the dictionary header tables
-/// into heap arrays and attaches the data chunk.
 pub fn read_dictionary(
     arena: &mut [u8],
     object: u32,
@@ -975,7 +943,7 @@ pub fn read_dictionary(
     position = position.wrapping_add(2);
     put_half(arena, object.wrapping_add(48), raw_count >> 1);
     let count = half(arena, object.wrapping_add(48));
-    // The original stores the calloc result before testing it.
+
     let entries = alloc
         .calloc(
             arena,
@@ -1195,8 +1163,6 @@ fn contains_stop_scan(
     found
 }
 
-/// fn_2c3db8, EU fn_2c3f74, KR fn_2c4020. Allocates an 8-byte handle item for
-/// the `(h0, h1)` pair.
 pub fn alloc_handle_item(
     arena: &mut [u8],
     h0: u32,
@@ -1222,7 +1188,6 @@ pub fn alloc_handle_item(
     0
 }
 
-/// fn_2c6264, EU fn_2c6420, KR fn_2c64cc. Allocates a 20-byte break config.
 pub fn alloc_break_config(
     arena: &mut [u8],
     object: u32,
@@ -1253,11 +1218,8 @@ pub fn alloc_break_config(
     0
 }
 
-/// Scripted token-store vtable calls for the TOKENTN tokenizer
-/// (`fn_283528` unit): `find`/`get`/`next`/`create`/`set`/`getString`.
-/// Handles are passed as their two words; all pointers are arena offsets.
 pub trait TokenStoreHost {
-    /// `tokens->find(handle, kind, arg, out)`: writes the token half.
+
     fn token_find(
         &mut self,
         arena: &mut [u8],
@@ -1267,8 +1229,7 @@ pub trait TokenStoreHost {
         arg: u32,
         out: u32,
     ) -> u32;
-    /// `tokens->get(handle, rec, field, len, out, out_count)`: the stored
-    /// width follows the field (field 0 reads a byte, the rest halves).
+
     fn token_get(
         &mut self,
         arena: &mut [u8],
@@ -1280,11 +1241,11 @@ pub trait TokenStoreHost {
         out: u32,
         out_count: u32,
     ) -> u32;
-    /// `tokens->next(handle, tok, out)`: writes the next token half.
+
     fn token_next(&mut self, arena: &mut [u8], h0: u32, h1: u32, tok: u32, out: u32) -> u32;
-    /// `tokens->create(handle, token, out)`: writes the record half.
+
     fn token_create(&mut self, arena: &mut [u8], h0: u32, h1: u32, tok: u32, out: u32) -> u32;
-    /// `tokens->set(handle, rec, field, len, data, out_written)`.
+
     fn token_set(
         &mut self,
         arena: &mut [u8],
@@ -1296,7 +1257,7 @@ pub trait TokenStoreHost {
         data: u32,
         out_written: u32,
     ) -> u32;
-    /// `tokens->getString(handle, rec, field, out_text, out_count)`.
+
     fn token_get_string(
         &mut self,
         arena: &mut [u8],
@@ -1309,10 +1270,8 @@ pub trait TokenStoreHost {
     ) -> u32;
 }
 
-/// Scripted dictionary vtable calls for the TOKENTN tokenizer:
-/// `lookupRules`/`lookup`/`normalize`/`fold`/`isSpace`.
 pub trait TokenDictHost {
-    /// `lookupRules(dictionary, table, key, out_rules, out_count, sep, mode)`.
+
     fn dict_lookup_rules(
         &mut self,
         arena: &mut [u8],
@@ -1325,7 +1284,7 @@ pub trait TokenDictHost {
         out_sep: u32,
         mode: u32,
     ) -> u32;
-    /// `lookup(dictionary, text, kind, domain, out_entries, out_count)`.
+
     #[allow(clippy::too_many_arguments)]
     fn dict_lookup(
         &mut self,
@@ -1338,18 +1297,16 @@ pub trait TokenDictHost {
         out_entries: u32,
         out_count: u32,
     ) -> u32;
-    /// `normalize(dictionary, domain, text)`: rewrites the text in place.
+
     fn dict_normalize(&mut self, arena: &mut [u8], h0: u32, h1: u32, domain: u32, text: u32) -> u32;
-    /// `fold(dictionary, domain, text)`: rewrites the text in place.
+
     fn dict_fold(&mut self, arena: &mut [u8], h0: u32, h1: u32, domain: u32, text: u32) -> u32;
-    /// `isSpace(dictionary, c)`: nonzero when `c` is a space character.
+
     fn dict_is_space(&mut self, arena: &[u8], h0: u32, h1: u32, c: u8) -> u32;
 }
 
-/// Scripted context vtable calls for the TOKENTN tokenizer:
-/// `setText`/`run`/`getText`.
 pub trait TokenContextHost {
-    /// `setText(context, layer, text, len)`.
+
     fn context_set_text(
         &mut self,
         arena: &mut [u8],
@@ -1359,9 +1316,9 @@ pub trait TokenContextHost {
         text: u32,
         len: u32,
     ) -> u32;
-    /// `run(context, name)`.
+
     fn context_run(&mut self, arena: &mut [u8], h0: u32, h1: u32, name: u32) -> u32;
-    /// `getText(context, layer, out_text, out_len)`.
+
     fn context_get_text(
         &mut self,
         arena: &mut [u8],
@@ -1373,8 +1330,6 @@ pub trait TokenContextHost {
     ) -> u32;
 }
 
-/// fn_195d58. Compares two NUL-terminated byte strings, like strcmp:
-/// negative, zero, or positive.
 fn strcmp8(data: &[u8], a: u32, b: u32) -> i32 {
     let mut i = 0u32;
     loop {
@@ -1390,8 +1345,6 @@ fn strcmp8(data: &[u8], a: u32, b: u32) -> i32 {
     }
 }
 
-/// fn_195d30. Finds the first occurrence of byte `c` in the string at
-/// `base`, returning its offset, or 0 when absent.
 fn strchr8(data: &[u8], base: u32, c: u8) -> u32 {
     if base == 0 {
         return 0;
@@ -1409,20 +1362,14 @@ fn strchr8(data: &[u8], base: u32, c: u8) -> u32 {
     }
 }
 
-/// fn_195cd0. Copies the NUL-terminated string at `src` to `dst`.
 fn strcpy_at(arena: &mut [u8], dst: u32, src: u32) {
     memcpy_at(arena, dst, src, strlen8(arena, src).wrapping_add(1));
 }
 
-/// fn_1960a8. Finds the `needle` string in `haystack`, returning the match
-/// offset, or 0 when absent. Both are NUL-terminated arena strings.
 fn strstr8(data: &[u8], haystack: u32, needle: u32) -> u32 {
     strstr_at(data, haystack, needle).unwrap_or(0)
 }
 
-/// fn_176cd8. Parses an optionally signed, space-padded decimal prefix:
-/// leading blanks/tabs skipped, one optional `+`, then digits evaluated
-/// right to left; any other character yields 0.
 fn parse_counted(data: &[u8], base: u32) -> i32 {
     if base == 0 {
         return 0;
@@ -1470,80 +1417,68 @@ fn parse_counted(data: &[u8], base: u32) -> i32 {
     val
 }
 
-/// Scratch frame layout for `tokenize_span` (`fn_284bc0`): word,
-/// lookupText, normalizedPhrase, normalizedWord, foldedText, tokenText,
-/// wordCounts, then the scalar outs. 0x480 bytes.
 pub const TOKENIZE_FRAME: u32 = 0x480;
-/// Offsets within the `tokenize_span` scratch frame.
+
 pub const TOKENIZE_WORD: u32 = 0;
-/// Offset of `lookupText[256]` in the frame.
+
 pub const TOKENIZE_LOOKUP: u32 = 128;
-/// Offset of `normalizedPhrase[256]` in the frame.
+
 pub const TOKENIZE_PHRASE: u32 = 384;
-/// Offset of `normalizedWord[128]` in the frame.
+
 pub const TOKENIZE_NORMWORD: u32 = 640;
-/// Offset of `foldedText[128]` in the frame.
+
 pub const TOKENIZE_FOLDED: u32 = 768;
-/// Offset of `tokenText[128]` in the frame.
+
 pub const TOKENIZE_TOKENTEXT: u32 = 896;
-/// Offset of `wordCounts[64]` in the frame.
+
 pub const TOKENIZE_COUNTS: u32 = 1024;
-/// Offset of the scalar outs (`readCount`, `nextToken`, `kind`,
-/// `nextKind`, `tokenEnd`, `matchedEnd`, `entries`, `entryCount`,
-/// field-1 `position`) in the frame.
+
 pub const TOKENIZE_OUTS: u32 = 1088;
-/// Offset of the `entries` pointer cell in the frame.
+
 pub const TOKENIZE_ENTRIES: u32 = 1100;
-/// Offset of the `entryCount` cell in the frame.
+
 pub const TOKENIZE_ENTRY_COUNT: u32 = 1104;
-/// Offset of the field-1 `position` cell in the frame.
+
 pub const TOKENIZE_POSITION: u32 = 1106;
-/// Offset of the `kind` string scratch (`"femwtn"`) in the frame.
+
 pub const TOKENIZE_KIND: u32 = 1108;
-/// Offset of the `table` string scratch (`"tn"`) in the frame.
+
 pub const TOKENIZE_TABLE: u32 = 1116;
 
-/// Scratch frame layout for `match_rules` (`fn_283528`): the 128-byte
-/// context name, the 12-byte separator, then the scalar out cells.
-/// 0xB0 bytes.
 pub const MATCH_FRAME: u32 = 0xB0;
-/// Offset of `contextName[128]` in the frame.
+
 pub const MATCH_CONTEXT_NAME: u32 = 0;
-/// Offset of `separator[12]` in the frame.
+
 pub const MATCH_SEPARATOR: u32 = 128;
-/// Offset of the `rules` pointer cell in the frame.
+
 pub const MATCH_RULES_PTR: u32 = 140;
-/// Offset of the `ruleCount` cell in the frame.
+
 pub const MATCH_RULE_COUNT: u32 = 144;
-/// Offset of the `readCount` cell in the frame.
+
 pub const MATCH_READ_COUNT: u32 = 146;
-/// Offset of the `writeCount` cell in the frame.
+
 pub const MATCH_WRITE_COUNT: u32 = 148;
-/// Offset of the `firstToken` cell in the frame.
+
 pub const MATCH_FIRST_TOKEN: u32 = 150;
-/// Offset of the `record` cell in the frame.
+
 pub const MATCH_RECORD: u32 = 152;
-/// Offset of the `recordType` cell in the frame.
+
 pub const MATCH_RECORD_TYPE: u32 = 154;
-/// Offset of the `recordText` pointer cell in the frame.
+
 pub const MATCH_RECORD_TEXT: u32 = 156;
-/// Offset of the `recordStart` cell in the frame.
+
 pub const MATCH_RECORD_START: u32 = 160;
-/// Offset of the `recordEnd` cell in the frame.
+
 pub const MATCH_RECORD_END: u32 = 162;
-/// Offset of the `output` pointer cell in the frame.
+
 pub const MATCH_OUTPUT: u32 = 164;
-/// Offset of the `outputLength` cell in the frame.
+
 pub const MATCH_OUTPUT_LEN: u32 = 168;
-/// Offset of the `start` value cell in the frame.
+
 pub const MATCH_START: u32 = 170;
-/// Offset of the `tokenEnd` value cell in the frame.
+
 pub const MATCH_TOKEN_END: u32 = 172;
 
-/// fn_2409d4. Quicksort of `n` elements of `size` bytes at `base` with the
-/// C comparator `cmp(a, b)` (an integer like `fn_284ba8`'s 0/1), mirroring
-/// the C partition with pivot tracking exactly, including `< 0` / `> 0`
-/// loop tests and recursion structure.
 fn quicksort_by(arena: &mut [u8], base: u32, n: u32, size: u32, cmp: fn(u8, u8) -> i32) {
     if n <= 1 {
         return;
@@ -1610,9 +1545,6 @@ fn is_tn_space(c: u8) -> bool {
     c == b' ' || c == b'\t' || c == b'\n' || c == b'\r' || c == b'_'
 }
 
-/// fn_195e38. Copies the string at `src` to `dst`, padding with NULs to
-/// exactly `n` bytes; when no NUL appears in the first `n` bytes it copies
-/// `n` bytes flat, like strncpy.
 pub(crate) fn strncpy_at(arena: &mut [u8], dst: u32, src: u32, n: u32) {
     let mut d = dst;
     let mut s = src;
@@ -1630,7 +1562,7 @@ pub(crate) fn strncpy_at(arena: &mut [u8], dst: u32, src: u32, n: u32) {
         }
         remaining = remaining.wrapping_sub(1);
     }
-    // The NUL is copied without consuming `remaining`: pad the rest.
+
     let mut pad = remaining.wrapping_sub(1);
     while pad != 0 {
         put_byte(arena, d, 0);
@@ -1639,10 +1571,6 @@ pub(crate) fn strncpy_at(arena: &mut [u8], dst: u32, src: u32, n: u32) {
     }
 }
 
-/// fn_17c550, EU fn_17c600, KR fn_17c5ac. Parses the signed decimal value
-/// of the string at `base` with wrapping arithmetic. The skip/digit
-/// classes are the `D_8dc30c` masks verified from the ROM (bit 8 set
-/// exactly on 9, 10, 11, 12, 13, 32; bit 4 exactly on digits).
 fn atoi8(data: &[u8], base: u32) -> i32 {
     let mut p = base;
     while matches!(byte(data, p), 9 | 10 | 11 | 12 | 13 | 32) {
@@ -1670,8 +1598,6 @@ fn atoi8(data: &[u8], base: u32) -> i32 {
     }
 }
 
-/// Copies a static NUL-terminated literal into the arena: stands in for a
-/// C string literal with no arena address.
 fn strcpy_static(arena: &mut [u8], dst: u32, lit: &[u8]) {
     let mut i = 0u32;
     loop {
@@ -1684,8 +1610,6 @@ fn strcpy_static(arena: &mut [u8], dst: u32, lit: &[u8]) {
     }
 }
 
-/// Appends one byte to the arena string at `dst`, like strcat of a
-/// one-character literal.
 fn strcat_char(arena: &mut [u8], dst: u32, c: u8) {
     let mut d = dst;
     while byte(arena, d) != 0 {
@@ -1713,13 +1637,6 @@ fn streq(arena: &[u8], a: u32, lit: &[u8]) -> bool {
     }
 }
 
-/// fn_283528, EU fn_2836e4, KR fn_283790. Matches one word against the
-/// dictionary rule chain for `table`: splits each candidate rule on the
-/// separator, validates domain/case/punctuation/context, keeps the
-/// highest-priority match (at most two), and on a single match emits a DCT
-/// token record and advances `matched_end`. `start`/`token` arrive
-/// full-width like the ARM and are narrowed to the C's u16 locals.
-/// `scratch` is a `MATCH_FRAME`-byte region.
 #[allow(clippy::too_many_arguments)]
 pub fn match_rules(
     arena: &mut [u8],
@@ -1758,10 +1675,7 @@ pub fn match_rules(
     let context_h0 = word(arena, ctx.wrapping_add(20));
     let context_h1 = word(arena, ctx.wrapping_add(24));
     let lookup_mode = byte(arena, ctx.wrapping_add(40));
-    // The ROM compares `record == token` with the unnarrowed register
-    // (target fn_283528+0xa14: cmp r2, sl; sl holds the wide arg), so the
-    // wide value threads through to context_check while the u16 copy feeds
-    // the narrowed uses (record init, create id).
+
     let token_wide = token;
     let token = (token & 0xffff) as u16;
     let mut start = (start & 0xffff) as u16;
@@ -1845,7 +1759,7 @@ pub fn match_rules(
             }
         }
         if condition == 0 {
-            // accept (below)
+
         } else if streq(arena, condition, b"8\0") {
             rule_index = rule_index.wrapping_add(1);
             continue;
@@ -1941,7 +1855,7 @@ pub fn match_rules(
                 || streq(arena, condition, b"6\0")
                 || streq(arena, condition, b"7\0")
             {
-                // Context disambiguation; on success falls to accept.
+
                 let mut accepted_flag = false;
                 status = context_check(
                     arena, ctx, source, &mut start, &mut token_end,
@@ -1961,7 +1875,7 @@ pub fn match_rules(
                 }
             }
         }
-        // accept:
+
         if priority_text != 0 && !is_empty_str(arena, priority_text) {
             let i = (atoi8(arena, priority_text) as u32) as u16;
             if i < priority {
@@ -2044,11 +1958,6 @@ pub fn match_rules(
     status
 }
 
-/// Context disambiguation for one `fn_283528` rule (condition 2/4/6/7 in
-/// `src/fn_283528.c`): builds the input/expansion pair in reallocated
-/// `ctx->input`/`ctx->expansion`, runs the `disambiguate_abbreviations`
-/// context, and reports through `accepted` whether the rule is accepted.
-/// Returns the C's `status` (an error status returns immediately).
 #[allow(clippy::too_many_arguments)]
 fn context_check(
     arena: &mut [u8],
@@ -2201,9 +2110,7 @@ fn context_check(
                 result = host.token_get(
                     arena, h0, h1, record as u32, 2, 1, record_end_cell, read_count_cell,
                 );
-                // Target checks the fresh get result (fn_283528+0xd88: cmp
-                // r0 / bcs return); src/fn_283528.c:341 reads stale `status`
-                // instead (claimed C defect, slice 2b).
+
                 if result >= 0x8000_0000 {
                     return result;
                 }
@@ -2338,9 +2245,7 @@ fn context_check(
                 0,
             );
             result = host.context_run(arena, context_h0, context_h1, context_name);
-            // Target checks the fresh run result (fn_283528+0x114c: cmp
-            // r0 / bcs return); src/fn_283528.c:400 reads stale `status`
-            // instead (claimed C defect, slice 2b).
+
             if result >= 0x8000_0000 {
                 return result;
             }
@@ -2375,13 +2280,6 @@ fn context_check(
     status
 }
 
-/// fn_284bc0, EU fn_284d7c, KR fn_284e28. Tokenizes one span: walks the
-/// token chain from `*token_ptr`, collects dictionary word counts for each
-/// word start, and recursively normalizes through `match_rules` with the
-/// `"tn"` table. `position`/`end` arrive full-width like the ARM and are
-/// narrowed to the C's u16 locals. `scratch` is a `TOKENIZE_FRAME`-byte
-/// region; `match_scratch` a `MATCH_FRAME`-byte region for the recursive
-/// calls.
 #[allow(clippy::too_many_arguments)]
 pub fn tokenize_span(
     arena: &mut [u8],
@@ -2419,9 +2317,7 @@ pub fn tokenize_span(
     let dict_h1 = word(arena, ctx.wrapping_add(12));
     strcpy_static(arena, kind_str, b"femwtn\0");
     strcpy_static(arena, table_str, b"tn\0");
-    // The C holds `position`/`end` as narrowed u16 locals; the differential
-    // fuzz passes full-width values and any ARM-raw site is adjusted when
-    // its C-vs-ARM defects identify it.
+
     let end = (end & 0xffff) as u16;
     put_half(arena, read_count_cell, 0);
     put_half(arena, next_token_cell, 0);
@@ -2504,7 +2400,7 @@ pub fn tokenize_span(
         if (position as i16) > (half(arena, matched_end_cell) as i16) {
             let kind = byte(arena, kind_cell);
             if kind != 3 && previous_kind == 3 {
-                // Split the source word at the first blank boundary.
+
                 let mut index = position;
                 let mut i = 0u16;
                 let word_ready = loop {
@@ -2552,7 +2448,7 @@ pub fn tokenize_span(
                             }
                             i = i.wrapping_add(1);
                         }
-                        // The C comparator returns 0/1, never negative.
+
                         quicksort_by(arena, counts, word_count as u32, 1, |a, b| {
                             (a < b) as i32
                         });
@@ -2703,39 +2599,33 @@ pub fn tokenize_span(
     status
 }
 
-/// Host operations for the TOKENTN Process entry (`fn_1e4b7c`): the
-/// depth-1 callees are summarized from the recording, while the entry's
-/// own control flow, sentence scan, and scratch/work lifecycle run in
-/// the port. Arena offsets with 0 meaning null.
 pub trait TokentnHost: NormalizationHost + HandleValidator {
-    /// `fn_173fd8`: log verbosity for `log`.
+
     fn log_level(&mut self, arena: &mut [u8], log: u32) -> u32;
-    /// `fn_24c9fc`: read the sentence into `p+0x5c`. Returns the status.
+
     fn read_sentence(&mut self, arena: &mut [u8], p: u32) -> u32;
-    /// `fn_24cea0`: allocate destination buffer `buf` for process `p`.
+
     fn alloc_dest(&mut self, arena: &mut [u8], p: u32, buf: u32) -> u32;
-    /// `fn_24cdac`: allocate the two tables.
+
     fn alloc_tables(&mut self, arena: &mut [u8], p: u32) -> u32;
-    /// `fn_24cc90`: allocate the second record.
+
     fn alloc_rec2(&mut self, arena: &mut [u8], p: u32) -> u32;
-    /// `fn_24cb74`: allocate the first record.
+
     fn alloc_rec(&mut self, arena: &mut [u8], p: u32) -> u32;
-    /// `fn_249cec`: run the token rules over the prepared buffers.
+
     fn run_rules(&mut self, arena: &mut [u8], p: u32) -> u32;
-    /// `fn_24ac00`: end-of-processing log pass over `name` with `mode`.
+
     fn log_end(&mut self, arena: &mut [u8], p: u32, name: u32, mode: u32) -> u32;
-    /// `fn_24d030`: release buffer `buf` owned by context `ctx`.
+
     fn release_buf(&mut self, arena: &mut [u8], ctx: u32, buf: u32);
-    /// `fn_24ce40`: release the owned pair.
+
     fn release_pair(&mut self, arena: &mut [u8], p: u32);
-    /// `fn_24ccf0`: release the second record.
+
     fn release2(&mut self, arena: &mut [u8], p: u32);
-    /// `fn_24cbd4`: release the first record.
+
     fn release1(&mut self, arena: &mut [u8], p: u32);
 }
 
-/// Buffer field offsets within `TokenProcess`, in `prepare`/`cleanup`
-/// order: first, second, third, fifth, sixth, seventh, fourth.
 const TOKENTN_BUFS: [u32; 7] = [0x88, 0x94, 0xa0, 0xcc, 0xd8, 0xe4, 0xac];
 
 fn tokentn_prepare(
@@ -2808,19 +2698,6 @@ fn tokentn_cleanup(
     }
 }
 
-/// `fn_1e4b7c`, EU `fn_1e4b7c`, KR `fn_1e4de4` (TOKENTN Process):
-/// validate both handles, read the sentence, count its words, prepare
-/// buffers and tables, run the rules, and always clean up.
-/// `fn_1738e8`/`fn_173dc0` calls are log-only. TokenProcess layout per
-/// `src/fn_1e4b7c.c`: context@0 arg0@0x10 arg1@0x14 module@0x48
-/// sentence@0x5c sentenceLength@0x60 wordCount@0x62 work20@0x64
-/// work24@0x68 first@0x88 second@0x94 third@0xa0 fourth@0xac
-/// detailedLog@0xc6 scratch@0xc8 fifth@0xcc sixth@0xd8 seventh@0xe4
-/// f0@0xf0. TokenBuffer stride is 0xc (data@0 capacity@4 length@6
-/// limit@8). The `fn_24ac00` name literal is staged in scratch at
-/// `p+0x100`, past the 0xf4 struct. Note the `*processed` gate: only
-/// the scratch/prepare/rules failures skip it; a `fn_24ac00` failure
-/// still sets it.
 pub fn tokentn_process_1e4b7c(
     arena: &mut [u8],
     handle: u32,

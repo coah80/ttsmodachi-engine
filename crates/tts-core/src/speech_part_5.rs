@@ -1,15 +1,13 @@
-//! Speech dependencies, guest pointers into caller-owned memory.
+
 use crate::boot::Memory;
 
-/// Unported external routines and configured indirect platform methods.
-/// Local out-parameters are Rust references, not fabricated guest addresses.
 pub trait Host: crate::boot_part_f::Host + crate::log_live::LogMethodsM {
     fn scratch(&self) -> u32;
-    /// Override for a region's immutable category/tag addresses.
+
     fn category(&self, us: u32) -> u32 {
         us
     }
-    /// Platform identity used by the existing formatter/allocator bridge.
+
     fn thread_id(&mut self) -> u32 {
         0
     }
@@ -65,13 +63,11 @@ fn elem(m: &Memory<'_>, table: u32, j: i32, i: i32) -> u32 {
     at(m.word(at(table, j)), i)
 }
 
-/// fn_1b4238. Fixed error classification; msg is not dereferenced.
 pub fn fn_1b4238(m: &mut Memory<'_>, _msg: u32) -> u32 {
     let _ = m;
     3
 }
 
-/// fn_2a178c. Assemble the banded normal equations with ARM wrapping arithmetic.
 pub fn fn_2a178c(m: &mut Memory<'_>, p: u32, g1: u32, g2: u32, _arg: u32) {
     let mut i = 0i32;
     let mut cursor = m.word(p + 0x40);
@@ -149,8 +145,7 @@ fn divide(a: i32, b: i32) -> i32 {
         .expect("ARM divide by zero")
         .quotient
 }
-/// fn_2a19ac. General fixed-point Cholesky, including diagnostic failure.
-/// The existing logger port is used, with its documented live-target limitation.
+
 pub fn fn_2a19ac(m: &mut Memory<'_>, context: u32, p: u32, n: u32, host: &mut impl Host) {
     let mut k = 0u32;
     let first = elem(m, m.word(p + 0x3c), 0, 0);
@@ -210,7 +205,7 @@ pub fn fn_2a19ac(m: &mut Memory<'_>, context: u32, p: u32, n: u32, host: &mut im
         }
     }
 }
-/// fn_2e1fc8. Convert formatter sentinel -2 to an empty segment.
+
 pub fn fn_2e1fc8(m: &mut Memory<'_>, a: u32, b: u32, c: u32, d: u32, h: &mut impl Host) -> u32 {
     let r = h.call(m, 0x2fdc84, &[a, b, c, d]);
     if r == 0xfffffffe {
@@ -219,19 +214,7 @@ pub fn fn_2e1fc8(m: &mut Memory<'_>, a: u32, b: u32, c: u32, d: u32, h: &mut imp
         r
     }
 }
-/// fn_2fdc84. Segment formatter (c3 round 25): 1:1 port of src/fn_2fdc84.c
-/// (US ROM 0x2fdc84, checked against the ROM disassembly). Paths: an empty
-/// or over-long spec (len 0 or > 12) returns 0; a last char of 'p' formats
-/// through the host's 0x2fddec; any other last char than 's' returns 0; the
-/// fill must be ' ' or '0' (else 0); 's' pads with memset, copies with
-/// strcpy, returns the total, or -2 when [dst, limit) does not fit (the -2
-/// contract is quoted in src/fn_2e1fc8.c). The width comes from the middle
-/// of the spec through the 19600c/17c550 pair on a 16-byte stack buffer,
-/// exactly like the ARM frame; the charset literals live at 0x2fbb54 and
-/// 0x2fdb60 in ROM and are matched inline (same result, no guest reads).
-/// The class table for the width parse is the guest D_8dc30c, like the ROM.
-/// Reached specs are "s"/" "; a 'p' spec dispatches genuinely and names
-/// 0x2fddec if that entry is still unbound.
+
 pub fn fn_2fdc84_m(
     m: &mut Memory<'_>,
     dst: u32,
@@ -248,7 +231,7 @@ pub fn fn_2fdc84_m(
         }
         n
     }
-    // fn_19600c(spec, "\x06"): first 0x06 byte of the spec, or 0.
+
     fn first_mark(m: &Memory<'_>, mut s: u32) -> u32 {
         while m.byte(s) != 0 {
             if m.byte(s) == 0x06 {
@@ -258,8 +241,7 @@ pub fn fn_2fdc84_m(
         }
         0
     }
-    // fn_17c550: ASCII atoi with wrapping arithmetic over guest D_8dc30c.
-    // `seq` is the NUL-terminated input (a guest slice or the stack copy).
+
     fn atoi_seq(m: &Memory<'_>, seq: &[u8]) -> i32 {
         let mut s = 0usize;
         while (m.half(0x8dc30c + ((seq[s] as u32) & 0xff) * 2) as u32) & 8 != 0 {
@@ -294,9 +276,7 @@ pub fn fn_2fdc84_m(
     let mut width = 0i32;
     let found = first_mark(m, spec);
     if found != 0 {
-        // The middle of the spec (up to but excluding the last char) on
-        // the 16-byte ARM frame, NUL-terminated, then parsed. len <= 12
-        // so at most 11 bytes plus NUL fit, exactly like the ARM.
+
         let n = spec
             .wrapping_add(len)
             .wrapping_sub(found)
@@ -310,8 +290,7 @@ pub fn fn_2fdc84_m(
         stack[n as usize] = 0;
         width = atoi_seq(m, &stack);
     }
-    // fn_19600c(first, "-+0 #"): the fill is the matched char itself
-    // (each appears once), else the ROM default of ' '.
+
     let f0 = m.byte(spec);
     let mut fill = 0x20u32;
     if f0 == 0x2d || f0 == 0x2b || f0 == 0x30 || f0 == 0x20 || f0 == 0x23 {
@@ -341,7 +320,7 @@ pub fn fn_2fdc84_m(
     if limit.wrapping_sub(dst) < total {
         return 0xfffffffe;
     }
-    // fn_195bec(dst, fill, count) then fn_195cd0(dst + count, text).
+
     let mut i = 0u32;
     while i < count {
         m.put_byte(dst.wrapping_add(i), (fill & 0xff) as u8);
@@ -354,7 +333,7 @@ pub fn fn_2fdc84_m(
     }
     total
 }
-/// fn_2e3f2c. Dispatch write mode through the external stream implementation.
+
 pub fn fn_2e3f2c(m: &mut Memory<'_>, p: u32, a: u32, b: u32, h: &mut impl Host) -> u32 {
     if b == 0 {
         return 0;
@@ -366,10 +345,7 @@ pub fn fn_2e3f2c(m: &mut Memory<'_>, p: u32, a: u32, b: u32, h: &mut impl Host) 
         h.call(m, 0x3009a4, &[m.word(p + 0x24), p, a, b])
     }
 }
-/// fn_300a10. Release the transcription entry list: when the head entry's
-/// type is 1 or 3, release every entry's f18 buffer, then release the
-/// array itself. C src/fn_300a10.c (32-byte entries: type u32 @+0,
-/// f18 u32 @+24). Reached from fn_2e3f2c on speech_2 numbers.
+
 pub fn fn_300a10<H: crate::boot_part_f::Host>(m: &mut Memory<'_>, a: u32, arr: u32, n: u32, h: &mut H) {
     let release_each = m.word(arr) == 1 || m.word(arr) == 3;
     if release_each {
@@ -383,17 +359,13 @@ pub fn fn_300a10<H: crate::boot_part_f::Host>(m: &mut Memory<'_>, a: u32, arr: u
     }
     crate::boot_part_f::fn_1b2128(m, a, arr, h);
 }
-/// fn_2e453c. Release a transcription item list: count lives in the word
-/// just before the array; release each item's data, then the array head.
-/// C src/fn_2e453c.c (TextContext {unused, allocator}; 12-byte items:
-/// kind u8 @+0, data ptr @+4, size u32 @+8). Reached via 0x2b4004 on
-/// speech_2 numbers.
+
 pub fn fn_2e453c<H: crate::boot_part_f::Host>(m: &mut Memory<'_>, context: u32, items: u32, h: &mut H) {
     if items == 0 {
         return;
     }
     let heap = m.word(context.wrapping_add(4));
-    // count = *(items - 4).
+
     let count = m.word(items.wrapping_sub(4));
     let mut i = 0u32;
     while i < count {
@@ -403,14 +375,13 @@ pub fn fn_2e453c<H: crate::boot_part_f::Host>(m: &mut Memory<'_>, context: u32, 
     }
     crate::boot_part_f::fn_1b2128(m, heap, items.wrapping_sub(4), h);
 }
-/// fn_2b4004. Forward to fn_2e453c with the context at obj+0x4c.
-/// C src/fn_2b4004.c (verified shape; the ARM tail-calls 0x2e453c).
+
 pub fn fn_2b4004<H: crate::boot_part_f::Host>(m: &mut Memory<'_>, obj: u32, resources: u32, h: &mut H) -> u32 {
     let context = m.word(obj.wrapping_add(0x4c));
     fn_2e453c(m, context, resources, h);
     0
 }
-/// fn_2f91f8. Cap the returned entry list at sixteen, releasing its tail.
+
 pub fn fn_2f91f8(
     m: &mut Memory<'_>,
     a: u32,
@@ -437,13 +408,6 @@ pub fn fn_2f91f8(
     rc
 }
 
-/// fn_2f88d4. Dictionary transcription alternatives: split parenthesised
-/// `|` alternatives (with `%` escapes and `" quoted spans), expand each
-/// alternative with the surrounding prefix/suffix, and recurse into nested
-/// parens. A bare `|` with no parens (or any invalid shape) yields no
-/// expansions; otherwise a lone word yields itself. 1:1 with
-/// src/fn_2f88d4.c: heap grows through the boot allocator ports, partial
-/// alternative lists leak on the invalid path exactly like the ARM.
 fn split_alternatives(
     m: &mut Memory<'_>,
     allocator: u32,
@@ -523,7 +487,7 @@ fn split_alternatives(
         }
         bar = strchr_195d30(m.bytes, scan, b'|' as u32);
     }
-    // Tail after the last bar.
+
     *count += 1;
     *out = crate::boot_part_f::fn_1b218c(m, allocator, *out, *count * 4, &mut error, h);
     if error == 0 {
@@ -537,8 +501,6 @@ fn split_alternatives(
     error
 }
 
-/// fn_2f88d4. Expand a transcription's parenthesised alternatives, else a
-/// lone word expands to itself. See split_alternatives for the shape rules.
 pub fn fn_2f88d4_m(
     m: &mut Memory<'_>,
     context: u32,
@@ -729,7 +691,6 @@ pub fn fn_2f88d4_m(
     error
 }
 
-/// Local descriptor returned by the external fn_30a4cc record iterator.
 #[derive(Default)]
 pub struct RecordBuffer {
     pub first: u32,
@@ -796,7 +757,7 @@ fn cstr<'a>(m: &'a Memory<'_>, p: u32) -> &'a [u8] {
         .expect("unterminated string");
     &m.bytes[off..off + n + 1]
 }
-/// fn_24e004. Diagnostic dump over the live logger and external domain printer.
+
 pub fn fn_24e004(m: &mut Memory<'_>, p: u32, label: u32, mode: u32, h: &mut impl Host) -> u32 {
     let collection = m.word(p + 0x44);
     if m.byte(p + 0xc6) == 0 {
@@ -822,7 +783,7 @@ pub fn fn_24e004(m: &mut Memory<'_>, p: u32, label: u32, mode: u32, h: &mut impl
         m.bytes[off..off + 20].copy_from_slice(&saved);
         return crate::normalization::error_code(7);
     }
-    // Addressable local description and varargs use disjoint caller scratch.
+
     let scratch = h.scratch() + 128;
     let off = m.offset(scratch);
     let mut saved = [0u8; 12];
@@ -852,8 +813,7 @@ fn half(m: &Memory<'_>, p: u32) -> u16 {
     let i = m.offset(p);
     u16::from_le_bytes(m.bytes[i..i + 2].try_into().unwrap())
 }
-/// fn_2b24e8. Dictionary-wide configuration agreement, using the existing
-/// language validator, guest libc ports and reentrant allocator wrappers.
+
 pub fn fn_2b24e8(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     let mut entries = 0;
     let mut count = 0;
@@ -902,7 +862,7 @@ pub fn fn_2b24e8(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     }
     h.call(m, 0x2e39ec, &[m.word(p + 60), entries, count]) as u8 as u32
 }
-/// fn_2daf68. Combine differential streams and convolve the cached weights.
+
 pub fn fn_2daf68(m: &mut Memory<'_>, p: u32, k: i32, flags: u32, q: u32) {
     let qn = get(m, q);
     let c = at(m.word(q + 4), qn.wrapping_mul(k));
@@ -965,8 +925,7 @@ pub fn fn_2daf68(m: &mut Memory<'_>, p: u32, k: i32, flags: u32, q: u32) {
         m.put_word(at(data, i), (acc >> 10) as u32);
     }
 }
-/// fn_301b70. Enumerate matching records. Allocations and record-I/O are
-/// reentrant; guest libc operations use their existing real ports.
+
 pub fn fn_301b70(
     m: &mut Memory<'_>,
     alloc: u32,
@@ -1112,9 +1071,7 @@ pub fn fn_301b70(
     m.put_word(out_count, count);
     status as u32
 }
-/// fn_2da8c8. The caller supplies the existing typed PDF views of v+0x1a4
-/// and v+0x254. Tables and record storage remain caller-owned and borrowed.
-/// Cache misses must be bound to the real BlockCache adapter by the caller.
+
 pub fn fn_2da8c8<'a>(
     m: &mut Memory<'_>,
     _handle: u32,
@@ -1167,9 +1124,6 @@ pub fn fn_2da8c8<'a>(
     rc
 }
 
-// The old normalization::range_bisect_check consumes fixture rule tables.
-// This live adapter executes the same operations through the real vtable, with
-// addressable caller-owned locals so callbacks can reenter and mutate them.
 fn bisect_check(m: &mut Memory<'_>, p: u32, range: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return 0;
@@ -1278,8 +1232,7 @@ fn bisect_inner(m: &mut Memory<'_>, p: u32, range: u32, s: u32, h: &mut impl Hos
     }
     0
 }
-/// fn_2e5adc. Match validation. Local table outputs stay Rust locals; token
-/// operations and domain/rule callbacks receive the current mutable memory.
+
 pub fn fn_2e5adc(
     m: &mut Memory<'_>,
     p: u32,
@@ -1388,8 +1341,7 @@ impl<H: Host> crate::normalization::NormalizationHost for Normalize<'_, H> {
         panic!("unexpected node handle")
     }
 }
-/// fn_2b6afc. Regex callout longest-match selection. The 92-byte candidate
-/// and four-byte span use disjoint caller scratch, restored on every return.
+
 pub fn fn_2b6afc(m: &mut Memory<'_>, callout: u32, h: &mut impl Host) -> u32 {
     let ctx = m.word(callout + 36);
     let span = m.word(ctx + 4);
@@ -1415,11 +1367,7 @@ pub fn fn_2b6afc(m: &mut Memory<'_>, callout: u32, h: &mut impl Host) -> u32 {
         ],
     );
     let previous_to = half(m, span + 2) as i16 as i32;
-    // ARM 1:1: every callout prefills the candidate slot from the context
-    // (2b6afc+0x50/0x54: token ptr to candidate+4, count to the sp+8 temp)
-    // before any branching. The table-add later overwrites entries[count],
-    // but the prefill survives in the other entries and rides the Match
-    // copy into the persistent record/table.
+
     m.put_word(0xe0ff070u32.wrapping_add(4), m.word(ctx + 12));
     m.put_half(0xe0ff068u32, half(m, ctx + 20));
     if previous_to != 0 || half(m, span) != 0 {
@@ -1504,17 +1452,9 @@ pub fn fn_2b6afc(m: &mut Memory<'_>, callout: u32, h: &mut impl Host) -> u32 {
         log_state(m, h, m.word(ctx + 16), 6, 0x2b6c60, &[]);
         return 1;
     }
-    // ARM 1:1 slot addresses in 2b6afc's frame (entry SP 0xe0ff100 on every
-    // wl callout): the candidate CheckMatch (92B) at SP+16, the valid byte
-    // at SP+108 and the span at SP+112. The ISTOKEN table-add lands in this
-    // slot through check->match, and the Match copy below carries it to
-    // the persistent table, exactly as on the ARM. The slot keeps leftovers
-    // across callouts like the ARM frame does (same SP every callout), so
-    // there is deliberately no save/restore: restoring would wipe the
-    // leftovers the next Match reuses.
+
     let scratch = 0xe0ff070u32;
-    // Prefix bytes are intentionally not initialized: the callback may fill
-    // them. They are unobservable unless validateCurrentMatch accepts them.
+
     let candidate = scratch;
     let candidate_span = scratch + 96;
     let valid = scratch + 92;
@@ -1599,9 +1539,6 @@ pub fn fn_2b6afc(m: &mut Memory<'_>, callout: u32, h: &mut impl Host) -> u32 {
     1
 }
 
-/// Caller-owned numeric projection for the existing typed factor/filter ports.
-/// Rows must be distinct; each slice must hold count*max(order,3), count,
-/// and count elements respectively. No engine buffer is replaced by this work.
 pub struct FilterWork<'a> {
     pub coefficients: &'a mut [i32],
     pub input: &'a mut [i32],
@@ -1634,9 +1571,7 @@ impl<H: Host> crate::reentrant::HooksM for FilterHooks<'_, H> {
         }
     }
 }
-/// fn_2a2be0. Assemble, factor, and solve both the three-band and generic
-/// paths. Existing typed callees use the caller's projection workspace; the
-/// alias-preserving lattice forward solve uses bridge-3's live adapter.
+
 pub fn fn_2a2be0(
     m: &mut Memory<'_>,
     context: u32,

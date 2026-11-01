@@ -1,43 +1,27 @@
-//! Live part-a call tree: fn_22e378, the audiofetch component open.
-//!
-//! The port lives here rather than in frontend_part_c because that file's
-//! PromptServices trait hands its methods no memory. An adapter that holds the
-//! live arena cannot be borrowed at the same time as the `&mut [u8]` that
-//! open_audio_fetch receives, so that port cannot drive the boot's arena.
-//! The trait signatures there belong to another lane and stay untouched.
-//!
-//! Every callee below is the crate's real Rust port. Every address and every
-//! byte belongs to the caller.
+
+
 use crate::boot::Memory;
 
-/// The live services fn_22e378 needs. The methods take the arena, which is
-/// the crate's host convention.
 pub trait AudioFetchHooksM {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32;
     fn parser_m(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32;
 }
 
-/// The regional data fn_22e378 reads. Every value is the caller's.
 pub struct AudioFetchConfig {
-    /// fn_19611c's null pair and its default context.
+
     pub pair: [u8; 8],
     pub default: u32,
-    /// The HwCfg22 callback words: the request map's five, then the
-    /// speechbase map's five.
+
     pub callbacks: [[u32; 5]; 2],
-    /// The "INET" resource name.
+
     pub inet: u32,
-    /// The log category and the four message formats, in the order the ARM
-    /// uses them: entering the open, entering the close, exiting the close,
-    /// exiting the open.
+
     pub category: u32,
     pub formats: [u32; 4],
-    /// Caller-owned scratch. The environment word, the INET result word and
-    /// the 32 bytes fn_17b1c4 needs follow it.
+
     pub scratch: u32,
 }
 
-/// The heap and resource ports forward to the live dispatcher.
 struct Heap<'a, H>(&'a mut H);
 impl<H: AudioFetchHooksM> crate::boot_part_e::Host for Heap<'_, H> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
@@ -45,7 +29,6 @@ impl<H: AudioFetchHooksM> crate::boot_part_e::Host for Heap<'_, H> {
     }
 }
 
-/// The registry ports forward to the live dispatcher.
 struct Parser<'a, H>(&'a mut H);
 impl<H: AudioFetchHooksM> crate::render_part_c::ParserMethodsM for Parser<'_, H> {
     fn method_m(&mut self, method: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
@@ -53,17 +36,14 @@ impl<H: AudioFetchHooksM> crate::render_part_c::ParserMethodsM for Parser<'_, H>
     }
 }
 
-/// fn_1738e8 through the live dispatcher. The dispatcher owns the logger.
 fn log(m: &mut Memory<'_>, h: &mut impl AudioFetchHooksM, logger: u32, cfg: &AudioFetchConfig, format: u32) {
     h.call(m, 0x1738e8, &[logger, cfg.category, 4, 0, format, 0]);
 }
 
-/// fn_173dc0 through the live dispatcher. The ARM passes a null format here.
 fn error(m: &mut Memory<'_>, h: &mut impl AudioFetchHooksM, logger: u32, cfg: &AudioFetchConfig, code: u32) {
     h.call(m, 0x173dc0, &[logger, cfg.category, code, 0]);
 }
 
-/// fn_22e378. The audiofetch component open.
 pub fn fn_22e378(
     m: &mut Memory<'_>,
     component: u32,
@@ -159,31 +139,24 @@ pub fn fn_22e378(
     rc
 }
 
-/// fn_17b1c4. The "INET" release.
 fn release_inet(m: &mut Memory<'_>, h: &mut impl AudioFetchHooksM, registry: u32, cfg: &AudioFetchConfig) {
     crate::boot_port_2c::fn_17b1c4(m, registry, cfg.inet, cfg.scratch + 8, &mut Parser(h));
 }
 
-/// The regional data the domain manager open reads. Every value is the
-/// caller's.
 pub struct DomainConfig {
-    /// fn_19611c's null pair and its default context.
+
     pub pair: [u8; 8],
     pub default: u32,
-    /// The Cfg table: the first list's three callback words at +0xb4, the
-    /// map's five at +0xc0 and the second list's three at +0xd4.
+
     pub cfg: u32,
-    /// The resource names by the domain label: LINGDB, SYNTHSTREAM, two
-    /// unused labels, AUDIOFETCHER and INET.
+
     pub names: [u32; 6],
-    /// The log category.
+
     pub category: u32,
-    /// Caller-owned scratch: the environment word, the block out word and
-    /// the resource out word.
+
     pub scratch: u32,
 }
 
-/// The reentrant hooks the list teardown needs.
 struct Reentrant<'a, H>(&'a mut H);
 impl<H: AudioFetchHooksM> crate::reentrant2::HooksM for Reentrant<'_, H> {
     fn call_m(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>) -> u32 {
@@ -191,7 +164,6 @@ impl<H: AudioFetchHooksM> crate::reentrant2::HooksM for Reentrant<'_, H> {
     }
 }
 
-/// fn_22e378's log and error sinks, with the domain manager's category.
 fn domain_log(m: &mut Memory<'_>, h: &mut impl AudioFetchHooksM, logger: u32, cfg: &DomainConfig) {
     h.call(m, 0x1738e8, &[logger, cfg.category, 4, 0, 0, 0]);
 }
@@ -200,7 +172,6 @@ fn domain_error(m: &mut Memory<'_>, h: &mut impl AudioFetchHooksM, logger: u32, 
     h.call(m, 0x173dc0, &[logger, cfg.category, code, 0]);
 }
 
-/// fn_1fd9f8. The domain manager open.
 pub fn fn_1fd9f8(
     m: &mut Memory<'_>,
     _component: u32,
@@ -302,7 +273,6 @@ pub fn fn_1fd9f8(
     status
 }
 
-/// fn_1fd854. The domain manager close.
 fn close_domain(m: &mut Memory<'_>, h: &mut impl AudioFetchHooksM, p: u32, cfg: &DomainConfig) -> u32 {
     let status = crate::boot_port_1::fn_176f94(m, p, 0x11d, 0x11d, 0x48);
     if status >= 0x80000000 {
@@ -336,94 +306,74 @@ fn close_domain(m: &mut Memory<'_>, h: &mut impl AudioFetchHooksM, p: u32, cfg: 
     status
 }
 
-
-// ---------------------------------------------------------------------------
-// fn_1ec070: the fe_dctlkp component open, live.
-//
-// The boot-port-2b port owns the fe_dctlkp chain. Its two seams are the
-// engine services (the context, the registry, the parameters) and the
-// dictionary service (fn_26b5f0, fn_26b7ec, fn_26bb6c). This section binds
-// both to the live boot: the host runs the crate's real ports over the
-// caller's arena, and the dictionary runs the real broker, the real file
-// read and the real trie walk.
-//
-// The port carries the US address of the FE_DCTLKP log category. The live
-// host relocates it to the region's own address, the way the region relocates
-// every other literal.
-
-/// The US address of the FE_DCTLKP log category the port carries.
 pub const DCTLKP_CATEGORY_US: u32 = 0x8f8f44;
 
-/// The regional strings the fe_dctlkp open reads. Every value is a guest
-/// address in the region's own image.
 #[derive(Clone, Copy)]
 pub struct DctlkpStrings {
-    /// "LINGDB": the linguistic registry the open takes.
+
     pub lingdb: u32,
-    /// "sysdct": the system dictionary.
+
     pub sysdct: u32,
-    /// "lid": the language dictionary.
+
     pub lid: u32,
-    /// "punc": the entry the first lookup asks for.
+
     pub punc: u32,
-    /// "fecfg": the section the first lookup asks for.
+
     pub fecfg: u32,
-    /// "langcode": the language parameter.
+
     pub langcode: u32,
-    /// "fecfg": the configuration directory parameter.
+
     pub fecfg_dir: u32,
-    /// "fedataprefix": the data prefix parameter.
+
     pub fedataprefix: u32,
-    /// "fedatapackaging": the packaging parameter.
+
     pub fedatapackaging: u32,
-    /// "clc": the packaging name the path compares against.
+
     pub clc: u32,
-    /// "clc/": the packaging prefix the path appends.
+
     pub clc_slash: u32,
-    /// "/": the path separator.
+
     pub slash: u32,
-    /// ":": the separator the packaging path uses.
+
     pub colon: u32,
-    /// "sysdct/": the system dictionary prefix.
+
     pub sysdct_slash: u32,
 }
 
-/// The regional data the fe_dctlkp open needs. Every value is the caller's.
 pub struct DctlkpConfig {
-    /// fn_19611c's null pair and its default context.
+
     pub pair: [u8; 8],
     pub default: u32,
-    /// The FE_DCTLKP log category, in the region's own image.
+
     pub category: u32,
-    /// The regional strings.
+
     pub strings: DctlkpStrings,
-    /// The broker's regional constants.
+
     pub broker: crate::boot_port_2c::BrokerGlobals,
-    /// The broker's allocator addresses, in the region's own image.
+
     pub allocators: [u32; 4],
-    /// The caller's scratch. The port's 720 byte frame comes first.
+
     pub scratch: u32,
-    /// The unmap environment the file release uses.
+
     pub unmap: crate::boot_part_e::UnmapEnvironment,
 }
 
-/// The offset of the adapter's name buffer, past the port's frame.
 const NAME_BUFFER: u32 = 736;
-/// The offset of the lookup's half buffer.
+
 const HALF_BUFFER: u32 = 992;
-/// The offset of the broker open's scratch.
+
 const OPEN_SCRATCH: u32 = 1000;
-/// The offset of the broker query's scratch.
+
 const QUERY_SCRATCH: u32 = 1024;
-/// The offset of the guest words the services write their results into.
+
 const OUT_WORDS: u32 = 1040;
-/// The offset of the guest word fn_17a1a4 writes the window address into.
+
 const WINDOW_WORD: u32 = 1044;
-/// The size the caller has to provide.
+
 pub const DCTLKP_SCRATCH_SIZE: u32 = 1088;
 
 impl DctlkpConfig {
-    /// The config strings the port's path builder reads.
+
     pub fn config_strings(&self) -> crate::boot_port_2::ConfigStrings {
         crate::boot_port_2::ConfigStrings {
             langcode: self.strings.langcode,
@@ -440,11 +390,6 @@ impl DctlkpConfig {
     }
 }
 
-/// The live fe_dctlkp open. The host is the caller's dispatcher.
-///
-/// The dispatcher and the trie tables live behind cells, so the engine
-/// services and the dictionary service can hold the same open at once, the
-/// way the port's two seams do.
 pub struct Dctlkp<'a, H> {
     pub host: core::cell::RefCell<&'a mut H>,
     pub cfg: &'a DctlkpConfig,
@@ -452,7 +397,7 @@ pub struct Dctlkp<'a, H> {
 }
 
 impl<'a, H: crate::boot::Calls> Dctlkp<'a, H> {
-    /// The live open. The caller's dispatcher and the regional data.
+
     pub fn new(
         host: &'a mut H,
         cfg: &'a DctlkpConfig,
@@ -465,7 +410,6 @@ impl<'a, H: crate::boot::Calls> Dctlkp<'a, H> {
         }
     }
 
-    /// fn_1ec070. The fe_dctlkp component open.
     pub fn open(
         &self,
         m: &mut Memory<'_>,
@@ -478,11 +422,7 @@ impl<'a, H: crate::boot::Calls> Dctlkp<'a, H> {
         let scratch = crate::boot_port_2b::Scratch {
             base: self.cfg.scratch,
         };
-        // The port reads the dictionary names by buffer. The ROM's fn_1ec070
-        // frame carries these literals (src/fn_1ea4e0_merged.c:378 "fecfg",
-        // "domdef"; :877 "fecfg", "punc"; :896 "fecfg", "canonmapdomain";
-        // :904/:907 "normal"); the live caller owns the scratch, so the
-        // binding writes them the way it already wrote sysdct/lid.
+
         for (at, name) in [
             (scratch.sysdct(), &b"sysdct\0"[..]),
             (scratch.lid(), &b"lid\0"[..]),
@@ -512,7 +452,11 @@ impl<'a, H: crate::boot::Calls> Dctlkp<'a, H> {
         )
     }
 
-    /// The dispatcher, with the port's US log category relocated.
+    pub fn query(&self,m:&mut Memory<'_>,args:[u32;7])->u32 {
+        let mut host=Host(self);let mut dictionary=Dictionary(self);
+        crate::boot_port_2b::fn_1ea4e0(m,args[0],args[1],args[2],args[3],args[4],args[5],args[6],&mut host,&mut dictionary)
+    }
+
     fn dispatch(&self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         let mut guard = self.host.borrow_mut();
         let host = &mut **guard;
@@ -526,7 +470,6 @@ impl<'a, H: crate::boot::Calls> Dctlkp<'a, H> {
         host.call(m, f, a)
     }
 
-    /// A guest copy of a name in the caller's scratch.
     fn name_at(&self, m: &mut Memory<'_>, name: &[u8]) -> u32 {
         let at = self.cfg.scratch + NAME_BUFFER;
         let o = m.offset(at);
@@ -536,11 +479,6 @@ impl<'a, H: crate::boot::Calls> Dctlkp<'a, H> {
         at
     }
 
-    /// The broker's open, fn_1795f0 with the region's flags.
-    ///
-    /// Round 25: public so the voice harness can broker-open depes
-    /// resource files through the same proven path (additive visibility
-    /// only; no behaviour change).
     pub fn broker_open(&self, m: &mut Memory<'_>, broker: u32, name: u32, flags: u32, out: u32) -> u32 {
         let mut globals = self.cfg.broker.data_open(self.cfg.scratch + OPEN_SCRATCH);
         globals.allocators = self.cfg.allocators;
@@ -548,7 +486,6 @@ impl<'a, H: crate::boot::Calls> Dctlkp<'a, H> {
         crate::boot_part_b::fn_1795f0(m, broker, name, flags, out, &globals, &mut host)
     }
 
-    /// fn_17a1a4. Read a window of a mapped file.
     fn read(
         &self,
         m: &mut Memory<'_>,
@@ -572,19 +509,16 @@ impl<'a, H: crate::boot::Calls> Dctlkp<'a, H> {
         )
     }
 
-    /// fn_179208. Release a mapped window.
     fn release(&self, m: &mut Memory<'_>, hdata: u32, handle: u32, buf: u32) -> u32 {
         let mut host = BrokerHost(self);
         crate::boot_part_e::fn_179208(m, hdata, handle, buf, &self.cfg.unmap, &mut host)
     }
 
-    /// fn_179f3c. Close a mapped file.
     fn close(&self, m: &mut Memory<'_>, resources: u32, handle: u32) -> u32 {
         self.dispatch(m, 0x179f3c, &[resources, handle])
     }
 }
 
-/// The engine services the fe_dctlkp chain needs.
 struct Host<'a, 'b, H>(&'a Dctlkp<'b, H>);
 
 impl<H: crate::boot::Calls> crate::boot_part_e::Host for Host<'_, '_, H> {
@@ -594,18 +528,16 @@ impl<H: crate::boot::Calls> crate::boot_part_e::Host for Host<'_, '_, H> {
 }
 
 impl<H: crate::boot::Calls> crate::boot_port_2b::Host for Host<'_, '_, H> {
-    /// fn_19611c. The engine context of a handle pair.
+
     fn context(&mut self, m: &mut Memory<'_>, h0: u32, h1: u32, out: &mut u32) -> u32 {
         let cfg = self.0.cfg;
-        // The context service writes the context pointer into a guest word;
-        // the port reads the pointer itself.
+
         let slot = self.0.cfg.scratch + OUT_WORDS;
         let rc = crate::boot_port_1::fn_19611c(m, [h0, h1], slot, cfg.pair, cfg.default);
         *out = m.word(slot);
         rc
     }
 
-    /// fn_179f30. The broker's open of a named resource.
     fn resource_open(
         &mut self,
         m: &mut Memory<'_>,
@@ -614,15 +546,13 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Host for Host<'_, '_, H> {
         out: &mut u32,
     ) -> u32 {
         let at = self.0.name_at(m, name);
-        // The broker writes the handle into a guest word; the port reads
-        // the handle itself.
+
         let slot = self.0.cfg.scratch + OUT_WORDS;
         let rc = self.0.broker_open(m, resources, at, 0, slot);
         *out = m.word(slot);
         rc
     }
 
-    /// fn_17b058. The registry's open of a named resource.
     fn open_named(
         &mut self,
         m: &mut Memory<'_>,
@@ -631,8 +561,7 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Host for Host<'_, '_, H> {
         out: &mut u32,
     ) -> u32 {
         let at = self.0.name_at(m, name);
-        // The registry writes the slot address into a guest word; the port
-        // reads the address itself.
+
         let slot = self.0.cfg.scratch + OUT_WORDS;
         let mut host = ParserHost(self.0);
         let rc = crate::render_part_c::fn_17b058_m(m, resources, at, slot, &mut host);
@@ -640,7 +569,6 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Host for Host<'_, '_, H> {
         rc
     }
 
-    /// fn_17b1c4. The registry's release of a named resource.
     fn resource_close(&mut self, m: &mut Memory<'_>, resources: u32, name: &[u8]) {
         let at = self.0.name_at(m, name);
         let scratch = self.0.cfg.scratch + OPEN_SCRATCH;
@@ -648,17 +576,15 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Host for Host<'_, '_, H> {
         crate::boot_port_2c::fn_17b1c4(m, resources, at, scratch, &mut host);
     }
 
-    /// fn_175a1c. A named parameter.
     fn parameter(&mut self, m: &mut Memory<'_>, params: u32, name: &[u8], out: &mut u32) -> u32 {
         let at = self.0.name_at(m, name);
-        // The parameter service writes the value pointer into a guest word.
+
         let slot = self.0.cfg.scratch + OUT_WORDS;
         let rc = self.0.dispatch(m, 0x175a1c, &[params, at, slot]);
         *out = m.word(slot);
         rc
     }
 
-    /// fn_175944. A named integer setting.
     fn setting(&mut self, m: &mut Memory<'_>, settings: u32, name: &[u8]) -> u32 {
         let at = self.0.name_at(m, name);
         let slot = self.0.cfg.scratch + OUT_WORDS;
@@ -670,7 +596,6 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Host for Host<'_, '_, H> {
         }
     }
 
-    /// fn_175944. A named integer setting, with its value.
     fn setting_value(
         &mut self,
         m: &mut Memory<'_>,
@@ -686,7 +611,6 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Host for Host<'_, '_, H> {
     }
 }
 
-/// The registry's parser methods reach the live dispatcher.
 struct ParserHost<'a, 'b, H>(&'a Dctlkp<'b, H>);
 
 impl<H: crate::boot::Calls> crate::render_part_c::ParserMethodsM for ParserHost<'_, '_, H> {
@@ -695,7 +619,6 @@ impl<H: crate::boot::Calls> crate::render_part_c::ParserMethodsM for ParserHost<
     }
 }
 
-/// The broker's host services.
 struct BrokerHost<'a, 'b, H>(&'a Dctlkp<'b, H>);
 
 impl<H: crate::boot::Calls> crate::boot_part_e::Host for BrokerHost<'_, '_, H> {
@@ -705,6 +628,11 @@ impl<H: crate::boot::Calls> crate::boot_part_e::Host for BrokerHost<'_, '_, H> {
 }
 
 impl<H: crate::boot::Calls> crate::boot_part_b::Host for BrokerHost<'_, '_, H> {
+    fn format_address_m(&mut self,m:&Memory<'_>,format:&[u8])->Option<u32> {self.0.host.borrow_mut().format_address_m(m,format)}
+    fn real_log_args(&mut self)->bool {self.0.host.borrow_mut().real_log_args()}
+    fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool {
+        self.0.host.borrow_mut().log_variadic(m,entry,a,format,varargs)
+    }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.0.dispatch(m, f, a)
     }
@@ -728,11 +656,10 @@ impl<H: crate::boot::Calls> crate::boot_part_b::OutputHost for BrokerHost<'_, '_
 impl<H: crate::boot::Calls> crate::boot_part_b::PropertyHost for BrokerHost<'_, '_, H> {
     fn property(&mut self, m: &mut Memory<'_>, dictionary: u32, key: &[u8]) -> (u32, u32) {
         let at = self.0.name_at(m, key);
-        // The map find writes the value into a guest word; the port reads
-        // the value's slot, so the slot's address is the result.
+
         let out = self.0.cfg.scratch + OUT_WORDS;
         let rc = self.0.dispatch(m, 0x1966ac, &[dictionary, at, out]);
-        (rc, out)
+        (rc, if self.0.host.borrow_mut().real_log_args() {m.word(out)}else{out})
     }
     fn insert(
         &mut self,
@@ -741,6 +668,9 @@ impl<H: crate::boot::Calls> crate::boot_part_b::PropertyHost for BrokerHost<'_, 
         key: u32,
         entry: [u32; 3],
     ) -> u32 {
+        if self.0.host.borrow_mut().real_log_args() {
+            return self.0.dispatch(m,0x19668c,&[dictionary,key,entry[0]]);
+        }
         let at = self.0.cfg.scratch + OUT_WORDS;
         for (i, v) in entry.iter().enumerate() {
             m.put_word(at + i as u32 * 4, *v);
@@ -793,7 +723,6 @@ impl<H: crate::boot::Calls> crate::boot_part_b::DataHost for BrokerHost<'_, '_, 
     }
 }
 
-/// The broker database's query services.
 struct BrokerQuery<'a, 'b, H>(&'a Dctlkp<'b, H>);
 
 impl<H: crate::boot::Calls> crate::boot_port_2c::BrokerQuery for BrokerQuery<'_, '_, H> {
@@ -824,21 +753,13 @@ impl<H: crate::boot::Calls> crate::boot_port_2c::BrokerQuery for BrokerQuery<'_,
     }
 }
 
-/// The dictionary service: fn_26b5f0, fn_26b7ec and fn_26bb6c.
-///
-/// Round 31: public so the live voice harness can drive fn_1ea4e0's
-/// dictionary loads through the real broker files (the 1ea4e0 lookup
-/// path needs it; the image-backed test double cannot serve real files).
-/// The wrapped open is borrowed per call; the harness must not hold the
-/// dictionary across calls that reborrow its host.
 pub struct Dictionary<'a, 'b, H>(pub &'a Dctlkp<'b, H>);
 
 impl<H: crate::boot::Calls> crate::boot_port_2b::Dictionaries for Dictionary<'_, '_, H> {
-    /// fn_26b5f0. Open a dictionary resource and report its payload size.
+
     fn open(&mut self, m: &mut Memory<'_>, st: u32, name: u32, size: &mut u32) -> u32 {
         let owner = m.word(st + crate::boot_port_2b::state::H0);
-        // The broker writes the handle into a guest word; the port reads the
-        // handle itself.
+
         let handle_at = self.0.cfg.scratch + OUT_WORDS;
         let rc = self.0.broker_open(m, owner, name, 1, handle_at);
         let handle = m.word(handle_at);
@@ -846,8 +767,7 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Dictionaries for Dictionary<'_,
             m.put_word(st + crate::boot_port_2b::state::H1, 0);
             return rc;
         }
-        // fn_17a1a4 writes the window address into the caller's word; the
-        // window is the header the ROM reads.
+
         let window_at = self.0.cfg.scratch + WINDOW_WORD;
         let rc = self.0.read(m, owner, handle, 0, 40, window_at);
         if rc >= 0x80000000 {
@@ -875,7 +795,6 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Dictionaries for Dictionary<'_,
         0
     }
 
-    /// fn_26b7ec. Load the section tables for `key` into the state block.
     fn load(&mut self, m: &mut Memory<'_>, st: u32, key: u32, size: u32, resource: u32) -> u32 {
         let owner = m.word(st + crate::boot_port_2b::state::H0);
         let handle = m.word(st + crate::boot_port_2b::state::H1);
@@ -888,7 +807,7 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Dictionaries for Dictionary<'_,
             return rc;
         }
         let buf = m.word(window_at);
-        // The section index: a name, its length, then the offset word.
+
         let mut pos = 0u32;
         while pos < size {
             let name = buf + pos;
@@ -928,7 +847,7 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Dictionaries for Dictionary<'_,
         if rc >= 0x80000000 {
             return rc;
         }
-        // The nineteen offsets the section loader writes.
+
         let section = m.word(tables);
         let first = m.byte(section + 4);
         let last = m.byte(section + 5);
@@ -994,7 +913,6 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Dictionaries for Dictionary<'_,
         0
     }
 
-    /// fn_26bb6c. The byte pair search.
     fn lookup(
         &mut self,
         m: &mut Memory<'_>,
@@ -1025,7 +943,6 @@ impl<H: crate::boot::Calls> crate::boot_port_2b::Dictionaries for Dictionary<'_,
     }
 }
 
-/// The trie walk's services reach the live dispatcher.
 struct DictHost<'a, 'b, H>(&'a Dctlkp<'b, H>);
 
 impl<H: crate::boot::Calls> crate::component_live_c::Host for DictHost<'_, '_, H> {
@@ -1034,20 +951,6 @@ impl<H: crate::boot::Calls> crate::component_live_c::Host for DictHost<'_, '_, H
     }
 }
 
-// ---------------------------------------------------------------------------
-// fn_19869c: the map's tree destroy.
-//
-// The broker's database insert creates a broker string entry, and the
-// registry releases it when the map is destroyed. The boot-port-2 and
-// boot-port-5 lanes each hold a private copy of this walk; the live boot
-// needs its own, so the port lives here beside the fe_dctlkp binding that
-// reaches it.
-
-/// `fn_198fb4`. The map tree's post-order walk.
-///
-/// The broker's maps carry no key or value free callbacks: the ARM's own
-/// destroy frees the nodes only, and the tree's key and value belong to the
-/// broker.
 fn fn_198fb4(m: &mut Memory<'_>, h: &mut impl crate::boot_part_e::Host, t: u32, n: u32) {
     if n == t {
         return;
@@ -1058,7 +961,6 @@ fn fn_198fb4(m: &mut Memory<'_>, h: &mut impl crate::boot_part_e::Host, t: u32, 
     crate::boot_part_e::release(m, heap, n, h);
 }
 
-/// `fn_19869c`. The map's tree destroy.
 pub fn fn_19869c(m: &mut Memory<'_>, h: &mut impl crate::boot_part_e::Host, t: u32) {
     fn_198fb4(m, h, t, m.word(t));
     m.put_word(t + 0x18, 0);
@@ -1066,10 +968,6 @@ pub fn fn_19869c(m: &mut Memory<'_>, h: &mut impl crate::boot_part_e::Host, t: u
     m.put_word(t + 4, t);
 }
 
-/// `fn_177044`. The resource pair's release.
-///
-/// The map's value release reaches this: the pair holds the two handles
-/// the broker opened, and each handle's map goes first.
 pub fn fn_177044(
     m: &mut Memory<'_>,
     h: &mut impl crate::boot_part_e::Host,
@@ -1090,7 +988,6 @@ pub fn fn_177044(
     crate::boot_part_e::release(m, heap, resources, h);
 }
 
-/// `fn_19665c`. The map's close: the tree first, then the map itself.
 pub fn fn_19665c(m: &mut Memory<'_>, h: &mut impl crate::boot_part_e::Host, p: u32) -> u32 {
     if p == 0 {
         return 0x89002007;
@@ -1100,11 +997,6 @@ pub fn fn_19665c(m: &mut Memory<'_>, h: &mut impl crate::boot_part_e::Host, p: u
     0
 }
 
-/// `fn_177498`. The archive cursor read.
-///
-/// The archive's platform read is the ROM's cursor read: the bytes come
-/// from the cursor's own window, the position advances, and the caller gets
-/// the number of bytes it may take.
 pub fn fn_177498(m: &mut Memory<'_>, cursor: u32, out: &mut [u8]) -> u32 {
     let data = m.word(cursor);
     let length = m.word(cursor + 4);
@@ -1123,11 +1015,6 @@ pub fn fn_177498(m: &mut Memory<'_>, cursor: u32, out: &mut [u8]) -> u32 {
     bytes
 }
 
-/// fn_1b2380. Close the archive stream's callback, then release the stream.
-///
-/// The ROM's stream object keeps its callback at +44; the callback's own
-/// method table carries the close function and the adjustment that turns
-/// the callback pointer back into the object the close function expects.
 pub fn fn_1b2380(m: &mut Memory<'_>, p: u32, h: &mut impl crate::boot::Calls) -> u32 {
     let callback = m.word(p + 44);
     if callback != 0 {
@@ -1142,20 +1029,6 @@ pub fn fn_1b2380(m: &mut Memory<'_>, p: u32, h: &mut impl crate::boot::Calls) ->
     crate::boot_port_1::fn_1b44c8(m)
 }
 
-/// The live close of a broker data handle.
-///
-/// The crate's port (`leftovers_1::fn_179f3c`) frees the handle through the
-/// detached `frontend::HeapVtable`, which carries no arena, so the live
-/// cannot serve that release.  This port follows `src/fn_179f3c.c` over the
-/// caller's arena: the begin log, the reference count, the unlink of the
-/// last reference, the resource close, the release of the handle and the
-/// end log.  Every heap operation is dispatched to the caller's dispatcher,
-/// so the release happens over the same arena the ROM released from.
-///
-/// The ARM's own close in the boot (`rust/scripts/boot_part_a_r11_r19_trace.py`)
-/// takes the reference-count path: the count stays above zero, so the
-/// unlink is not taken and the only heap operation is the release of the
-/// handle, after the resource close and before the end log.
 pub trait LiveCloseHost:
     crate::boot::Calls + crate::log_live::LogMethodsM + crate::boot_part_b::FormatHost
 {
@@ -1165,10 +1038,12 @@ impl<T: crate::boot::Calls + crate::log_live::LogMethodsM + crate::boot_part_b::
 {
 }
 
-/// The close's own calls: the heap work goes to the live dispatcher.
 struct CloseCalls<'a, H>(&'a mut H);
 
 impl<H: LiveCloseHost> crate::boot_part_b::Host for CloseCalls<'_, H> {
+    fn real_log_args(&mut self)->bool {crate::boot::Calls::real_log_args(self.0)}
+    fn format_address_m(&mut self,m:&Memory<'_>,format:&[u8])->Option<u32> {crate::boot::Calls::format_address_m(self.0,m,format)}
+    fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool {crate::boot::Calls::log_variadic(self.0,m,entry,a,format,varargs)}
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         crate::boot::Calls::call(self.0, m, f, a)
     }
@@ -1194,8 +1069,6 @@ impl<H: LiveCloseHost> crate::boot_part_d::Host for CloseCalls<'_, H> {
     }
 }
 
-/// The close's log line: the arguments go into the caller's scratch, the
-/// logger writes them, and the scratch is restored.
 fn close_log(
     m: &mut Memory<'_>,
     h: &mut impl LiveCloseHost,
@@ -1213,7 +1086,6 @@ fn close_log(
     m.bytes[k.scratch as usize..k.scratch as usize + 64].copy_from_slice(&saved);
 }
 
-/// The close's name lookup, over the broker's own tree.
 fn close_lookup(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -1235,7 +1107,6 @@ fn close_lookup(
     found
 }
 
-/// fn_179f3c. The broker's data close, over the caller's arena.
 pub fn fn_179f3c_m(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -1327,19 +1198,6 @@ pub fn fn_179f3c_m(
     rc
 }
 
-/// fn_16b554. The archive find, live over the archive's own pages.
-///
-/// The crate's `speech_part_1::fn_16b554` is a script model of the walk: it
-/// restores its scratch and it takes the case-classification table from its
-/// caller. The ROM's fn_16b554 does neither: the name copy lands in the
-/// archive list's own name field for good, and the folding the name compare
-/// uses comes from the thread's own locale table (fn_10062c reads it through
-/// the thread pointer), so a caller cannot hand the walk a different table.
-///
-/// This port follows the ROM instruction for instruction: the name copy, the
-/// archive list walk, the group folder, the directory scan, the file lookup
-/// and the size out-parameter. Every tree access reads the archive's own
-/// pages in the arena through the crate's real ports.
 struct ResolvePath {
     path: u32,
     locale: u32,
@@ -1355,16 +1213,10 @@ impl crate::boot_part_b::Host for ResolvePath {
     }
 }
 
-/// fn_19ddd0. Change the archive's current directory.
 fn archive_chdir(m: &mut Memory<'_>, archive: u32, path: u32, locale: u32) -> u32 {
     crate::boot_part_b::fn_19ddd0(m, archive, &mut ResolvePath { path, locale })
 }
 
-/// fn_16b554. The archive find, over the archive's own pages.
-///
-/// `locale` is the thread's case-classification table, the one the ROM's
-/// fn_10062c reads; `env.dot` and `env.parent` are the region's own "."
-/// and ".." strings. `scratch` needs 80 bytes plus 32 per directory level.
 pub fn fn_16b554_m(
     m: &mut Memory<'_>,
     list: u32,
@@ -1375,8 +1227,7 @@ pub fn fn_16b554_m(
     env: &crate::speech_part_1::ArchiveEnvironment,
 ) -> u32 {
     let locale = env.locale;
-    // The name goes into the list's own name field, as u16, at most 63
-    // characters, each byte sign extended.
+
     let mut len = 0u32;
     while len < 63 {
         let c = m.byte(name + len) as i8;
@@ -1448,18 +1299,12 @@ pub fn fn_16b554_m(
     0
 }
 
-/// Caller-owned inputs of fn_243d50: the two log formats and one arg word.
-/// The bytes are the ROM's; the addresses are caller scratch.
 pub struct ChunkReleaseEnv {
     pub begin: u32,
     pub end: u32,
     pub args: u32,
 }
 
-/// fn_243d50. Release a detached chunk: close the owner pair, release the
-/// record through the engine heap. Follows src/fn_243ad4.c: the Begin log,
-/// fn_244324, fn_196428 (which runs even when the close failed), the End
-/// log. The owner close runs through the live reentrant port.
 pub fn fn_243d50_m(
     m: &mut Memory<'_>,
     record: u32,
@@ -1483,14 +1328,6 @@ pub fn fn_243d50_m(
     rc
 }
 
-
-
-/// Caller-owned inputs of fn_22af2c (the RETTT component open).
-/// `pair`/`default` are the region's null pair and default context;
-/// `g80`..`gfa0` are the region's D_8fa74c row; the remaining fields
-/// are guest NUL-terminated strings plus disjoint caller scratch (at
-/// least 64 bytes at `scratch`: the resolve cell, the 17b058 link
-/// triple, the 175a1c value cell and spares).
 pub struct RetttEnv {
     pub pair: [u8; 8],
     pub default: u32,
@@ -1510,14 +1347,8 @@ pub struct RetttEnv {
     pub scratch: u32,
 }
 
-/// Host surface of fn_22af2c_m: live dispatch plus the arena heap and
-/// the log sink. Every seam calls the same certified port or live
-/// entry the surrounding voice boot already runs.
 pub trait RetttHost: crate::boot::Calls + crate::boot_part_b::Host + crate::boot_part_e::Host {
-    /// Fail-path-only callee with no live route in this boot (174f9c,
-    /// 17b1c4, 2ae784): name it the way the harness names unbound calls.
-    /// The ARM voice boot never takes the fail path (rc is always 0 at
-    /// 0x22af2c), so reaching this names the next binding to write.
+
     fn fail_unbound(&mut self, f: u32, args: &[u32]) -> u32;
 }
 
@@ -1535,7 +1366,6 @@ impl<H: crate::boot::Calls> crate::component_live_b::Host for RetttCall<'_, H> {
     }
 }
 
-
 struct RetttHooks<'a, H>(&'a mut H);
 impl<H: RetttHost> crate::reentrant2::HooksM for RetttHooks<'_, H> {
     fn call_m(&mut self, f: u32, a: &[u32], m: &mut crate::boot::Memory<'_>) -> u32 {
@@ -1543,14 +1373,6 @@ impl<H: RetttHost> crate::reentrant2::HooksM for RetttHooks<'_, H> {
     }
 }
 
-/// fn_22af2c. Open the RETTT component: resolve the handle, allocate the
-/// 0x38-byte Xcoder, open SYNTHSTREAM (plus INET when present), build the
-/// pattern engine and the linguistic list, publish the ruleset parameters
-/// and register the owner. Follows src/fn_22ada0_merged.c branch for
-/// branch; every callee is the certified port or live entry the voice
-/// boot already runs. The fail path tears down through the same pieces;
-/// the three fail-only callees with no live route in this boot (174f9c,
-/// 17b1c4, 2ae784) name themselves instead of scripting a result.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_22af2c_m<H: RetttHost>(
     m: &mut Memory<'_>,
@@ -1567,20 +1389,20 @@ pub fn fn_22af2c_m<H: RetttHost>(
     }
     m.put_word(out, 0);
     m.put_word(out + 4, 0);
-    // 176fd4(&e); *out = e.
+
     crate::boot_part_d::fn_176fd4(
         m,
         out,
         [u32::from_le_bytes(e.pair[..4].try_into().unwrap()), u32::from_le_bytes(e.pair[4..].try_into().unwrap())],
     );
-    // 19611c(ha, hb, &o).
+
     let o_cell = e.scratch;
     let rc = crate::boot_port_1::fn_19611c(m, [ha, hb], o_cell, e.pair, e.default);
     if rc >= 0x80000000 {
         return rc;
     }
     let o = m.word(o_cell);
-    // n = 1963b8(o->f04, 1, 0x38).
+
     let heap = m.word(o + 4);
     let n = crate::boot_part_e::calloc(m, heap, 1, 0x38, h);
     if n == 0 {
@@ -1588,7 +1410,7 @@ pub fn fn_22af2c_m<H: RetttHost>(
     }
     m.put_word(n + 0x04, hb);
     m.put_word(n, ha);
-    // lk = 17b058(o->f18, "SYNTHSTREAM").
+
     let res = m.word(o + 24);
     let lk = e.scratch + 4;
     let rc = crate::render_part_c::fn_17b058_m(m, res, e.synth, lk, &mut RetttParser(h));
@@ -1596,22 +1418,20 @@ pub fn fn_22af2c_m<H: RetttHost>(
         return fail_22af2c(m, n, o, e, h, rc);
     }
     m.put_word(n + 0x20, m.word(lk));
-    // 17b058(o->f18, "INET") — optional.
+
     let rc = crate::render_part_c::fn_17b058_m(m, res, e.inet, lk, &mut RetttParser(h));
     if rc < 0x80000000 {
         m.put_word(n + 0x08, m.word(lk));
         m.put_word(n + 0x0c, m.word(lk + 4));
         m.put_word(n + 0x10, m.word(lk + 8));
     }
-    // 2ae690(ha, hb, &n->f14): 16-byte pattern engine object.
+
     let rc = pattern_create_22af2c(m, ha, hb, o, e, h);
     if rc >= 0x80000000 {
         return fail_22af2c(m, n, o, e, h, rc);
     }
     m.put_word(n + 0x14, rc);
-    // 196a64(o->f04, g80, g84, g88, 1, &n->f18): 32-byte linguistic block.
-    // The ROM rejects exactly one-sided nonzero (c, d); otherwise it
-    // allocates, zeroes, and publishes the address.
+
     if (e.g84 != 0) != (e.g88 != 0) {
         return fail_22af2c(m, n, o, e, h, 0x88602007);
     }
@@ -1628,7 +1448,7 @@ pub fn fn_22af2c_m<H: RetttHost>(
     m.put_half(lb + 0x18, 1);
     m.put_word(lb + 0x1c, heap);
     m.put_word(n + 0x18, lb);
-    // 175a1c(o->f14, "rulesetsfrommarkup", &s1).
+
     let params = m.word(o + 20);
     let sval = e.scratch + 20;
     m.put_word(sval, 0);
@@ -1647,19 +1467,19 @@ pub fn fn_22af2c_m<H: RetttHost>(
         let is_true = w.eq_ignore_ascii_case(b"true") || w == b"1";
         m.put_word(n + 0x1c, u32::from(is_true));
     }
-    // 174e74(o->f14, "rulesetsfrommarkup", n, g90, g94).
+
     let rc = crate::boot::Calls::call(h, m, 0x174e74, &[params, e.markup, n, e.g90, e.g94]);
     if rc >= 0x80000000 {
         return fail_22af2c(m, n, o, e, h, rc);
     }
     m.put_word(n + 0x34, 0);
-    // clcpppipelinemode? (default 0; set when the param is a non-empty string)
+
     m.put_word(sval, 0);
     let rc = crate::boot::Calls::call(h, m, 0x175a1c, &[params, e.pipe, sval]);
     if rc < 0x80000000 && m.word(sval) != 0 && m.bytes[m.offset(m.word(sval))] != 0 {
         m.put_word(n + 0x34, 1);
     }
-    // 1757b8(o->f14, "enablerett", 1).
+
     let rc = crate::boot::Calls::call(h, m, 0x1757b8, &[params, e.reten, 1]);
     if rc >= 0x80000000 {
         return fail_22af2c(m, n, o, e, h, rc);
@@ -1669,18 +1489,15 @@ pub fn fn_22af2c_m<H: RetttHost>(
     0
 }
 
-/// fn_2ae690 for the 22af2c pattern engine: resolve, allocate the 16-byte
-/// object, open the PCRE handle into f8/fc and initialize it. Returns the
-/// object address on success, or an error code with bit 31 set.
 fn pattern_create_22af2c<H: RetttHost>(m: &mut Memory<'_>, ha: u32, hb: u32, _o: u32, e: &RetttEnv, h: &mut H) -> u32 {
-    // 19611c(ha, hb, &o2): same owner the caller resolved.
+
     let o2 = e.scratch + 24;
     let rc = crate::boot_port_1::fn_19611c(m, [ha, hb], o2, e.pair, e.default);
     if rc >= 0x80000000 {
         return rc;
     }
     let oo = m.word(o2);
-    // p = 196394(o->heap, 16).
+
     let heap = m.word(oo + 4);
     let p = crate::boot::Calls::call(h, m, 0x196394, &[heap, 16]);
     if p == 0 {
@@ -1691,7 +1508,7 @@ fn pattern_create_22af2c<H: RetttHost>(m: &mut Memory<'_>, ha: u32, hb: u32, _o:
     }
     m.put_word(p, ha);
     m.put_word(p + 4, hb);
-    // 23fe84(h0, h1, &p->f8): resolve, allocate the 24-byte head.
+
     let rc = crate::boot_port_1::fn_19611c(m, [ha, hb], o2, e.pair, e.default);
     if rc >= 0x80000000 {
         crate::boot::Calls::call(h, m, 0x196428, &[heap, p]);
@@ -1707,7 +1524,7 @@ fn pattern_create_22af2c<H: RetttHost>(m: &mut Memory<'_>, ha: u32, hb: u32, _o:
     m.put_word(head, po);
     m.put_word(p + 8, head);
     m.put_word(p + 12, 0xdd57);
-    // 2401a0(p->f8, p->fc, 10, 10).
+
     let rc = crate::component_live_b::pcre_init_m(m, m.word(p + 8), m.word(p + 12), 10, 10, &mut RetttCall(h));
     if rc >= 0x80000000 {
         crate::boot::Calls::call(h, m, 0x196428, &[heap, p]);
@@ -1716,10 +1533,6 @@ fn pattern_create_22af2c<H: RetttHost>(m: &mut Memory<'_>, ha: u32, hb: u32, _o:
     p
 }
 
-/// Fail path of fn_22af2c: tear down the partial Xcoder the way fn_22ae34
-/// does. The three fail-only callees with no live route in this boot
-/// (174f9c, 17b1c4, 2ae784) name themselves instead of scripting a result;
-/// the ARM voice boot never takes this path (rc is always 0 at 0x22af2c).
 fn fail_22af2c<H: RetttHost>(m: &mut Memory<'_>, n: u32, o: u32, e: &RetttEnv, h: &mut H, rc: u32) -> u32 {
     let mut ocell = [0u32; 1];
     let rc0 = crate::boot_port_1::fn_19611c(m, [m.word(n), m.word(n + 4)], e.scratch + 28, e.pair, e.default);

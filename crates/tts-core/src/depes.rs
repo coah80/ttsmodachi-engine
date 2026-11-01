@@ -1,6 +1,5 @@
 use crate::frontend_types::Error;
 
-/// fn_216fe4, EU fn_2171a0, KR fn_21724c.
 pub fn read_bytes<'a>(data: &'a [u8], offset: &mut u32, size: u32) -> Result<&'a [u8], Error> {
     let end = offset.wrapping_add(size);
     if end as usize > data.len() {
@@ -13,7 +12,6 @@ pub fn read_bytes<'a>(data: &'a [u8], offset: &mut u32, size: u32) -> Result<&'a
     Ok(result)
 }
 
-/// fn_21708c, EU fn_217248, KR fn_2172f4.
 pub fn read_aligned(data: &[u8], offset: &mut u32, output: &mut [u8]) -> Result<(), Error> {
     *offset = offset.wrapping_add(3) & !3;
     let bytes = read_bytes(
@@ -43,7 +41,6 @@ impl CharacterTables<'_> {
         table.get(index).copied().ok_or(Error::InvalidResource)
     }
 
-    /// fn_28a478, EU fn_28a634, KR fn_28a6e0.
     pub fn capture_matches(&self, character: u8, capture: u32) -> Result<bool, Error> {
         let index = (capture as usize)
             .checked_mul(2)
@@ -78,7 +75,7 @@ pub struct PredicateState {
 }
 
 impl PredicateState {
-    /// fn_28548c, EU fn_285648, KR fn_2856f4.
+
     pub fn evaluate(
         &mut self,
         code: &[u8],
@@ -217,7 +214,6 @@ impl MatchState {
             .ok_or(Error::InvalidResource)
     }
 
-    /// fn_285888, EU fn_285a44, KR fn_285af0.
     pub fn match_prefix(
         &mut self,
         code: &[u8],
@@ -487,7 +483,6 @@ pub struct ScanFrame {
     after_child: bool,
 }
 
-/// fn_28a510, EU fn_28a6cc, KR fn_28a778.
 pub fn scan_repeat(
     code: &[u8],
     cursor: &mut usize,
@@ -636,7 +631,6 @@ impl SequenceState {
             .evaluate(code, end, position, layers, captures, tables)? as i32)
     }
 
-    /// fn_2865e8, EU fn_2867a4, KR fn_286850.
     pub fn execute_operation(
         &mut self,
         code: &[u8],
@@ -931,7 +925,6 @@ impl SequenceState {
         Ok(result)
     }
 
-    /// fn_2878f4, EU fn_287ab0, KR fn_287b5c.
     pub fn match_sequence(
         &mut self,
         code: &[u8],
@@ -995,7 +988,6 @@ impl SequenceState {
     }
 }
 
-/// fn_2ca8e4, EU fn_2caaa0, KR fn_2cab4c.
 pub fn insert_question_command(
     rows: &mut [&mut [u8]],
     start: i16,
@@ -1189,7 +1181,6 @@ impl ReplacementState {
         self.depth = self.depth.wrapping_sub(1);
     }
 
-    /// fn_28920c, EU fn_2893c8, KR fn_289474.
     pub fn replace(
         &mut self,
         code: &[u8],
@@ -2110,7 +2101,7 @@ impl<H: ExpansionCallback> VmCall<'_, '_, '_, H> {
 }
 
 impl VmState {
-    /// fn_28920c, EU fn_2893c8, KR fn_289474, with recursive VM callbacks.
+
     pub fn replace(
         &mut self,
         index: usize,
@@ -2134,7 +2125,6 @@ impl VmState {
         .replace(&mut self.replacement, index, work, rows, markers)
     }
 
-    /// fn_287cd8, EU fn_287e94, KR fn_287f40.
     pub fn dispatch(
         &mut self,
         module: usize,
@@ -2159,7 +2149,6 @@ impl VmState {
         .dispatch(&mut self.replacement, module, start, end, rows, markers)
     }
 
-    /// fn_287bc0, EU fn_287d7c, KR fn_287e28.
     pub fn match_rule(
         &mut self,
         index: usize,
@@ -2186,7 +2175,7 @@ impl VmState {
 }
 
 impl VmState {
-    /// fn_2195e4, EU fn_2197a0, KR fn_21984c.
+
     pub fn execute_module(
         &mut self,
         name: &[u8],
@@ -2284,7 +2273,7 @@ pub struct ModuleOptions {
 }
 
 impl ModuleOptions {
-    /// fn_219554, EU fn_219710, KR fn_2197bc.
+
     pub fn set(
         &mut self,
         handle: u32,
@@ -2304,7 +2293,6 @@ impl ModuleOptions {
         status
     }
 
-    /// fn_21958c, EU fn_219748, KR fn_2197f4.
     pub fn get(
         &self,
         handle: u32,
@@ -2321,7 +2309,6 @@ impl ModuleOptions {
     }
 }
 
-/// fn_2195c8, EU fn_219784, KR fn_219830.
 pub fn select_interface<'a, T>(kind: u32, interface: &'a T, output: &mut Option<&'a T>) -> u32 {
     if kind <= 1 {
         *output = Some(interface);
@@ -2331,7 +2318,6 @@ pub fn select_interface<'a, T>(kind: u32, interface: &'a T, output: &mut Option<
     }
 }
 
-/// fn_2191c8, EU fn_219384, KR fn_219430.
 pub fn get_layer<'a>(
     handle: u32,
     index: i32,
@@ -2356,7 +2342,6 @@ pub fn get_layer<'a>(
     Ok(status)
 }
 
-/// fn_2192c0, EU fn_21947c, KR fn_219528.
 pub fn get_markers<'a>(
     handle: u32,
     markers: &'a [u8],
@@ -2378,7 +2363,6 @@ pub fn get_markers<'a>(
     }
 }
 
-/// fn_2190b4, EU fn_219270, KR fn_21931c.
 pub fn set_markers(
     handle: u32,
     source: Option<&[u8]>,
@@ -2425,7 +2409,7 @@ pub struct LayerState {
 }
 
 impl LayerState {
-    /// fn_218ba4, EU fn_218d60, KR fn_218e0c.
+
     pub fn set_layer_ex(
         &mut self,
         handle: u32,
@@ -2511,7 +2495,6 @@ impl LayerState {
         Ok(status)
     }
 
-    /// fn_218f88, EU fn_219144, KR fn_2191f0.
     pub fn set_layer(
         &mut self,
         handle: u32,
@@ -2571,7 +2554,6 @@ impl<H: ExpansionCallback> ModuleExecutor for VmModules<'_, '_, '_, '_, H> {
     }
 }
 
-/// fn_2193a4, EU fn_219560, KR fn_21960c.
 pub fn execute_named_module(
     handle: u32,
     name: &[u8],
@@ -2690,7 +2672,6 @@ fn resource_path<'a>(
     Ok(status)
 }
 
-/// fn_217f64, EU fn_218120, KR fn_2181cc.
 pub fn voice_resource_path<'a>(
     mode: i32,
     output: &mut [u8],
@@ -2699,7 +2680,6 @@ pub fn voice_resource_path<'a>(
     resource_path(true, mode, output, parameters)
 }
 
-/// fn_2181b8, EU fn_218374, KR fn_218420.
 pub fn language_resource_path<'a>(
     mode: i32,
     output: &mut [u8],
@@ -2728,7 +2708,6 @@ fn resource_word(data: &[u8], offset: usize) -> Result<u32, Error> {
     ))
 }
 
-/// fn_217e24, EU fn_217fe0, KR fn_21808c.
 pub fn open_resource<'a>(
     handle: u32,
     output_handle: &mut u32,
@@ -2767,71 +2746,53 @@ pub fn open_resource<'a>(
     Ok(status)
 }
 
-/// Engine services the FE_DEPES component borrows from its host.
-///
-/// The host owns every allocation, every loaded resource and the engine
-/// context, so this component keeps only the opaque addresses the original
-/// stored in its objects. Logging (`fn_1738e8`, `fn_173dc0`) is host work and
-/// is not modelled here; the differential adapters observe it separately.
 pub trait DepesHost {
-    /// fn_1963b8: `count` items of `size` bytes. `None` when the allocator refuses.
+
     fn allocate(&mut self, count: u32, size: u32) -> Option<u32>;
-    /// fn_196394: `size` bytes. `None` when the allocator refuses.
+
     fn allocate_block(&mut self, size: u32) -> Option<u32>;
-    /// fn_196428: release an allocation.
+
     fn free(&mut self, address: u32);
-    /// fn_176f94: validate a component handle against `tag` and `size`.
+
     fn validate(&mut self, handle: u32, tag: u32, size: u32) -> u32;
-    /// fn_19611c: resolve the engine context a component request names.
+
     fn resolve(&mut self, params: u32, name: &[u8]) -> (u32, u32);
-    /// fn_17b058: acquire the named resource and fill its three metadata words
-    /// in the order the object stores them (`resource8`, `resourcec`, `resource4`).
+
     fn acquire(&mut self, name: &[u8], metadata: &mut [u32; 3]) -> u32;
-    /// fn_17b1c4: release the named resource.
+
     fn release(&mut self, name: &[u8]);
 }
 
-/// Parsed FE_DEPES grammar header: the scalar fields of the 0x3bc-byte grammar
-/// object. Every field the original stores as a pointer into the mapped grammar
-/// file is a byte offset into the borrowed data instead.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct GrammarHeader {
-    /// +0x04, the length of the grammar data.
+
     pub size: u32,
-    /// +0x08, the offset of the character table.
+
     pub table: u32,
-    /// +0x0c, the number of layers.
+
     pub layer_count: i16,
-    /// +0x10, the number of packed strings.
+
     pub string_count: u32,
-    /// +0x14, the number of 0xa2-byte records in the 0x34 section.
+
     pub record_count: u32,
-    /// +0x18, the number of records in the 0x38 and 0x3c sections.
+
     pub record_count_2: u32,
-    /// +0x1c, the second dimension of the 0x40 matrix.
+
     pub record_count_3: u32,
-    /// +0x20, the number of 32-bit words in the trailing tables.
+
     pub word_count: i16,
-    /// +0x22, the number of 16-bit entries in the 0x44 section.
+
     pub short_count: i16,
-    /// +0x24, the size of the 0x68 section.
+
     pub value_24: u32,
-    /// +0x28, the offset of the 0x28 section.
+
     pub value_28: u32,
-    /// +0x2c..+0x48, the offsets of the section table.
+
     pub sections: [u32; 8],
-    /// +0x4c..+0x68, the offsets of the trailing word tables.
+
     pub values: [u32; 8],
 }
 
-/// Caller-owned FE_DEPES grammar object (the 0x3bc-byte `DepesGrammar`).
-///
-/// `header` holds the parsed offsets; `strings` is the +0x3a4 array of offsets
-/// into the grammar data; `layers` is the +0x39c array that the loader
-/// allocates and `init_module` fills with the shared layer rows; `string_data`
-/// is the +0x3a0 buffer. `capacity` is the address of the owning object's
-/// +0x32 capacity word, and `allocator`/`metadata` are the object fields the
-/// component open path copies in.
 pub struct GrammarState<'a> {
     pub header: GrammarHeader,
     pub strings: &'a mut [u32],
@@ -2851,7 +2812,6 @@ fn word_at(data: &[u8], offset: u32) -> Option<u32> {
     Some(u32::from_le_bytes(bytes.try_into().ok()?))
 }
 
-/// fn_195d90: the length of the NUL-terminated string at `offset`.
 fn name_length(data: &[u8], offset: u32) -> u32 {
     let mut length = 0u32;
     while byte_at(data, offset.wrapping_add(length)) != 0 {
@@ -2860,9 +2820,6 @@ fn name_length(data: &[u8], offset: u32) -> u32 {
     length
 }
 
-/// fn_1769d0: ASCII case-insensitive comparison of the NUL-terminated string at
-/// `offset` with `name`. The classification table `D_8dc30c` marks exactly
-/// ASCII `A`..`Z`, so the original's `fn_17c8c0` fold is `to_ascii_lowercase`.
 fn names_match(data: &[u8], offset: u32, name: &[u8]) -> bool {
     let mut index = 0u32;
     loop {
@@ -2878,20 +2835,6 @@ fn names_match(data: &[u8], offset: u32, name: &[u8]) -> bool {
     }
 }
 
-/// fn_2171bc, EU fn_217378, KR fn_217424.
-///
-/// Reads the `name` section of the mapped grammar resource, parses its header
-/// into `grammar.header`, and fills `grammar.strings` with the offsets of the
-/// packed strings. Returns the original status and the borrowed grammar data,
-/// which the caller must keep mapped until the object is closed. Out-of-range
-/// reads in the original are bounded here instead of reading past the mapping.
-///
-/// C defect: `src/fn_2171bc.c` returns `0x89702004` from every failed
-/// `fn_17a1a4`/`fn_21708c`/`fn_216fe4` check. The original branches to the
-/// common epilogue at `+0xd4` and returns that call's status unchanged; only
-/// the `offset >= file_size` exit (via the pool word at `+0x804`) returns
-/// `0x89702004`. Rust returns the read's own status, matching ARM. Suggested
-/// fix: replace those `return 0x89702004;` statements with `return rc;`.
 pub fn load_grammar<'a>(
     name: &[u8],
     handle: u32,
@@ -2904,8 +2847,7 @@ pub fn load_grammar<'a>(
         return Err(Error::Engine(status));
     }
     let region = region.ok_or(Error::InvalidResource)?;
-    // The original keeps a raw pointer into the mapping, so its scans and
-    // directory reads are bounded by the mapping, not by `file_size`.
+
     let base = region.data;
 
     let mut offset = 0u32;
@@ -3129,35 +3071,26 @@ fn lputh(data: &mut [u8], offset: u32, value: u16) {
     }
 }
 
-/// Host operations for the FE_DEPES module and component lifecycle
-/// (`fn_216c24`, `fn_216e8c`, `fn_217ac8`, `fn_21834c`, `fn_2187a0`,
-/// `fn_2029dc`, `fn_202ee8`, `fn_202dcc`). Arena offsets with 0 meaning null.
-///
-/// Already-ported callees with borrowed-slice interfaces (`fn_2171bc`,
-/// `fn_217e24`, `fn_217f64`, `fn_2181b8`) run behind the `grammar_status`,
-/// `open_resource_file` and `config_path` seams so the differential harness
-/// can replay recorded results; the stage replay wires the real ports through
-/// an adapter host instead.
 pub trait DepesLifecycleHost: HandleValidator {
-    /// `fn_1963b8`: `count` items of `size` bytes, zeroed.
+
     fn calloc(&mut self, arena: &mut [u8], heap: u32, count: u32, size: u32) -> Option<u32>;
-    /// `fn_196394`: `size` bytes.
+
     fn alloc(&mut self, arena: &mut [u8], heap: u32, size: u32) -> Option<u32>;
-    /// `fn_196428`: release `ptr`.
+
     fn free(&mut self, heap: u32, ptr: u32);
-    /// `fn_19611c`: resolve the engine context. Returns `(status, context)`.
+
     fn resolve(&mut self, params: u32, name: u32) -> (u32, u32);
-    /// `fn_17b058`: acquire the named resource. Returns `(status, info)`.
+
     fn acquire(&mut self, arena: &mut [u8], resources: u32, name: u32) -> (u32, u32);
-    /// `fn_17b1c4`: release the named resource.
+
     fn release_named(&mut self, resources: u32, name: u32);
-    /// `fn_179f3c`: close the file behind `handle`.
+
     fn close_file(&mut self, files: u32, handle: u32);
-    /// `fn_179208`: unmap the file mapping at `base`.
+
     fn unmap_file(&mut self, files: u32, handle: u32, base: u32);
-    /// `fn_175944`: read one integer registry value. Returns `(status, value)`.
+
     fn registry_int(&mut self, arena: &mut [u8], reg: u32, key: u32) -> (u32, u32);
-    /// `fn_2171bc`: load one grammar. The adapter host calls `load_grammar`.
+
     fn grammar_status(
         &mut self,
         arena: &mut [u8],
@@ -3167,8 +3100,7 @@ pub trait DepesLifecycleHost: HandleValidator {
         file_size: u32,
         grammar: u32,
     ) -> u32;
-    /// `fn_217e24`: open one grammar resource. The adapter host calls
-    /// `open_resource`.
+
     fn open_resource_file(
         &mut self,
         arena: &mut [u8],
@@ -3177,8 +3109,7 @@ pub trait DepesLifecycleHost: HandleValidator {
         out_handle: &mut u32,
         out_size: &mut u32,
     ) -> u32;
-    /// `fn_217f64`/`fn_2181b8`: format the mode's config path at `out`
-    /// (256 bytes). The adapter host calls `format_path_for_mode`.
+
     fn config_path(
         &mut self,
         arena: &mut [u8],
@@ -3187,13 +3118,10 @@ pub trait DepesLifecycleHost: HandleValidator {
         mode: u32,
         which: u32,
     ) -> u32;
-    /// `fn_2b2de8`: detach one dictionary table. The helper has no C source
-    /// and no delinked entry, so every side replays the recorded status.
+
     fn detach_table(&mut self, table: u32) -> u32;
 }
 
-/// fn_216c24, EU fn_216de0, KR fn_216e8c. Tears down the module's layers,
-/// flags and grammar mappings.
 pub fn exit_module(
     arena: &mut [u8],
     obj: u32,
@@ -3267,10 +3195,6 @@ pub fn exit_module(
     0
 }
 
-/// fn_216e8c, EU fn_217048, KR fn_2170f4. Closes the object: releases the
-/// lookup resource, tears the module down and frees the grammars, file
-/// handles and the object itself. `lookup_name` is the name the original
-/// passes to the release call (`"FE_DCTLKP"`).
 pub fn close_module(
     arena: &mut [u8],
     obj: u32,
@@ -3311,9 +3235,6 @@ pub fn close_module(
     status
 }
 
-/// fn_217ac8, EU fn_217c84, KR fn_217d30. Loads the module's grammars and
-/// wires the shared layer rows. `name` is the grammar name (`"fe_depes"`),
-/// an arena offset.
 pub fn init_module(
     arena: &mut [u8],
     obj: u32,
@@ -3444,18 +3365,12 @@ pub fn init_module(
     status
 }
 
-/// Scratch layout shared by `open_object` and `reopen_object`: the 256-byte
-/// config path, then the two NUL-terminated service names.
 pub const CONFIG_SCRATCH: u32 = 0;
-/// Offset of `"FE_DCTLKP"` within the object scratch.
+
 pub const LOOKUP_NAME_SCRATCH: u32 = 256;
-/// Offset of `"fe_depes"` within the object scratch.
+
 pub const GRAMMAR_NAME_SCRATCH: u32 = 272;
 
-/// fn_21834c, EU fn_218508, KR fn_2185b4. Opens the FE_DEPES object:
-/// resolves the engine, acquires the lookup resource, opens both grammar
-/// resources and initializes the module. `arg0`/`arg1` are ignored by the
-/// original. `scratch` is 288 caller-owned bytes (see `CONFIG_SCRATCH`).
 pub fn open_object(
     arena: &mut [u8],
     params: u32,
@@ -3680,9 +3595,6 @@ fn open_grammars(
     status
 }
 
-/// fn_2187a0, EU fn_21895c, KR fn_218a08. Reopens the FE_DEPES object:
-/// tears the module down, reopens both grammar resources and initializes
-/// the module again. `scratch` follows the `CONFIG_SCRATCH` layout.
 pub fn reopen_object(
     arena: &mut [u8],
     object: u32,
@@ -3826,25 +3738,18 @@ fn init_reopened(arena: &mut [u8], object: u32, grammar: u32, allocator: u32) {
     );
 }
 
-/// String pool layout for the component functions: the service and registry
-/// names live at these offsets from the `names` base.
 pub const NAME_SYNTHSTREAM: u32 = 0;
-/// Offset of `"FE_DEPES"` within the component name pool.
+
 pub const NAME_FE_DEPES: u32 = 12;
-/// Offset of `"DCTEG"` within the component name pool.
+
 pub const NAME_DCTEG: u32 = 21;
-/// Offset of `"udctmaxlookuplen"` within the component name pool.
+
 pub const NAME_LOOKUP_LEN: u32 = 27;
-/// Offset of `"udctmaxdictretlen"` within the component name pool.
+
 pub const NAME_DICT_LEN: u32 = 44;
-/// Offset of `"numberoutputtranscriptions"` within the component name pool.
+
 pub const NAME_NUMBER_OUTPUT: u32 = 62;
 
-/// fn_2029dc, EU fn_202b98, KR fn_202c44. Opens the FE_DEPES component:
-/// acquires its three resources, allocates the state and reads the registry
-/// limits. `hh` is passed as its two words; `names` is the string pool.
-/// The `fa`..`fh` slots hold code addresses, so this port stores zeros there
-/// and the differential harness excludes them from the observation window.
 pub fn component_open(
     arena: &mut [u8],
     hh_a: u32,
@@ -3877,7 +3782,7 @@ pub fn component_open(
         host.release_named(res, synth);
         return status;
     }
-    // The original ignores the third acquire's status and tests the pointer.
+
     let (_dcteg_status, dcteg) = host.acquire(arena, res, dcteg_name);
     let p = match host.calloc(arena, heap, 1, 184) {
         Some(p) => p,
@@ -3932,14 +3837,14 @@ pub fn component_open(
     if status < 0x8000_0000 {
         lputh(arena, p.wrapping_add(104), value as u16);
     }
-    // Code addresses; stored as zero (see the doc comment above).
+
     for field in [112u32, 116, 120, 124, 148, 152, 156, 160] {
         lputw(arena, p.wrapping_add(field), 0);
     }
     if let Some(slot) = arena.get_mut(p.wrapping_add(164) as usize) {
         *slot = 0;
     }
-    // fn_1b20a4: copy the `fa`..`fd` quad to `f128`, then the heap word.
+
     for i in 0..16u32 {
         let byte = arena
             .get(p.wrapping_add(112).wrapping_add(i) as usize)
@@ -3950,7 +3855,7 @@ pub fn component_open(
         }
     }
     lputw(arena, p.wrapping_add(144), heap);
-    // fn_1b20a4 always succeeds, so the remap below is dead in practice.
+
     let rc = map_table_status(0);
     lputw(arena, out.wrapping_add(4), 0xf38a);
     lputw(arena, out, p);
@@ -3965,7 +3870,6 @@ fn map_table_status(rc: u32) -> u32 {
     }
 }
 
-/// fn_202ee8, EU fn_2030a4, KR fn_203150. Re-reads the registry limits.
 pub fn component_refresh(
     arena: &mut [u8],
     obj: u32,
@@ -3999,18 +3903,6 @@ pub fn component_refresh(
     validated
 }
 
-/// fn_202dcc, EU fn_202f88, KR fn_203034. Closes the component: detaches its
-/// tables, closes its file, releases its resources and frees the state.
-///
-/// C defects, both confirmed against the ARM: `src/fn_2029dc.c:266` calls
-/// `fn_179208(p->ctx->heap2, p->f64)` with two arguments, but the ARM at
-/// `fn_202dcc+0x88..0x94` passes three: `r0 = ctx+12`, `r1 = f60`,
-/// `r2 = f64`. `src/fn_2029dc.c:268` calls
-/// `fn_179f3c(p->ctx->heap2, (int)p->f60)`, but the ARM at `+0x9c..0xa8`
-/// passes `r0 = ctx+12`, not `ctx->heap2` (which lives at `ctx+8`). Rust
-/// follows ARM. Suggested fix: declare the three-parameter form (as
-/// `src/fn_216c24.c:36` does), name the `ctx+12` field, and pass `p->f60`
-/// as the unmap handle.
 pub fn component_close(
     arena: &mut [u8],
     obj: u32,

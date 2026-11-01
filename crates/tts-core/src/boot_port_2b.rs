@@ -1,15 +1,9 @@
-//! Boot path lane two-b: the `fe_dctlkp` lookup chain on the boot path.
-//!
-//! Guest pointers stay guest addresses; the caller owns the arena. The
-//! dictionary and resource seams are host traits so the same body runs in the
-//! native C oracle, in the three-region ARM emulator and in Rust.
+
+
 use crate::boot::Memory;
 
-/// `fn_252d6c`. The synthesis fetch table release is already certified by
-/// boot-port-2; the lane only rebinds it.
 pub use crate::boot_port_2::fn_252d6c;
 
-/// `LookupOwner` field offsets.
 pub mod owner {
     pub const HEAP: u32 = 0x04;
     pub const RESOURCES: u32 = 0x0c;
@@ -18,7 +12,6 @@ pub mod owner {
     pub const FIELD18: u32 = 0x18;
 }
 
-/// `DictionaryState` field offsets.
 pub mod state {
     pub const BUFFER: u32 = 0x08;
     pub const TABLES: u32 = 0x0c;
@@ -27,7 +20,6 @@ pub mod state {
     pub const OUTPUT: u32 = 0x18;
 }
 
-/// `LookupContext` field offsets.
 pub mod ctx {
     pub const OWNER: u32 = 0x00;
     pub const MAIN: u32 = 0x04;
@@ -56,32 +48,22 @@ pub mod ctx {
     pub const TABLE2A0: u32 = 0x2a0;
 }
 
-/// The engine services the `fe_dctlkp` chain needs from the platform.
 pub trait Host: crate::boot_part_e::Host {
-    /// `fn_19611c`. The engine context block for a handle pair; the status is
-    /// returned and the block lands in `out`.
+
     fn context(&mut self, m: &mut Memory<'_>, h0: u32, h1: u32, out: &mut u32) -> u32;
-    /// `fn_17b058`. Open a named engine resource; the status is returned and
-    /// the resource block lands in `out`.
+
     fn resource_open(&mut self, m: &mut Memory<'_>, resources: u32, name: &[u8], out: &mut u32)
         -> u32;
-    /// `fn_17b058`. Open a named engine resource; the status is returned and
-    /// the resource block lands in `out`.
+
     fn open_named(&mut self, m: &mut Memory<'_>, resources: u32, name: &[u8], out: &mut u32)
         -> u32;
-    /// `fn_17b1c4`. Release a named engine resource.
+
     fn resource_close(&mut self, m: &mut Memory<'_>, resources: u32, name: &[u8]);
-    /// `fn_175a1c`. A named parameter string; the status is returned and the
-    /// guest string address lands in `out`.
+
     fn parameter(&mut self, m: &mut Memory<'_>, params: u32, name: &[u8], out: &mut u32) -> u32;
-    /// `fn_175944`. A named integer setting.
+
     fn setting(&mut self, m: &mut Memory<'_>, settings: u32, name: &[u8]) -> u32;
-    /// `fn_175944`. A named integer setting; the status is returned and the
-    /// value lands in `out`.
-    ///
-    /// The default keeps the four-argument `setting` contract: the value is
-    /// not known there, so `out` is left at zero and the status passes
-    /// through.
+
     fn setting_value(
         &mut self,
         m: &mut Memory<'_>,
@@ -92,11 +74,7 @@ pub trait Host: crate::boot_part_e::Host {
         *out = 0;
         self.setting(m, settings, name)
     }
-    /// `fn_24d8fc`. The boot-port-4 runtime-data teardown.
-    ///
-    /// Only the token rows reach it; the default refuses the call so a host
-    /// that has not bound the boot-port-4 port cannot report a silent
-    /// success.
+
     fn close_runtime_data(
         &mut self,
         _m: &mut Memory<'_>,
@@ -107,26 +85,20 @@ pub trait Host: crate::boot_part_e::Host {
     }
 }
 
-/// The services `fn_1e555c` needs from the fetch-table facility.
-///
-/// `fn_26402c` belongs to boot-port-5 and has not landed yet; the harness
-/// stubs it the same way on the native, ARM and Rust sides.
 pub trait FetchHost {
-    /// `fn_252cf8`. Allocate the fetch table for the handle pair.
+
     fn fetch_table(&mut self, m: &mut Memory<'_>, h0: u32, h1: u32, out: &mut u32) -> u32;
-    /// `fn_252e1c`. Append one entry to the fetch table.
+
     fn fetch_entry(&mut self, m: &mut Memory<'_>, table: u32, key: u32, a: u32, b: u32) -> u32;
-    /// `fn_26402c`. Open the synthesis sequence; the stub reports success
-    /// and leaves the sequence handle null.
+
     fn synth_sequence(&mut self, m: &mut Memory<'_>, h0: u32, h1: u32, vt: u32, out: &mut u32)
         -> u32;
-    /// `fn_252d6c`. Release the fetch table.
+
     fn release_table(&mut self, m: &mut Memory<'_>, e: u32);
-    /// `fn_263abc`. Release the synthesis sequence.
+
     fn release_sequence(&mut self, m: &mut Memory<'_>, o: u32);
 }
 
-/// `SynthStream` field offsets.
 pub mod synth {
     pub const H0: u32 = 0x00;
     pub const H1: u32 = 0x04;
@@ -137,20 +109,18 @@ pub mod synth {
     pub const SIZE: u32 = 0x30;
 }
 
-/// The engine context the synth stream reads.
 pub mod synth_ctx {
     pub const HEAP: u32 = 0x04;
     pub const PARAMS: u32 = 0x14;
     pub const RESOURCES: u32 = 0x18;
 }
 
-/// The dictionary seam behind `fn_26b5f0`, `fn_26b7ec` and `fn_26bb6c`.
 pub trait Dictionaries {
-    /// `fn_26b5f0`. Open a dictionary resource and report its payload size.
+
     fn open(&mut self, m: &mut Memory<'_>, st: u32, name: u32, size: &mut u32) -> u32;
-    /// `fn_26b7ec`. Load the section tables for `key` into the state block.
+
     fn load(&mut self, m: &mut Memory<'_>, st: u32, key: u32, size: u32, resource: u32) -> u32;
-    /// `fn_26bb6c`. Look `text` up and write the answer into the state output.
+
     fn lookup(
         &mut self,
         m: &mut Memory<'_>,
@@ -163,28 +133,24 @@ pub trait Dictionaries {
     ) -> i32;
 }
 
-/// `fn_26bb44`. The section header word at offset 0x30 of the loaded header.
 fn fn_26bb44(m: &Memory<'_>, st: u32) -> u16 {
     let tables = m.word(st + state::TABLES);
     let header = m.word(tables);
     u16::from_le_bytes([m.byte(header + 0x30), m.byte(header + 0x31)])
 }
 
-/// `fn_26bb54`. The separator byte at offset 9 of the loaded header.
 fn fn_26bb54(m: &Memory<'_>, st: u32) -> u8 {
     let tables = m.word(st + state::TABLES);
     let header = m.word(tables);
     m.byte(header + 9)
 }
 
-/// `fn_26bb28`. Release the loaded header through the resource broker.
 fn fn_26bb28(m: &mut Memory<'_>, st: u32, resource: u32, h: &mut impl Host) {
     let tables = m.word(st + state::TABLES);
     let header = m.word(tables);
     h.call(m, 0x179208, &[m.word(st + state::H0), resource, header]);
 }
 
-/// `fn_26b6fc`. Close the dictionary resource the state still holds.
 fn fn_26b6fc(m: &mut Memory<'_>, st: u32, h: &mut impl Host) {
     let h1 = m.word(st + state::H1);
     if h1 != 0 {
@@ -192,17 +158,14 @@ fn fn_26b6fc(m: &mut Memory<'_>, st: u32, h: &mut impl Host) {
     }
 }
 
-/// `fn_195d90`. The length of a guest string.
 fn strlen(m: &Memory<'_>, p: u32) -> u32 {
     crate::fe_text::strlen_195d90(m.bytes, p - m.base) as u32
 }
 
-/// `fn_195cd0`. Copy a guest string.
 fn strcpy(m: &mut Memory<'_>, dst: u32, src: u32) {
     crate::normalization::strcpy_at(m.bytes, dst - m.base, src - m.base);
 }
 
-/// `fn_195c90`. Append a guest string.
 fn append_guest(m: &mut Memory<'_>, dst: u32, src: u32) {
     let mut at = dst + strlen(m, dst);
     let mut s = src;
@@ -218,12 +181,10 @@ fn append_guest(m: &mut Memory<'_>, dst: u32, src: u32) {
     }
 }
 
-/// `fn_195c90`. Append a guest string.
 fn strcat(m: &mut Memory<'_>, dst: u32, src: u32) {
     crate::fe_text::strcat_195c90(m.bytes, dst - m.base, src - m.base);
 }
 
-/// `fn_195c90`. Append a literal byte string.
 fn append(m: &mut Memory<'_>, dst: u32, src: &[u8]) {
     let mut at = dst + strlen(m, dst);
     for b in src {
@@ -235,12 +196,10 @@ fn append(m: &mut Memory<'_>, dst: u32, src: &[u8]) {
     m.bytes[o] = 0;
 }
 
-/// `fn_195d58`. Compare two guest strings.
 fn strcmp(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     crate::normalization::strcmp_at(m.bytes, a - m.base, b - m.base)
 }
 
-/// `fn_195d58`. Compare a guest string with a literal.
 fn strcmp_lit(m: &Memory<'_>, a: u32, b: &[u8]) -> i32 {
     let mut x = a;
     let mut i = 0usize;
@@ -258,7 +217,6 @@ fn strcmp_lit(m: &Memory<'_>, a: u32, b: &[u8]) -> i32 {
     }
 }
 
-/// `fn_195df8`. Compare at most `n` bytes of two guest strings.
 fn strncmp_lit(m: &Memory<'_>, a: u32, b: &[u8], n: u32) -> i32 {
     if n == 0 {
         return 0;
@@ -287,7 +245,6 @@ fn strncmp_lit(m: &Memory<'_>, a: u32, b: &[u8], n: u32) -> i32 {
     p as i32 - q as i32
 }
 
-/// `fn_195d30`. Find a byte in a guest string.
 fn strchr(m: &mut Memory<'_>, s: u32, c: u8) -> u32 {
     let at = crate::fe_text::strchr_195d30(m.bytes, s - m.base, c as u32);
     if at == 0 {
@@ -297,12 +254,10 @@ fn strchr(m: &mut Memory<'_>, s: u32, c: u8) -> u32 {
     }
 }
 
-/// `fn_195bec`. Fill guest memory.
 fn memset(m: &mut Memory<'_>, dst: u32, value: u8, n: u32) {
     crate::fe_text::memset_195bec(m.bytes, dst - m.base, value, n);
 }
 
-/// `fn_195e38`. Copy at most `n` bytes and zero-fill the rest of the count.
 fn copy_bounded(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) {
     let mut d = dst;
     let mut s = src;
@@ -332,7 +287,6 @@ fn copy_bounded(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) {
     }
 }
 
-/// `fn_176ac8`. Render a value in base ten.
 fn itoa10(value: u32, buf: &mut [u8; 8]) {
     if value == 0 {
         buf[0] = b'0';
@@ -356,27 +310,22 @@ fn itoa10(value: u32, buf: &mut [u8; 8]) {
     }
 }
 
-/// `fn_196394`. Allocate from the owner heap.
 fn alloc(m: &mut Memory<'_>, heap: u32, size: u32, h: &mut impl Host) -> u32 {
     crate::boot_part_e::alloc(m, heap, size, h)
 }
 
-/// `fn_1963b8`. Allocate zeroed memory from the owner heap.
 fn calloc(m: &mut Memory<'_>, heap: u32, count: u32, size: u32, h: &mut impl Host) -> u32 {
     crate::boot_part_e::calloc(m, heap, count, size, h)
 }
 
-/// `fn_1963e0`. Resize a heap block.
 fn realloc(m: &mut Memory<'_>, heap: u32, old: u32, size: u32, h: &mut impl Host) -> u32 {
     crate::boot_part_e::fn_1963e0(m, heap, old, size, h)
 }
 
-/// `fn_196428`. Release a heap block.
 fn release(m: &mut Memory<'_>, heap: u32, p: u32, h: &mut impl Host) {
     crate::boot_part_e::release(m, heap, p, h);
 }
 
-/// The dictionary the lookup selected.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Which {
     Main,
@@ -394,7 +343,6 @@ impl Which {
     }
 }
 
-/// `find_dictionary`. The index of the loaded dictionary named `key`.
 fn find_dictionary(m: &Memory<'_>, ctx: u32, key: u32) -> i16 {
     let count = m.half(ctx + ctx::DICTIONARY_COUNT);
     let keys = m.word(ctx + ctx::KEYS);
@@ -407,10 +355,6 @@ fn find_dictionary(m: &Memory<'_>, ctx: u32, key: u32) -> i16 {
     -1
 }
 
-/// `fn_1ea4e0`. `fe_dctlkp_Lookup`.
-///
-/// `key` and `text` are guest string addresses; `out`, `count` and `separator`
-/// are guest output addresses.
 pub fn fn_1ea4e0(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -739,7 +683,6 @@ pub fn fn_1ea4e0(
     cleanup(m, ctx, logger, h, d, dictionary, false, lookup_key, key, out, count, 0)
 }
 
-/// The `cleanup` label: release the lookup key and settle the outputs.
 #[allow(clippy::too_many_arguments)]
 fn cleanup(
     m: &mut Memory<'_>,
@@ -808,17 +751,11 @@ fn cleanup(
     done(m, logger, h, rc)
 }
 
-/// The `done` label.
 fn done(m: &mut Memory<'_>, logger: u32, h: &mut impl Host, rc: u32) -> u32 {
     h.call(m, 0x1738e8, &[logger, 0x8f8f44, 4, 0, 0]);
     rc
 }
 
-/// The caller-owned scratch the chain uses for its own buffers and literals.
-///
-/// The native C and the ARM keep those in stack slots and in read-only data;
-/// the Rust port needs guest-visible memory, so the caller lends a scratch
-/// area past the arena. Nothing in it is compared.
 pub struct Scratch {
     pub base: u32,
 }
@@ -866,49 +803,46 @@ impl Scratch {
     pub fn text(&self) -> u32 {
         self.base + 80
     }
-    /// The token name `fn_1e4270` appends to the token list.
+
     pub fn token_name(&self) -> u32 {
         self.base + 88
     }
-    /// The key buffer `fn_1eb978` builds its lookup keys in.
+
     pub fn keybuf(&self) -> u32 {
         self.base + 336
     }
-    /// The scratch word `fn_1ebe84` writes its parameter into.
+
     pub fn slot(&self) -> u32 {
         self.base + 592
     }
-    /// The guest buffer the host writes a registry key into before it
-    /// searches the map the way the ROM does.
+
     pub fn map_key(&self) -> u32 {
         self.base + 600
     }
-    /// The guest word the host writes the linguistic entry into.
+
     pub fn host_out(&self) -> u32 {
         self.base + 664
     }
-    /// The guest word the host writes the parameter value into.
+
     pub fn host_out2(&self) -> u32 {
         self.base + 668
     }
-    /// The guest word the host writes an integer setting into.
+
     pub fn setting_slot(&self) -> u32 {
         self.base + 672
     }
-    /// The scratch the boot-port-4 logger trace uses.
+
     pub fn env_scratch(&self) -> u32 {
         self.base + 680
     }
-    /// The scratch size the caller has to provide.
+
     pub const SIZE: u32 = 720;
 }
 
-/// A local string length.
 fn l_len(b: &[u8]) -> usize {
     b.iter().position(|&c| c == 0).unwrap_or(b.len())
 }
 
-/// `fn_195cd0`. Copy into a local buffer.
 fn l_copy(dst: &mut [u8], src: &[u8]) {
     let mut i = 0usize;
     while i < dst.len() {
@@ -921,7 +855,6 @@ fn l_copy(dst: &mut [u8], src: &[u8]) {
     }
 }
 
-/// `fn_195c90`. Append to a local buffer.
 fn l_append(dst: &mut [u8], src: &[u8]) {
     let mut at = l_len(dst);
     let mut i = 0usize;
@@ -936,12 +869,10 @@ fn l_append(dst: &mut [u8], src: &[u8]) {
     }
 }
 
-/// `fn_195d30`. Find a byte in a local buffer.
 fn l_chr(b: &[u8], c: u8) -> Option<usize> {
     b.iter().position(|&x| x == c)
 }
 
-/// `fn_195e38`. Copy at most `n` bytes into a local buffer and zero-fill.
 fn l_copy_bounded(dst: &mut [u8], src: &[u8], n: usize) {
     let mut i = 0usize;
     let mut left = n;
@@ -964,7 +895,6 @@ fn l_copy_bounded(dst: &mut [u8], src: &[u8], n: usize) {
     }
 }
 
-/// `fn_1763e4`. Widen a byte string into a guest buffer of halves.
 fn fn_1763e4(m: &mut Memory<'_>, dst: u32, src: &[u8]) {
     let mut at = dst;
     let mut i = 0usize;
@@ -979,7 +909,6 @@ fn fn_1763e4(m: &mut Memory<'_>, dst: u32, src: &[u8]) {
     }
 }
 
-/// `fn_1eb56c`. Release everything the context still holds.
 pub fn fn_1eb56c(m: &mut Memory<'_>, ctx: u32, h: &mut impl Host) -> u32 {
     if ctx == 0 {
         return 0x89802007;
@@ -1081,7 +1010,6 @@ pub fn fn_1eb56c(m: &mut Memory<'_>, ctx: u32, h: &mut impl Host) -> u32 {
     0
 }
 
-/// `fn_1ee6f4`. Release the token entries the context holds.
 pub fn fn_1ee6f4(m: &mut Memory<'_>, ctx: u32, h: &mut impl Host) -> u32 {
     let count = m.half(ctx + ctx::TOKEN_COUNT);
     if count == 0 {
@@ -1106,7 +1034,6 @@ pub fn fn_1ee6f4(m: &mut Memory<'_>, ctx: u32, h: &mut impl Host) -> u32 {
     0
 }
 
-/// `fn_1eb7b8`. `fe_dctlkp_ObjClose`.
 pub fn fn_1eb7b8(m: &mut Memory<'_>, ctx: u32, handle: u32, h: &mut impl Host) -> u32 {
     let rc = crate::frontend::validate_handle(ctx != 0, handle, 0xf37f, 0x2a4);
     if rc >= 0x80000000 {
@@ -1151,7 +1078,6 @@ pub fn fn_1eb7b8(m: &mut Memory<'_>, ctx: u32, handle: u32, h: &mut impl Host) -
     0
 }
 
-/// `fn_1eae98`. Split the domain definition into its token entries.
 pub fn fn_1eae98(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -1168,7 +1094,7 @@ pub fn fn_1eae98(
     let mut out = s.out0();
     let mut count = s.count0();
     let mut sep = s.sep0();
-    // The ROM's fn_1eae98 frame initializes count to 0xFFFF (strh -1).
+
     m.put_half(count, 0xffff);
     let mut rc = fn_1ea4e0(
         m,
@@ -1248,14 +1174,14 @@ pub fn fn_1eae98(
             }
             m.put_word(at, p);
             fn_1763e4(m, p, &token);
-            // The text buffer is caller-owned guest memory.
+
             let text = s.text();
             l_copy_to(m, text, &token);
             append_bytes(m, text, b"_alpha");
             out = s.out1();
             count = s.count1();
             sep = s.sep1();
-            // The ROM zeroes count before each token query (strh r8).
+
             m.put_half(count, 0);
             rc = fn_1ea4e0(m, ctx, handle, s.fecfg(), text, out, count, sep, h, d);
             if rc >= 0x80000000 {
@@ -1282,13 +1208,13 @@ pub fn fn_1eae98(
                 m.put_word(at + 4, p);
                 l_copy_to(m, p, &text_bytes[..len]);
             }
-            // digit
+
             l_copy_to(m, text, &token);
             append_bytes(m, text, b"_digit");
             out = s.out1();
             count = s.count1();
             sep = s.sep1();
-            // The ROM zeroes count before each token query (strh r8).
+
             m.put_half(count, 0);
             rc = fn_1ea4e0(m, ctx, handle, s.fecfg(), text, out, count, sep, h, d);
             if rc >= 0x80000000 {
@@ -1315,13 +1241,13 @@ pub fn fn_1eae98(
                 m.put_word(at + 8, p);
                 l_copy_to(m, p, &text_bytes[..len]);
             }
-            // punc
+
             l_copy_to(m, text, &token);
             append_bytes(m, text, b"_punc");
             out = s.out1();
             count = s.count1();
             sep = s.sep1();
-            // The ROM zeroes count before each token query (strh r8).
+
             m.put_half(count, 0);
             rc = fn_1ea4e0(m, ctx, handle, s.fecfg(), text, out, count, sep, h, d);
             if rc >= 0x80000000 {
@@ -1363,7 +1289,6 @@ pub fn fn_1eae98(
     }
 }
 
-/// A guest string as bytes and its length.
 fn guest_bytes(m: &Memory<'_>, p: u32) -> ([u8; 256], usize) {
     let mut at = p as usize;
     let mut out = [0u8; 256];
@@ -1376,7 +1301,6 @@ fn guest_bytes(m: &Memory<'_>, p: u32) -> ([u8; 256], usize) {
     (out, n)
 }
 
-/// Copy a local string into guest memory.
 fn l_copy_to(m: &mut Memory<'_>, dst: u32, src: &[u8]) {
     let mut at = dst;
     for c in src {
@@ -1388,7 +1312,6 @@ fn l_copy_to(m: &mut Memory<'_>, dst: u32, src: &[u8]) {
     m.bytes[o] = 0;
 }
 
-/// Append literal bytes to a guest string.
 fn append_bytes(m: &mut Memory<'_>, dst: u32, src: &[u8]) {
     let mut at = dst + strlen(m, dst);
     for c in src {
@@ -1400,10 +1323,6 @@ fn append_bytes(m: &mut Memory<'_>, dst: u32, src: &[u8]) {
     m.bytes[o] = 0;
 }
 
-/// `fn_1eb978`. `fe_dctlkp_CanonicalMap`.
-///
-/// The canonical-map tables are keyed by the first byte of the answer, so the
-/// lookup keys are built in the caller's scratch buffer.
 pub fn fn_1eb978(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -1423,9 +1342,9 @@ pub fn fn_1eb978(
     let mut out = s.out0();
     let mut count = s.count0();
     let mut sep = s.sep0();
-    // The ROM's fn_1eb978 frame initializes count to 0 (strh r8).
+
     m.put_half(count, 0);
-    // The two cache tables and the two phases share one shape.
+
     for phase in 0..2u32 {
         let (prefix, plain, table): (&[u8], &[u8], u32) = if phase == 0 {
             (b"canonmap_", b"canonmap", ctx::TABLE90)
@@ -1480,7 +1399,7 @@ pub fn fn_1eb978(
             }
         }
     }
-    // The usage phase.
+
     m.put_half(count, 0xffff);
     l_copy_to(m, key, b"canonmapusage_");
     append_bytes(m, key, &guest_bytes(m, name).0[..guest_bytes(m, name).1]);
@@ -1516,7 +1435,6 @@ pub fn fn_1eb978(
     rc
 }
 
-/// `fn_1ec070`. `fe_dctlkp_ObjOpen`.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_1ec070(
     m: &mut Memory<'_>,
@@ -1604,7 +1522,6 @@ pub fn fn_1ec070(
     finish_open(m, ctx, slot, s, k, h, d, rc)
 }
 
-/// `fn_1ebe84`. Build the dictionary resource path.
 fn fn_1ebe84(
     m: &mut Memory<'_>,
     owner: u32,
@@ -1662,7 +1579,6 @@ fn fn_1ebe84(
     rc
 }
 
-/// `fn_26b5f0` for the system and the language dictionary.
 fn open_system(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -1687,7 +1603,6 @@ fn open_system(
     0
 }
 
-/// The tail of `fn_1ec070` after the dictionaries are open.
 fn finish_open(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -1705,7 +1620,7 @@ fn finish_open(
     let mut out = s.out0();
     let mut count = s.count0();
     let mut sep = s.sep0();
-    // The ROM's finish_open frame initializes this slot to 0xFFFF (strh sb).
+
     m.put_half(count, 0xffff);
     let rc = fn_1ea4e0(m, ctx, handle, s.fecfg(), s.punc(), out, count, sep, h, d);
     if rc >= 0x80000000 {
@@ -1762,7 +1677,6 @@ fn finish_open(
     rc
 }
 
-/// The `cleanup` label of `fn_1ec070`.
 fn cleanup_open(m: &mut Memory<'_>, slot: u32, logger: u32, h: &mut impl Host, rc: u32) -> u32 {
     let ctx = m.word(slot);
     let handle = m.word(slot + 4);
@@ -1775,12 +1689,6 @@ fn cleanup_open(m: &mut Memory<'_>, slot: u32, logger: u32, h: &mut impl Host, r
     rc
 }
 
-/// `fn_1e555c`. `fe_synthstream_ObjOpen`.
-///
-/// The handle pair is `(h0, h1)`; `out` is the guest `{object, tag}` pair.
-/// The engine registry comes from the shared `Host`; the fetch table and
-/// the sequence factory from `FetchHost`. `tbl` is the guest address of
-/// the ROM's seven-entry `D_8f8cae` table.
 pub fn fn_1e555c(
     m: &mut Memory<'_>,
     h0: u32,
@@ -1850,7 +1758,6 @@ pub fn fn_1e555c(
     0
 }
 
-/// The `fail` label of `fn_1e555c`.
 fn synth_fail(
     m: &mut Memory<'_>,
     o: u32,
@@ -1884,10 +1791,6 @@ fn synth_fail(
     rc
 }
 
-// ------------------------------------------------------------- token object
-
-/// `TokContext_1e3eec` field offsets. The token rows use the engine context
-/// block itself as the token context.
 pub mod ectx {
     pub const MAGIC: u32 = 0x00;
     pub const HEAP: u32 = 0x04;
@@ -1896,7 +1799,6 @@ pub mod ectx {
     pub const RESOURCES: u32 = 0x18;
 }
 
-/// `TokObject_1e3eec` field offsets.
 pub mod tok {
     pub const CONTEXT: u32 = 0x00;
     pub const SOURCE_TYPE: u32 = 0x04;
@@ -1930,22 +1832,10 @@ pub mod tok {
     pub const FF1: u32 = 0xf1;
 }
 
-/// The canonical arena address of the module tag (`D_8f8bec`).
-///
-/// The ROM computes the tag with a PC-relative add, so the three engines
-/// cannot agree on the regional rodata address; the harness relocates the
-/// one literal that holds it to this arena word.
 pub const MODULE_TAG: u32 = 0x10300;
 
-/// The canonical arena address of the empty handle pair (`D_8d7660`).
 pub const EMPTY_PAIR: u32 = 0x102c0;
 
-/// The boot-port-2d platform host of the three token closers.
-///
-/// The closers reach the engine logger, the heap release and the tree
-/// destructors. The lane's own host provides the logger and the heap
-/// release through the guest call seam; the token object owns no tree
-/// destructors, so those slots stay inert.
 struct TwoD<'a, H> {
     host: &'a mut H,
     base: u32,
@@ -2020,12 +1910,6 @@ impl<H: Host> crate::render_part_a::ReaderHost for TwoD<'_, H> {
     }
 }
 
-/// The boot-port-2d environment the three token closers read.
-///
-/// The engine logger is inert in this lane: the token object's context
-/// carries a null logger, so every format pointer stays null and is never
-/// dereferenced. The closers read the scratch window, and the token rows
-/// never reach the paths that use it.
 fn two_d_environment(scratch: u32) -> crate::boot_port_2d::Environment {
     crate::boot_port_2d::Environment {
         begin: 0,
@@ -2054,11 +1938,6 @@ fn two_d_environment(scratch: u32) -> crate::boot_port_2d::Environment {
     }
 }
 
-/// `fn_1e4008`. Close the token object the handle holds.
-///
-/// `ctx` is the engine context the token belongs to and `handle` the guest
-/// address of the `{object, tag}` pair. The three boot-port-2d leaves stay
-/// stubbed until that lane lands them.
 pub fn fn_1e4008(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -2144,10 +2023,6 @@ pub fn fn_1e4008(
     rc
 }
 
-/// `fn_240344`. Close the PCRE engine object the token holds.
-///
-/// The port lives in the regex module; the token row binds it through the
-/// same heap the object was allocated from.
 fn pcre_close(m: &mut Memory<'_>, object: u32, key: u32, h: &mut impl Host) -> u32 {
     struct Pcre<'a, 'b, H> {
         m: &'a mut Memory<'b>,
@@ -2176,9 +2051,6 @@ fn pcre_close(m: &mut Memory<'_>, object: u32, key: u32, h: &mut impl Host) -> u
     crate::regex::pcre_close(&mut pcre, heap, object, key)
 }
 
-/// The boot-port-4 format host the runtime-data teardown needs.
-///
-/// The teardown is bound by the host, so the adapter lives with the caller.
 pub struct Format<'a, H>(pub &'a mut H);
 
 impl<H: crate::boot_part_b::Host> crate::boot_part_b::Host for Format<'_, H> {
@@ -2192,11 +2064,6 @@ impl<H: crate::boot_part_b::Host> crate::boot_part_b::Host for Format<'_, H> {
 
 impl<H: crate::boot_part_b::Host> crate::boot_part_b::FormatHost for Format<'_, H> {}
 
-/// `fn_1e4270`. Open a token object.
-///
-/// `source_type` and `source_name` are the handle the engine context is
-/// resolved with, and `out_handle` the guest address of the `{object, tag}`
-/// pair the caller receives.
 pub fn fn_1e4270(
     m: &mut Memory<'_>,
     source_type: u32,
@@ -2337,15 +2204,10 @@ pub fn fn_1e4270(
         return rc;
     }
     m.put_word(o + tok::LINGDB, m.word(entry + 4));
-    // The deeper open steps (fn_24ef54, fn_24dac8, fn_24d640, fn_2520e4,
-    // fn_24d3bc, fn_1e5278, fn_2512dc and fn_1e512c) belong to the
-    // boot-port-4 and boot-port-5 lanes. The certified scene stops at the
-    // LINGDB open, so the native oracle refuses to link past this point
-    // and this port refuses the path as well.
+
     panic!("the token open stops at the LINGDB open");
 }
 
-/// `fn_23fe84`. Open the PCRE engine object the token holds.
 fn pcre_open(
     m: &mut Memory<'_>,
     handle_ptr: u32,
@@ -2400,25 +2262,14 @@ fn pcre_open(
     rc
 }
 
-// ---------------------------------------------------------------------------
-// The dictionary seams: fn_26b5f0, fn_26b7ec and fn_26bb6c.
-//
-// The SYS_DCT image lives in the arena and the resource service the ports
-// read through is the arena window itself, so the native oracle, the
-// emulator and this port read the same bytes at the same addresses. The
-// dictionary work is done by the morphology ports: the system dictionary
-// open, the section loader and the byte pair search.
-
-/// The SYS_DCT image in the arena.
 pub const SYS_DCT_IMAGE: u32 = 0x10800;
-/// The length of the image window.
+
 pub const SYS_DCT_SIZE: u32 = 0x200;
-/// The file handle the resource service hands out for the dictionary.
+
 pub const SYS_DICT_FILE: u32 = 0x1234;
-/// The status a read past the end of the image reports.
+
 const SYS_DCT_SHORT: u32 = 0x81506004;
 
-/// The resource service the dictionary ports read through.
 pub struct DictionaryImage<'a> {
     image: &'a [u8],
 }
@@ -2438,8 +2289,6 @@ impl<'a> crate::morphology::SystemDictionaryIo<'a> for DictionaryImage<'a> {
     fn close(&mut self, _owner: u32, _file: u32) {}
 }
 
-/// The pages the byte pair search reads the record and offset tables
-/// through. The addresses are file offsets into the image.
 struct ImagePages<'a> {
     image: &'a [u8],
 }
@@ -2462,14 +2311,11 @@ impl crate::morphology::DictionaryPages for ImagePages<'_> {
     fn release(&mut self) {}
 }
 
-/// The image window in the arena.
 fn sysdct_window<'a>(m: &'a Memory<'_>) -> &'a [u8] {
     let at = (SYS_DCT_IMAGE - m.base) as usize;
     &m.bytes[at..at + SYS_DCT_SIZE as usize]
 }
 
-/// The image window and the lookup output, which never overlap: the image
-/// sits at a fixed address and the output comes from the engine heap.
 fn sysdct_window_and_output<'a>(
     m: &'a mut Memory<'_>,
     out: u32,
@@ -2492,11 +2338,6 @@ fn sysdct_window_and_output<'a>(
     }
 }
 
-/// `fn_26b5f0`. Open the system dictionary and report its payload size.
-///
-/// The port reads the 40 byte header, checks the tag, the vendor and the
-/// kind and hands back the size the header carries minus the header. The
-/// file handle the resource service returns lands in the state.
 pub fn fn_26b5f0(m: &mut Memory<'_>, st: u32, name: &[u8], size: &mut u32) -> u32 {
     let owner = m.word(st + state::H0);
     let (rc, handle) = {
@@ -2514,12 +2355,6 @@ pub fn fn_26b5f0(m: &mut Memory<'_>, st: u32, name: &[u8], size: &mut u32) -> u3
     rc
 }
 
-/// `fn_26b7ec`. Load the section tables for `key` into the state block.
-///
-/// The port walks the section index, reads the section and computes the
-/// nineteen offsets the section loader writes into the tables block: the
-/// section data pointer first and the sixteen sub section offsets, the
-/// section end and the record and offset tables after it.
 pub fn fn_26b7ec(m: &mut Memory<'_>, st: u32, key: &[u8], size: u32, heap: u32) -> u32 {
     let owner = m.word(st + state::H0);
     let file = m.word(st + state::H1);
@@ -2546,9 +2381,7 @@ pub fn fn_26b7ec(m: &mut Memory<'_>, st: u32, key: &[u8], size: u32, heap: u32) 
     m.put_word(st + state::H1, handle);
     if data != 0 {
         m.put_word(tables, data);
-        // The first sixteen offsets are relative to the section data; the
-        // last three are file offsets: the section end and the record and
-        // offset tables after it.
+
         for index in 1..16 {
             m.put_word(tables + index as u32 * 4, data.wrapping_add(offsets[index]));
         }
@@ -2559,14 +2392,6 @@ pub fn fn_26b7ec(m: &mut Memory<'_>, st: u32, key: &[u8], size: u32, heap: u32) 
     rc
 }
 
-/// `fn_26bb6c`. The byte pair search.
-///
-/// The port reads the resource header of the loaded section, checks the
-/// length and the input range and then walks the trie. The trie tables
-/// are typed slices, which the crate cannot build from arena bytes without
-/// an allocator, so the tables carry the header's scalars and the search
-/// stops at the first check that needs the trie: a section whose trie the
-/// port would have to walk is refused instead of answered wrongly.
 pub fn fn_26bb6c(
     m: &mut Memory<'_>,
     st: u32,
@@ -2582,9 +2407,7 @@ pub fn fn_26bb6c(
     let section_end = m.word(tables + 16 * 4);
     let records = m.word(tables + 17 * 4);
     let offsets = m.word(tables + 18 * 4);
-    // The resource header of the loaded section. The scalars the port reads
-    // live in its first 72 bytes, so they are copied out and the arena is
-    // free again for the output buffer.
+
     let mut header = [0u8; 72];
     {
         let image = sysdct_window(m);

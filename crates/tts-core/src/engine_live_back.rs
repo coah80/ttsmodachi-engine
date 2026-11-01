@@ -1,26 +1,13 @@
-//! Live backend from the render entry 0x1a18c4 to PCM (lane back, round 1).
-//!
-//! The dispatcher already serves most of the chain the back half needs:
-//! 0x1a18c4 (render_backend_m), 0x18f490, 0x176f2c/0x176f5c (locks),
-//! 0x183398, the PCM sink 0xc72018 and the publication 0x1a1b68. The
-//! back-half host drives the render loop's own entries through the
-//! existing ports: 0x163a98 and 0x132124 through `callback_m`, the PCM
-//! hook through `fn_c72018` plus the sink copy, and the chunk path's
-//! 0x84c160 through its existing port. Every nested call re-enters this
-//! same host, so nested entries bind the same way; a nested fault is
-//! recorded and reported instead of guessed. All state lives in the
-//! caller's arena, backend workspace and PCM sink; this module keeps no
-//! state, allocates nothing and uses no unsafe.
+
 
 pub use crate::engine_live::{
-    call_live_with_runtime_m, call_live_with_runtime_m_traced, BackendWorkspace,
+    call_live_with_runtime_m_rom, call_live_with_runtime_m_traced, BackendWorkspace,
     CallTrace, CallTraceSink, RuntimeM, RuntimeServicesM, SleepPlatform,
 };
 pub use crate::engine::Error as LiveError;
+pub use crate::rom_region::Rom;
 pub use crate::{boot, engine};
 
-/// Run one back-half entry through the live dispatcher with the caller's
-/// arena, heap platform, runtime services and reference snapshot.
 pub fn run_back_m(
     m: &mut boot::Memory<'_>,
     entry: u32,
@@ -29,10 +16,21 @@ pub fn run_back_m(
     runtime: &mut dyn RuntimeServicesM,
     snap: &[u8],
 ) -> Result<u32, LiveError> {
-    call_live_with_runtime_m(m, entry, args, platform, runtime, snap)
+    run_back_rom(m, entry, args, platform, runtime, snap, Rom::Us)
 }
 
-/// Same run with a caller-owned call trace (test-only accessor).
+pub fn run_back_rom(
+    m: &mut boot::Memory<'_>,
+    entry: u32,
+    args: &[u32],
+    platform: &mut dyn engine::HeapPlatform,
+    runtime: &mut dyn RuntimeServicesM,
+    snap: &[u8],
+    rom: Rom,
+) -> Result<u32, LiveError> {
+    call_live_with_runtime_m_rom(m, entry, args, platform, runtime, snap, rom)
+}
+
 pub fn run_back_traced_m(
     m: &mut boot::Memory<'_>,
     entry: u32,
@@ -42,21 +40,26 @@ pub fn run_back_traced_m(
     snap: &[u8],
     trace: &mut dyn CallTraceSink,
 ) -> Result<u32, LiveError> {
-    call_live_with_runtime_m_traced(m, entry, args, platform, runtime, snap, trace)
+    call_live_with_runtime_m_traced(
+        m,
+        entry,
+        args,
+        platform,
+        runtime,
+        snap,
+        trace,
+        crate::rom_region::Rom::Us,
+    )
 }
 
-/// The back-half host: every entry rides the live dispatcher or an
-/// existing port with the caller's arena, workspace and PCM sink.
 pub struct BackHost;
 
-/// The back-half hooks: every nested call re-enters `BackHost`, so the
-/// chunk path's entries bind the same way at any depth. A nested fault
-/// is recorded and reported instead of guessed.
 pub struct Hooks<'p, 'r, 's> {
     pub platform: &'p mut dyn engine::HeapPlatform,
     pub runtime: &'r mut dyn RuntimeServicesM,
     pub snap: &'s [u8],
     pub fault: Option<LiveError>,
+    pub rom: Rom,
 }
 
 impl Hooks<'_, '_, '_> {
@@ -66,7 +69,7 @@ impl Hooks<'_, '_, '_> {
         function: u32,
         args: &[u32],
     ) -> u32 {
-        match BackHost::call_entry(m, function, args, self.platform, self.runtime, self.snap) {
+        match BackHost::call_entry_rom(m, function, args, self.platform, self.runtime, self.snap, self.rom) {
             Ok(rc) => rc,
             Err(e) => {
                 self.fault.get_or_insert(e);
@@ -88,10 +91,10 @@ impl crate::boot_part_b::FormatHost for Hooks<'_, '_, '_> {}
 
 impl crate::speech_part_4::Host for Hooks<'_, '_, '_> {
     fn heap_table(&mut self, _: &mut boot::Memory<'_>) -> u32 {
-        0xb6f4ec
+        crate::rom_region::addr(self.rom, 0xb6f4ec)
     }
     fn heap_optional_flag(&mut self, _: &mut boot::Memory<'_>) -> u32 {
-        0xa7b8e9
+        crate::rom_region::addr(self.rom, 0xa7b8e8) + 1
     }
     fn heap_thread_id(&mut self) -> u32 {
         self.platform.thread_id()
@@ -120,7 +123,7 @@ impl crate::boot_part_b::Host for Hooks<'_, '_, '_> {
 }
 
 impl BackHost {
-    /// One entry through the back-half host.
+
     pub fn call_entry(
         m: &mut boot::Memory<'_>,
         entry: u32,
@@ -129,14 +132,24 @@ impl BackHost {
         runtime: &mut dyn RuntimeServicesM,
         snap: &[u8],
     ) -> Result<u32, LiveError> {
+        Self::call_entry_rom(m, entry, args, platform, runtime, snap, Rom::Us)
+    }
+
+    pub fn call_entry_rom(
+        m: &mut boot::Memory<'_>,
+        entry: u32,
+        args: &[u32],
+        platform: &mut dyn engine::HeapPlatform,
+        runtime: &mut dyn RuntimeServicesM,
+        snap: &[u8],
+        rom: Rom,
+    ) -> Result<u32, LiveError> {
+        let entry = crate::rom_region::to_us_guest(rom, entry);
         match entry {
-            // fn_163a98 / fn_132124: the render loop's own event dispatch,
-            // driven here so nested calls (locks, ready check, render,
-            // PCM hooks, publication, and the chunk path's 0x84c160) run
-            // through this same host instead of the bare dispatcher.
+
             0x163a98 => {
                 let a: [u32; 5] = args.try_into().map_err(|_| LiveError::InvalidSnapshot)?;
-                let mut h = Hooks { platform, runtime, snap, fault: None };
+                let mut h = Hooks { platform, runtime, snap, fault: None, rom };
                 let rc = crate::engine_live::callback_m(m, a, 0x1c00, 0x989680, &mut h);
                 if let Some(e) = h.fault {
                     return Err(e);
@@ -148,42 +161,39 @@ impl BackHost {
                     return Err(LiveError::InvalidSnapshot);
                 }
                 let a = [args[4], args[0], args[1], args[2], args[3]];
-                let mut h = Hooks { platform, runtime, snap, fault: None };
+                let mut h = Hooks { platform, runtime, snap, fault: None, rom };
                 let rc = crate::engine_live::callback_m(m, a, 0x1c00, 0x989680, &mut h);
                 if let Some(e) = h.fault {
                     return Err(e);
                 }
                 Ok(rc)
             }
-            // fn_84c160: the owned range predicate on the chunk path.
-            // The existing speech_part_3 port runs here; its locks
-            // re-enter this same host.
+
             0x84c160 => {
                 if args.len() < 2 {
                     return Err(LiveError::InvalidSnapshot);
                 }
-                let mut h = Hooks { platform, runtime, snap, fault: None };
+                let mut h = Hooks { platform, runtime, snap, fault: None, rom };
                 let rc = crate::speech_part_3::fn_84c160(m, args[0], args[1], &mut h);
                 if let Some(e) = h.fault {
                     return Err(e);
                 }
                 Ok(rc)
             }
-            // The PCM hook: the guest capture runs first (it can grow
-            // the capture buffer through the realloc path, which is how
-            // 0x84c160 is reached), then the sink copy, exactly like the
-            // engine_live arm this replaces for the back half.
+
             0xc72018 => {
                 if args.len() < 2 {
                     return Err(LiveError::InvalidSnapshot);
                 }
-                let env = crate::speech_part_4::CaptureRuntime {
-                    slot: m.word(0xc72688),
-                    fill_flag: m.byte(0xa7b8e8) as u32,
-                    append_result: m.word(0xc7268c),
-                };
-                let mut h = Hooks { platform, runtime, snap, fault: None };
-                crate::speech_part_4::fn_c72018(m, &mut h, env, args[0], args[1]);
+                let mut h = Hooks { platform, runtime, snap, fault: None, rom };
+                if h.runtime.guest_capture() {
+                    let env = crate::speech_part_4::CaptureRuntime {
+                        slot: m.word(crate::rom_region::capture_slot(rom)),
+                        fill_flag: m.byte(crate::rom_region::addr(rom, 0xa7b8e8)) as u32,
+                        append_result: m.word(crate::rom_region::capture_slot(rom).wrapping_add(4)),
+                    };
+                    crate::speech_part_4::fn_c72018(m, &mut h, env, args[0], args[1]);
+                }
                 if let Some(e) = h.fault {
                     return Err(e);
                 }
@@ -203,7 +213,7 @@ impl BackHost {
                     args[4],
                     args[5],
                     args[6],
-                    &mut Hooks { platform, runtime, snap, fault: None },
+                    &mut Hooks { platform, runtime, snap, fault: None, rom },
                 );
                 Ok(rc)
             }
@@ -216,25 +226,16 @@ impl BackHost {
                     args[0],
                     args[1],
                     args[2],
-                    &mut Hooks { platform, runtime, snap, fault: None },
+                    &mut Hooks { platform, runtime, snap, fault: None, rom },
                 );
                 Ok(rc)
             }
-            // seg7 r12: the 0x1530d0 step port is deleted (it stubbed the
-            // nested render). 0x1530d0 falls through to run_back_m, which
-            // reaches the single real implementation (the seg7
-            // composition via the merged Host).
-            _ => run_back_m(m, entry, args, platform, runtime, snap),
+
+            _ => run_back_rom(m, entry, args, platform, runtime, snap, rom),
         }
     }
 }
 
-// ============================================================
-// Lane back, round 2: the outer pump loop, chained through all chunks.
-// (See the module docs at the top for the lane structure.)
-
-/// Check the pump state (fn_176f2c / fn_176f5c around the state byte).
-/// Returns the stop flag; a failed lock returns its error status.
 fn pump_check(
     m: &mut boot::Memory<'_>,
     user: u32,
@@ -253,8 +254,6 @@ fn pump_check(
     Ok(stopped)
 }
 
-/// Publish the popped buffer (have_output): the user tag slots and the
-/// in/out count follow the popped local buffer's live fields.
 fn pump_have_output(
     m: &mut boot::Memory<'_>,
     user: u32,
@@ -267,8 +266,6 @@ fn pump_have_output(
     m.put_word(tcptr, tc);
 }
 
-/// Clear the output (clear_output / clear_tag_count): the sample, count
-/// and user tag words go to zero, mirroring the ARM stores exactly.
 fn pump_clear_output(
     m: &mut boot::Memory<'_>,
     user: u32,
@@ -282,9 +279,6 @@ fn pump_clear_output(
     m.put_word(tcptr, 0);
 }
 
-/// The pump's engine stop path (never taken on the certified run: every
-/// nested call returns 0). Routed through the host so a future status
-/// surfaces as a fault instead of a guess.
 fn pump_engine_stop(m: &mut boot::Memory<'_>, user: u32, h: &mut Hooks<'_, '_, '_>) -> u32 {
     let engine = m.word(user.wrapping_add(4));
     let api = m.word(engine.wrapping_add(0xbc));
@@ -296,8 +290,6 @@ fn pump_engine_stop(m: &mut boot::Memory<'_>, user: u32, h: &mut Hooks<'_, '_, '
     )
 }
 
-/// Run the pump's render half (check_state, 0x18f490, callback 16).
-/// Returns the callback status code, or a lock/map error.
 #[allow(clippy::too_many_arguments)]
 fn pump_render_half(
     m: &mut boot::Memory<'_>,
@@ -338,8 +330,7 @@ fn pump_render_half(
         m.half(user.wrapping_add(0x150)) as u32
     };
     m.put_word(req.wrapping_add(4), req_flags);
-    // seg7 r6: the ARM does not nest a 132124->kind-16 render here;
-    // the app callback returns success without rendering. Stub status 0.
+
     let status = 0u32;
     let rc = if status != 0 {
         (status & 0x1fff) | 0x80002000
@@ -350,8 +341,6 @@ fn pump_render_half(
     Ok(rc)
 }
 
-/// Run the pump's pop half (check_state, callback 8, publish the popped
-/// buffer). `rc` is the render half's status code.
 #[allow(clippy::too_many_arguments)]
 fn pump_pop_half(
     m: &mut boot::Memory<'_>,
@@ -380,7 +369,7 @@ fn pump_pop_half(
     m.put_word(req, 8);
     m.put_word(req.wrapping_add(8), local);
     m.put_word(req.wrapping_add(4), 0);
-    // seg7 r6: same as above; no nested render at this call site.
+
     let status = 0u32;
     rc = if status != 0 {
         (status & 0x1fff) | 0x80002000
@@ -446,7 +435,6 @@ fn pump_pop_half(
     rc
 }
 
-/// fn_18f6b8: the application's output pump (putOutput), over the live guest.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_18f6b8_m(
     m: &mut boot::Memory<'_>,
@@ -523,9 +511,6 @@ pub fn fn_18f6b8_m(
     pump_pop_half(m, user, sptr, cptr, tcptr, local, req, h, rc)
 }
 
-/// fn_195a44: the flush event. Builds the [x, 0, 0] event at the
-/// caller-provided guest address and issues it through the scheduler
-/// callback slot (0x132124 here).
 pub fn fn_195a44_m(
     m: &mut boot::Memory<'_>,
     user: u32,
@@ -550,8 +535,6 @@ pub fn fn_195a44_m(
     }
 }
 
-/// Resume a pump at its pop half (entry pump tail): rebuild the pump
-/// frame's local from the live slots and run the pop half.
 pub fn fn_18f6b8_pop_m(
     m: &mut boot::Memory<'_>,
     user: u32,

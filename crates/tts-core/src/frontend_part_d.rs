@@ -1,4 +1,4 @@
-//! Caller-owned APDB expansion state.
+
 fn word(m: &[u8], p: u32) -> u32 {
     u32::from_le_bytes(m[p as usize..p as usize + 4].try_into().unwrap())
 }
@@ -44,7 +44,7 @@ fn widen(m: &mut [u8], dst: u32, src: u32, append: bool) {
         i += 1;
     }
 }
-/// Outputs of fn_279988's caller-supplied marker inspection.
+
 #[derive(Default)]
 pub struct OriginalPromptSpan {
     pub expected: u16,
@@ -53,30 +53,30 @@ pub struct OriginalPromptSpan {
     pub start: u32,
     pub end: u32,
 }
-/// A lossless fn_17486c vararg. Null is distinct from an empty string.
+
 pub enum ExpansionLogArg<'a> {
     Null,
     String(&'a [u8]),
     Number(u32),
 }
 use ExpansionLogArg::{Null, Number as Num, String as Str};
-/// Heap, marker decoding and diagnostics supplied by the engine host.
+
 pub trait OriginalExpansionServices {
-    /// fn_17497c. Queried at every ROM call site, not cached.
+
     fn logging_enabled(&mut self, logger: u32) -> bool {
         let _ = logger;
         false
     }
-    /// fn_173fd8.
+
     fn diagnostic_level(&mut self, logger: u32) -> u32 {
         let _ = logger;
         0
     }
-    /// fn_17486c. Formats and arguments are passed without host formatting.
+
     fn log(&mut self, logger: u32, site: u32, format: &[u8], args: &[ExpansionLogArg<'_>]) {
         let _ = (logger, site, format, args);
     }
-    /// fn_1748a0. Capture the payload now, before subsequent mutations.
+
     fn payload(
         &mut self,
         mem: &[u8],
@@ -89,7 +89,7 @@ pub trait OriginalExpansionServices {
     ) {
         let _ = (mem, logger, site, label, media_type, pointer, bytes);
     }
-    /// fn_1738e8 accepted-match diagnostics. Names remain arena pointers.
+
     fn accepted(
         &mut self,
         mem: &[u8],
@@ -118,7 +118,7 @@ pub trait OriginalExpansionServices {
         out: &mut OriginalPromptSpan,
     ) -> bool;
     fn reallocate(&mut self, heap: u32, entries: u32, bytes: u32) -> u32;
-    /// Reallocate caller memory, including copying live bytes if the block moves.
+
     fn reallocate_state(&mut self, mem: &mut [u8], heap: u32, entries: u32, bytes: u32) -> u32 {
         let _ = mem;
         self.reallocate(heap, entries, bytes)
@@ -128,7 +128,7 @@ pub trait OriginalExpansionServices {
     fn free(&mut self, heap: u32, pointer: u32);
     fn node(&mut self, heap: u32, kind: u32, start: u32, length: u32) -> u32;
     fn error(&mut self, logger: u32, code: u32);
-    /// fn_1738e8. Pointers in args address caller memory; strings exclude NUL.
+
     fn diagnostic(
         &mut self,
         mem: &[u8],
@@ -141,7 +141,7 @@ pub trait OriginalExpansionServices {
     ) {
         let _ = (mem, logger, source, level, flags, format, args);
     }
-    /// fn_17486c's string-only rejection messages, including unconditional calls.
+
     fn log_strings(&mut self, logger: u32, site: u32, format: &[u8], args: &[&[u8]]) {
         let _ = (logger, site, format, args);
     }
@@ -195,7 +195,7 @@ const ACCEPT_NORMAL: &[u8] =
 fn class_count(a: &[u8]) -> usize {
     a.iter().position(|&c| c == 0).unwrap() + 1
 }
-/// The fn_279c28 context summary, in a fixed local buffer, without core::fmt.
+
 fn summary(flag: bool, kind: u8, ch: u8, classes: &[u8], mark: u8) -> [u8; 128] {
     const NAMES: [&[u8]; 8] = [
         b"[*]", b"[S]", b"[P]", b"[S|P]", b"[...]", b"[p]", b"[P|...]", b"[PG]",
@@ -279,7 +279,7 @@ fn original_bytes(mem: &[u8], lk: u32, sl: u32, base: u32) -> u32 {
         0
     }
 }
-/// fn_279d54 / EU fn_279f10 / KR fn_279fbc, including host logging.
+
 pub fn expand_original_record(
     mem: &mut [u8],
     rec: u32,
@@ -391,9 +391,7 @@ fn classes(begin: bool, mark: u16, sentence: bool) -> [u8; 6] {
 fn class_matches(class: u8, ch: u8, mark: u16, classes: [u8; 6]) -> bool {
     class == 0 || (classes.contains(&class) && (class != 5 || ch == mark as u8))
 }
-/// fn_279d54 / EU fn_279f10 / KR fn_279fbc.
-/// Match original UTF-16 orthography, insert an AP marker, remove the
-/// matched text and split the caller's node chain. Diagnostics are host-owned.
+
 fn original_body(
     mem: &mut [u8],
     rec: u32,
@@ -583,7 +581,7 @@ fn original_body(
                     while after < wide_len(mem, text) {
                         let c = half(mem, text + after * 2);
                         if !space(c) {
-                            // The ROM compares the full UTF-16 unit with each set byte here.
+
                             let bytes =
                                 &mem[set as usize..set as usize + byte_len(mem, set) as usize];
                             if !bytes.iter().any(|&b| b as u16 == c) {
@@ -848,7 +846,6 @@ fn original_body(
     0
 }
 
-/// Host prompt properties and normalized-text replacement.
 pub trait NormalizedExpansionServices: OriginalExpansionServices {
     fn first(&mut self, handle: [u32; 2], kind: u32, parent: u16, out: &mut u16) -> u32;
     fn next(&mut self, handle: [u32; 2], token: u16, out: &mut u16) -> u32;
@@ -1094,7 +1091,7 @@ fn normalized_property_match(
     }
     Ok(false)
 }
-/// fn_27b904 / EU fn_27bac0 / KR fn_27bb6c, including host logging.
+
 pub fn expand_normalized_record(
     mem: &mut [u8],
     rec: u32,
@@ -1172,9 +1169,7 @@ pub fn expand_normalized_record(
     }
     rc
 }
-/// fn_27b904 / EU fn_27bac0 / KR fn_27bb6c.
-/// Match normalized APDB patterns and prompt/class restrictions, then replace
-/// text through the caller's rewrite service and insert the accepted marker.
+
 fn normalized_body(
     mem: &mut [u8],
     rec: u32,

@@ -12,7 +12,7 @@ pub struct BitCursor {
 }
 
 impl BitCursor {
-    /// fn_26b2f8, EU fn_26b4b4, KR fn_26b560.
+
     pub fn decode(&mut self, data: &[u8], tree: &[[u16; 2]], root: u32) -> Result<u32, Error> {
         if self.bit > 7 {
             return Err(Error::InvalidResource);
@@ -41,7 +41,6 @@ impl BitCursor {
         }
     }
 
-    /// fn_26b530, EU fn_26b6ec, KR fn_26b798.
     pub fn read_shifted(&mut self, data: &[u8], bits: u8, shift: u8) -> Result<u32, Error> {
         if self.bit > 7 || bits > 32 {
             return Err(Error::InvalidResource);
@@ -76,7 +75,6 @@ impl BitCursor {
         Ok(value.checked_shl(u32::from(shift)).unwrap_or(0))
     }
 
-    /// fn_26b37c, EU fn_26b538, KR fn_26b5e4.
     pub fn decode_count(
         &mut self,
         data: &[u8],
@@ -96,7 +94,6 @@ impl BitCursor {
         packed_value(values, index, width, false)
     }
 
-    /// fn_26b444, EU fn_26b600, KR fn_26b6ac.
     pub fn decode_offset(&mut self, data: &[u8], table: OffsetTable<'_>) -> Result<u32, Error> {
         let index = self.decode(data, table.tree, u32::from(table.root))?;
         let value = packed_value(table.values, index, table.width, true)?;
@@ -191,7 +188,7 @@ pub struct TrieCursor {
 }
 
 impl TrieCursor {
-    /// fn_26c1c0, EU fn_26c37c, KR fn_26c428.
+
     pub fn lookup(
         &mut self,
         text: &[u8],
@@ -465,7 +462,6 @@ impl TrieCursor {
     }
 }
 
-/// Byte-input behavior of fn_240b28, EU fn_240ce4, KR fn_240d90.
 pub(crate) fn lowercase_byte(c: u8) -> u8 {
     match c {
         b'A'..=b'Z' => c + 32,
@@ -501,7 +497,7 @@ pub struct EntryTables<'a> {
 }
 
 impl TrieCursor {
-    /// fn_26bb6c, EU fn_26bd28, KR fn_26bdd4.
+
     pub fn lookup_entry(
         &mut self,
         text: &[u8],
@@ -724,7 +720,6 @@ fn expand_entry(data: &[u8], tables: EntryTables<'_>, output: &mut [u8]) -> Resu
     Ok(count)
 }
 
-/// fn_2ca778, EU fn_2ca934, KR fn_2ca9e0.
 pub fn number_hyphens(source: &[u8], output: &mut [u8], lo: i16, hi: i16) -> Result<u32, Error> {
     let first = lo.wrapping_sub(1);
     let last = hi.wrapping_sub(1);
@@ -751,7 +746,6 @@ pub fn number_hyphens(source: &[u8], output: &mut [u8], lo: i16, hi: i16) -> Res
     Ok(1)
 }
 
-/// fn_2ca808, EU fn_2ca9c4, KR fn_2caa70.
 pub fn copy_range(source: &[u8], output: &mut [u8], lo: i16, hi: i16) -> Result<u32, Error> {
     if hi < lo {
         return Ok(1);
@@ -775,29 +769,25 @@ pub struct DictionaryHeader<'a> {
 }
 
 impl DictionaryHeader<'_> {
-    /// fn_26bb44, EU fn_26bd00, KR fn_26bdac.
+
     pub fn result_capacity(&self) -> Result<u16, Error> {
         let bytes = self.bytes.get(48..50).ok_or(Error::InvalidResource)?;
         Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
     }
 
-    /// fn_26bb54, EU fn_26bd10, KR fn_26bdbc.
     pub fn separator(&self) -> Result<u8, Error> {
         self.bytes.get(9).copied().ok_or(Error::InvalidResource)
     }
 }
 
-/// fn_26bb64, EU fn_26bd20, KR fn_26bdcc.
 pub fn set_dictionary_resource(resource: &mut u32, value: u32) {
     *resource = value;
 }
 
-/// fn_2ddec4, EU fn_2de080, KR fn_2de12c.
 pub fn activate_dictionary(active: &mut u32) {
     *active = 1;
 }
 
-/// fn_2dded4, EU fn_2de090, KR fn_2de13c.
 pub fn duration_frequency(rate: u32, duration: u32) -> u16 {
     if duration == 0 {
         0
@@ -806,12 +796,10 @@ pub fn duration_frequency(rate: u32, duration: u32) -> u16 {
     }
 }
 
-/// fn_2ddf2c, EU fn_2de0e8, KR fn_2de194.
 pub fn duration_samples(rate: u32, duration: u32) -> u32 {
     rate.wrapping_mul(duration).wrapping_mul(0x1064) >> 16
 }
 
-/// fn_270b28, EU fn_270ce4, KR fn_270d90.
 pub fn byte_precedes(left: u8, right: u8) -> bool {
     left < right
 }
@@ -869,7 +857,7 @@ fn dictionary_index(data: &[u8], key: &[u8]) -> Result<Option<usize>, Error> {
 }
 
 impl SystemDictionaryFile {
-    /// fn_26b5f0, EU fn_26b7ac, KR fn_26b858.
+
     pub fn open<'a>(
         &mut self,
         name: &[u8],
@@ -901,7 +889,6 @@ impl SystemDictionaryFile {
         Ok(0)
     }
 
-    /// fn_26b6fc, EU fn_26b8b8, KR fn_26b964.
     pub fn close<'a>(&self, io: &mut impl SystemDictionaryIo<'a>) -> u32 {
         if self.file != 0 {
             io.close(self.owner, self.file);
@@ -909,7 +896,6 @@ impl SystemDictionaryFile {
         0
     }
 
-    /// fn_26b718, EU fn_26b8d4, KR fn_26b980.
     pub fn contains<'a>(
         &mut self,
         key: &[u8],
@@ -935,7 +921,6 @@ impl SystemDictionaryFile {
         Ok(0)
     }
 
-    /// fn_26b7ec, EU fn_26b9a8, KR fn_26ba54.
     pub fn load<'a>(
         &mut self,
         key: &[u8],
@@ -1021,26 +1006,6 @@ impl SystemDictionaryFile {
     }
 }
 
-// ---------------------------------------------------------------------------
-// FE_ONEWORD single-word lookup (fn_1f7ed0 unit).
-//
-// The `Fe` object is the 0x4c8-byte context below, translated field for
-// field from src/fn_1f7ed0.c. Handles and vtable pointers are opaque engine
-// addresses copied verbatim from the recorded image; scripted seams treat
-// them as tokens. Only fn_1f98c8 and the one function it reaches,
-// fn_1f932c, are ported; the unit's create/destroy/vtable slots are not in
-// that tree.
-//
-// Seam conventions used by both ports: every seam call happens exactly where
-// the C calls it (log fidelity). Strings the C holds across calls live in
-// port-local buffers; `StrKey` reuses a buffer while its source and the
-// output version are unchanged, and unlogged seam refreshes pick up
-// scripted store changes. Fuzz scripts apply dictionary marker effects to
-// the passed marker buffer only, and never touch the root marker field.
-// ---------------------------------------------------------------------------
-
-/// The environment block the context points at: heap, log, params and
-/// resource handles at Env offsets 0x4, 0x10, 0x14 and 0x18.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct OnewordEnv {
     pub heap: u32,
@@ -1049,19 +1014,12 @@ pub struct OnewordEnv {
     pub res: u32,
 }
 
-/// An engine handle (`CfgHandle`): two opaque words passed back to the
-/// vtable or dictionary entry they came from.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct OnewordHandle {
     pub a: u32,
     pub b: u32,
 }
 
-/// The FE_ONEWORD context (`Fe`, 0x4c8 bytes), translated field for field
-/// from src/fn_1f7ed0.c. Pointer fields hold arena offsets (for heap
-/// blocks) or absolute engine addresses (for handles, vtables and the
-/// environment); the test harness serializes each field back to its C
-/// offset when comparing against the recorded context image.
 #[derive(Clone, Debug)]
 pub struct Oneword {
     pub env_ptr: u32,
@@ -1159,7 +1117,6 @@ impl Default for Oneword {
     }
 }
 
-/// A dictionary entry returned by the lexicon lookup (name, size, id).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct OnewordDictEntry {
     pub name: u32,
@@ -1167,10 +1124,6 @@ pub struct OnewordDictEntry {
     pub id: u32,
 }
 
-/// A language marker (`Marker`, 24 bytes on the wire): the type halfword at
-/// 0, the position at 12, the length at 16 and the value word at 20 (either
-/// a u16-text address or a number; the port copies it opaquely except for
-/// the type-37 text lookup, which resolves it through [`OnewordOut`]).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct OnewordMarker {
     pub type_: u16,
@@ -1179,34 +1132,24 @@ pub struct OnewordMarker {
     pub val: u32,
 }
 
-/// Cache key for a port-local copy of an output string: the record, the
-/// field and the output version it was fetched at.
 pub type StrKey = Option<(u16, u32, u32)>;
 
-/// The text `fn_1f932c` slices its word from: either a caller buffer or a
-/// heap string the port reads through `heap` itself.
 pub enum OnewordText<'a> {
     Slice(&'a [u8]),
     Heap(u32),
 }
 
-/// The handle check (fn_176f94) the one-word functions open with.
 pub trait OnewordHost {
     fn check(&mut self, handle: u32, tag: u32, size: u32) -> u32;
 }
 
-/// Engine parameters (fn_1756d0/fn_175a1c). Each fetch copies the value,
-/// terminator included, into the caller's buffer and reports whether the
-/// engine handed one back at all; values fit their 64 bytes.
 pub trait OnewordParams {
     fn get_dec(&mut self, params: u32, key: &[u8], d: u32, out: &mut [u8]) -> (u32, bool);
     fn get(&mut self, params: u32, key: &[u8], out: &mut [u8]) -> (u32, bool);
 }
 
-/// The configuration vtable (`cfg`, reached through `h`).
 pub trait OnewordCfg {
-    /// Read a config string into the caller's buffer, reporting its length
-    /// and separator. Values fit their 128 bytes.
+
     fn get_string(
         &mut self,
         handle: OnewordHandle,
@@ -1216,9 +1159,9 @@ pub trait OnewordCfg {
         len: &mut u16,
         sep: &mut u8,
     ) -> u32;
-    /// Register a word with the configuration. The caller ignores the result.
+
     fn add_word(&mut self, handle: OnewordHandle, mode: &[u8], word: &[u8]) -> u32;
-    /// Install language markers.
+
     fn set_markers(
         &mut self,
         handle: OnewordHandle,
@@ -1226,20 +1169,17 @@ pub trait OnewordCfg {
         b: u32,
         markers: &[OnewordMarker],
     ) -> u32;
-    /// Normalize `word` in place, leaving it terminated within `size` bytes.
+
     fn normalize(&mut self, handle: OnewordHandle, mode: &[u8], word: &mut [u8], size: u32) -> u32;
 }
 
-/// The output-record vtable (`out`). String fields are fetched into
-/// caller buffers; the refresh/set helpers re-read or write single bytes
-/// without logging, so the logged calls match the C exactly.
 pub trait OnewordOut {
     fn add_child(&mut self, a: u32, b: u32, type_: u32, parent: u32, id: &mut u16) -> u32;
     fn new_record(&mut self, a: u32, b: u32, c: u32, id: &mut u16) -> u32;
     fn insert_before(&mut self, a: u32, b: u32, id: u32, new_id: &mut u16) -> u32;
     fn get_first(&mut self, a: u32, b: u32, type_: u32, parent: u32, id: &mut u16) -> u32;
     fn get_next(&mut self, a: u32, b: u32, id: u32, next: &mut u16) -> u32;
-    /// Write `value` (`size` bytes) into a record field.
+
     fn set_field(
         &mut self,
         a: u32,
@@ -1250,7 +1190,7 @@ pub trait OnewordOut {
         value: &[u8],
         x: &mut u16,
     ) -> u32;
-    /// Read a numeric field into the caller's one- or two-byte buffer.
+
     fn get_field(
         &mut self,
         a: u32,
@@ -1261,7 +1201,7 @@ pub trait OnewordOut {
         out: &mut [u8],
         n: &mut u16,
     ) -> u32;
-    /// Fetch a string field into the caller's buffer, terminator included.
+
     fn field_text(
         &mut self,
         a: u32,
@@ -1271,11 +1211,11 @@ pub trait OnewordOut {
         out: &mut [u8],
         n: &mut u16,
     ) -> u32;
-    /// Re-read a string field after the store may have changed (unlogged).
+
     fn field_text_refresh(&mut self, a: u32, b: u32, id: u32, field: u32, out: &mut [u8]);
-    /// Write one byte of a string field through (unlogged).
+
     fn field_text_set(&mut self, a: u32, b: u32, id: u32, field: u32, index: usize, value: u8);
-    /// Fetch the marker array into the caller's buffer (at most 64).
+
     fn field_markers(
         &mut self,
         a: u32,
@@ -1286,19 +1226,16 @@ pub trait OnewordOut {
     ) -> u32;
     fn has_field(&mut self, a: u32, b: u32, id: u32, field: u32, has: &mut u16) -> u32;
     fn remove(&mut self, a: u32, b: u32, id: u32) -> u32;
-    /// Borrow the u16 text a type-37 marker value points at (unlogged).
+
     fn marker_text(&self, val: u32) -> &[u16];
 }
 
-/// The transliterator vtable (`trans`, reached through `h2`). Every
-/// fetch copies fresh bytes: staging or selecting re-arms the scratch, so
-/// the ports never reuse transliterated output across those calls.
 pub trait OnewordTrans {
-    /// Stage `text` (exactly its bytes, no terminator needed).
+
     fn set_string(&mut self, handle: OnewordHandle, index: u32, text: &[u8]) -> u32;
-    /// Select the named transliteration table.
+
     fn select(&mut self, handle: OnewordHandle, name: &[u8]) -> u32;
-    /// Copy the transliterated bytes into the caller's buffer (at most 511).
+
     fn get_string(
         &mut self,
         handle: OnewordHandle,
@@ -1310,11 +1247,8 @@ pub trait OnewordTrans {
     fn get_pos(&mut self, handle: OnewordHandle, pos: &mut i32, z: u32) -> u32;
 }
 
-/// The dictionary entries the one-word functions call directly. Modes
-/// and words are read-only views; scripts apply marker effects to the
-/// passed marker buffer, and heap effects through the passed heap.
 pub trait OnewordDict {
-    /// fn_271130: single-character word path.
+
     fn word_single(
         &mut self,
         ctx: &mut Oneword,
@@ -1324,7 +1258,7 @@ pub trait OnewordDict {
         separator: &mut u8,
         tmp: &mut [u32; 3],
     ) -> u32;
-    /// fn_26fc54: multi-character word path.
+
     fn word_multi(
         &mut self,
         ctx: &mut Oneword,
@@ -1332,7 +1266,7 @@ pub trait OnewordDict {
         mode: &[u8],
         word: &mut [u8],
     ) -> u32;
-    /// fn_26dd20: lexicon-entry path.
+
     fn lex_entry(
         &mut self,
         ctx: &mut Oneword,
@@ -1343,7 +1277,7 @@ pub trait OnewordDict {
         id: u32,
         mode: &[u8],
     ) -> u32;
-    /// fn_270b40: transliteration-fallback path.
+
     fn trans_fallback(
         &mut self,
         ctx: &mut Oneword,
@@ -1354,8 +1288,7 @@ pub trait OnewordDict {
         zero: u32,
         one: u32,
     ) -> u32;
-    /// fn_275928: multi-word dictionary path. `text_copy` is the heap block
-    /// the entry may reallocate; `tok`, `mi` and `n_markers` advance.
+
     fn dict_multi(
         &mut self,
         ctx: &mut Oneword,
@@ -1373,7 +1306,7 @@ pub trait OnewordDict {
         base: i32,
         rich: u32,
     ) -> u32;
-    /// fn_274564: phonetic-input path.
+
     fn dict_phon(
         &mut self,
         ctx: &mut Oneword,
@@ -1392,36 +1325,28 @@ pub trait OnewordDict {
     ) -> u32;
 }
 
-/// The lexicon unit (fn_196xxx): entry lookup plus the iterator the
-/// decision-tree block walks. Entries are heap blocks of three words
-/// (name, f4, id); the iterator stages them into the arena and hands out
-/// their offsets.
 pub trait OnewordLex {
-    /// fn_1966ac: look up `word`, returning the entry by value.
+
     fn lookup(&mut self, lex: u32, word: &[u8]) -> (u32, OnewordDictEntry);
-    /// fn_196764: whether the lexicon needs decision-tree options.
+
     fn has(&mut self, lex: u32) -> u32;
-    /// fn_196794: open an iterator over the lexicon.
+
     fn begin(&mut self, lex: u32, first: u32, last: u32, iter: &mut u32) -> u32;
-    /// fn_196860: fetch the next entry offset into the arena.
+
     fn next(&mut self, arena: &mut [u8], iter: u32, key: &mut u32, entry: &mut u32) -> u32;
-    /// fn_196830: close the iterator.
+
     fn close(&mut self, iter: u32);
 }
 
-/// The decision-tree engine entry (fn_2b1814): one typed option value.
 pub trait OnewordEngine {
     fn dt_set(&mut self, id: u32, type_: u8, val: i32) -> u32;
 }
 
-/// The cross-language map vtable (`clmMap`, reached through `h4`).
 pub trait OnewordClm {
-    /// Map `src` (its bytes, terminator included) into `dst`.
+
     fn map(&mut self, handle: OnewordHandle, code: &[u8], src: &[u8], dst: &mut [u8]) -> u32;
 }
 
-/// Fetch a string field the C fetches: always the logged call, refreshing
-/// the cache key. The seam copies the value, terminator included.
 fn fetch_str(
     out: &mut impl OnewordOut,
     a: u32,
@@ -1440,8 +1365,6 @@ fn fetch_str(
     rc
 }
 
-/// Reuse a fetched string, refreshing it (unlogged) when the store may have
-/// changed since. A missing key is the C null pointer: an empty view.
 fn cached_str<'b>(
     out: &mut impl OnewordOut,
     a: u32,
@@ -1462,8 +1385,6 @@ fn cached_str<'b>(
     }
 }
 
-/// Reuse a fetched string the C holds, panicking when the cache holds a
-/// different source (a port bug: the C fetched first).
 fn fetched_str<'b>(
     out: &mut impl OnewordOut,
     a: u32,
@@ -1486,7 +1407,6 @@ fn fetched_str<'b>(
     }
 }
 
-/// Read a one-byte numeric field.
 fn get_num8(
     out: &mut impl OnewordOut,
     a: u32,
@@ -1502,7 +1422,6 @@ fn get_num8(
     rc
 }
 
-/// Read a two-byte numeric field (little-endian).
 fn get_num16(
     out: &mut impl OnewordOut,
     a: u32,
@@ -1518,7 +1437,6 @@ fn get_num16(
     rc
 }
 
-/// NUL-stopping copy between two heap blocks (fn_195e38 onto the arena).
 fn arena_copy_fixed(heap: &mut impl Heap, dst: u32, src: u32, n: u32) {
     let mut i = 0u32;
     while i < n {
@@ -1535,8 +1453,6 @@ fn arena_copy_fixed(heap: &mut impl Heap, dst: u32, src: u32, n: u32) {
     }
 }
 
-/// Read one wire marker (type at 0, position at 12, length at 16, value at
-/// 20) from the arena.
 fn read_marker(arena: &[u8], at: u32) -> OnewordMarker {
     let at = at as usize;
     OnewordMarker {
@@ -1547,8 +1463,6 @@ fn read_marker(arena: &[u8], at: u32) -> OnewordMarker {
     }
 }
 
-/// Write the type, position and value words of one arena marker. The length
-/// word stays zero: every marker block is calloc'd.
 fn write_marker(arena: &mut [u8], at: u32, type_: u16, pos: i32, val: u32) {
     let at = at as usize;
     arena[at..at + 2].copy_from_slice(&type_.to_le_bytes());
@@ -1556,8 +1470,6 @@ fn write_marker(arena: &mut [u8], at: u32, type_: u16, pos: i32, val: u32) {
     arena[at + 20..at + 24].copy_from_slice(&val.to_le_bytes());
 }
 
-/// strchr (fn_195d30): like [`class_index`] but stopping at the
-/// terminator, so reused buffers never match their stale tail bytes.
 fn str_index(s: &[u8], c: u8) -> Option<usize> {
     let end = terminated_len(s) as usize;
     if c == 0 {
@@ -1566,12 +1478,10 @@ fn str_index(s: &[u8], c: u8) -> Option<usize> {
     class_index(&s[..end], c)
 }
 
-/// strchr from a heap offset, returning the absolute offset.
 fn arena_index(heap: &mut impl Heap, base: u32, c: u8) -> Option<u32> {
     str_index(&heap.arena()[base as usize..], c).map(|rel| base.wrapping_add(rel as u32))
 }
 
-/// Append one heap string onto another (fn_195c90 onto the arena).
 fn arena_append(heap: &mut impl Heap, dst: u32, src: u32) {
     let at = terminated_len(&heap.arena()[dst as usize..]) as usize;
     let mut i = 0u32;
@@ -1585,7 +1495,6 @@ fn arena_append(heap: &mut impl Heap, dst: u32, src: u32) {
     }
 }
 
-/// Release the live scratch blocks (`out:` in fn_1f98c8).
 fn free_out(heap: &mut impl Heap, text_copy: u32, word_buf: u32, clm_buf: u32, alt_buf: u32) {
     if text_copy != 0 {
         heap.release(text_copy);
@@ -1601,9 +1510,6 @@ fn free_out(heap: &mut impl Heap, text_copy: u32, word_buf: u32, clm_buf: u32, a
     }
 }
 
-/// Run a fallible engine call for fn_1f98c8: on a high result, free the
-/// marker block and the scratch blocks and return it (`fail:`/`out:` —
-/// equivalent here, since the marker block is still null at every `out:`).
 macro_rules! oneword_checked {
     ($heap:expr, $mk:expr, $text_copy:expr, $word_buf:expr, $clm_buf:expr, $alt_buf:expr, $call:expr) => {{
         let checked = $call;
@@ -1618,14 +1524,6 @@ macro_rules! oneword_checked {
     }};
 }
 
-/// fn_1f932c, EU fn_1f94e8, KR fn_1f9594. Look up the word spanning
-/// `text[start..end]`: normalize it, run the dictionary and transliterator
-/// paths, and emit the DET record. `out_version` is the caller's output
-/// store version, bumped past every mutating output or dictionary call.
-///
-/// Fuzz bounds: `end >= start`, the slice ends within 128 bytes, the
-/// `buf54[1..4]` blocks are live NUL-terminated heap strings, and the
-/// transliterator hands back at most 511 bytes.
 pub fn oneword_lookup_word(
     ctx: &mut Oneword,
     heap: &mut impl Heap,
@@ -1791,23 +1689,6 @@ pub fn oneword_lookup_word(
     }
 }
 
-/// fn_1f98c8, EU fn_1f9a84, KR fn_1f9b30. Process one word list: apply
-/// parameters and decision-tree options, copy input tokens into word
-/// records, run the dictionary and phonetic lookups, split multi-word
-/// entries, build alternative transcriptions, and map foreign phonemes.
-///
-/// `latin_addr`/`normal_addr` are the region's addresses of the D_8f9574 and
-/// D_8f9580 marker strings; `pos_key` is the borrowed D_8f9524.pos template.
-/// Log calls are skipped: they touch neither the context nor the arena.
-///
-/// Fuzz bounds: input text under 1024 bytes, field strings under 256,
-/// transliterated output under 512, config values under 128, parameter
-/// values under 64 and non-null on success, markers under 64 with at least
-/// one, deletions per start-group under 128, `dps_multi_trans` at most 20,
-/// record spans with `start <= end`, language codes empty or 2-80 bytes,
-/// marker type-37 texts under 256 bytes, `buf40`/`buf54` staging blocks
-/// live with 128 bytes, mapped alternatives fitting their blocks, and every
-/// `str6b` holding a space wherever its `str3` does.
 pub fn oneword_process(
     ctx: &mut Oneword,
     heap: &mut impl Heap,
@@ -2035,7 +1916,6 @@ pub fn oneword_process(
         .expect("textCopy fits its block");
     del_ids.fill(0);
 
-    /* copy the input tokens into word records and build the language markers */
     oneword_checked!(
         heap,
         mk,
@@ -2399,7 +2279,6 @@ pub fn oneword_process(
         );
     }
 
-    /* merge the remaining input tokens into the word list by position */
     oneword_checked!(
         heap,
         mk,
@@ -2735,7 +2614,6 @@ pub fn oneword_process(
         out_version = out_version.wrapping_add(1);
     }
 
-    /* run the word level lookups (dictionary words and phonetic input) */
     oneword_checked!(
         heap,
         mk,
@@ -2892,7 +2770,6 @@ pub fn oneword_process(
         }
     }
 
-    /* shift the positions when the text was changed */
     if ctx.f50 > 0 {
         while mi < n_markers {
             marks[mi as usize].pos = marks[mi as usize].pos.wrapping_add(i32::from(ctx.f50));
@@ -3014,7 +2891,6 @@ pub fn oneword_process(
     );
     out_version = out_version.wrapping_add(1);
 
-    /* drop the records below the word level */
     oneword_checked!(
         heap,
         mk,
@@ -3074,7 +2950,6 @@ pub fn oneword_process(
         }
     }
 
-    /* apply the markers to the words and split multi-word entries */
     mi = 0;
     {
         let mut cur_start = terminated_len(&heap.arena()[text_copy as usize..]) as u16;
@@ -3712,7 +3587,6 @@ pub fn oneword_process(
         }
     }
 
-    /* build the alternative transcriptions */
     if ctx.dps_multi_trans != 0 {
         rc = oneword_checked!(
             heap,
@@ -3981,7 +3855,6 @@ pub fn oneword_process(
         }
     }
 
-    /* language identification of foreign words */
     if ctx.no_ext_clc == 0 {
         if mk != 0 {
             heap.release(mk);
@@ -4169,7 +4042,6 @@ pub fn oneword_process(
         }
     }
 
-    /* map foreign phonemes through the cross-language mapping */
     rc = out.get_first(a, c, 2, u32::from(root), &mut tok);
     if rc >= 0x80000000 || tok == 0 {
         if mk != 0 {

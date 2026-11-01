@@ -1,15 +1,10 @@
-//! live fe one-word root 1f98c8 and the multi-word dictionary path 275928, over the caller's arena.
-//!
-//! The ports live over the caller's bytes: every guest pointer stays a scalar
-//! address inside the arena, every guest call is issued through the host, and
-//! the frame the caller owns is restored before the port returns.
+
 
 #![allow(dead_code)]
 #![allow(non_upper_case_globals)]
 
 use crate::{boot::Memory, component_live_b::Host};
 
-/// The `out` interface slots the ROM reads out of the caller's vtable.
 const OUT_ADD_CHILD: u32 = 9;
 const OUT_NEW_RECORD: u32 = 10;
 const OUT_INSERT_BEFORE: u32 = 11;
@@ -21,7 +16,6 @@ const OUT_GET_FIELD_PTR: u32 = 22;
 const OUT_HAS_FIELD: u32 = 23;
 const OUT_REMOVE: u32 = 24;
 
-/// The `cfg` (fe_dctlkp) interface slots.
 const CFG_GET_STRING: u32 = 7;
 const CFG_ADD_WORD: u32 = 9;
 const CFG_WORD_LENGTHS: u32 = 10;
@@ -30,21 +24,17 @@ const CFG_NORMALIZE_TOKEN: u32 = 13;
 const CFG_NORMALIZE_WORD: u32 = 14;
 const CFG_LOOKUP: u32 = 18;
 
-/// The ROM data the one-word path uses.
 const D_8f9524: u32 = 0x8f9524;
 const D_8f9532: u32 = 0x8f9532;
 const D_8f9574: u32 = 0x8f9574;
 const D_8f9580: u32 = 0x8f9580;
 
-/// The `trans` (translator) interface slots the ROM reads out of the
-/// caller's vtable: set/add at 9-11, position at 14-15.
 const TRANS_SET_STRING: u32 = 9;
 const TRANS_GET_STRING: u32 = 10;
 const TRANS_SELECT: u32 = 11;
 const TRANS_SET_POS: u32 = 14;
 const TRANS_GET_POS: u32 = 15;
 
-/// The `Fe` field offsets the ROM reads.
 const FE_OUT: u32 = 0x0c;
 const FE_CFG_HANDLE: u32 = 0x10;
 const FE_CFG_VT: u32 = 0x18;
@@ -71,15 +61,12 @@ const FE_CLM_HANDLE: u32 = 0x34;
 const FE_CLM_MAP: u32 = 0x3c;
 const FE_F68: u32 = 0x68;
 
-/// The `Marker` layout on the wire: type, position, length, value.
 const MARKER_LEN: u32 = 24;
 const MARKER_TYPE: u32 = 0;
 const MARKER_POS: u32 = 12;
 const MARKER_LEN_OFF: u32 = 16;
 const MARKER_VAL: u32 = 20;
 
-/// The failure status the ports use when the arena does not hold what the
-/// ROM expects. It matches the ROM's own out-of-memory status.
 const FAIL_MEM: u32 = 0x89b0200a;
 const FAIL_HANDLE: u32 = 0x89b02008;
 
@@ -138,7 +125,6 @@ fn p_byte(m: &mut Memory<'_>, p: u32, v: u8) -> bool {
     true
 }
 
-/// The length of the guest string at `p`, terminator excluded.
 fn g_strlen(m: &Memory<'_>, p: u32) -> Option<u32> {
     let mut i = 0u32;
     loop {
@@ -150,7 +136,6 @@ fn g_strlen(m: &Memory<'_>, p: u32) -> Option<u32> {
     }
 }
 
-/// The length of the guest wide string at `p`.
 fn g_wstrlen(m: &Memory<'_>, p: u32) -> Option<u32> {
     let mut i = 0u32;
     loop {
@@ -162,7 +147,6 @@ fn g_wstrlen(m: &Memory<'_>, p: u32) -> Option<u32> {
     }
 }
 
-/// Copy the guest string `src` to `dst`, terminator included.
 fn g_strcpy(m: &mut Memory<'_>, dst: u32, src: u32) -> bool {
     let len = match g_strlen(m, src) {
         Some(v) => v,
@@ -179,7 +163,6 @@ fn g_strcpy(m: &mut Memory<'_>, dst: u32, src: u32) -> bool {
     true
 }
 
-/// Compare two guest strings.
 fn g_strcmp(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     let mut i = 0u32;
     loop {
@@ -195,7 +178,6 @@ fn g_strcmp(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     }
 }
 
-/// Compare a guest string with a Rust literal.
 fn g_streq(m: &Memory<'_>, a: u32, b: &[u8]) -> bool {
     let mut i = 0usize;
     loop {
@@ -211,7 +193,6 @@ fn g_streq(m: &Memory<'_>, a: u32, b: &[u8]) -> bool {
     }
 }
 
-/// Find `c` in the guest string `s`. Zero when it is absent.
 fn g_strchr(m: &Memory<'_>, s: u32, c: u32) -> u32 {
     let mut i = 0u32;
     loop {
@@ -230,7 +211,6 @@ fn g_strchr(m: &Memory<'_>, s: u32, c: u32) -> u32 {
     }
 }
 
-/// Find `needle` in the guest string `hay`. Zero when it is absent.
 fn g_strstr(m: &Memory<'_>, hay: u32, needle: &[u8]) -> u32 {
     if needle.is_empty() {
         return hay;
@@ -248,7 +228,6 @@ fn g_strstr(m: &Memory<'_>, hay: u32, needle: &[u8]) -> u32 {
     }
 }
 
-/// Compare the guest string at `a` with a Rust literal, byte by byte.
 fn g_cmp_at(m: &Memory<'_>, a: u32, b: &[u8]) -> i32 {
     let mut i = 0usize;
     loop {
@@ -264,7 +243,6 @@ fn g_cmp_at(m: &Memory<'_>, a: u32, b: &[u8]) -> i32 {
     }
 }
 
-/// Copy `n` bytes inside the arena.
 fn g_memcpy(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     if !g_range(m, dst, n) || !g_range(m, src, n) {
         return false;
@@ -275,7 +253,6 @@ fn g_memcpy(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     true
 }
 
-/// Move `n` bytes inside the arena.
 fn g_memmove(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     if !g_range(m, dst, n) || !g_range(m, src, n) {
         return false;
@@ -286,7 +263,6 @@ fn g_memmove(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     true
 }
 
-/// Fill `n` bytes at `p` with `v`.
 fn g_memset(m: &mut Memory<'_>, p: u32, v: u8, n: u32) -> bool {
     if !g_range(m, p, n) {
         return false;
@@ -298,13 +274,10 @@ fn g_memset(m: &mut Memory<'_>, p: u32, v: u8, n: u32) -> bool {
     true
 }
 
-/// The `fn_195e38` copy: `n` bytes of `src` into `dst`, terminator excluded.
 fn g_copy_n(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     g_memmove(m, dst, src, n)
 }
 
-/// Call one slot of the `out` vtable. The first two words of every call are
-/// the caller's `a` and `c` handles.
 fn out_call(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -322,7 +295,6 @@ fn out_call(
     h.call_m(f, &all[..n], m)
 }
 
-/// Call one slot of the `cfg` vtable. The first two words are the handle.
 fn cfg_call(m: &mut Memory<'_>, h: &mut impl Host, cfg: u32, slot: u32, args: &[u32]) -> u32 {
     let f = match g_word(m, cfg.wrapping_add(slot * 4)) {
         Some(v) => v,
@@ -334,7 +306,6 @@ fn cfg_call(m: &mut Memory<'_>, h: &mut impl Host, cfg: u32, slot: u32, args: &[
     h.call_m(f, &all[..n], m)
 }
 
-/// The `fn_17c800` character-class test: bit three of the class table.
 pub fn fn_17c800_m(class_table: &[u8], c: u32) -> u32 {
     let at = (c & 0xff) as usize * 2;
     if at + 2 > class_table.len() {
@@ -344,13 +315,6 @@ pub fn fn_17c800_m(class_table: &[u8], c: u32) -> u32 {
     u32::from(v & 8)
 }
 
-/// The `fn_21a1fc` marker-record comparator.
-///
-/// The exact ARM call is `fn_21a1fc(a, b)`: both arguments point at 24-byte
-/// records. `a+12` and `b+12` hold the sort key, `a+0` and `b+0` the 16-bit
-/// type and `a+4` and `b+4` the tie break. The ROM object returns `~99`
-/// (`mvneq r0, #99`), which is -100 as a signed word; the C source also
-/// says `-100`.
 pub fn fn_21a1fc_m(m: &Memory<'_>, a: u32, b: u32) -> u32 {
     let af = g_word(m, a.wrapping_add(12)).unwrap_or(0);
     let bf = g_word(m, b.wrapping_add(12)).unwrap_or(0);
@@ -370,12 +334,6 @@ pub fn fn_21a1fc_m(m: &Memory<'_>, a: u32, b: u32) -> u32 {
         .wrapping_sub(g_word(m, b.wrapping_add(4)).unwrap_or(0))
 }
 
-/// The `fn_2409d4` quicksort over the caller's arena. The comparator is the
-/// caller's ROM entry, issued through the host.
-///
-/// The exact ARM call is `fn_2409d4(base, n, size, cmp)`. The ROM object
-/// compares the comparator result as a signed word, so a negative result is
-/// an ordinary "less than", not an error.
 pub fn fn_2409d4_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -452,25 +410,16 @@ pub fn fn_2409d4_m(
     0
 }
 
-/// The `fn_195d90` string length the ports use for the guest strings.
 fn guest_len(m: &Memory<'_>, p: u32) -> u32 {
     g_strlen(m, p).unwrap_or(0)
 }
 
-/// The `fn_240b28` fold the replacement pass applies.
 fn fn_240b28_m(c: u8) -> u8 {
     crate::component_live_c::fn_240b28(u32::from(c)) as u8
 }
 
-/// The status the ports use when a callee is not ported yet.
 const FAIL_UNSUPPORTED: u32 = 0x80002001;
 
-/// The `fn_1ed520` replacement-table pass, live over the caller's arena.
-///
-/// The exact ARM call is `fn_1ed520(ctx, replacements, text, capacity)`.
-/// `ctx` is the `fe_dctlkp` object: `ctx+0x64` is the character-class
-/// string, `ctx+0x9c` the mode half word and `ctx+0` the owner whose
-/// `owner+0x10` is the logger.
 pub fn fn_1ed520_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -542,10 +491,6 @@ pub fn fn_1ed520_m(
     0
 }
 
-/// The `fn_1ed954` G2P convert entry, live over the caller's arena.
-///
-/// The exact ARM call is `fn_1ed954(ctx, handle, text, which, capacity)`.
-/// `which` is the caller-owned text buffer the ARM rewrites in place.
 pub fn fn_1ed954_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -577,31 +522,15 @@ pub fn fn_1ed954_m(
     fn_1ed520_m(m, h, ctx, repl, which, capacity)
 }
 
-/// The `fn_1eb978` canonical-word conversion. The ROM unit has no source
-/// file; the port only covers the path the capture exercises.
 fn fn_1eb978_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handle: u32, text: u32) -> u32 {
     let _ = (m, h, ctx, handle, text);
     FAIL_UNSUPPORTED
 }
 
-/// The `fn_195d90` string length, live over the caller's arena.
-///
-/// The exact ARM call is `fn_195d90(s)`: the length of the NUL-terminated
-/// guest string at `s`, terminator excluded. Lane b's `LiveHost` serves
-/// this entry by slicing the terminator off and then scanning the slice
-/// for one, so it panics on every input; the b3 host serves the entry
-/// locally instead.
 pub fn fn_195d90_m(m: &Memory<'_>, s: u32) -> Option<u32> {
     g_strlen(m, s)
 }
 
-/// The `fn_195d58` string compare, live over the caller's arena.
-///
-/// The exact ARM call is `fn_195d58(a, b)`: zero when the two
-/// NUL-terminated guest strings are equal, nonzero otherwise. Lane b's
-/// `LiveHost` compares the slices with the terminators cut off, so equal
-/// strings, prefixes and empty literals panic there; the b3 host serves
-/// the entry locally instead.
 pub fn fn_195d58_m(m: &Memory<'_>, a: u32, b: u32) -> Option<u32> {
     let alen = g_strlen(m, a)?;
     let blen = g_strlen(m, b)?;
@@ -611,17 +540,6 @@ pub fn fn_195d58_m(m: &Memory<'_>, a: u32, b: u32) -> Option<u32> {
     Some(g_strcmp(m, a, b) as u32)
 }
 
-/// The `fn_1ec7cc` dictionary Lookup entry, live over the caller's arena.
-///
-/// The exact ARM call is `fn_1ec7cc(ctx, handle, key, text, out, count,
-/// separator, total)`. The ROM is a thin wrapper over `fn_1ea4e0`
-/// (src/fn_1ec7cc.c): a `total` of one tail-calls `fn_1ea4e0` with the same
-/// seven words (the ARM trace shows the `0x1ec7cc` entry immediately
-/// followed by `0x1ea4e0` with identical arguments); a larger total repeats
-/// the lookup with the numbered key and stops on the first error or the
-/// first nonzero count. The lookup itself is lane b4's certified
-/// `fn_1ea4e0_m`. `scratch` is a caller-owned frame of 260 bytes the
-/// numbered path uses for the key buffer.
 pub fn fn_1ec7cc_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -670,25 +588,6 @@ pub fn fn_1ec7cc_m(
     rc
 }
 
-/// The `fn_26ff18` G2P lookup, live over the caller's arena.
-///
-/// The exact ARM call is
-/// `fn_26ff18(ctx, text, word, orig, dict, domain, start, rec, recObj,
-///            recData, end, tokenCheck, langOnly)`.
-///
-/// `ctx` is the one-word object: `ctx+0x00` the environment (`env+0x10` the
-/// logger and `env+0x14` the property table), `ctx+0x0c` the record store
-/// vtable, `ctx+0x10`/`ctx+0x14` the dictionary handle, `ctx+0x18` the
-/// dictionary vtable, `ctx+0x50` the text offset, `ctx+0x172` the lookup
-/// flag, `ctx+0x1a5` the English flag, `ctx+0x2a8` the language check,
-/// `ctx+0x2ac` the language list, `ctx+0x2b0` the language key and
-/// `ctx+0x2b4` the language-domain flag.  `scratch` is a caller-owned frame
-/// of 64 bytes that holds the lookup results and the record scratch.
-///
-/// The ROM's literals live in the ROM image the caller owns: the property
-/// key `sysdctlookup` at 0x2702ac, the empty string at 0x2702b8, `no` at
-/// 0x2702bc, the log formats at 0x2702c0 and later and the logger module
-/// at 0x8f9532.
 pub fn fn_26ff18_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -707,29 +606,29 @@ pub fn fn_26ff18_m(
     token_check: u32,
     lang_only: u32,
 ) -> u32 {
-    /// The property value pointer.
+
     const S_VALUE: u32 = 0x00;
-    /// The lookup result array.
+
     const S_WORDS: u32 = 0x04;
-    /// The lookup result count.
+
     const S_COUNT: u32 = 0x08;
-    /// The lookup separator.
+
     const S_SEP: u32 = 0x0a;
-    /// The record status.
+
     const S_STATUS: u32 = 0x0c;
-    /// The record type value.
+
     const S_FOUR: u32 = 0x0e;
-    /// The record priority.
+
     const S_PRIO: u32 = 0x10;
-    /// The record id.
+
     const S_REC: u32 = 0x12;
-    /// The record start.
+
     const S_START: u32 = 0x14;
-    /// The record end.
+
     const S_END: u32 = 0x16;
-    /// The language tag character.
+
     const S_LANGC: u32 = 0x18;
-    /// The lookup domain name.
+
     const S_NAME: u32 = 0x20;
 
     let env = g_word(m, ctx).unwrap_or(0);
@@ -743,25 +642,20 @@ pub fn fn_26ff18_m(
     let lex_flag = g_byte(m, ctx.wrapping_add(0x172)).unwrap_or(0);
     let use_lang_domain = g_byte(m, ctx.wrapping_add(0x2b4)).unwrap_or(0);
 
-    // The dictionary is switched off when the property says so.
-    let rc = h.call_m(0x175a1c, &[cfg, 0x2702ac, scratch.wrapping_add(S_VALUE)], m);
+    let rc = h.call_m(0x175a1c, &[cfg, s_lit(h.rom(), 0x2702ac), scratch.wrapping_add(S_VALUE)], m);
     if rc < 0x80000000 {
         let value = g_word(m, scratch.wrapping_add(S_VALUE)).unwrap_or(0);
-        if h.call_m(0x195d58, &[value, 0x2702bc], m) == 0 {
+        if h.call_m(0x195d58, &[value, s_lit(h.rom(), 0x2702bc)], m) == 0 {
             return 0;
         }
     }
-    h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, 0x2702c0, word], m);
+    h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x2702c0), word], m);
 
-    // The lookup: the language domain variant uses slot seven, the plain
-    // one slot eighteen. The ROM passes a fresh zeroed `count` local, so
-    // the scratch count is reset on every call: a reused scratch would
-    // otherwise steer the lookup into the numbered-key path.
     if !p_half(m, scratch.wrapping_add(S_COUNT), 0) {
         return FAIL_MEM;
     }
     let ret = if use_lang_domain != 0 {
-        h.call_m(0x195cd0, &[scratch.wrapping_add(S_NAME), 0x2702d4], m);
+        h.call_m(0x195cd0, &[scratch.wrapping_add(S_NAME), s_lit(h.rom(), 0x2702d4)], m);
         let index = u32::from(g_byte(m, word).unwrap_or(0));
         let langs = ctx
             .wrapping_add(0x2b5)
@@ -809,10 +703,6 @@ pub fn fn_26ff18_m(
     let mut langc = 0u8;
     let mut status = ret;
 
-    // The record id chains across the words: the C passes its `rec` local
-    // by value and by address (`newRecord(recObj, recData, rec, &rec)`),
-    // so each word clones from the previous word's new id. The cell is
-    // primed once here and never reset in the loop (src/fn_26ff18.c:291).
     if !p_half(m, scratch.wrapping_add(S_REC), rec) {
         return FAIL_MEM;
     }
@@ -825,7 +715,7 @@ pub fn fn_26ff18_m(
         let mut pos = 0u32;
         let mut gpos = 0u32;
         let mut prio_s = 0u32;
-        // The separator splits the record into its fields.
+
         let mut p = h.call_m(0x195d30, &[w, sep], m);
         if p != 0 {
             pos = p.wrapping_add(1);
@@ -869,11 +759,11 @@ pub fn fn_26ff18_m(
             h.call_m(0x173dc0, &[log, 0x8f9532, 0x84d1, 0], m);
             return 0x89b02007;
         }
-        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, 0x2702d8, w], m);
-        // The domain of the record has to match the requested one.
-        if dom != 0 && h.call_m(0x195d58, &[dom, 0x2702b8], m) != 0 {
+        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x2702d8), w], m);
+
+        if dom != 0 && h.call_m(0x195d58, &[dom, s_lit(h.rom(), 0x2702b8)], m) != 0 {
             if h.call_m(0x1960a8, &[dom, domain], m) == 0 {
-                h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, 0x2705ec], m);
+                h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x2705ec)], m);
                 continue;
             }
         }
@@ -882,7 +772,7 @@ pub fn fn_26ff18_m(
             let lang_list = g_word(m, ctx.wrapping_add(0x2ac)).unwrap_or(0);
             let mut skip = false;
             if lang == 0 || h.call_m(0x195d30, &[lang, 0x21], m) != 0 {
-                // The ROM writes the fourth byte of the language tag.
+
                 p_byte(m, lang.wrapping_add(3), 0);
             } else {
                 let found = h.call_m(0x1960a8, &[domain, lang], m);
@@ -891,7 +781,7 @@ pub fn fn_26ff18_m(
                     || (len != 0 && g_byte(m, found.wrapping_add(len)).unwrap_or(0) != 0);
                 if lang_only != 0 {
                     if token_check == 0 && bad && h.call_m(0x1769d0, &[lang, lang_key], m) != 0 {
-                        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, 0x27060c, lang], m);
+                        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x27060c), lang], m);
                         skip = true;
                     }
                 } else if token_check == 0 && bad {
@@ -903,7 +793,7 @@ pub fn fn_26ff18_m(
                         0
                     };
                     if h.call_m(0x1769d0, &[lang, lang_key], m) != 0 || user == 0 || mark != 0x7c {
-                        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, 0x270630, lang], m);
+                        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270630), lang], m);
                         skip = true;
                     }
                 }
@@ -922,7 +812,7 @@ pub fn fn_26ff18_m(
                         0
                     };
                     if h.call_m(0x1769d0, &[lang, lang_key], m) != 0 || user == 0 || mark != 0x7c {
-                        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, 0x270664, lang], m);
+                        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270664), lang], m);
                         skip = true;
                     }
                 }
@@ -932,7 +822,6 @@ pub fn fn_26ff18_m(
             }
         }
 
-        // The record: the end offset, the new record and its first fields.
         let len = h.call_m(0x195d90, &[orig], m);
         let end_value = u16::wrapping_add(start, len as u16);
         if !p_half(m, end, end_value) {
@@ -1008,7 +897,6 @@ pub fn fn_26ff18_m(
             return rc;
         }
 
-        // The spaces of the word become dashes.
         let base = g_word(m, text).unwrap_or(0);
         let limit = base
             .wrapping_add(u32::from(g_half(m, end).unwrap_or(0)))
@@ -1029,7 +917,6 @@ pub fn fn_26ff18_m(
             }
         }
 
-        // The word and its parts.
         let mut p = h.call_m(0x195d30, &[w, 0x12], m);
         if p != 0 {
             p = p.wrapping_add(1);
@@ -1158,7 +1045,7 @@ pub fn fn_26ff18_m(
                 ],
                 m,
             );
-            h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, 0x270af4, lang], m);
+            h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270af4), lang], m);
             let user = if g_word(m, ctx.wrapping_add(0x2ac)).unwrap_or(0) != 0 {
                 h.call_m(
                     0x1960a8,
@@ -1189,7 +1076,7 @@ pub fn fn_26ff18_m(
                 if (phon != 0 && (len == 0 || tail == 0)) || (same && user != 0 && mark == 0x7c)
                 {
                     prio = prio.wrapping_add(1);
-                    h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, 0x270b08, u32::from(prio)], m);
+                    h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270b08), u32::from(prio)], m);
                 }
             }
             if rc >= 0x80000000 {
@@ -1245,25 +1132,9 @@ pub fn fn_26ff18_m(
     status
 }
 
-/// Caller-owned scratch for `fn_275204_m`: the 256-byte key buffer, the
-/// section/expected strings and the getString out-cells. Sits in the
-/// excluded guest-stack window 0x0e000000..0x0e100000 (never compared;
-/// 0x0e0f9000 is free: broker family ends at 0x0e0fd580, depes at
-/// 0x0e0fda00, seg2-c4 at 0x0e0f8000+0x1000), saved/restored on return.
 pub const FE275204_SCRATCH: u32 = 0x0e0f_9000;
 const FE275204_LEN: usize = 0x400;
 
-/// `fn_275204`: morphology limits/flags for one mode (src/fn_275204.c 1:1).
-///
-/// The exact ARM call is `fn_275204(fe, mode)`. Per field it builds
-/// `prefix + mode` on its stack, issues the config `getString` through the
-/// vtable the ROM reads out of `fe` (`cfg` at `+0x18`, handle pair at
-/// `+0x10/+0x14`), falls back to the bare prefix on empty, truncates at
-/// the separator and parses. Key building, the separator scan, the integer
-/// parses and the string compares are pure stack/arena ops, done here over
-/// the guest bytes; only the per-field `getString` rides the host, with
-/// the same `(pair, section, key, &val, &len, &sep)` addresses the ARM
-/// passes. `scratch` is the caller-owned window above, restored on return.
 pub fn fn_275204_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -1282,8 +1153,7 @@ pub fn fn_275204_m(
         b"mdenondctdps_",
         b"mdedps_",
     ];
-    // (fe offset, parse): parse 0 = integer, 1 = "upper", 2 = "stemafx",
-    // 3/4/5 = "yes" (emptyafx, nonctdps, dps).
+
     const FIELDS: [(u32, u8); 8] = [
         (0x6a, 0),
         (0x6b, 0),
@@ -1314,13 +1184,13 @@ pub fn fn_275204_m(
     let mut saved = [0u8; FE275204_LEN];
     saved.copy_from_slice(&m.bytes[base..base + FE275204_LEN]);
     let result = (|| {
-        // Defaults from the C head: maxNrMorph 0x10, dps 1, rest 0.
+
         for (off, v) in [(0x6au32, 0u8), (0x6b, 0), (0x6c, 0), (0x6d, 0x10), (0x6e, 0), (0x6f, 0), (0x70, 0), (0x71, 1)] {
             if !p_byte(m, fe.wrapping_add(off), v) {
                 return FAIL_MEM;
             }
         }
-        // Mode string (NUL-bounded, like the strcat source).
+
         let mut mode_buf = [0u8; 128];
         let mut mode_len = 0usize;
         while mode_len < 128 {
@@ -1352,7 +1222,7 @@ pub fn fn_275204_m(
             Some(v) => v,
             None => return FAIL_MEM,
         };
-        // Section + expected strings (ROM literals in the C).
+
         let sec = scratch.wrapping_add(SEC);
         let exp_upper = scratch.wrapping_add(EXP_UPPER);
         let exp_stem = scratch.wrapping_add(EXP_STEM);
@@ -1374,7 +1244,7 @@ pub fn fn_275204_m(
         let mut rc = 0u32;
         for (i, prefix) in PREFIXES.iter().enumerate() {
             let (off, parse) = FIELDS[i];
-            // key = prefix + mode (fn_195cd0 + fn_195c90 on the stack).
+
             if prefix.len() + mode_len + 1 > 256 {
                 return FAIL_MEM;
             }
@@ -1389,9 +1259,8 @@ pub fn fn_275204_m(
             if !p_half(m, lenc, 0xffff) {
                 return FAIL_MEM;
             }
-            // cfg getString(h, "fecfg", key): the 1f98c8 prologue recipe:
-            // lane b4's port when the vtable names 0x1ea4e0, else the host.
-            if method == 0x1ea4e0 {
+
+            if crate::rom_region::to_us_guest(h.rom(), method) == 0x1ea4e0 {
                 rc = fn_1ea4e0_m(m, h, pair0, pair1, sec, key, valc, lenc, sepc);
             } else {
                 rc = h.call_m(method, &[pair0, pair1, sec, key, valc, lenc, sepc], m);
@@ -1404,14 +1273,14 @@ pub fn fn_275204_m(
                 None => return FAIL_MEM,
             };
             if len == 0 {
-                // Fallback: bare prefix (the C's literal second call).
+
                 let bare = &prefix[..prefix.len() - 1];
                 m.bytes[key0..key0 + bare.len()].copy_from_slice(bare);
                 m.bytes[key0 + bare.len()] = 0;
                 if !p_half(m, lenc, 0xffff) {
                     return FAIL_MEM;
                 }
-                if method == 0x1ea4e0 {
+                if crate::rom_region::to_us_guest(h.rom(), method) == 0x1ea4e0 {
                     rc = fn_1ea4e0_m(m, h, pair0, pair1, sec, key, valc, lenc, sepc);
                 } else {
                     rc = h.call_m(method, &[pair0, pair1, sec, key, valc, lenc, sepc], m);
@@ -1438,7 +1307,7 @@ pub fn fn_275204_m(
                 Some(v) => v,
                 None => return FAIL_MEM,
             };
-            // Truncate at the separator (fn_195d30 + *s = 0).
+
             let mut e = val;
             loop {
                 match g_byte(m, e) {
@@ -1476,7 +1345,7 @@ pub fn fn_275204_m(
                     2 => exp_stem,
                     _ => exp_yes,
                 };
-                // fn_195d58(val, expected).
+
                 let mut k = 0u32;
                 let eq = loop {
                     let a = match g_byte(m, val.wrapping_add(k)) {
@@ -1499,7 +1368,7 @@ pub fn fn_275204_m(
                     }
                 };
                 if parse == 2 {
-                    // mdetype: only the "stemafx" arm writes.
+
                     if eq && !p_byte(m, dst, 1) {
                         return FAIL_MEM;
                     }
@@ -1514,42 +1383,14 @@ pub fn fn_275204_m(
     result
 }
 
-/// The `fn_275928` dictionary multi-word path, live over the caller's arena.
-///
-/// The exact ARM call is
-/// `fn_275928(fe, text, start, end, mode, handle, tok, markers, mi,
-/// nMarkers, base, rich)` where `handle` is a two-word `TtsHandle`
-/// `(obj, data)` and `text` is the `char **` of the caller text.
-/// `scratch` is a caller-owned frame: the word buffers live at
-/// `scratch + 0x604` and the address-taken scalars at the top; nested
-/// `fn_26ff18` calls use `scratch + FN_275928_N26` (64 bytes) and nested
-/// `fn_1ec7cc` calls use `scratch + FN_275928_NEC` (260 bytes). The token
-/// and dictionary APIs are the direct function-pointer structs the ROM
-/// reads out of `fe` (`token_api` at `+0x0c`, dictionary `obj/data` at
-/// `+0x10/+0x14`, `dictionary_api` at `+0x18`); every other callee is
-/// issued through the host. The ROM literals used are `prompt` at
-/// 0x2760d8, `femwg2p` at 0x2760e0, `g2p` at 0x2760e4, `tokenType` at
-/// 0x276750, `token` at 0x27675c, the log format at 0x276764, `*` at
-/// 0x276778 and `word` at 0x276c48; the empty string is the shared
-/// 0x2702b8.
 pub const FN_275928_FRAME_END: u32 = 0xa64;
 pub const FN_275928_NEC: u32 = 0x4c0;
 pub const FN_275928_N26: u32 = 0x5c4;
-/// Measured 1f98c8 entry SP, identical on all seven e2e workloads
-/// (scratch/c3-r20/sp-probe.py hooks 1f98c8's entry: 0xe0ff938 on
-/// speech_1/2/3/4, custom_1/2 and sing_1). The ARM frame chain below
-/// derives every nested SP arithmetically: 1f98c8's body is entry minus
-/// its 0x2E8 frame (`push` 13 regs + `sub sp, #0x2b4`), 275928's body its
-/// entry minus 0x4E0 (`push` 13 + `vpush` 3 regs + `sub` 0x400 + 0x94),
-/// each G2P call's body minus its own frame, each 2c8554 level minus
-/// 0x158 (`push` 9 regs + `sub sp, #0x134`). No fixed windows, no depth
-/// cap: every frame position is computed from this live anchor.
+
 pub const SP_1F98C8_ENTRY: u32 = 0xe0ff938;
-/// 1f98c8's own frame size (`push {r0-r3, r4-r8, sb, sl, fp, lr}` +
-/// `sub sp, #0x2b4`), verified against the balanced epilogue.
+
 pub const F1F98C8_FRAME: u32 = 0x2e8;
-/// 275928's own frame size (`push` 13 regs + `vpush {d8, d9, d10}` +
-/// `sub sp, #0x400` + `sub sp, #0x94`).
+
 pub const F275928_FRAME: u32 = 0x4e0;
 const F275928_WORDS: u32 = 0x604;
 const F275928_TOKEN_TEXT: u32 = 0x704;
@@ -1573,14 +1414,10 @@ const F275928_FIRST: u32 = 0xa7c;
 const EMPTY_S: u32 = 0x2702b8;
 const STAR_S: u32 = 0x276778;
 
-/// The `is_separator` test of `fn_275928`: space, tab, newline, CR, `_`.
 fn f275928_sep(c: u8) -> bool {
     c == b' ' || c == b'\t' || c == b'\n' || c == b'\r' || c == b'_'
 }
 
-/// The `read_word` helper of `fn_275928`: the next blank-delimited word
-/// of `*text` at `text_off + start` into `word`. Terminates the word
-/// unless the 0x80-byte buffer fills first, and reports whether it did.
 fn f275928_read_word(m: &mut Memory<'_>, text: u32, text_off: u16, start: u16, word: u32) -> bool {
     let src = match g_word(m, text) {
         Some(v) => v,
@@ -1648,17 +1485,14 @@ pub fn fn_275928_m(
     let afirst = scratch.wrapping_add(F275928_FIRST);
     let n26 = scratch.wrapping_add(FN_275928_N26);
     let nec = scratch.wrapping_add(FN_275928_NEC);
-    // The nested G2P entry SP is this body SP: the `bl` doesn't move it.
-    // Every G2P frame hangs off it at the disassembled offsets.
+
     let gsp = sp.wrapping_sub(F275928_FRAME);
 
     let token_api = g_word(m, fe.wrapping_add(0x0c)).unwrap_or(0);
     let dict_obj = g_word(m, fe.wrapping_add(0x10)).unwrap_or(0);
     let dict_data = g_word(m, fe.wrapping_add(0x14)).unwrap_or(0);
     let dict_api = g_word(m, fe.wrapping_add(0x18)).unwrap_or(0);
-    // fe+0x50 is shared mutable state (2719ec writes it back per acronym
-    // token): always re-read it like the C does (`fe->text_offset`), never
-    // cache it in a local (the C's own `text_offset` local is unused).
+
     let nonctdps = g_byte(m, fe.wrapping_add(0x70)).unwrap_or(0);
     let dps = g_byte(m, fe.wrapping_add(0x71)).unwrap_or(0);
     let domain = fe.wrapping_add(0x72);
@@ -1673,9 +1507,8 @@ pub fn fn_275928_m(
     let f_normalize_token = g_word(m, dict_api.wrapping_add(0x34)).unwrap_or(0);
     let f_normalize_word = g_word(m, dict_api.wrapping_add(0x38)).unwrap_or(0);
 
-    // The six buffers start empty; the scalars start at their reset values.
     for b in [word, words, token_text, nword, nwords, ntoken] {
-        h.call_m(0x195cd0, &[b, EMPTY_S], m);
+        h.call_m(0x195cd0, &[b, s_lit(h.rom(), 0x2702b8)], m);
     }
     if !p_half(m, anext_token, 0)
         || !p_half(m, aread, 0)
@@ -1700,7 +1533,7 @@ pub fn fn_275928_m(
             return FAIL_MEM;
         }
     }
-    // The token kind of the head token.
+
     status = h.call_m(
         f_get_attr,
         &[handle_obj, handle_data, u32::from(g_half(m, tok).unwrap_or(0)), 0, 1, akind, aread],
@@ -1802,7 +1635,7 @@ pub fn fn_275928_m(
                 fallback = 0;
                 segment_start = g_half(m, tok).unwrap_or(0);
                 if f275928_read_word(m, text, g_half(m, fe.wrapping_add(0x50)).unwrap_or(0), start, word) {
-                    if next_token != 0 && h.call_m(0x195d58, &[mode, 0x2760d8], m) != 0 {
+                    if next_token != 0 && h.call_m(0x195d58, &[mode, s_lit(h.rom(), 0x2760d8)], m) != 0 {
                         if !g_strcpy(m, words, word) {
                             return FAIL_MEM;
                         }
@@ -1812,7 +1645,7 @@ pub fn fn_275928_m(
                         h.call_m(0x195bec, &[lengths, 0, 0x40], m);
                         status = h.call_m(
                             f_word_lengths,
-                            &[dict_obj, dict_data, words, 0x2760e0, mode, aresults, acount],
+                            &[dict_obj, dict_data, words, s_lit(h.rom(), 0x2760e0), mode, aresults, acount],
                             m,
                         );
                         let mut length_count = 0u8;
@@ -1836,8 +1669,7 @@ pub fn fn_275928_m(
                                 }
                                 j = j.wrapping_add(1);
                             }
-                            // The sort runs the b3 port directly; its
-                            // 0x270b28 comparator runs through the host.
+
                             status = fn_2409d4_m(
                                 m,
                                 h,
@@ -1916,7 +1748,7 @@ pub fn fn_275928_m(
                                         text,
                                         nwords,
                                         words,
-                                        0x2760e4,
+                                        s_lit(h.rom(), 0x2760e4),
                                         mode,
                                         start,
                                         g_half(m, tok).unwrap_or(0),
@@ -1948,7 +1780,7 @@ pub fn fn_275928_m(
                             text,
                             word,
                             word,
-                            0x2760e4,
+                            s_lit(h.rom(), 0x2760e4),
                             mode,
                             start,
                             g_half(m, tok).unwrap_or(0),
@@ -1980,7 +1812,7 @@ pub fn fn_275928_m(
                                 text,
                                 nword,
                                 word,
-                                0x2760e4,
+                                s_lit(h.rom(), 0x2760e4),
                                 mode,
                                 start,
                                 g_half(m, tok).unwrap_or(0),
@@ -1996,7 +1828,7 @@ pub fn fn_275928_m(
                         }
                     }
                 }
-                // mde: the nonctdps path runs whether or not the word read.
+
                 if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16)
                     && nonctdps != 0
                 {
@@ -2029,11 +1861,7 @@ pub fn fn_275928_m(
             if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16)
                 && (previous_kind != 3 || next_kind != 3)
             {
-                // The ARM reaches its 0x2766c4 fallback store only by
-                // falling through the kind==0/1 dispatch (0x2761f4 jumps
-                // straight to the 0x2766e4 call gate for any other kind)
-                // with a short token (0x27626c jumps over the store when
-                // length>=0x80).
+
                 let mut reach_store = false;
                 if kind == 0 || kind == 1 {
                     status = h.call_m(
@@ -2053,7 +1881,7 @@ pub fn fn_275928_m(
                         return status;
                     }
                     let token_end = g_half(m, atoken_end).unwrap_or(0);
-                    // 1:1 with the C (`fe->text_offset` is re-read, never cached).
+
                     let text_off_now = g_half(m, fe.wrapping_add(0x50)).unwrap_or(0);
                     let begin = text_off_now.wrapping_add(start);
                     let length = u32::from(token_end.wrapping_add(text_off_now))
@@ -2061,8 +1889,7 @@ pub fn fn_275928_m(
                     if length < 0x80 {
                         reach_store = true;
                         let t = g_word(m, text).unwrap_or(0);
-                        // Round 4 (seg1): the bounded copy runs
-                        // in-component (0x195e38 has no live Host arm).
+
                         if !f195e38_copy(m, token_text, t.wrapping_add(u32::from(begin)), length) {
                             return FAIL_MEM;
                         }
@@ -2073,10 +1900,8 @@ pub fn fn_275928_m(
                         if !g_strcpy(m, ntoken, token_text) {
                             return FAIL_MEM;
                         }
-                        // Round 4 (seg1): the lex canonical-token
-                        // entry (0x1ed3b0) runs in-component; the
-                        // vtable read guards the direct binding.
-                        status = if f_normalize_token == 0x1ed3b0 {
+
+                        status = if crate::rom_region::to_us_guest(h.rom(), f_normalize_token) == 0x1ed3b0 {
                             fn_1ed3b0_m(m, h, dict_obj, dict_data, mode, ntoken, 0x80)
                         } else {
                             h.call_m(
@@ -2095,7 +1920,7 @@ pub fn fn_275928_m(
                                     text,
                                     ntoken,
                                     token_text,
-                                    0x2760e4,
+                                    s_lit(h.rom(), 0x2760e4),
                                     mode,
                                     start,
                                     g_half(m, tok).unwrap_or(0),
@@ -2115,9 +1940,7 @@ pub fn fn_275928_m(
                         if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16) {
                             if kind == 0 {
                                 if dps != 0 {
-                                    // c3 r18/r19 (shared): the G2P lookup runs
-                                    // in-component over the SP-relative
-                                    // 275928 frame (c3 r18/r19).
+
                                     status = crate::component_g2p::fn_2c9ba0_m(
                                         m,
                                         h,
@@ -2125,7 +1948,7 @@ pub fn fn_275928_m(
                                         fe,
                                         ntoken,
                                         token_text,
-                                        0x2760e4,
+                                        s_lit(h.rom(), 0x2760e4),
                                         mode,
                                         start,
                                         g_half(m, tok).unwrap_or(0),
@@ -2139,8 +1962,7 @@ pub fn fn_275928_m(
                                 }
                                 if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16)
                                 {
-                                    // c3 r18/r19 (shared): the MDE config lookup runs
-                                    // in-component over the SP-relative 275928 frame.
+
                                     status = crate::component_g2p::fn_2c93f0_m(
                                         m,
                                         h,
@@ -2167,7 +1989,7 @@ pub fn fn_275928_m(
                                     f_insert_child,
                                     f_set_attr,
                                     logger,
-                                    0x27675c,
+                                    s_lit(h.rom(), 0x27675c),
                                     token_text,
                                     kind,
                                     handle_obj,
@@ -2194,11 +2016,7 @@ pub fn fn_275928_m(
                     fallback = 1;
                 }
                 if kind != 3 && next_kind == 3 {
-                    // Round 4 (seg1): the acronym path runs in-component
-                    // at the ARM's own frame, with the rule expansion and
-                    // the broker open intercepted (see XHost); the write-up
-                    // for wire-a's engine_live::Host arm is in the round-4
-                    // progress file.
+
                     let mut xh = XHost {
                         inner: &mut *h,
                         vm: crate::component_live_c::VmWorkspace::default(),
@@ -2224,7 +2042,7 @@ pub fn fn_275928_m(
                         return status;
                     }
                 }
-                // next:
+
                 status = h.call_m(
                     f_get_attr,
                     &[
@@ -2270,15 +2088,14 @@ pub fn fn_275928_m(
                         return status;
                     }
                     let token_end = g_half(m, atoken_end).unwrap_or(0);
-                    // 1:1 with the C (`fe->text_offset` is re-read, never cached).
+
                     let text_off_now = g_half(m, fe.wrapping_add(0x50)).unwrap_or(0);
                     let begin = text_off_now.wrapping_add(start);
                     let length = u32::from(token_end.wrapping_add(text_off_now))
                         .wrapping_sub(u32::from(begin));
                     if length < 0x80 {
                         let t = g_word(m, text).unwrap_or(0);
-                        // Round 4 (seg1): the bounded copy runs
-                        // in-component (0x195e38 has no live Host arm).
+
                         if !f195e38_copy(m, token_text, t.wrapping_add(u32::from(begin)), length) {
                             return FAIL_MEM;
                         }
@@ -2289,10 +2106,8 @@ pub fn fn_275928_m(
                         if !g_strcpy(m, ntoken, token_text) {
                             return FAIL_MEM;
                         }
-                        // Round 4 (seg1): the lex canonical-token
-                        // entry (0x1ed3b0) runs in-component; the
-                        // vtable read guards the direct binding.
-                        status = if f_normalize_token == 0x1ed3b0 {
+
+                        status = if crate::rom_region::to_us_guest(h.rom(), f_normalize_token) == 0x1ed3b0 {
                             fn_1ed3b0_m(m, h, dict_obj, dict_data, mode, ntoken, 0x80)
                         } else {
                             h.call_m(
@@ -2303,7 +2118,7 @@ pub fn fn_275928_m(
                         };
                         if status < 0x80000000 {
                             if dps != 0 {
-                                // c3 r18/r19 (shared): see the first 0x2c9ba0 site.
+
                                 status = crate::component_g2p::fn_2c9ba0_m(
                                     m,
                                     h,
@@ -2311,7 +2126,7 @@ pub fn fn_275928_m(
                                     fe,
                                     ntoken,
                                     token_text,
-                                    0x2760e4,
+                                    s_lit(h.rom(), 0x2760e4),
                                     mode,
                                     start,
                                     g_half(m, tok).unwrap_or(0),
@@ -2325,7 +2140,7 @@ pub fn fn_275928_m(
                             }
                             if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16)
                             {
-                                // c3 r18/r19 (shared): see the first 0x2c93f0 site above.
+
                                 status = crate::component_g2p::fn_2c93f0_m(
                                     m,
                                     h,
@@ -2349,7 +2164,7 @@ pub fn fn_275928_m(
                             fallback = 1;
                         }
                     }
-                    // Round 4 (seg1): see the first 0x2719ec site above.
+
                     let mut xh = XHost {
                         inner: &mut *h,
                         vm: crate::component_live_c::VmWorkspace::default(),
@@ -2382,7 +2197,7 @@ pub fn fn_275928_m(
                         f_insert_child,
                         f_set_attr,
                         logger,
-                        0x276c48,
+                        s_lit(h.rom(), 0x276c48),
                         word,
                         kind,
                         handle_obj,
@@ -2402,7 +2217,7 @@ pub fn fn_275928_m(
                 }
             }
         }
-        // next:
+
         status = h.call_m(
             f_get_attr,
             &[
@@ -2426,8 +2241,7 @@ pub fn fn_275928_m(
         kind = next_kind;
     }
 }
-/// Guest scratch window offsets for `fn_274564_m` (caller-provided
-/// guest window, disjoint from the caller's frame; 64 bytes used).
+
 const F274564_AUX: u32 = 0x00;
 const F274564_AUX2: u32 = 0x08;
 const F274564_VALS: u32 = 0x0c;
@@ -2440,14 +2254,6 @@ const F274564_BOUND: u32 = 0x32;
 const F274564_OUT: u32 = 0x34;
 const F274564_WRITTEN: u32 = 0x38;
 
-/// `fn_274564` (dict_phon): the phonetic-input path. A word whose mode
-/// string is `phon` is re-tokenized from its phonetic spelling: markers
-/// at or past `end` shift by the G2P time shift, the sentence nodes up to
-/// `end` are dropped, then one word record per blank-delimited phonetic
-/// token is inserted under `sentNode` with dictionary transcription,
-/// pause-boundary flags and the alternative-transcription link.
-/// 1:1 with src/fn_26ff18.c (NONMATCHING there, behaviorally exact).
-/// `scratch` is a caller-owned guest window (at least 64 bytes).
 #[allow(clippy::too_many_arguments)]
 pub fn fn_274564_m(
     m: &mut Memory<'_>,
@@ -2478,8 +2284,7 @@ pub fn fn_274564_m(
     let bound_at = scratch.wrapping_add(F274564_BOUND);
     let out_at = scratch.wrapping_add(F274564_OUT);
     let written_at = scratch.wrapping_add(F274564_WRITTEN);
-    // G2P context off the fe object (offsets verified against the live
-    // image: lat vtable serves the LINGDB entries below).
+
     let env = g_word(m, p).unwrap_or(0);
     let heap = g_word(m, env.wrapping_add(4)).unwrap_or(0);
     let log = g_word(m, env.wrapping_add(16)).unwrap_or(0);
@@ -2506,7 +2311,7 @@ pub fn fn_274564_m(
     if !p_half(m, one_at, 1) || !p_half(m, bound_at, boundary) {
         return FAIL_MEM;
     }
-    // Marker shift: markers at or past `end` shift by timeShift.
+
     let nm = g_half(m, nm_out).unwrap_or(0);
     let mut mark_idx = g_half(m, mi_out).unwrap_or(0);
     while mark_idx < nm {
@@ -2534,10 +2339,7 @@ pub fn fn_274564_m(
     if !p_half(m, mi_out, mark_idx) {
         return FAIL_MEM;
     }
-    // Drop sentence nodes up to `end`, tracking the type-5 node.
-    // NOTE: `ftype` is uninitialized in the C until the first getAttr;
-    // zero matches the observed ARM behavior (verified on the case-39
-    // capture: the `#` climb below runs the same).
+
     let mut node = g_half(m, tok_out).unwrap_or(0);
     let mut tok: u16 = 0;
     let mut wpos: u16 = 0;
@@ -2580,7 +2382,7 @@ pub fn fn_274564_m(
         }
         prev = 0;
     }
-    // Phonetic spelling of the sentence node (field 3).
+
     let mut status = h.call_m(f_get_ptr, &[a, c, u32::from(sent_node), 3, out_at, aux], m);
     if status >= 0x80000000 {
         return status;
@@ -2615,7 +2417,7 @@ pub fn fn_274564_m(
     let mut str_len = h.call_m(0x195d90, &[str_addr], m);
     let is_bs = str_len > 4 && g_byte(m, str_addr).unwrap_or(0) == b'\\';
     if is_bs && g_byte(m, str_addr.wrapping_add(1)).unwrap_or(0) == b'T' {
-        // `\T?` language override: lngphon_e + str[2].
+
         let key = *b"lngphon_e\0\0\0\0\0\0\0";
         let mut kb = key;
         kb[8] = g_byte(m, str_addr.wrapping_add(2)).unwrap_or(0);
@@ -2629,7 +2431,7 @@ pub fn fn_274564_m(
         }
         status = h.call_m(
             f_cfg_get,
-            &[cfgh0, cfgh1, S_FECFG, lngkey, vals_at, found_at, len_at],
+            &[cfgh0, cfgh1, s_fecfg(h.rom()), lngkey, vals_at, found_at, len_at],
             m,
         );
         if status >= 0x80000000 {
@@ -2648,9 +2450,7 @@ pub fn fn_274564_m(
         }
         str_addr = str_addr.wrapping_add(4);
     }
-    // `#` adjustment: climb to the word level, flag the boundary.
-    // (`ntype` repeats the last getAttr type; `ftype` is 0 if the drop
-    // loop never ran, matching the C local's observed value.)
+
     if g_byte(m, str_addr).unwrap_or(0) == b'#' {
         let mut n = sent_node;
         let mut ntype = ftype;
@@ -2679,7 +2479,7 @@ pub fn fn_274564_m(
     while g_byte(m, str_addr).unwrap_or(0) == b'#' {
         str_addr = str_addr.wrapping_add(1);
     }
-    // One word record per blank-delimited phonetic token.
+
     let mut wp = str_addr;
     let mut pos = start_in;
     loop {
@@ -2748,7 +2548,7 @@ pub fn fn_274564_m(
             }
         }
         n_words = n_words.wrapping_add(1);
-        // Isolate one blank-delimited word out of `str`.
+
         while g_byte(m, wp).unwrap_or(0) != 0
             && g_byte(m, wp).unwrap_or(0) != b'_'
             && g_byte(m, wp).unwrap_or(0) != b' '
@@ -2771,7 +2571,7 @@ pub fn fn_274564_m(
             }
             buf = nb;
             if use_lex != 0 {
-                if h.call_m(0x195d58, &[lang, EMPTY_S], m) != 0 {
+                if h.call_m(0x195d58, &[lang, s_lit(h.rom(), 0x2702b8)], m) != 0 {
                     status = h.call_m(f_lex_lookup, &[lexh0, lexh1, 1, str_addr, need, buf, lang], m);
                 } else {
                     status = h.call_m(f_lex_lookup, &[lexh0, lexh1, 1, str_addr, need, buf, 0], m);
@@ -2782,7 +2582,7 @@ pub fn fn_274564_m(
             if status >= 0x80000000 {
                 return status;
             }
-            // Marker-word check: buf in {"*,","*;","*:","`","'","\""}.
+
             let b0 = g_byte(m, buf).unwrap_or(0);
             let b1 = g_byte(m, buf.wrapping_add(1)).unwrap_or(0);
             let b2 = g_byte(m, buf.wrapping_add(2)).unwrap_or(0);
@@ -2832,12 +2632,12 @@ pub fn fn_274564_m(
             extra = 0;
             last_word = tok;
         }
-        // Phonetic ("*") + orthographic ("*") placeholders and the used-flag.
-        status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 5, 2, STAR_S, aux2], m);
+
+        status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 5, 2, s_lit(h.rom(), STAR_S), aux2], m);
         if status >= 0x80000000 {
             return status;
         }
-        status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 6, 2, STAR_S, aux2], m);
+        status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 6, 2, s_lit(h.rom(), STAR_S), aux2], m);
         if status >= 0x80000000 {
             return status;
         }
@@ -2936,11 +2736,6 @@ pub fn fn_274564_m(
     status
 }
 
-
-/// The shared kind==1/2 token-emit block of `fn_275928`: log the token,
-/// extend the match, insert the child and set fields 0, 1, 2, 3, 5, 6, 7
-/// and 9. `advance` selects the trailing `next` of the `previous/next`
-/// path. Returns the last callee status.
 #[allow(clippy::too_many_arguments)]
 fn f275928_emit_token(
     m: &mut Memory<'_>,
@@ -2964,15 +2759,14 @@ fn f275928_emit_token(
 ) -> u32 {
     h.call_m(
         0x173dc0,
-        &[logger, 0x8f9532, 0x84d3, 0x276764, name, buf, 0x276750, u32::from(kind)],
+        &[logger, 0x8f9532, 0x84d3, s_lit(h.rom(), 0x276764), name, buf, s_lit(h.rom(), 0x276750), u32::from(kind)],
         m,
     );
     let wlen = h.call_m(0x195d90, &[buf], m);
     if !p_byte(m, akind, 4) {
         return FAIL_MEM;
     }
-    // The ROM reads `start` back out of its incoming stack slot; the port
-    // keeps it in `astart` since the loop start.
+
     let start = g_half(m, astart).unwrap_or(0);
     if !p_half(m, amatched_end, (wlen as u16).wrapping_add(start)) {
         return FAIL_MEM;
@@ -2992,11 +2786,11 @@ fn f275928_emit_token(
         (0, 1, akind),
         (1, 1, astart),
         (2, 1, amatched_end),
-        (3, 1, EMPTY_S),
-        (5, 2, STAR_S),
-        (6, 2, STAR_S),
+        (3, 1, s_lit(h.rom(), 0x2702b8)),
+        (5, 2, s_lit(h.rom(), STAR_S)),
+        (6, 2, s_lit(h.rom(), STAR_S)),
         (7, 1, aprio),
-        (9, 1, EMPTY_S),
+        (9, 1, s_lit(h.rom(), 0x2702b8)),
     ];
     if !p_half(m, aprio, 1) {
         return FAIL_MEM;
@@ -3020,8 +2814,7 @@ fn f275928_emit_token(
     }
     status
 }
-/// `fn_1f98c8` literal addresses: the function's own pool in the ROM
-/// image (verified against the wire capture of the 1f98c8 run).
+
 const S_CLMVARIANTS: u32 = 0x1f9cf8;
 const S_NO: u32 = 0x1f9d04;
 const S_CLCMLEXTRA: u32 = 0x1f9d08;
@@ -3029,6 +2822,9 @@ const S_NUMOUTTRANS: u32 = 0x1f9d1c;
 const S_NORICHTRANS: u32 = 0x1f9d38;
 const S_FALSE: u32 = 0x1f9d4c;
 const S_FECFG: u32 = 0x1f9d54;
+fn s_fecfg(rom: crate::rom_region::Rom) -> u32 {
+    crate::rom_region::addr(rom, S_FECFG)
+}
 const S_MPTHREE: u32 = 0x1f9d5c;
 const S_MPTHREEML: u32 = 0x1f9d64;
 const S_VADVDE: u32 = 0x1f9d70;
@@ -3036,14 +2832,16 @@ const S_DTSCORE: u32 = 0x1f9d78;
 const S_DTHIST: u32 = 0x1f9d94;
 const S_DTVAR: u32 = 0x1f9db4;
 const S_NORMAL: u32 = 0x1fa2dc;
+fn s_normal(rom: crate::rom_region::Rom) -> u32 {
+    crate::rom_region::addr(rom, S_NORMAL)
+}
+fn s_lit(rom: crate::rom_region::Rom, us: u32) -> u32 {
+    crate::rom_region::addr(rom, us)
+}
 const S_PROMPT: u32 = 0x1fa89c;
 const S_LATIN: u32 = 0x1fa8a4;
 const S_PHON: u32 = 0x1db2d4;
 
-/// `fn_1f98c8` caller frame: locals live at `scratch + 0x2000`, the nested
-/// `fn_275928` frame at `scratch + 0x3000` (both inside the machine stack
-/// window, never compared). The nested `fn_26ff18`/`fn_1ec7cc` frames the
-/// host hands out sit above the host scratch base and never overlap these.
 const F198C8_LOC: u32 = 0x2000;
 const F198C8_S2759: u32 = 0x3000;
 const L_TMP: u32 = 0x00;
@@ -3090,13 +2888,9 @@ const L_CLM: u32 = 0x2bc;
 const L_NO4: u32 = 0x2c0;
 const L_CODE: u32 = 0x2c4;
 const L_CLMSIZE: u32 = 0x2c8;
-/// Caller stack scratch for the nested `fn_1ede44_m` tokenize frame: 50
-/// bytes at the ROM's sp-relative offsets (lane b4's `S_*` slots). Free
-/// locals space: the last local ends at 0x2cc, the nested 275928 frame
-/// starts at `F198C8_S2759` (+0x1000 from the locals base).
+
 const L_TOKFRAME: u32 = 0x300;
 
-/// Read the `pos` field of marker `i` at `base`.
 fn f198c8_mark_pos(m: &Memory<'_>, base: u32, i: u16) -> u32 {
     g_word(
         m,
@@ -3107,7 +2901,6 @@ fn f198c8_mark_pos(m: &Memory<'_>, base: u32, i: u16) -> u32 {
     .unwrap_or(0)
 }
 
-/// Copy a Rust byte string plus terminator into the arena.
 fn f198c8_puts(m: &mut Memory<'_>, dst: u32, s: &[u8]) -> bool {
     let mut i = 0u32;
     for &ch in s {
@@ -3119,17 +2912,6 @@ fn f198c8_puts(m: &mut Memory<'_>, dst: u32, s: &[u8]) -> bool {
     p_byte(m, dst.wrapping_add(i), 0)
 }
 
-/// `fn_1f98c8(fe, b, a, c, done)`: the live one-word root, direct port of
-/// src/fn_1f7ed0.c:938-2351 over the caller's arena. `scratch` is a
-/// caller-owned frame: locals live at `scratch + 0x2000`, the nested
-/// `fn_275928` frame at `scratch + 0x3000`; the heap buffers the ROM
-/// `malloc`s (`textCopy`, `wordBuf`, `clmBuf`, `altBuf`, `mk`) come from
-/// the guest heap. Every record/config/translator call is issued through
-/// the host with the vtable slot the ROM reads; `fn_275928` nests
-/// directly, `getString` binds lane b4's `fn_1ea4e0_m`. The language-ID
-/// (`fn_1f932c`) and cross-language-map sections are present but the
-/// certified capture leaves them through the `noExtClc` gate, as does the
-/// alternative-transcription section (`dpsMultiTrans == 0` here).
 #[allow(clippy::too_many_arguments)]
 pub fn fn_1f98c8_m(
     m: &mut Memory<'_>,
@@ -3142,8 +2924,7 @@ pub fn fn_1f98c8_m(
     done: u32,
 ) -> u32 {
     let (rc, bufs) = fn_1f98c8_inner(m, h, scratch, p, b, a, c, done);
-    // The ROM's `fail`/`out` tails free the heap buffers; free the same
-    // set here so every exit path matches.
+
     let env = g_word(m, p).unwrap_or(0);
     let heap = g_word(m, env.wrapping_add(4)).unwrap_or(0);
     for q in bufs {
@@ -3154,9 +2935,6 @@ pub fn fn_1f98c8_m(
     rc
 }
 
-/// The body of `fn_1f98c8_m`: returns the status and the five heap
-/// buffers (`textCopy`, `wordBuf`, `clmBuf`, `altBuf`, `mk`) for the
-/// caller to free, exactly the set the ROM frees on its `fail`/`out` tails.
 #[allow(clippy::too_many_arguments)]
 fn fn_1f98c8_inner(
     m: &mut Memory<'_>,
@@ -3168,23 +2946,14 @@ fn fn_1f98c8_inner(
     c: u32,
     done: u32,
 ) -> (u32, [u32; 5]) {
-    // The G2P text offset is per root call: each call gets a fresh text
-    // buffer (`text_copy` below), so the accumulated normalization shift
-    // must restart at zero. The ARM achieves this with a fresh G2P context
-    // per call (heap zero-on-alloc; the C has no in-engine reset); the live
-    // arena reuses the object, so reset it explicitly. Without this, a
-    // second speak in one session reads text at a stale shifted offset.
-    // (seg1 r11: this unblocked the 26 prosody.rs:3416 panics.)
+
     if !p_half(m, p.wrapping_add(0x50), 0) {
         return (FAIL_MEM, [0u32; 5]);
     }
     let loc = scratch.wrapping_add(F198C8_LOC);
     let s2759 = scratch.wrapping_add(F198C8_S2759);
     let at = |o: u32| loc.wrapping_add(o);
-    // normStr lives in the ARM's own frame at body SP + 0x220 (the two
-    // 0x195cd0 strcpy dsts at 0x1f9fd4/0x1fa00c and the 0x195d58 arg at
-    // 0x1fa548). The old scratch+0x2060 window has no ARM counterpart,
-    // so its bytes diffed against ARM zeros (seg6 round 14).
+
     let normstr = SP_1F98C8_ENTRY.wrapping_sub(F1F98C8_FRAME).wrapping_add(0x220);
     let zero5 = [0u32; 5];
     let env = g_word(m, p).unwrap_or(0);
@@ -3213,7 +2982,7 @@ fn fn_1f98c8_inner(
     let f_get_pos = g_word(m, trans_vt.wrapping_add(TRANS_GET_POS * 4)).unwrap_or(0);
     let f_set_pos = g_word(m, trans_vt.wrapping_add(TRANS_SET_POS * 4)).unwrap_or(0);
     use crate::component_live_b4::fn_1ea4e0_m;
-    // rc = fn_176f94(p, b, 0xf384, 0x4c8); *done = 1.
+
     let mut status = h.call_m(0x176f94, &[p, b, 0xf384, 0x4c8], m);
     if status >= 0x80000000 {
         return (0x89b02008, zero5);
@@ -3221,23 +2990,23 @@ fn fn_1f98c8_inner(
     if !p_byte(m, done, 1) {
         return (FAIL_MEM, zero5);
     }
-    // clmVariants from the "clmvariants" param.
-    status = h.call_m(0x1756d0, &[params, S_CLMVARIANTS, at(L_OPT), 0], m);
+
+    status = h.call_m(0x1756d0, &[params, s_lit(h.rom(), S_CLMVARIANTS), at(L_OPT), 0], m);
     let mut clm_variants = 1u8;
     if status >= 0x80000000
-        || h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), S_NO], m) == 0
+        || h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_NO)], m) == 0
     {
         clm_variants = 0;
     }
     if !p_byte(m, p.wrapping_add(FE_CLM_VARIANTS), clm_variants) {
         return (FAIL_MEM, zero5);
     }
-    // clcExtraMainTrans from "clcmlextramaintrans" (+ extraMainTrans).
-    status = h.call_m(0x1756d0, &[params, S_CLCMLEXTRA, at(L_OPT), 0], m);
+
+    status = h.call_m(0x1756d0, &[params, s_lit(h.rom(), S_CLCMLEXTRA), at(L_OPT), 0], m);
     let extra_main = g_byte(m, p.wrapping_add(FE_EXTRA_MAIN_TRANS)).unwrap_or(0);
     let mut clc_extra = 1u8;
     if status >= 0x80000000
-        || h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), S_NO], m) == 0
+        || h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_NO)], m) == 0
         || extra_main == 0
     {
         clc_extra = 0;
@@ -3245,15 +3014,14 @@ fn fn_1f98c8_inner(
     if !p_byte(m, p.wrapping_add(FE_CLC_EXTRA_MAIN_TRANS), clc_extra) {
         return (FAIL_MEM, zero5);
     }
-    // nOutTrans / dpsMultiTrans from "numberoutputtranscriptions".
-    status = h.call_m(0x1756d0, &[params, S_NUMOUTTRANS, at(L_OPT), 0], m);
+
+    status = h.call_m(0x1756d0, &[params, s_lit(h.rom(), S_NUMOUTTRANS), at(L_OPT), 0], m);
     let mut n_out_trans = 1u8;
     let mut dps_multi = g_byte(m, p.wrapping_add(FE_DPS_MULTI_TRANS)).unwrap_or(0);
     if status < 0x80000000 && g_word(m, at(L_OPT)).unwrap_or(0) != 0 {
         let nt = h.call_m(0x17c550, &[g_word(m, at(L_OPT)).unwrap_or(0)], m) as u8;
         n_out_trans = nt;
-        // NOTE: the ROM compares in `int` (`nt - 1 <= dps` with nt == 0
-        // is true and stores 0xff); a u8 compare would diverge there.
+
         if (i32::from(nt) - 1) <= i32::from(dps_multi) {
             dps_multi = nt.wrapping_sub(1);
         }
@@ -3263,30 +3031,30 @@ fn fn_1f98c8_inner(
     {
         return (FAIL_MEM, zero5);
     }
-    // noRichTrans from "norichtranscription" (+ the fecfg gate).
-    status = h.call_m(0x1756d0, &[params, S_NORICHTRANS, at(L_OPT), 0], m);
+
+    status = h.call_m(0x1756d0, &[params, s_lit(h.rom(), S_NORICHTRANS), at(L_OPT), 0], m);
     let mut no_rich = 0u8;
     if !(status >= 0x80000000
-        || h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), S_FALSE], m) == 0)
+        || h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_FALSE)], m) == 0)
     {
         no_rich = 1;
     }
-    status = h.call_m(0x1756d0, &[params, S_FECFG, at(L_OPT), 0], m);
+    status = h.call_m(0x1756d0, &[params, s_fecfg(h.rom()), at(L_OPT), 0], m);
     if no_rich != 0
         && status < 0x80000000
-        && h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), S_MPTHREE], m) != 0
-        && h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), S_MPTHREEML], m) != 0
-        && h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), S_VADVDE], m) != 0
+        && h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_MPTHREE)], m) != 0
+        && h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_MPTHREEML)], m) != 0
+        && h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_VADVDE)], m) != 0
     {
         no_rich = 0;
     }
     if !p_byte(m, p.wrapping_add(FE_NO_RICH_TRANS), no_rich) {
         return (FAIL_MEM, zero5);
     }
-    // Decision-tree pruning when the lexicon carries trees.
+
     let lex = g_word(m, p.wrapping_add(FE_LEX)).unwrap_or(0);
     if h.call_m(0x196764, &[lex], m) != 0 {
-        let keys = [S_DTSCORE, S_DTHIST, S_DTVAR];
+        let keys = [s_lit(h.rom(), S_DTSCORE), s_lit(h.rom(), S_DTHIST), s_lit(h.rom(), S_DTVAR)];
         let types = [1u32, 2, 5];
         let mut prune_opt = [0u32; 3];
         for (i, k) in keys.iter().enumerate() {
@@ -3298,14 +3066,14 @@ fn fn_1f98c8_inner(
             };
         }
         let n_trans_opt = {
-            status = h.call_m(0x1756d0, &[params, S_NUMOUTTRANS, at(L_OPT), 0], m);
+            status = h.call_m(0x1756d0, &[params, s_lit(h.rom(), S_NUMOUTTRANS), at(L_OPT), 0], m);
             if status >= 0x80000000 {
                 0
             } else {
                 g_word(m, at(L_OPT)).unwrap_or(0)
             }
         };
-        // iter + entries live in the LOC frame; the option struct too.
+
         if !p_word(m, at(0x238), 0)
             || !p_word(m, at(0x23c), 0)
             || !p_word(m, at(0x240), 0)
@@ -3354,7 +3122,7 @@ fn fn_1f98c8_inner(
         let _ = types;
         let _ = status;
     }
-    // The root word record and its text.
+
     status = h.call_m(f_get_first, &[a, c, 1, 0, at(L_ROOT)], m);
     if status >= 0x80000000 {
         return (status, zero5);
@@ -3391,8 +3159,7 @@ fn fn_1f98c8_inner(
     if status >= 0x80000000 {
         return (status, bufs);
     }
-    // delIds[128] zeroed (the ROM's fn_3023b0 memclr; the live host has
-    // no 0x3023b0 entry, so the port stores the same zeros directly).
+
     {
         let mut i = 0u32;
         while i < 256 {
@@ -3402,7 +3169,7 @@ fn fn_1f98c8_inner(
             i += 1;
         }
     }
-    // The input tokens and their language markers.
+
     if !p_half(m, at(L_N), 0) {
         return (FAIL_MEM, bufs);
     }
@@ -3427,7 +3194,7 @@ fn fn_1f98c8_inner(
     if !p_half(m, at(L_MI), mi) {
         return (FAIL_MEM, bufs);
     }
-    // Translator position; f1a5 reset.
+
     if !p_word(m, at(L_TEXTPOS), 0) {
         return (FAIL_MEM, bufs);
     }
@@ -3447,14 +3214,14 @@ fn fn_1f98c8_inner(
     if !p_half(m, at(L_LEN), 0xffff) {
         return (FAIL_MEM, bufs);
     }
-    // cfg getString(h, "fecfg", "normal"): lane b4's port, or the host
-    // when the vtable names another entry.
-    if f_get_string == 0x1ea4e0 {
-        status = fn_1ea4e0_m(m, h, h_a, h_b, S_FECFG, S_NORMAL, at(L_VAL), at(L_LEN), at(L_SEP));
+
+    if crate::rom_region::to_us_guest(h.rom(), f_get_string) == 0x1ea4e0 {
+
+        status = fn_1ea4e0_m(m, h, h_a, h_b, s_fecfg(h.rom()), s_normal(h.rom()), at(L_VAL), at(L_LEN), at(L_SEP));
     } else {
         status = h.call_m(
             f_get_string,
-            &[h_a, h_b, S_FECFG, S_NORMAL, at(L_VAL), at(L_LEN), at(L_SEP)],
+            &[h_a, h_b, s_fecfg(h.rom()), s_normal(h.rom()), at(L_VAL), at(L_LEN), at(L_SEP)],
             m,
         );
     }
@@ -3464,7 +3231,7 @@ fn fn_1f98c8_inner(
     let mut len = g_half(m, at(L_LEN)).unwrap_or(0);
     let val = g_word(m, at(L_VAL)).unwrap_or(0);
     let sep = g_byte(m, at(L_SEP)).unwrap_or(0);
-    status = h.call_m(0x195cd0, &[normstr, S_NORMAL], m);
+    status = h.call_m(0x195cd0, &[normstr, s_normal(h.rom())], m);
     if status >= 0x80000000 {
         return (status, bufs);
     }
@@ -3479,7 +3246,7 @@ fn fn_1f98c8_inner(
             return (status, bufs);
         }
     }
-    // The f173 language-mode marker pair.
+
     let f173 = g_byte(m, p.wrapping_add(FE_F173)).unwrap_or(0);
     let mut mk: u32 = 0;
     let mut cap_mk = 0u16;
@@ -3504,7 +3271,7 @@ fn fn_1f98c8_inner(
             return (FAIL_MEM, bufs);
         }
     }
-    // Copy the phon-typed input tokens into word records.
+
     let mut first = true;
     let mut mode = b'N';
     let esc_tn = g_word(m, p.wrapping_add(FE_LANG_CODE).wrapping_add(4)).unwrap_or(0);
@@ -3547,7 +3314,7 @@ fn fn_1f98c8_inner(
             }
             let str4 = g_word(m, at(L_STR4)).unwrap_or(0);
             let mut str3 = 0u32;
-            if h.call_m(0x195d58, &[str4, S_PHON], m) == 0 {
+            if h.call_m(0x195d58, &[str4, s_lit(h.rom(), S_PHON)], m) == 0 {
                 if !p_word(m, at(L_STR3), 0) {
                     return (FAIL_MEM, bufs);
                 }
@@ -3619,7 +3386,7 @@ fn fn_1f98c8_inner(
             setf!(w, 1, 1, at(L_START));
             setf!(w, 2, 1, at(L_END));
             setf!(w, 4, s4len.wrapping_add(1), str4);
-            if h.call_m(0x195d58, &[str4, S_PHON], m) == 0 {
+            if h.call_m(0x195d58, &[str4, s_lit(h.rom(), S_PHON)], m) == 0 {
                 let s3len = h.call_m(0x195d90, &[str3], m);
                 setf!(w, 3, s3len.wrapping_add(1), str3);
             }
@@ -3632,14 +3399,14 @@ fn fn_1f98c8_inner(
             let str4 = g_word(m, at(L_STR4)).unwrap_or(0);
             if str4 != 0 {
                 let mut new_mode = b'N';
-                if h.call_m(0x195d58, &[str4, S_PHON], m) != 0
-                    && h.call_m(0x195d58, &[str4, S_PROMPT], m) != 0
+                if h.call_m(0x195d58, &[str4, s_lit(h.rom(), S_PHON)], m) != 0
+                    && h.call_m(0x195d58, &[str4, s_lit(h.rom(), S_PROMPT)], m) != 0
                 {
                     if esc_tn == 0 {
                         return (0x89b02006, bufs);
                     }
                     let hit = h.call_m(0x1960a8, &[esc_tn, str4], m);
-                    if h.call_m(0x195d58, &[str4, S_LATIN], m) == 0 {
+                    if h.call_m(0x195d58, &[str4, s_lit(h.rom(), S_LATIN)], m) == 0 {
                         new_mode = b'L';
                     } else if h.call_m(0x195d58, &[str4, normstr], m) != 0 {
                         let s4l = h.call_m(0x195d90, &[str4], m);
@@ -3713,10 +3480,7 @@ fn fn_1f98c8_inner(
             return (status, bufs);
         }
     }
-    // Publish the markers (the f173 pair or the caller's own). The ROM's
-    // setMarkers is lane b4's `fn_1ede44_m` (same six-word entry), whose
-    // 20-byte tokenize frame lives in caller stack scratch at the ROM's
-    // sp-relative offsets (50 bytes at `at(L_TOKFRAME)`).
+
     {
         use crate::component_live_b4::fn_1ede44_m;
         if f173 == 1 {
@@ -3729,7 +3493,7 @@ fn fn_1f98c8_inner(
     if status >= 0x80000000 {
         return (status, bufs);
     }
-    // Merge the remaining input tokens into the word list by position.
+
     if !p_half(m, at(L_TOK), 0) || !p_half(m, at(L_W), 0) {
         return (FAIL_MEM, bufs);
     }
@@ -3952,9 +3716,7 @@ fn fn_1f98c8_inner(
             return (status, bufs);
         }
     }
-    // Run the word-level lookups (dictionary words and phonetic input).
-    // `str4_last` keeps the last word-loop mode string for the
-    // alternative-transcription section below, mirroring the C local.
+
     let mut str4_last = 0u32;
     if !p_half(m, at(L_TOK), 0) {
         return (FAIL_MEM, bufs);
@@ -3967,7 +3729,7 @@ fn fn_1f98c8_inner(
     if !p_word(m, at(L_TEXT), text_copy) {
         return (FAIL_MEM, bufs);
     }
-    // p->f68 lives at fe + 0x68.
+
     if !p_half(m, p.wrapping_add(0x68), tok) {
         return (FAIL_MEM, bufs);
     }
@@ -4009,7 +3771,7 @@ fn fn_1f98c8_inner(
                 }
                 let str4 = g_word(m, at(L_STR4)).unwrap_or(0);
                 str4_last = str4;
-                if h.call_m(0x195d58, &[str4, S_PHON], m) != 0 {
+                if h.call_m(0x195d58, &[str4, s_lit(h.rom(), S_PHON)], m) != 0 {
                     let mut rich = 0u32;
                     if !p_half(m, at(L_HAS), 0) {
                         return (FAIL_MEM, bufs);
@@ -4028,10 +3790,7 @@ fn fn_1f98c8_inner(
                     {
                         return (FAIL_MEM, bufs);
                     }
-                    // 275928's entry SP is this body SP: the `bl`
-                    // doesn't move it. Derived from the measured 1f98c8
-                    // entry SP (identical on all workloads) minus
-                    // 1f98c8's frame.
+
                     let sp_2759 = SP_1F98C8_ENTRY.wrapping_sub(F1F98C8_FRAME);
                     status = fn_275928_m(
                         m,
@@ -4055,10 +3814,7 @@ fn fn_1f98c8_inner(
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    // 275928 takes `&textCopy`: the acronym path reallocs
-                    // `*text` on a positive delta and writes it back
-                    // (src/fn_26ff18.c:1104-1107), so refresh the local
-                    // and the free set from the cell.
+
                     text_copy = g_word(m, at(L_TEXT)).unwrap_or(0);
                     bufs[0] = text_copy;
                     tok = g_half(m, at(L_TOK)).unwrap_or(0);
@@ -4128,7 +3884,7 @@ fn fn_1f98c8_inner(
             w2 = g_half(m, at(L_W2)).unwrap_or(0);
         }
     }
-    // Shift the positions when the text was changed (f50).
+
     let f50 = g_half(m, p.wrapping_add(FE_F50)).unwrap_or(0) as i16;
     if f50 > 0 {
         let mut mmark = mi;
@@ -4235,7 +3991,7 @@ fn fn_1f98c8_inner(
         return (FAIL_MEM, bufs);
     }
     let tclen = h.call_m(0x195d90, &[text_copy], m);
-    // markers->len = strlen(textCopy).
+
     if !p_word(m, markers.wrapping_add(MARKER_LEN_OFF), tclen) {
         return (FAIL_MEM, bufs);
     }
@@ -4247,7 +4003,7 @@ fn fn_1f98c8_inner(
     if status >= 0x80000000 {
         return (status, bufs);
     }
-    // Drop the records below the word level.
+
     if !p_half(m, at(L_TOK), 0) {
         return (FAIL_MEM, bufs);
     }
@@ -4291,7 +4047,6 @@ fn fn_1f98c8_inner(
         tok = g_half(m, at(L_TOK)).unwrap_or(0);
     }
 
-    // Apply the markers to the words and split multi-word entries.
     mi = 0;
     if !p_half(m, at(L_MI), 0) {
         return (FAIL_MEM, bufs);
@@ -4460,7 +4215,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_LEN), 0xffff) {
                         return (FAIL_MEM, bufs);
                     }
-                    // key.s = D_8f9524.pos with s[4] = num, s[5] = 0.
+
                     let src = D_8f9524.wrapping_add(8);
                     let mut i = 0u32;
                     while i < 8 {
@@ -4475,14 +4230,14 @@ fn fn_1f98c8_inner(
                     {
                         return (FAIL_MEM, bufs);
                     }
-                    if f_get_string == 0x1ea4e0 {
+                    if crate::rom_region::to_us_guest(h.rom(), f_get_string) == 0x1ea4e0 {
                         status = fn_1ea4e0_m(
-                            m, h, h_a, h_b, S_FECFG, at(L_KEY), at(L_VAL), at(L_LEN), at(L_SEP),
+                            m, h, h_a, h_b, s_fecfg(h.rom()), at(L_KEY), at(L_VAL), at(L_LEN), at(L_SEP),
                         );
                     } else {
                         status = h.call_m(
                             f_get_string,
-                            &[h_a, h_b, S_FECFG, at(L_KEY), at(L_VAL), at(L_LEN), at(L_SEP)],
+                            &[h_a, h_b, s_fecfg(h.rom()), at(L_KEY), at(L_VAL), at(L_LEN), at(L_SEP)],
                             m,
                         );
                     }
@@ -4615,7 +4370,7 @@ fn fn_1f98c8_inner(
                 let need3 = h.call_m(0x195d90, &[str3], m).wrapping_add(1);
                 let need5 = h.call_m(0x195d90, &[str5], m).wrapping_add(1);
                 let need6 = h.call_m(0x195d90, &[str6b], m).wrapping_add(1);
-                // Grow the fe scratch buffers past 128 bytes when needed.
+
                 let b54_1 = g_word(m, p.wrapping_add(0x58)).unwrap_or(0);
                 if need3 > 128 {
                     let q = h.call_m(0x1963e0, &[heap, b54_1, need3], m);
@@ -4719,7 +4474,7 @@ fn fn_1f98c8_inner(
                     if sp5 != 0 {
                         pos5 = sp5.wrapping_add(1);
                     }
-                    // *sp6 = 0 unconditionally: sp6 is never null here.
+
                     if !p_byte(m, sp6, 0) {
                         return (FAIL_MEM, bufs);
                     }
@@ -4877,7 +4632,7 @@ fn fn_1f98c8_inner(
                 }
             }
         }
-        // nextWord: advance to the next word record.
+
         if !p_half(m, at(L_TOK), 0) {
             return (FAIL_MEM, bufs);
         }
@@ -4898,8 +4653,7 @@ fn fn_1f98c8_inner(
             k = k.wrapping_add(1);
         }
     }
-    // Build the alternative transcriptions (dpsMultiTrans != 0).
-    // Unreached on the certified capture; the host calls mirror the C.
+
     if dps_multi != 0 {
         if !f198c8_puts(m, at(0x33c), b"multi_trans_")
             || !f198c8_puts(m, at(0x34a), b"%s L1: %s")
@@ -4980,8 +4734,7 @@ fn fn_1f98c8_inner(
                     }
                 }
                 let b400 = g_word(m, p.wrapping_add(0x40)).unwrap_or(0);
-                // Round 4 (seg1): the bounded copy runs in-component
-                // (0x195e38 has no live Host arm).
+
                 if !f195e38_copy(m, b400, text_copy.wrapping_add(u32::from(start)), u32::from(end.wrapping_sub(start))) {
                     return (FAIL_MEM, bufs);
                 }
@@ -5155,7 +4908,7 @@ fn fn_1f98c8_inner(
                         if status >= 0x80000000 {
                             return (status, bufs);
                         }
-                        // strcat(buf40[1], "\x12"): the 0x12 byte via scratch.
+
                         if !p_byte(m, at(0x268), 0x12) || !p_byte(m, at(0x269), 0) {
                             return (FAIL_MEM, bufs);
                         }
@@ -5192,8 +4945,7 @@ fn fn_1f98c8_inner(
             tok = g_half(m, at(L_TOK)).unwrap_or(0);
         }
     }
-    // Language identification of foreign words; the certified capture
-    // leaves through the `noExtClc` gate, as does the CLM section.
+
     let no_ext_clc = g_byte(m, p.wrapping_add(FE_NO_EXT_CLC)).unwrap_or(0);
     if no_ext_clc == 0 {
         return (status, bufs);
@@ -5272,8 +5024,8 @@ fn fn_1f98c8_inner(
                         foreign = 0;
                     }
                     if h.call_m(0x1769d0, &[lang, lang_code], m) == 0
-                        || h.call_m(0x195d58, &[lang, EMPTY_S], m) == 0
-                        || h.call_m(0x195d58, &[lang, S_NORMAL], m) == 0
+                        || h.call_m(0x195d58, &[lang, s_lit(h.rom(), 0x2702b8)], m) == 0
+                        || h.call_m(0x195d58, &[lang, s_normal(h.rom())], m) == 0
                     {
                         foreign = 1;
                     }
@@ -5294,7 +5046,7 @@ fn fn_1f98c8_inner(
                 }
             }
             if foreign == 0 {
-                // lidDone with foreign == 0: fall through to the final call.
+
             }
         }
         if foreign == 0 {
@@ -5307,13 +5059,13 @@ fn fn_1f98c8_inner(
                 return (status, bufs);
             }
         }
-        // lidDone: re-check the gate.
+
         let no_ext_clc = g_byte(m, p.wrapping_add(FE_NO_EXT_CLC)).unwrap_or(0);
         if no_ext_clc == 0 {
             return (status, bufs);
         }
     }
-    // Map foreign phonemes through the cross-language mapping.
+
     if !f198c8_puts(m, at(0x2d4), b"Phon before %s CLM %s")
         || !f198c8_puts(m, at(0x2ec), b"Phon after %s CLM %s")
         || !f198c8_puts(m, at(0x302), b"CLM failed for %s")
@@ -5393,7 +5145,7 @@ fn fn_1f98c8_inner(
             if status < 0x80000000 {
                 clm = g_word(m, at(L_CLM)).unwrap_or(0);
                 if clm == 0 {
-                    // `else if (clm != 0) goto checkClm`: null falls through.
+
                 }
             } else {
                 clm = 0;
@@ -5407,7 +5159,7 @@ fn fn_1f98c8_inner(
                 if status >= 0x80000000 || h.call_m(0x1960a8, &[g_word(m, at(L_CLM)).unwrap_or(0), lang], m) == 0 {
                     clm = 0;
                 } else {
-                    status = h.call_m(0x195cd0, &[at(L_NO4), S_NO], m);
+                    status = h.call_m(0x195cd0, &[at(L_NO4), s_lit(h.rom(), S_NO)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -5416,14 +5168,14 @@ fn fn_1f98c8_inner(
             }
             if clm != 0
                 && (h.call_m(0x195d58, &[clm, 0x154ce8], m) != 0
-                    && (h.call_m(0x195d58, &[clm, S_NO], m) != 0 || clm_variants == 0))
+                    && (h.call_m(0x195d58, &[clm, s_lit(h.rom(), S_NO)], m) != 0 || clm_variants == 0))
             {
-                // nextClm: skip this word.
+
             } else if h.call_m(0x1769d0, &[lang, g_word(m, p.wrapping_add(FE_LANG_CODE)).unwrap_or(0)], m) == 0
-                || h.call_m(0x195d58, &[lang, EMPTY_S], m) == 0
-                || h.call_m(0x195d58, &[lang, S_NORMAL], m) == 0
+                || h.call_m(0x195d58, &[lang, s_lit(h.rom(), 0x2702b8)], m) == 0
+                || h.call_m(0x195d58, &[lang, s_normal(h.rom())], m) == 0
             {
-                // nextClm: domestic word.
+
             } else {
                 let s3len = h.call_m(0x195d90, &[str3], m);
                 let clm_size = s3len.wrapping_add(1).wrapping_mul(4);
@@ -5459,7 +5211,7 @@ fn fn_1f98c8_inner(
                 if !p_byte(m, clm_buf, 0) {
                     return (FAIL_MEM, bufs);
                 }
-                if clm != 0 && h.call_m(0x195d58, &[clm, S_NO], m) == 0 && clm_variants != 0 {
+                if clm != 0 && h.call_m(0x195d58, &[clm, s_lit(h.rom(), S_NO)], m) == 0 && clm_variants != 0 {
                     if !p_half(m, at(L_ONE), 1) {
                         return (FAIL_MEM, bufs);
                     }
@@ -5494,11 +5246,11 @@ fn fn_1f98c8_inner(
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 5, 1, 0x276778, at(L_X)], m);
+                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 5, 1, s_lit(h.rom(), STAR_S), at(L_X)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 6, 1, 0x276778, at(L_X)], m);
+                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 6, 1, s_lit(h.rom(), STAR_S), at(L_X)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -5547,7 +5299,7 @@ fn fn_1f98c8_inner(
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
-                status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 9, 1, EMPTY_S, at(L_X)], m);
+                status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 9, 1, s_lit(h.rom(), 0x2702b8), at(L_X)], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -5571,7 +5323,7 @@ fn fn_1f98c8_inner(
                         return (status, bufs);
                     }
                     let alt3 = g_word(m, at(L_STR3)).unwrap_or(0);
-                    if h.call_m(0x195d58, &[alt3, EMPTY_S], m) != 0 {
+                    if h.call_m(0x195d58, &[alt3, s_lit(h.rom(), 0x2702b8)], m) != 0 {
                         let alen = h.call_m(0x195d90, &[alt3], m);
                         let grown =
                             h.call_m(0x1963e0, &[heap, bufs[3], alen.wrapping_add(1).wrapping_mul(4)], m);
@@ -5692,22 +5444,7 @@ fn fn_1f98c8_inner(
     }
     (status, bufs)
 }
-/// The acronym-detection frame of `fn_2719ec` at the ARM's own stack
-/// position (round 4, seg1).
-///
-/// The ARM keeps `ruleName[128]`, `nodeIds[256]` and `languageName[12]` on
-/// its stack: entry SP 0xe0ff170 (measured on speech_3 and three caps
-/// inputs, stable because the scheduler call chain is input-independent),
-/// ROM prologue pushes 13 words and subs 0x21c, so the body SP is
-/// `FN_2719EC_FRAME` = 0xe0fef20. The port materialises the guest-visible
-/// locals there with the layout below (0x1c0 bytes of the ARM's 0x250-byte
-/// frame, clear of the caller's pushed args at 0xe0ff170 and of the live
-/// 275928 frame above). `nodeIds` never reaches guest memory, so it stays
-/// a Rust local. The frame sits in the excluded guest-stack range, like
-/// every other segment scratch area. Out-param slots carry the
-/// callee-written words (`insertChild`/`getFirst`/`next`/`up` node,
-/// `1966ac` entry, rule `getOutput` buffers and length, attr sizes, and
-/// the single callee-written bytes).
+
 pub const FN_2719EC_FRAME: u32 = 0xe0fef20;
 const F2719EC_RULE: u32 = 0x00;
 const F2719EC_LANG: u32 = 0x80;
@@ -5751,7 +5488,6 @@ const F2719EC_OUT_SEP: u32 = 0x26;
 const F2719EC_OUT_TYPE: u32 = 0x1a;
 const F2719EC_OUT_FBUF: u32 = 0x1b;
 
-/// Write one NUL-terminated scratch literal for `fn_2719ec`.
 fn f2719ec_wlit(m: &mut Memory<'_>, dst: u32, s: &[u8]) -> bool {
     for (i, &b) in s.iter().enumerate() {
         if !p_byte(m, dst.wrapping_add(i as u32), b) {
@@ -5761,9 +5497,6 @@ fn f2719ec_wlit(m: &mut Memory<'_>, dst: u32, s: &[u8]) -> bool {
     true
 }
 
-/// The `fn_195e38` copy (strncpy): at most `n` bytes from `src` to
-/// `dst`, stopping after the terminator and zero-filling the rest.
-/// False if the arena does not hold the range.
 fn f195e38_copy(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     let mut d = dst;
     let mut s = src;
@@ -5800,10 +5533,6 @@ fn f195e38_copy(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     true
 }
 
-/// `fn_1edd3c`: the lexicon delimiter test (src/fn_1edd3c.c), issued
-/// through the host. The ROM refreshes the handle (`fn_176f94` with key
-/// `0xf37f`) and reports whether `c` occurs in the handle's delimiter
-/// string at `+100`. Both callees are bound on the one-word path.
 fn f1edd3c_is_delim(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -5823,8 +5552,6 @@ fn f1edd3c_is_delim(
     }
 }
 
-/// Forward the lane-b host to the lane-c port interface so the
-/// dictionary canonicalizer can run inside the acronym path.
 struct CAdapter<'a, H: Host + ?Sized> {
     inner: &'a mut H,
 }
@@ -5835,11 +5562,6 @@ impl<H: Host + ?Sized> crate::component_live_c::Host for CAdapter<'_, H> {
     }
 }
 
-/// `fn_271130` G2P single-character word frame: the ARM keeps its scratch
-/// below the caller's frame; the live port uses the same window with the
-/// layout below (guest-stack range, excluded from comparisons like the
-/// 2719ec frame). Out-param slots carry the callee-written words (lexicon
-/// `results`/`count`/`sepch`, rule `out`/`outlen`).
 pub const FN_271130_FRAME: u32 = 0xe0fee50;
 const F271130_RULES: u32 = 0x00;
 const F271130_DOM: u32 = 0x80;
@@ -5857,10 +5579,6 @@ const F271130_LIT_STAR: u32 = 0x12;
 const F271130_LIT_L1: u32 = 0x14;
 const F271130_LIT_O1: u32 = 0x1e;
 
-/// `fn_271130`: the single-character G2P word path (src/fn_26ff18.c), 1:1
-/// over the caller's arena. `loc` is the 2719ec frame the nested 270b40
-/// calls need; `scratch` below is this function's own window. Every lexicon
-/// and rule call rides the host like any other nested entry.
 pub fn fn_271130_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -5953,26 +5671,25 @@ pub fn fn_271130_m(
     let mut i: u16 = 0;
     while (u32::from(i)) <= h.call_m(0x195d90, &[copy], m) {
         let ci = g_byte(m, copy.wrapping_add(u32::from(i))).unwrap_or(0);
-        // The C assigns c inside isWordSep, so c is stale when isDelim
-        // fires; the branch is taken either way and c is not used below.
+
         let is_delim = h.call_m(f_is_delim, &[lexh_obj, lexh_data, u32::from(ci)], m) != 0;
         if is_delim || is_word_sep(ci) || ci == 0 {
             if i != start {
                 lastc = b' ';
-                h.call_m(0x195cd0, &[key, 0x2702b8], m);
+                h.call_m(0x195cd0, &[key, s_lit(h.rom(), 0x2702b8)], m);
                 h.call_m(
                     0x195dac,
                     &[key, copy.wrapping_add(u32::from(start)), u32::from(i.wrapping_sub(start))],
                     m,
                 );
                 let mut best = 0u32;
-                h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, 0x2702c0, key], m);
+                h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, s_lit(h.rom(), 0x2702c0), key], m);
                 if !p_word(m, count_at, 0) || !p_byte(m, sepch_at, 0) {
                     h.call_m(0x196428, &[heap, copy], m);
                     return FAIL_MEM;
                 }
                 if use_lang_domain != 0 {
-                    h.call_m(0x195cd0, &[dom, 0x2702d4], m);
+                    h.call_m(0x195cd0, &[dom, s_lit(h.rom(), 0x2702d4)], m);
                     let ki = g_byte(m, key).unwrap_or(0);
                     h.call_m(0x195c90, &[dom, langs.wrapping_add(u32::from(ki) * 3)], m);
                     ret = h.call_m(
@@ -5983,7 +5700,7 @@ pub fn fn_271130_m(
                 } else {
                     ret = h.call_m(
                         f_lookup,
-                        &[lexh_obj, lexh_data, 0x2702d4, key, results_at, count_at, sepch_at, u32::from(lex_flag)],
+                        &[lexh_obj, lexh_data, s_lit(h.rom(), 0x2702d4), key, results_at, count_at, sepch_at, u32::from(lex_flag)],
                         m,
                     );
                 }
@@ -6067,12 +5784,12 @@ pub fn fn_271130_m(
                         h.call_m(0x196428, &[heap, copy], m);
                         return 0x89b02007;
                     }
-                    h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, 0x2702d8, entry], m);
+                    h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, s_lit(h.rom(), 0x2702d8), entry], m);
                     if domain != 0
-                        && h.call_m(0x195d58, &[domain, 0x2702b8], m) != 0
+                        && h.call_m(0x195d58, &[domain, s_lit(h.rom(), 0x2702b8)], m) != 0
                         && h.call_m(0x1960a8, &[domain, word], m) == 0
                     {
-                        h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, 0x2705ec], m);
+                        h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, s_lit(h.rom(), 0x2705ec)], m);
                     } else if check_lang != 0 && lang != 0 {
                         let mut skip = false;
                         let q = h.call_m(0x1960a8, &[word, lang], m);
@@ -6087,7 +5804,7 @@ pub fn fn_271130_m(
                                 || q2 == 0
                                 || g_byte(m, q2.wrapping_add(word_len)).unwrap_or(0) != b'|'
                             {
-                                h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, 0x27060c, lang], m);
+                                h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, s_lit(h.rom(), 0x27060c), lang], m);
                                 skip = true;
                             }
                         }
@@ -6095,7 +5812,7 @@ pub fn fn_271130_m(
                             j = j.wrapping_add(1);
                             continue;
                         }
-                        let score = if scorestr != 0 && h.call_m(0x195d58, &[scorestr, 0x2702b8], m) != 0 {
+                        let score = if scorestr != 0 && h.call_m(0x195d58, &[scorestr, s_lit(h.rom(), 0x2702b8)], m) != 0 {
                             h.call_m(0x17c550, &[scorestr], m) as u16
                         } else {
                             1
@@ -6112,7 +5829,7 @@ pub fn fn_271130_m(
                             }
                         }
                     } else {
-                        let score = if scorestr != 0 && h.call_m(0x195d58, &[scorestr, 0x2702b8], m) != 0 {
+                        let score = if scorestr != 0 && h.call_m(0x195d58, &[scorestr, s_lit(h.rom(), 0x2702b8)], m) != 0 {
                             h.call_m(0x17c550, &[scorestr], m) as u16
                         } else {
                             1
@@ -6204,7 +5921,7 @@ pub fn fn_271130_m(
                 h.call_m(0x196428, &[heap, copy], m);
                 return FAIL_MEM;
             }
-            ret = fn_270b40_m(m, h, loc, ctx, tmp, 0x2702b8, 0x2702b8, u32::from(b' '), 0);
+            ret = fn_270b40_m(m, h, loc, ctx, tmp, s_lit(h.rom(), 0x2702b8), s_lit(h.rom(), 0x2702b8), u32::from(b' '), 0);
             if ret >= 0x80000000 {
                 h.call_m(0x196428, &[heap, copy], m);
                 return ret;
@@ -6220,10 +5937,6 @@ pub fn fn_271130_m(
     ret
 }
 
-/// `fn_270b40`: the transliteration-fallback path of the one-word stage
-/// (src/fn_26ff18.c), live over the caller's arena. `loc` is the
-/// `FN_2719EC_FRAME` window: the 2-byte `sep` local lives there because
-/// guest calls read it. Returns the ROM status (0 or 0x89b0200a).
 #[allow(clippy::too_many_arguments)]
 pub fn fn_270b40_m(
     m: &mut Memory<'_>,
@@ -6268,7 +5981,7 @@ pub fn fn_270b40_m(
             return FAIL_MEM;
         }
     }
-    if h.call_m(0x195d58, &[word, EMPTY_S], m) == 0 {
+    if h.call_m(0x195d58, &[word, s_lit(h.rom(), 0x2702b8)], m) == 0 {
         return 0;
     }
     let mut extra = 0u16;
@@ -6430,11 +6143,6 @@ pub fn fn_270b40_m(
     0
 }
 
-/// `fn_26fc54`: the multi-character word path (src/fn_26fc54.c), live over
-/// the caller's arena. `ctx` is the segment context overlaid as the word
-/// context (`word`/`phon`/`pos` at +0x40/+0x44/+0x48 are the segment
-/// accumulators, the interface at +0x18 is the lexicon table). `loc` is
-/// the `FN_2719EC_FRAME` window for the callee-written `found` byte.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_26fc54_m(
     m: &mut Memory<'_>,
@@ -6489,8 +6197,8 @@ pub fn fn_26fc54_m(
         }
         let h = adapter.inner;
         h.call_m(0x195cd0, &[wbuf, word], m);
-        h.call_m(0x195cd0, &[pbuf, EMPTY_S], m);
-        h.call_m(0x195cd0, &[posbuf, EMPTY_S], m);
+        h.call_m(0x195cd0, &[pbuf, s_lit(h.rom(), 0x2702b8)], m);
+        h.call_m(0x195cd0, &[posbuf, s_lit(h.rom(), 0x2702b8)], m);
         let mut i = 0u16;
         loop {
             if i >= h.call_m(0x195d90, &[word], m) as u16 {
@@ -6515,9 +6223,9 @@ pub fn fn_26fc54_m(
     if rc >= 0x80000000 {
         return rc;
     }
-    h.call_m(0x195cd0, &[wbuf, EMPTY_S], m);
-    h.call_m(0x195cd0, &[pbuf, EMPTY_S], m);
-    h.call_m(0x195cd0, &[posbuf, EMPTY_S], m);
+    h.call_m(0x195cd0, &[wbuf, s_lit(h.rom(), 0x2702b8)], m);
+    h.call_m(0x195cd0, &[pbuf, s_lit(h.rom(), 0x2702b8)], m);
+    h.call_m(0x195cd0, &[posbuf, s_lit(h.rom(), 0x2702b8)], m);
     let found_at = out.wrapping_add(F2719EC_OUT_B);
     if !p_byte(m, found_at, 0) {
         return FAIL_MEM;
@@ -6529,8 +6237,8 @@ pub fn fn_26fc54_m(
     if g_byte(m, found_at).unwrap_or(0) == 0 {
         h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, lit_failed], m);
         h.call_m(0x195cd0, &[wbuf, word], m);
-        h.call_m(0x195cd0, &[pbuf, EMPTY_S], m);
-        h.call_m(0x195cd0, &[posbuf, EMPTY_S], m);
+        h.call_m(0x195cd0, &[pbuf, s_lit(h.rom(), 0x2702b8)], m);
+        h.call_m(0x195cd0, &[posbuf, s_lit(h.rom(), 0x2702b8)], m);
         let mut i = 0u16;
         loop {
             if i >= h.call_m(0x195d90, &[word], m) as u16 {
@@ -6544,14 +6252,6 @@ pub fn fn_26fc54_m(
     rc
 }
 
-/// `fn_2719ec`: the acronym-detection path (src/fn_26ff18.c), live over
-/// the caller's arena. `loc` is the `FN_2719EC_FRAME` window holding
-/// `ruleName`, `languageName`, the scratch literals and the callee
-/// out-param slots. Every other callee is issued through the host; the
-/// four callees no certified workload reaches (`fn_26dd20`,
-/// `fn_271130`, `fn_2c8100`, `fn_26e560`) ride `call_m` like any other
-/// nested entry so a future input that needs them fails closed with the
-/// first unbound entry instead of diverging.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2719ec_m(
     m: &mut Memory<'_>,
@@ -6673,7 +6373,7 @@ pub fn fn_2719ec_m(
     }
     let lit_noaff = lit.wrapping_add(F2719EC_LIT_NOAFF);
     let lit_afffail = lit.wrapping_add(F2719EC_LIT_AFFFAIL);
-    h.call_m(0x195cd0, &[lang_name, EMPTY_S], m);
+    h.call_m(0x195cd0, &[lang_name, s_lit(h.rom(), 0x2702b8)], m);
     h.call_m(0x195cd0, &[rule_name, lit_acronym], m);
     let rule_length = h.call_m(0x195d90, &[rule_name], m) & 0xffff;
     let split_word = g_byte(m, ctx.wrapping_add(0x173)).unwrap_or(0);
@@ -6746,10 +6446,10 @@ pub fn fn_2719ec_m(
     let phon_p = g_word(m, ctx.wrapping_add(0x5c)).unwrap_or(0);
     let pos_p = g_word(m, ctx.wrapping_add(0x60)).unwrap_or(0);
     let sep_p = g_word(m, ctx.wrapping_add(0x64)).unwrap_or(0);
-    h.call_m(0x195cd0, &[orth_p, EMPTY_S], m);
-    h.call_m(0x195cd0, &[phon_p, EMPTY_S], m);
-    h.call_m(0x195cd0, &[pos_p, EMPTY_S], m);
-    h.call_m(0x195cd0, &[sep_p, EMPTY_S], m);
+    h.call_m(0x195cd0, &[orth_p, s_lit(h.rom(), 0x2702b8)], m);
+    h.call_m(0x195cd0, &[phon_p, s_lit(h.rom(), 0x2702b8)], m);
+    h.call_m(0x195cd0, &[pos_p, s_lit(h.rom(), 0x2702b8)], m);
+    h.call_m(0x195cd0, &[sep_p, s_lit(h.rom(), 0x2702b8)], m);
     let end_r = end_in as u16;
     rc = h.call_m(
         f_get_attr,
@@ -6802,7 +6502,7 @@ pub fn fn_2719ec_m(
             return FAIL_MEM;
         }
     }
-    h.call_m(0x195cd0, &[accum0, EMPTY_S], m);
+    h.call_m(0x195cd0, &[accum0, s_lit(h.rom(), 0x2702b8)], m);
     node_r = start_r;
     let mut text_str = g_word(m, text).unwrap_or(0);
     while text_start < text_end
@@ -7341,7 +7041,7 @@ pub fn fn_2719ec_m(
                 if (delta as i32 + text_len as i32 + 1) as u16 as u32
                     >= u32::from(grow_need)
                 {
-                    // fits; no error
+
                 } else {
                     h.call_m(0x173dc0, &[log, D_8f9532, 0x84d1, 0], m);
                     return 0x89b02007;
@@ -7652,8 +7352,7 @@ pub fn fn_2719ec_m(
                 if !p_byte(m, out_lang, language) {
                     return FAIL_MEM;
                 }
-                // The single-character G2P word path runs in-component
-                // (seg1 r10): 1:1 port below, same as the nested 270b40.
+
                 rc = fn_271130_m(m, h, loc, ctx, word, output_text, out_lang, lang_name);
                 if rc >= 0x80000000 {
                     return rc;
@@ -7786,7 +7485,8 @@ pub fn fn_2719ec_m(
                     if !p_byte(m, letter_at.wrapping_add(1), 0) {
                         return FAIL_MEM;
                     }
-                    rc = fn_270b40_m(m, h, loc, ctx, letter_at, EMPTY_S, EMPTY_S, 0x20, 0);
+
+                    rc = fn_270b40_m(m, h, loc, ctx, letter_at, s_lit(h.rom(), 0x2702b8), s_lit(h.rom(), 0x2702b8), 0x20, 0);
                     if rc >= 0x80000000 {
                         return rc;
                     }
@@ -8261,10 +7961,7 @@ pub fn fn_2719ec_m(
                     }
                 }
                 }
-                // c3 round 24 (re-landing r22): C next_token (src/fn_26ff18.c)
-                // runs pos = tokenEnd+1 for EVERY path including the letter
-                // branch, which leaves do_output false. It lived inside
-                // `if do_output` after the seg1 rewrite, hanging letters.
+
                 pos = token_end.wrapping_add(1);
                 if pos >= limit {
                     break;
@@ -8274,8 +7971,7 @@ pub fn fn_2719ec_m(
     if language == b' ' {
         language = 0;
     }
-    // Re-read the shared buffers: nested 270b40 calls reallocate them
-    // through the context on long words.
+
     let mut orth_now = g_word(m, ctx.wrapping_add(0x58)).unwrap_or(0);
     let mut phon_now = g_word(m, ctx.wrapping_add(0x5c)).unwrap_or(0);
     let mut pos_now = g_word(m, ctx.wrapping_add(0x60)).unwrap_or(0);
@@ -8367,9 +8063,9 @@ pub fn fn_2719ec_m(
                 }
             }
         }
-        h.call_m(0x195cd0, &[orth_now, EMPTY_S], m);
-        h.call_m(0x195cd0, &[phon_now, EMPTY_S], m);
-        h.call_m(0x195cd0, &[pos_now, EMPTY_S], m);
+        h.call_m(0x195cd0, &[orth_now, s_lit(h.rom(), 0x2702b8)], m);
+        h.call_m(0x195cd0, &[phon_now, s_lit(h.rom(), 0x2702b8)], m);
+        h.call_m(0x195cd0, &[pos_now, s_lit(h.rom(), 0x2702b8)], m);
         text_start = 0;
         loop {
             h.call_m(0x195cd0, &[rule_name, lit_cross], m);
@@ -8692,9 +8388,9 @@ pub fn fn_2719ec_m(
                 }
             }
             let scan_off = scan;
-            let tmpn = h.call_m(0x195d58, &[cross_phon.wrapping_add(scan_off), EMPTY_S], m);
+            let tmpn = h.call_m(0x195d58, &[cross_phon.wrapping_add(scan_off), s_lit(h.rom(), 0x2702b8)], m);
             let (phondst, srcp) = if tmpn == 0 {
-                (phon_now, STAR_S)
+                (phon_now, s_lit(h.rom(), STAR_S))
             } else {
                 (phon_now, cross_phon.wrapping_add(scan_off))
             };
@@ -8720,9 +8416,9 @@ pub fn fn_2719ec_m(
                 }
             }
             let scan2_off = scan2;
-            let tmpp = h.call_m(0x195d58, &[cross_tags.wrapping_add(scan2_off), EMPTY_S], m);
+            let tmpp = h.call_m(0x195d58, &[cross_tags.wrapping_add(scan2_off), s_lit(h.rom(), 0x2702b8)], m);
             let (posdst, srcpp) = if tmpp == 0 {
-                (pos_now, STAR_S)
+                (pos_now, s_lit(h.rom(), STAR_S))
             } else {
                 (pos_now, cross_tags.wrapping_add(scan2_off))
             };
@@ -8739,7 +8435,7 @@ pub fn fn_2719ec_m(
     if !p_byte(m, pos_now.wrapping_add(1), 0) {
         return FAIL_MEM;
     }
-    // cross_done:
+
     if record_generated == 0 {
         rc = h.call_m(
             f_insert_child,
@@ -8751,7 +8447,7 @@ pub fn fn_2719ec_m(
         }
         node_r = g_half(m, out_node).unwrap_or(0);
     }
-    // epi_done:
+
     rc = h.call_m(
         f_get_attr,
         &[handle_obj, handle_data, u32::from(start_r), 0, 1, out_type, out_attr],
@@ -8913,20 +8609,6 @@ pub fn fn_2719ec_m(
     rc
 }
 
-// ===== seg1 round 4: the acronym rule's live dependencies =====
-//
-// `fn_2719ec` runs depes rules whose expansion step calls back into the
-// dictionary (`0x1ea4e0`), which opens a broker resource (`0x179f30`).
-// Both ride host interception here, in this file, so `engine_live.rs`
-// is untouched: `XHost` serves the rule-module run (`0x2193a4`) with a
-// `LexExpansion` that performs the ARM's positional `0x1ea4e0` calls,
-// and `BrokerAdapter` serves the resource open through the live broker
-// port. Everything else forwards to the caller's lane-b host.
-
-// Guest scratch for the expansion's dictionary query: the NUL-terminated
-// query copy, the result vector slot, the count halfword and the
-// separator byte. Dead ARM stack below the 2719ec frame, inside the
-// excluded stack range, clear of every lane-b/seg3 scratch window.
 const EXPAND_SCRATCH: u32 = 0xe0fbe40;
 const EXPAND_QUERY: u32 = 0x00;
 const EXPAND_QUERY_MAX: usize = 128;
@@ -8934,18 +8616,12 @@ const EXPAND_OUT: u32 = 0x80;
 const EXPAND_COUNT: u32 = 0x84;
 const EXPAND_SEP: u32 = 0x86;
 
-// Guest scratch for the live broker open: the file platform's 4096 bytes,
-// the DataOpen globals' 24 bytes, the broker query's 16 bytes and 256
-// bytes of log-literal space. Dead ARM stack below the 2719ec frame,
-// inside the excluded stack range, clear of the lane-b/seg3 scratch
-// windows and of engine_live's own broker block.
 const BROKER_FILE_SCRATCH: u32 = 0xe0fad00;
 const BROKER_DATA_SCRATCH: u32 = 0xe0fbd00;
 const BROKER_QUERY_SCRATCH: u32 = 0xe0fbd20;
 const BROKER_LIT_BASE: u32 = 0xe0fbd40;
 const BROKER_LIT_END: u32 = 0xe0fbe40;
 
-/// Plain forwarder: run a lane-b port on another lane-b host.
 struct BAdapter<'a, H: Host + ?Sized> {
     inner: &'a mut H,
 }
@@ -8959,14 +8635,6 @@ impl<H: Host + ?Sized> crate::component_live_b::Host for BAdapter<'_, H> {
     }
 }
 
-/// The depes lexicon expansion (the ROM's `0x1ea4e0` call inside the
-/// acronym rule): resolve the rule entry for `code` through the depes
-/// entries table at `ctx + 0x3a4` and run the certified dictionary
-/// lookup, mapping the result table to the depes status/text. Anything
-/// unresolvable fails closed, like the ARM's own missing-entry path.
-/// Guest ends buffer for the depes expansion mirror, mirroring the
-/// ROM's heap ends buffer (allocated per expansion, freed after the
-/// splice). `buf`/`heap`/`len` describe the live buffer, if any.
 struct EndsMirror {
     buf: u32,
     heap: u32,
@@ -8990,9 +8658,7 @@ impl<H: Host + ?Sized> crate::component_live_c::VmExpansion for LexExpansion<'_,
         m: &mut Memory<'_>,
     ) -> Result<(i16, u8), crate::frontend_types::Error> {
         use crate::frontend_types::Error;
-        // Mirror the previous expansion's final ends and release its
-        // buffer before this expansion allocates, matching the ROM's
-        // per-expansion alloc/use/free order.
+
         if self.mirror.is_some() {
             let prev = self.mirror.take();
             if let Some(p) = prev {
@@ -9009,7 +8675,7 @@ impl<H: Host + ?Sized> crate::component_live_c::VmExpansion for LexExpansion<'_,
         if code == 0 {
             return Err(Error::InvalidResource);
         }
-        // entry = entries[code-1], entries table at depes ctx+0x3a4.
+
         let table =
             g_word(m, self.ctx.wrapping_add(0x3a4)).ok_or(Error::InvalidResource)?;
         let entry = g_word(
@@ -9020,7 +8686,7 @@ impl<H: Host + ?Sized> crate::component_live_c::VmExpansion for LexExpansion<'_,
         if entry == 0 {
             return Err(Error::InvalidResource);
         }
-        // Stage the NUL-terminated query in guest scratch.
+
         let mut qlen = 0usize;
         while qlen < text.len() && qlen < EXPAND_QUERY_MAX && text[qlen] != 0 {
             qlen += 1;
@@ -9037,7 +8703,7 @@ impl<H: Host + ?Sized> crate::component_live_c::VmExpansion for LexExpansion<'_,
         if !p_byte(m, qbase.wrapping_add(qlen as u32), 0) {
             return Err(Error::InvalidResource);
         }
-        // Fresh single-lookup count, matching the ROM's stack setup.
+
         let out_at = EXPAND_SCRATCH.wrapping_add(EXPAND_OUT);
         let count_at = EXPAND_SCRATCH.wrapping_add(EXPAND_COUNT);
         let sep_at = EXPAND_SCRATCH.wrapping_add(EXPAND_SEP);
@@ -9074,7 +8740,7 @@ impl<H: Host + ?Sized> crate::component_live_c::VmExpansion for LexExpansion<'_,
         if results == 0 {
             return Ok((0, 0));
         }
-        // Join the result strings with the returned separator.
+
         let sep = g_byte(m, sep_at).ok_or(Error::InvalidResource)?;
         for e in ends.iter_mut() {
             *e = 0;
@@ -9112,10 +8778,7 @@ impl<H: Host + ?Sized> crate::component_live_c::VmExpansion for LexExpansion<'_,
             }
             ri += 1;
         }
-        // Mirror the ROM's in-place separator termination: the ARM
-        // splices guest text directly and NULs each separator it passes.
-        // NUL every separator in the used guest result strings so the
-        // heap image matches (the VM NULs only its Rust copy).
+
         {
             let mut rj = 0u32;
             while u32::from(rj) < u32::from(count) {
@@ -9139,10 +8802,7 @@ impl<H: Host + ?Sized> crate::component_live_c::VmExpansion for LexExpansion<'_,
                 rj = rj.wrapping_add(1);
             }
         }
-        // Mirror the ROM's per-expansion ends allocation: free the
-        // previous buffer (its ends were mirrored on entry), then take
-        // a fresh heap buffer for this expansion's ends. The heap and
-        // layer count follow the ROM (ctx+0x3a8, ctx+0x0c).
+
         let heap = g_word(m, self.ctx.wrapping_add(0x3a8)).unwrap_or(0);
         let layers = g_half(m, self.ctx.wrapping_add(0x0c)).unwrap_or(0);
         if heap == 0 || layers == 0 || layers as usize > crate::component_live_c::VM_LAYERS {
@@ -9156,9 +8816,7 @@ impl<H: Host + ?Sized> crate::component_live_c::VmExpansion for LexExpansion<'_,
         Ok((1, sep))
     }
     fn post_expand(&mut self, ends: &[i16], m: &mut Memory<'_>) {
-        // Mirror the final ends to the guest buffer and release it,
-        // matching the ROM's alloc/use/free per expansion. Best effort:
-        // a short write still frees the buffer.
+
         if let Some(cur) = self.mirror.take() {
             for (i, &v) in ends.iter().take(cur.len as usize).enumerate() {
                 let at = cur.buf.wrapping_add((i as u32).wrapping_mul(2));
@@ -9172,11 +8830,6 @@ impl<H: Host + ?Sized> crate::component_live_c::VmExpansion for LexExpansion<'_,
     }
 }
 
-/// `fn_2195e4` with the acronym expansion: the module table lives at
-/// `ctx + 0x08` with its size at `ctx + 0x04`. Byte for byte the certified
-/// `depes_execute_module_m` walk, except the VM runs with `LexExpansion`
-/// so the acronym rule's expansion opcodes perform the ARM's positional
-/// `0x1ea4e0` calls instead of failing closed.
 fn depes_execute_module_expanded_m<H: Host + ?Sized>(
     m: &mut Memory<'_>,
     key: u32,
@@ -9245,9 +8898,7 @@ fn depes_execute_module_expanded_m<H: Host + ?Sized>(
             inner: BAdapter { inner: &mut ba },
             mirror: None,
         };
-        // Same tripwire as depes_execute_module_m: the C ignores the VM
-        // return and reads the status byte, but a port-only resource
-        // failure must stop the speak loudly, never degrade silently.
+
         if crate::component_live_c::vm_run_m(
             m,
             ctx,
@@ -9273,9 +8924,6 @@ fn depes_execute_module_expanded_m<H: Host + ?Sized>(
     }
 }
 
-/// `fn_2193a4` with the acronym expansion: the engine/tag gate and the
-/// two-context fallback of the certified `depes_exec_module_m`, running
-/// the expanded module walk above.
 pub(crate) fn depes_exec_module_expanded_m<H: Host + ?Sized>(
     m: &mut Memory<'_>,
     engine: u32,
@@ -9312,12 +8960,6 @@ pub(crate) fn depes_exec_module_expanded_m<H: Host + ?Sized>(
     result
 }
 
-/// The live broker DataHost for the acronym path's `0x179f30` resource
-/// open. Wiring mirrors `engine_live`'s `0x1795f0` arm: the US broker
-/// globals over the archive the cartridge filled, with the live heap,
-/// database query, file interface and logger riding this same lane-b
-/// dispatcher. `real_log_args` is true so the heap compares byte for
-/// byte; the varargs chunk service answers 0 like every lane.
 struct AcronymBrokerHost<'a, H: Host + ?Sized> {
     host: &'a mut H,
     rom: crate::rom_region::Rom,
@@ -9335,14 +8977,15 @@ impl<H: Host + ?Sized> AcronymBrokerHost<'_, H> {
 }
 
 impl<H: Host + ?Sized> crate::boot_part_b::Host for AcronymBrokerHost<'_, H> {
+    fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool {
+        crate::log_live::variadic_m(m,entry,a,format,varargs,BROKER_LIT_BASE - 256,|m,f,a|self.forward(m,f,a))
+    }
+
     fn real_log_args(&mut self) -> bool {
         true
     }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
-        match f {
-            0xffff0001 => 0,
-            _ => self.forward(m, f, a),
-        }
+        self.forward(m, f, a)
     }
     fn thread_id(&mut self) -> u32 {
         0x1ff82000
@@ -9359,8 +9002,8 @@ impl<H: Host + ?Sized> crate::boot_part_b::Host for AcronymBrokerHost<'_, H> {
 }
 
 impl<H: Host + ?Sized> crate::boot_part_b::OutputHost for AcronymBrokerHost<'_, H> {
-    fn output(&mut self, _m: &mut Memory<'_>, _f: u32, _a: &[u32]) -> (u32, u32) {
-        (0, 0)
+    fn output(&mut self, _m: &mut Memory<'_>, f: u32, _a: &[u32]) -> (u32, u32) {
+        panic!("acronym broker output requires live binding {f:#x}");
     }
 }
 
@@ -9393,8 +9036,7 @@ impl<H: Host + ?Sized> crate::boot_part_b::QueryHost for AcronymBrokerHost<'_, H
 
 impl<H: Host + ?Sized> crate::boot_part_b::DataHost for AcronymBrokerHost<'_, H> {
     fn data_output(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32], out: u32) -> u32 {
-        // 0x173000 is served by the FilePlatform in fn_1795f0_live's
-        // DataOpenHost; other file services fail closed.
+
         let _ = (m, f, a, out);
         0x8060_2001
     }
@@ -9433,16 +9075,6 @@ impl<H: Host + ?Sized> crate::boot_port_2c::BrokerQuery for AcronymBrokerHost<'_
     }
 }
 
-/// `fn_179f30` over the live engine: the flags-zero broker open of
-/// `src/fn_179f30.c` (byte-identical to `leftovers_1::fn_179f30`, which
-/// forwards to the same `fn_1795f0` body). The broker/file scratch lives
-/// in dead ARM stack below the 2719ec frame; the ROMFS state is the live
-/// engine's (the cartridge archive already in the arena).
-///
-/// Shared with the seg1 scheduler probes (lane us round 7): the EU/KR
-/// 1d5ba8 entry states open their system dictionary here while the US
-/// entry state arrives with it open, so the regional probes serve the
-/// same port through their own region-aware host.
 pub fn broker_179f30_live<H: Host + ?Sized>(
     m: &mut Memory<'_>,
     broker: u32,
@@ -9469,12 +9101,6 @@ pub fn broker_179f30_live<H: Host + ?Sized>(
     crate::engine_components2::fn_1795f0_live(m, broker, name, 0, out, &globals, &mut files, &mut host)
 }
 
-/// `fn_26b7ec` (src/fn_26b7ec.c 1:1): load the dictionary section
-/// tables for `key` into the state block. `st` carries ST_TABLES/ST_H0/
-/// ST_H1; `resource` is the opened resource handle for the payload map.
-/// The map/unmap/compare/strlen/close calls ride the host. The two
-/// transient words (map-out, section length) live in dead ARM stack
-/// below the 2719ec frame.
 const MAP_OUT: u32 = EXPAND_SCRATCH + 0x90;
 const MAP_LEN: u32 = EXPAND_SCRATCH + 0x94;
 pub fn fn_26b7ec_m<H: Host + ?Sized>(
@@ -9611,9 +9237,6 @@ pub fn fn_26b7ec_m<H: Host + ?Sized>(
     0
 }
 
-/// `fn_26bb28` (src/fn_26bb28.c 1:1): release the loaded header through
-/// the resource broker. Returns 0; the unmap status is ignored, like the
-/// ROM.
 pub fn fn_26bb28_m<H: Host + ?Sized>(m: &mut Memory<'_>, h: &mut H, st: u32, resource: u32) -> u32 {
     let h0 = g_word(m, st.wrapping_add(0x10)).unwrap_or(0);
     let tables = g_word(m, st.wrapping_add(0x0c)).unwrap_or(0);
@@ -9622,16 +9245,10 @@ pub fn fn_26bb28_m<H: Host + ?Sized>(m: &mut Memory<'_>, h: &mut H, st: u32, res
     0
 }
 
-/// `fn_26bb44` (src/fn_26bb44.c 1:1): the result maximum, a pure read of
-/// the header word's +0x30 halfword.
 pub fn fn_26bb44_m(m: &Memory<'_>, st: u32) -> u32 {
     u32::from(g_half(m, g_word(m, g_word(m, st.wrapping_add(12)).unwrap_or(0)).unwrap_or(0).wrapping_add(0x30)).unwrap_or(0))
 }
 
-/// `fn_1ed0c4` (src/fn_1ed0c4.c 1:1): canonicalize `text` in place
-/// through the replacement table. `mode` is the u16 at `obj + 0x9c`;
-/// `table` is the 256-entry replacement table or 0 for pure lowercase.
-/// Every string/log helper rides the host.
 fn fn_1ed0c4_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -9689,10 +9306,6 @@ fn fn_1ed0c4_m(
     0
 }
 
-/// `fn_1ed3b0` (src/fn_1ed3b0.c 1:1): the G2P canonical token
-/// conversion. Copies the canonical token for the mode string into the
-/// caller's buffer. The last-token remember gate (`f29e`) rides the
-/// host's `0x1eb978` when set; the dictionary replace rides `fn_1ed0c4`.
 fn fn_1ed3b0_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -9732,25 +9345,19 @@ fn fn_1ed3b0_m(
     rc
 }
 
-
-/// Interception adapter for the acronym path's broker open: serves
-/// `0x179f30` through the live broker port, forwards everything else to
-/// the caller's lane-b host.
 struct BrokerAdapter<'a, H: Host + ?Sized> {
     inner: &'a mut H,
 }
 
 impl<H: Host + ?Sized> Host for BrokerAdapter<'_, H> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
+        let entry = crate::rom_region::to_us_guest(self.rom(), entry);
         if entry == 0x179f30 && args.len() >= 3 {
             let rc =
                 broker_179f30_live(m, args[0], args[1], args[2], &mut *self.inner);
             return rc;
         }
-        // Round 4 (seg1): the mapped dictionary load the acronym
-        // expansion's 1ea4e0 needs. Ports below (src/fn_26b7ec.c,
-        // src/fn_26bb28.c, src/fn_26bb44.c 1:1); every nested call
-        // rides the caller's lane-b host.
+
         if entry == 0x26b7ec && args.len() >= 4 {
             let rc = fn_26b7ec_m(m, &mut *self.inner, args[0], args[1], args[2], args[3]);
             return rc;
@@ -9772,11 +9379,6 @@ impl<H: Host + ?Sized> Host for BrokerAdapter<'_, H> {
     }
 }
 
-/// Interception host for `fn_2719ec`: the rule-module run (`0x2193a4`)
-/// executes with the acronym expansion above; the broker open
-/// (`0x179f30`) serves through the live broker port. Everything else
-/// forwards to the caller's lane-b host. The depes workspace persists
-/// across the module runs of one acronym call, like the segment host's.
 pub struct XHost<'a, H: Host + ?Sized> {
     pub inner: &'a mut H,
     pub vm: crate::component_live_c::VmWorkspace,
@@ -9784,9 +9386,8 @@ pub struct XHost<'a, H: Host + ?Sized> {
 
 impl<H: Host + ?Sized> Host for XHost<'_, H> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
-        // fn_1edd3c (seg1 r10): the lexicon delimiter test the G2P
-        // single-word path reaches through the lexicon vtable. Direct port
-        // below.
+        let entry = crate::rom_region::to_us_guest(self.rom(), entry);
+
         if entry == 0x1edd3c && args.len() >= 3 {
             return f1edd3c_is_delim(m, self, args[0], args[1], args[2]);
         }

@@ -1,4 +1,4 @@
-//! Render-path string and marker operations. Addresses refer to caller-owned guest memory.
+
 use crate::{boot::Memory, fe_text};
 
 fn half(m: &Memory<'_>, p: u32) -> u16 {
@@ -18,7 +18,7 @@ fn move_bytes(m: &mut Memory<'_>, d: u32, s: u32, n: u32) {
 fn copy_bytes(m: &mut Memory<'_>, d: u32, s: u32, n: u32) {
     fe_text::memcpy_195ae8(m.bytes, d - m.base, s - m.base, n);
 }
-/// fn_1761d4 / EU 176284 / KR 176230. Append a NUL-terminated halfword string.
+
 pub fn fn_1761d4(m: &mut Memory<'_>, dst: u32, mut src: u32) -> u32 {
     let mut d = dst;
     while half(m, d) != 0 {
@@ -34,7 +34,7 @@ pub fn fn_1761d4(m: &mut Memory<'_>, dst: u32, mut src: u32) -> u32 {
         src = src.wrapping_add(2);
     }
 }
-/// fn_176354 / EU 176404 / KR 1763b0. Widen bytes and zero-pad to n halfwords.
+
 pub fn fn_176354(m: &mut Memory<'_>, dst: u32, mut src: u32, mut n: u32) -> u32 {
     let mut d = dst;
     while n != 0 {
@@ -55,7 +55,7 @@ pub fn fn_176354(m: &mut Memory<'_>, dst: u32, mut src: u32, mut n: u32) -> u32 
     }
     dst
 }
-/// fn_17b7e4 / EU 17b894 / KR 17b840.
+
 pub fn fn_17b7e4(m: &Memory<'_>, object: u32) -> u32 {
     if object == 0 {
         0
@@ -63,7 +63,7 @@ pub fn fn_17b7e4(m: &Memory<'_>, object: u32) -> u32 {
         m.word(object + 12)
     }
 }
-/// fn_17ba4c / EU 17bafc / KR 17baa8.
+
 pub fn fn_17ba4c(m: &mut Memory<'_>, object: u32) -> u32 {
     if object == 0 {
         return 0x8a402007;
@@ -75,7 +75,7 @@ pub fn fn_17ba4c(m: &mut Memory<'_>, object: u32) -> u32 {
     }
     0
 }
-/// fn_17c4d8 / EU 17c588 / KR 17c534. ARM two's-complement absolute value.
+
 pub fn fn_17c4d8(x: i32) -> i32 {
     if x < 0 {
         x.wrapping_neg()
@@ -83,7 +83,7 @@ pub fn fn_17c4d8(x: i32) -> i32 {
         x
     }
 }
-/// fn_265be4 / EU 265da0 / KR 265e4c. Select the marker boundary.
+
 pub fn fn_265be4(m: &Memory<'_>, base: u32, n: u32, lim: u32, idx: u32, flag: i32) -> u32 {
     let mut i = 0u32;
     let mut ret = m.word(base + 12);
@@ -112,8 +112,7 @@ pub fn fn_265be4(m: &Memory<'_>, base: u32, n: u32, lim: u32, idx: u32, flag: i3
     }
     ret
 }
-/// fn_26a6e4 / EU 26a8a0 / KR 26a94c.
-/// The length is caller-owned and must not alias the text or pattern.
+
 pub fn fn_26a6e4(
     m: &mut Memory<'_>,
     text: u32,
@@ -159,7 +158,7 @@ pub fn fn_26a6e4(
         return;
     }
 }
-/// fn_266034 / EU 2661f0 / KR 26629c.
+
 pub fn fn_266034(m: &mut Memory<'_>, table: u32, text: u32, pattern: u32) {
     let mut textlen = strlen(m, text);
     let patlen = strlen(m, pattern);
@@ -212,7 +211,7 @@ pub fn fn_266034(m: &mut Memory<'_>, table: u32, text: u32, pattern: u32) {
     fn_26a6e4(m, text, pattern, patlen as u32, &mut textlen, 0);
     m.put_word(entries + 24, textlen as u32);
 }
-/// fn_2661a4 / EU 266360 / KR 26640c.
+
 pub fn fn_2661a4(m: &mut Memory<'_>, table: u32, text: u32, pattern: u32, dict: u32, mode: i32) {
     let mut textlen = strlen(m, text);
     let patlen = strlen(m, pattern);
@@ -271,7 +270,6 @@ pub fn fn_2661a4(m: &mut Memory<'_>, table: u32, text: u32, pattern: u32, dict: 
     m.put_word(entries + 24, textlen as u32);
 }
 
-/// fn_1767c4 / EU 176874 / KR 176820. Unsigned halfword-string integer conversion.
 pub fn fn_1767c4(m: &mut Memory<'_>, text: u32, end: u32, mut base: i32) -> u32 {
     let mut p = text.wrapping_add(2);
     let mut c = half(m, text) as u32;
@@ -353,8 +351,6 @@ pub fn fn_1767c4(m: &mut Memory<'_>, text: u32, end: u32, mut base: i32) -> u32 
     }
 }
 
-/// fn_17b53c / EU 17b5ec / KR 17b598. Grow the byte-string capacity.
-/// Only the allocator's platform vtable methods are supplied by the host.
 pub fn fn_17b53c(
     m: &mut Memory<'_>,
     object: u32,
@@ -387,8 +383,6 @@ pub fn fn_17b53c(
     0
 }
 
-/// Reentrant fn_17b53c. Allocator callbacks receive the caller's live arena.
-/// The legacy entry and HeapVtable implementations remain unchanged.
 pub fn fn_17b53c_m(
     m: &mut Memory<'_>,
     object: u32,
@@ -421,11 +415,9 @@ pub fn fn_17b53c_m(
     0
 }
 
-/// Platform callbacks used by the parameter-removal port. Memory is a flat
-/// address space (base zero); scratch is twelve caller-owned bytes.
 pub trait ParameterHost: crate::frontend::HeapVtable + crate::frontend::TreeOps {
     fn invoke(&mut self, function: u32, args: &[u32]) -> u32;
-    /// Stack value offered to the next tree allocator callback.
+
     fn offer_value(&mut self, value: [u32; 3]) {
         let _ = value;
     }
@@ -472,8 +464,7 @@ fn nz(p: u32) -> Option<u32> {
         Some(p)
     }
 }
-/// General host-backed form of fn_198f1c. The older normalization entry
-/// hardcodes its original fixture's callback logs, so cannot serve live calls.
+
 fn erase_release(m: &mut Memory<'_>, tree: u32, node: u32, h: &mut impl ParameterHost) {
     crate::normalization::rb_erase(m.bytes, tree, node);
     let vt = m.word(tree + 36);
@@ -487,8 +478,7 @@ fn erase_release(m: &mut Memory<'_>, tree: u32, node: u32, h: &mut impl Paramete
     }
     crate::frontend::heap_release(m.bytes, nz(m.word(tree + 32)), nz(node), h);
 }
-/// fn_175a24. Remove a parameter, preserving lock and error precedence.
-/// The caller lends twelve scratch bytes outside its live objects.
+
 pub fn fn_175a24(
     m: &mut Memory<'_>,
     p: u32,
@@ -569,7 +559,7 @@ pub fn fn_175a24(
     }
     result
 }
-/// fn_1968cc. Erase an iterator's current node, then clear its reference.
+
 pub fn fn_1968cc(m: &mut Memory<'_>, p: u32, h: &mut impl ParameterHost) -> u32 {
     assert_eq!(m.base, 0, "tree ports require flat guest memory");
     if p == 0 {
@@ -583,9 +573,7 @@ pub fn fn_1968cc(m: &mut Memory<'_>, p: u32, h: &mut impl ParameterHost) -> u32 
     m.put_word(p + 4, 0);
     0
 }
-/// fn_1ef60c. Resolve exact and wildcard language/voice rules.
-/// Scratch provides 548 bytes for the original stack strings. The output
-/// word remains untouched on a missing rule, just as in the ROM.
+
 pub fn fn_1ef60c(
     m: &mut Memory<'_>,
     p: u32,
@@ -690,8 +678,6 @@ pub fn fn_1ef60c(
     rc
 }
 
-/// Heap and ROM-global inputs needed by sequence render helpers.
-/// Only vtable methods cross this boundary.
 pub trait SequenceHost: ParameterHost + crate::frontend::MethodTable {
     fn cached_pair(&self) -> [u8; 8];
     fn default_context(&self) -> u32;
@@ -746,8 +732,7 @@ pub(crate) fn fetch(
     assert_eq!(m.base, 0, "sequence ports require flat guest memory");
     crate::normalization::fetch_entry(m.bytes, seq, tag, n, Some(out), &mut FetchHost(h))
 }
-/// fn_265c94. Insert marker records for matched patterns, then remove
-/// the patterns from the text. Float payloads are copied as raw bits.
+
 pub fn fn_265c94(
     m: &mut Memory<'_>,
     seq: u32,
@@ -896,14 +881,12 @@ fn marker(m: &mut Memory<'_>, ne: u32, val: u32, boundary: u32, pos: u32, float_
     m.put_word(ne + 32, 0);
 }
 
-/// Values passed to an indirect logging method. Local strings exclude the
-/// terminator; guest strings are NUL-terminated addresses in caller memory.
 pub enum RenderArgument<'a> {
     Word(u32),
     Guest(u32),
     Local(&'a [u8]),
 }
-/// Only configured indirect output methods cross this boundary.
+
 pub trait RenderLog: SequenceHost {
     fn log_target(
         &mut self,
@@ -917,7 +900,7 @@ pub trait RenderLog: SequenceHost {
         args: &[RenderArgument<'_>],
     ) -> u32;
 }
-/// Immutable logger and rendering globals. Tables remain in caller-owned memory.
+
 pub struct RenderEnvironment {
     pub category: u32,
     pub marker_format: u32,
@@ -942,9 +925,7 @@ fn render_log_at_level(
     h: &mut impl RenderLog,
 ) {
     let logger = m.word(ctx + 16);
-    // Adapt the existing fn_1738e8 gate to caller-owned automatic memory.
-    // Its legacy rule_stA target script is never used. Actual targets below
-    // receive the real variadic values through their platform vtable method.
+
     let mut view = [0u8; 128];
     let p = if logger == 0 { 0 } else { 64 };
     if logger != 0 {
@@ -985,8 +966,6 @@ fn narrow(m: &mut Memory<'_>, d: u32, s: u32, n: u32) {
     crate::fe_text::narrow_n_17649c(m.bytes, d, s, n);
 }
 
-/// fn_263384. Log a text element. Active output methods receive the original
-/// label, tag, length and narrowed display text.
 pub fn fn_263384(
     m: &mut Memory<'_>,
     mode: i32,
@@ -1032,8 +1011,6 @@ pub fn fn_263384(
     rc
 }
 
-/// fn_2634c0. Enumerate marker diagnostics and their offset pairs.
-/// The automatic 32-byte display buffer is not placed in the guest arena.
 pub fn fn_2634c0(
     m: &mut Memory<'_>,
     mode: i32,
@@ -1202,7 +1179,7 @@ pub fn fn_2634c0(
 }
 
 pub struct RewriteEnvironment {
-    /// D_914e34, whose related byte patterns share the same constant block.
+
     pub patterns: u32,
     pub wide0: u32,
     pub wide1: u32,
@@ -1232,8 +1209,7 @@ fn rewrite_error(
         scratch + 16,
     );
 }
-/// fn_2663b0. Rewrite phonetic escape text and the associated marker records.
-/// scratch provides 36 disjoint caller-owned bytes for automatic C objects.
+
 pub fn fn_2663b0(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -1611,11 +1587,9 @@ pub fn fn_2663b0(
         i = i.wrapping_add(1);
     }
     m.put_word(base + 24, strlen(m, text) as u32);
-    0 // rc is the last successful fn_265c94/fetch result (all return zero).
+    0
 }
 
-/// fn_1740e4 / EU 174194 / KR 174140. Grow and rebase the two tables.
-/// The ROM checks the descriptor, not the returned allocation, for null.
 pub fn fn_1740e4(m: &mut Memory<'_>, heap: u32, b: u32, needed: u32,
     h: &mut impl crate::boot_part_e::Host) -> u32 {
     let old = m.word(b);
@@ -1649,9 +1623,7 @@ fn format_cleanup(m: &mut Memory<'_>, heap: u32, st: u32, h: &mut impl crate::bo
         }
     }
 }
-/// fn_1741dc. Format alternating key/value arguments and notify subscribers.
-/// scratch is caller-owned automatic storage of at least 160 bytes, disjoint
-/// from input/output data. It replaces the original stack locals.
+
 pub fn fn_1741dc(m: &mut Memory<'_>, a: u32, b: u32, fmt: u32, mut va: u32,
     scratch: u32, h: &mut impl crate::boot_part_e::Host) -> u32 {
     if a == 0 { return 0; }
@@ -1787,13 +1759,12 @@ pub fn fn_1741dc(m: &mut Memory<'_>, a: u32, b: u32, fmt: u32, mut va: u32,
     ret
 }
 
-/// Immutable engine globals for the sequence lifecycle.
 pub struct LifecycleEnvironment {
     pub engine: crate::render_part_c::Environment,
     pub parameter_pairs: u32,
     pub parameter_triple: u32,
 }
-/// Sequence teardown shares render b2's real cleanup implementation.
+
 pub trait LifecycleHost: ParameterHost + crate::frontend::MethodTable + crate::render_part_b2::CleanupHost {
     fn cleanup_environment(&self) -> crate::render_part_b2::CleanupEnvironment;
 }
@@ -1831,8 +1802,7 @@ impl<H:LifecycleHost> crate::regex::PcreHost for LifecyclePcre<'_,H> {
     fn heap_of(&mut self,_:u32)->u32 {panic!("deinit cannot query heap")}
     fn alloc(&mut self,_:u32,_:u32,_:u32)->Option<u32> {panic!("deinit cannot allocate")}
     fn free(&mut self,heap:u32,p:u32) {
-        // The real heap dispatcher filters null allocations.
-        // Here heap/object identities are already resolved by the caller.
+
         if heap!=0 && p!=0 {self.host.release_at(heap,p);}
     }
 }
@@ -1861,7 +1831,7 @@ fn lifecycle_pcre(m:&mut Memory<'_>,o:u32,key:u32,blocks:&mut [crate::regex::Fra
         max_frames:half(m,o+18),fresh:crate::regex::MatchFrame::default(),heap:object,blocks_id:nz(table),
     };
     crate::regex::pcre_deinit(&mut p,o,key,&mut store);
-    // Mirror stores into the caller's guest headers, including freed headers.
+
     for i in 0..count as usize {
         let entry=m.word(table+i as u32*4);
         if entry!=0 {m.put_word(entry,0);m.put_word(entry+12,0);}
@@ -1874,8 +1844,7 @@ fn lifecycle_pcre(m:&mut Memory<'_>,o:u32,key:u32,blocks:&mut [crate::regex::Fra
     m.put_word(o+4,store.blocks_id.unwrap_or(0));
     crate::regex::pcre_close(&mut p,object,o,key);
 }
-/// fn_263abc. Destroy a sequence using the live list, property and PCRE ports.
-/// blocks is caller-owned PCRE lifecycle work storage.
+
 pub fn fn_263abc(m:&mut Memory<'_>,o:u32,e:&LifecycleEnvironment,scratch:u32,
     blocks:&mut [crate::regex::FrameBlockState],h:&mut impl LifecycleHost)->u32 {
     if o==0 {return 0x81102007;}
@@ -1931,8 +1900,7 @@ fn wide_len(m:&Memory<'_>,p:u32)->u32 {fe_text::strlen16_176624(m.bytes,p-m.base
 fn in_wide_set(m:&Memory<'_>,set:u32,c:u16)->bool {
     fe_text::strchr16_176514(m.bytes,set-m.base,c as u32)!=0
 }
-/// fn_1ef960. Rewrite a voice segment and insert its owned marker events.
-/// a = [module,config,text**,start,end,events**,owned**,group,index,count*,voice,language].
+
 pub fn fn_1ef960(m:&mut Memory<'_>,a:[u32;12],e:&VoiceEnvironment,h:&mut impl VoiceHost)->u32 {
     let [p,config,text,start,mut end,events,owned,group,index,count,voice,language]=a;
     let env=m.word(p);let heap=m.word(env+4);let base=m.word(m.word(events)+12);
@@ -2115,7 +2083,6 @@ pub fn fn_1ef960(m:&mut Memory<'_>,a:[u32;12],e:&VoiceEnvironment,h:&mut impl Vo
     }
 }
 
-
 pub struct SetupEnvironment<'a> {
     pub lifecycle: &'a LifecycleEnvironment,
     pub resources: &'a crate::render_part_c2::ResourceEnvironment,
@@ -2131,10 +2098,7 @@ pub struct SetupEnvironment<'a> {
 }
 pub trait SetupHost: LifecycleHost + SequenceHost + crate::render_part_c2::ResourceHost
     + crate::render_part_d::DictionaryHost + crate::boot_part_b::QueryHost + crate::render_part_c::ParserMethodsM {}
-/// fn_263c68. Build all sequence subcomponents, retaining the original
-/// rollback/error precedence. scratch reserves 512 disjoint guest bytes.
-/// Registry acquisition and release use the existing ordered-tree ports.
-/// SetupHost must dispatch engine entries such as 2eee7c to their real ports.
+
 pub fn fn_263c68(m:&mut Memory<'_>,o:u32,flag:u32,e:&SetupEnvironment<'_>,scratch:u32,
     blocks:&mut [crate::regex::FrameBlockState],mut compare:impl FnMut(u32,u32)->i32,
     callback:&mut impl FnMut(u32,u32,&mut [u8;32]),h:&mut impl SetupHost)->u32 {
@@ -2228,10 +2192,7 @@ pub struct BlockEnvironment<'a> {
     pub marker_log: u32,
     pub normalizer_defaults: &'a [u8;52],
 }
-/// InternalCalls-style live composition boundary. Implementations must dispatch
-/// each entry to its Rust port, including render c 2bfa90/2baf40 and render
-/// c2 2c4914/2c0014/2c1e2c/2c322c. No engine entry may return a captured
-/// answer. An unwired entry must fail loudly.
+
 pub trait BlockHost: RenderLog + LifecycleHost + crate::render_part_c::Host
     + crate::render_part_b2::Host + crate::frontend::StateLock
     + crate::boot_part_e::Host {
@@ -2239,7 +2200,7 @@ pub trait BlockHost: RenderLog + LifecycleHost + crate::render_part_c::Host
 }
 
 mod block_parser_sealed { pub trait Sealed {} }
-/// A concrete live parser binding, not a scripted result callback.
+
 pub struct BlockParserBridge<'a,'b,'c,H,L,O,B,E,C,A> {
     pub runtime: &'a mut crate::render_part_c2::ParserRuntime<'b,'c,H,L,O,B,E,C>,
     pub allocator: &'a mut A,
@@ -2306,8 +2267,7 @@ fn block_text(m:&mut Memory<'_>,o:u32,ctx:u32,sp:u32,tag:u32,label:usize,e:&Bloc
 fn block_mark(m:&mut Memory<'_>,o:u32,ctx:u32,sp:u32,tag:u32,label:usize,e:&BlockEnvironment<'_>,h:&mut impl BlockHost) {
     fn_2634c0(m,m.byte(o+0x78) as i32,ctx,sp,tag,e.labels[label],0,0,0,e.log,h);
 }
-/// fn_2645b4. Pull, escape-process, parse, normalize and rewrite one block.
-/// scratch is 320 caller-owned guest bytes, including formatter locals.
+
 pub fn fn_2645b4(m:&mut Memory<'_>,o:u32,sp:u32,param3:u32,e:&BlockEnvironment<'_>,scratch:u32,h:&mut impl BlockHost,parser:&mut impl BlockParser)->u32 {
     let mut saved=[0;320];let at=m.offset(scratch);saved.copy_from_slice(&m.bytes[at..at+320]);
     let result=(|| {

@@ -1,7 +1,5 @@
-//! Frontend sentence/word parsing (`fn_1d88f4` unit) and `FE_PUNCSPTN`
-//! (`fn_1dd914`). Arena offsets with 0 meaning null; wrapping arithmetic
-//! mirrors the C's unsigned/index wrap and heap-relative smashes land in the
-//! pool under constrained furnishing.
+
+
 #![allow(dead_code)]
 
 use crate::depes::HandleValidator;
@@ -67,10 +65,6 @@ fn strcat_lit(arena: &mut [u8], dst: u32, lit: &[u8]) {
     arena[e + n] = 0;
 }
 
-/// Signed-index byte read for heap-relative accesses that can dip below the
-/// buffer base (e.g. the `delta < 0` text shift in `fn_1dbcb0`): in-arena
-/// addresses read the arena, anything else reads zero. Constrained
-/// furnishing keeps every such access in-arena, so this is exact.
 fn byte_at(data: &[u8], idx: i64) -> u8 {
     if (0..data.len() as i64).contains(&idx) {
         data[idx as usize]
@@ -85,9 +79,6 @@ fn put_at(data: &mut [u8], idx: i64, value: u8) {
     }
 }
 
-/// `fn_17c8c0`: lowercase ASCII uppercase (`D_8dc30c` bit 1 covers `A-Z`,
-/// verified from the ROM), else identity. The table index masks to a byte
-/// while the add applies to the full input.
 fn fold_lower(c: u32) -> u32 {
     if (c as u8).is_ascii_uppercase() {
         c.wrapping_add(0x20)
@@ -96,8 +87,6 @@ fn fold_lower(c: u32) -> u32 {
     }
 }
 
-/// `fn_17c8dc`: uppercase ASCII lowercase (`D_8dc30c` bit 2 covers `a-z`,
-/// verified from the ROM), else identity.
 fn fold_upper(c: u32) -> u32 {
     if (c as u8).is_ascii_lowercase() {
         c.wrapping_sub(0x20)
@@ -106,7 +95,6 @@ fn fold_upper(c: u32) -> u32 {
     }
 }
 
-/// `fn_1769d0`: case-insensitive 8-bit compare through `fn_17c8c0`.
 fn strcmp_fold(data: &[u8], a: u32, b: u32) -> i32 {
     let mut i = 0u32;
     if fold_lower(byte(data, a) as u32) == fold_lower(byte(data, b) as u32) {
@@ -126,8 +114,6 @@ fn strcmp_fold(data: &[u8], a: u32, b: u32) -> i32 {
         - fold_lower(byte(data, b.wrapping_add(i)) as u32) as i64) as i32
 }
 
-/// `fn_195d30`: byte scan for `c` (including the NUL terminator when
-/// `c == 0`); 0 when a nonzero `c` is absent.
 fn strchr8(data: &[u8], base: u32, c: u8) -> u32 {
     let mut p = base;
     while byte(data, p) != 0 && byte(data, p) != c {
@@ -140,19 +126,12 @@ fn strchr8(data: &[u8], base: u32, c: u8) -> u32 {
     }
 }
 
-/// Host operations for the FE sentence/word units. Scalar outs use `&mut`
-/// locals; pointer outs are arena offsets with 0 meaning null. Resource
-/// acquire/release come from `NormOutHost`.
 pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
-    /// Scripted `fn_198760` comparator sequence. The key arguments are
-    /// side-specific pointer values, ignored by every side; only the
-    /// scripted results are compared.
+
     fn cmp_seq(&mut self, arena: &mut [u8], a: u32, b: u32) -> i32;
-    /// Lock/unlock inner call (`fn_176f2c`/`fn_176f5c` with a non-null
-    /// vtable slot). All current rows furnish null slots, so the recorded
-    /// host panics if this is ever reached.
+
     fn lock_call(&mut self, target: u32) -> u32;
-    /// `firstNode`: status + node id.
+
     fn lat_first_node(
         &mut self,
         arena: &mut [u8],
@@ -162,7 +141,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         x: u32,
         node: &mut u16,
     ) -> u32;
-    /// `nextNode`/`next`: status + node id.
+
     fn lat_next_node(
         &mut self,
         arena: &mut [u8],
@@ -171,10 +150,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         node: u32,
         next: &mut u16,
     ) -> u32;
-    /// `getInt`/`get`: status + value + count. Field 0 reports the low
-    /// byte; fields 1/2 clamp into the furnished span (field 2 at least
-    /// the last field-1 value); other fields report the raw halfword.
-    /// See `FE_GETINT`.
+
     fn lat_get_int(
         &mut self,
         arena: &mut [u8],
@@ -186,7 +162,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         count: &mut u16,
     ) -> u32;
-    /// `getStr`/`data`: status + pointer + count.
+
     fn lat_get_str(
         &mut self,
         arena: &mut [u8],
@@ -197,7 +173,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         count: &mut u16,
     ) -> u32;
-    /// `getU16`/`size`: status + halfword.
+
     fn lat_get_u16(
         &mut self,
         arena: &mut [u8],
@@ -207,7 +183,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         key: u32,
         out: &mut u16,
     ) -> u32;
-    /// `setField`/`set`: status + written count.
+
     fn lat_set_field(
         &mut self,
         arena: &mut [u8],
@@ -219,13 +195,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         data: u32,
         written: &mut u16,
     ) -> u32;
-    /// `setField`/`set` with caller-owned data bytes: the C passes
-    /// `&local` (a u8/u16 stack local) or a string literal, which the
-    /// slice ports keep in Rust instead of guest scratch. `n` keeps the
-    /// guest meaning (element count); `data` carries the element bytes.
-    /// Hosts that must hand the guest a pointer stage the bytes the way
-    /// their guest call needs (the live host uses its uncompared stack
-    /// window, the way the ARM passes its own stack slot).
+
     fn lat_set_field_bytes(
         &mut self,
         arena: &mut [u8],
@@ -237,7 +207,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         data: &[u8],
         written: &mut u16,
     ) -> u32;
-    /// `countNodes`/`count`: status + count.
+
     fn lat_count_nodes(
         &mut self,
         arena: &mut [u8],
@@ -247,7 +217,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         x: u32,
         count: &mut u16,
     ) -> u32;
-    /// `append`: status + node id.
+
     fn lat_append(
         &mut self,
         arena: &mut [u8],
@@ -257,7 +227,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         x: u32,
         node: &mut u16,
     ) -> u32;
-    /// `insertAfter`: status + node id.
+
     fn lat_insert_after(
         &mut self,
         arena: &mut [u8],
@@ -266,7 +236,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         node: u32,
         new: &mut u16,
     ) -> u32;
-    /// `insertBefore`: status + node id.
+
     fn lat_insert_before(
         &mut self,
         arena: &mut [u8],
@@ -275,11 +245,11 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         node: u32,
         new: &mut u16,
     ) -> u32;
-    /// `removeNode`/`remove`: status.
+
     fn lat_remove(&mut self, arena: &mut [u8], h0: u32, h1: u32, node: u32) -> u32;
-    /// LINGDB `reset`: status only.
+
     fn lat_reset(&mut self, arena: &mut [u8], h0: u32, h1: u32) -> u32;
-    /// Synthesis `convert`: status only; leaves `out` untouched in fuzz.
+
     fn synth_convert(
         &mut self,
         arena: &mut [u8],
@@ -291,7 +261,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: u32,
         cap: u32,
     ) -> u32;
-    /// Dict `lookup` (fecfg/*): status + entry cell + found + separator.
+
     fn dict_lookup(
         &mut self,
         arena: &mut [u8],
@@ -303,7 +273,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         found: &mut u16,
         sep: &mut u8,
     ) -> u32;
-    /// Dict `annotate`: status only.
+
     fn dict_annotate(
         &mut self,
         arena: &mut [u8],
@@ -314,7 +284,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         toks: u32,
         count: u32,
     ) -> u32;
-    /// Resources `available`: status + byte count + end flag.
+
     fn res_available(
         &mut self,
         arena: &mut [u8],
@@ -323,7 +293,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         avail: &mut u32,
         end: &mut u8,
     ) -> u32;
-    /// Resources `read`: status + data pointer + byte count.
+
     fn res_read(
         &mut self,
         arena: &mut [u8],
@@ -332,11 +302,11 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         data: &mut u32,
         bytes: &mut u32,
     ) -> u32;
-    /// Resources `consume`: status only.
+
     fn res_consume(&mut self, arena: &mut [u8], h0: u32, h1: u32, n: u32) -> u32;
-    /// `typeName`: log-only; all sides write null.
+
     fn lat_type_name(&mut self, arena: &mut [u8], h0: u32, h1: u32, ty: u32, out: &mut u32);
-    /// `getParam`: status + string-array pointer + found + count.
+
     fn dct_get_param(
         &mut self,
         arena: &mut [u8],
@@ -348,7 +318,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         found: &mut u16,
         n: &mut i32,
     ) -> u32;
-    /// `getFlags`: status + two flag bytes.
+
     fn dct_get_flags(
         &mut self,
         arena: &mut [u8],
@@ -357,7 +327,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         a: &mut u8,
         b: &mut u8,
     ) -> u32;
-    /// `setInput`: status.
+
     fn depes_set_input(
         &mut self,
         arena: &mut [u8],
@@ -367,7 +337,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         s: u32,
         n: u32,
     ) -> u32;
-    /// `getOutput`: status + pointer + length.
+
     fn depes_get_output(
         &mut self,
         arena: &mut [u8],
@@ -377,9 +347,9 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         len: &mut u16,
     ) -> u32;
-    /// `setRules`: status.
+
     fn depes_set_rules(&mut self, arena: &mut [u8], h0: u32, h1: u32, name: u32) -> u32;
-    /// `setWeights`: status.
+
     fn depes_set_weights(
         &mut self,
         arena: &mut [u8],
@@ -388,7 +358,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         w: u32,
         n: u32,
     ) -> u32;
-    /// `getWeights`: status + pointer + length.
+
     fn depes_get_weights(
         &mut self,
         arena: &mut [u8],
@@ -397,7 +367,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         len: &mut u16,
     ) -> u32;
-    /// `properties.get`: status + position.
+
     fn prop_get(
         &mut self,
         arena: &mut [u8],
@@ -406,13 +376,13 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         pos: &mut i32,
         flag: u32,
     ) -> u32;
-    /// `properties.set`: status.
+
     fn prop_set(&mut self, arena: &mut [u8], h0: u32, h1: u32, val: u32, flag: u32) -> u32;
-    /// `characters.punctuation`: nonzero when `c` is punctuation.
+
     fn char_punctuation(&mut self, arena: &mut [u8], h0: u32, h1: u32, c: u32) -> i32;
-    /// `fn_173fd8`: log verbosity.
+
     fn log_level(&mut self, arena: &mut [u8], log: u32) -> u32;
-    /// `dp.first`: status + node id.
+
     fn dp_first_node(
         &mut self,
         arena: &mut [u8],
@@ -422,7 +392,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         x: u32,
         node: &mut u16,
     ) -> u32;
-    /// `dp.next`: status + node id.
+
     fn dp_next_node(
         &mut self,
         arena: &mut [u8],
@@ -431,8 +401,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         node: u32,
         next: &mut u16,
     ) -> u32;
-    /// `dp.get`: status + value + count. Same field rules as
-    /// `lat_get_int`, on the dp script.
+
     fn dp_get(
         &mut self,
         arena: &mut [u8],
@@ -444,7 +413,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         count: &mut u16,
     ) -> u32;
-    /// `dp.getPtr`: status + pointer + count.
+
     fn dp_get_ptr(
         &mut self,
         arena: &mut [u8],
@@ -455,7 +424,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         count: &mut u16,
     ) -> u32;
-    /// `dp.getType`: status + halfword.
+
     fn dp_get_type(
         &mut self,
         arena: &mut [u8],
@@ -465,7 +434,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         key: u32,
         out: &mut u16,
     ) -> u32;
-    /// `dp.set`: status + written count.
+
     fn dp_set(
         &mut self,
         arena: &mut [u8],
@@ -477,9 +446,9 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         data: u32,
         written: &mut u16,
     ) -> u32;
-    /// `dp.remove`: status.
+
     fn dp_remove(&mut self, arena: &mut [u8], h0: u32, h1: u32, node: u32) -> u32;
-    /// `out.getPos`: status + position.
+
     fn out_get_pos(
         &mut self,
         arena: &mut [u8],
@@ -488,7 +457,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         pos: &mut i32,
         flag: u32,
     ) -> u32;
-    /// `out.setLayer`: status.
+
     fn out_set_layer(
         &mut self,
         arena: &mut [u8],
@@ -498,7 +467,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         s: u32,
         n: u32,
     ) -> u32;
-    /// `out.setLayerX`: status.
+
     fn out_set_layer_x(
         &mut self,
         arena: &mut [u8],
@@ -508,9 +477,9 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         s: u32,
         n: u32,
     ) -> u32;
-    /// `out.process`: status.
+
     fn out_process(&mut self, arena: &mut [u8], h0: u32, h1: u32, name: u32) -> u32;
-    /// `out.getLayer`: status + pointer + length.
+
     fn out_get_layer(
         &mut self,
         arena: &mut [u8],
@@ -520,9 +489,9 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         len: &mut u16,
     ) -> u32;
-    /// `out.setPos`: status.
+
     fn out_set_pos(&mut self, arena: &mut [u8], h0: u32, h1: u32, pos: i32, flag: u32) -> u32;
-    /// Stream `open`: status + handle pair.
+
     fn st_open(
         &mut self,
         arena: &mut [u8],
@@ -535,8 +504,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out_a: &mut u32,
         out_b: &mut u32,
     ) -> u32;
-    /// Stream `open` with a four-entry script (call `n` uses entry
-    /// `min(n, 3)`): status + handle pair.
+
     fn st_open4(
         &mut self,
         arena: &mut [u8],
@@ -549,11 +517,11 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out_a: &mut u32,
         out_b: &mut u32,
     ) -> u32;
-    /// Stream `close`: status.
+
     fn st_close(&mut self, arena: &mut [u8], ha: u32, hb: u32) -> u32;
-    /// Stream `getMode`: scripted value.
+
     fn st_get_mode(&mut self, arena: &mut [u8]) -> u32;
-    /// Stream `read`: status + available count + finished flag.
+
     fn st_read(
         &mut self,
         arena: &mut [u8],
@@ -562,7 +530,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         n: &mut i32,
         fin: &mut u8,
     ) -> u32;
-    /// Stream `gettext`: status + buffer pointer + byte length.
+
     fn st_gettext(
         &mut self,
         arena: &mut [u8],
@@ -571,11 +539,11 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         buf: &mut u32,
         len: &mut i32,
     ) -> u32;
-    /// Stream `write`: status.
+
     fn st_write(&mut self, arena: &mut [u8], ha: u32, hb: u32, buf: u32, len: u32) -> u32;
-    /// Stream `consume`: status.
+
     fn st_consume(&mut self, arena: &mut [u8], ha: u32, hb: u32, n: u32) -> u32;
-    /// Depes `getPosition`: status + position.
+
     fn depes_get_pos(
         &mut self,
         arena: &mut [u8],
@@ -584,14 +552,13 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         pos: &mut i32,
         flag: u32,
     ) -> u32;
-    /// Depes `setPosition`: status.
+
     fn depes_set_pos(&mut self, arena: &mut [u8], h0: u32, h1: u32, pos: i32, flag: u32) -> u32;
-    /// Dictionary `count`: scripted value, returned unconditionally.
+
     fn dict_count(&mut self, arena: &mut [u8], ha: u32, hb: u32) -> u32;
-    /// `fn_175a1c`: status + setting-string pointer.
+
     fn suba1c(&mut self, arena: &mut [u8], reg: u32, key: u32, out: &mut u32) -> u32;
-    /// `fn_282af0`: status + content type + `n` output units + capacity +
-    /// language pointer.
+
     fn tn_282af0(
         &mut self,
         arena: &mut [u8],
@@ -609,10 +576,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
     ) -> u32;
 }
 
-/// Case-insensitive compare of an arena string against a static literal
-/// through `fn_17c8c0` folding. The literals are ROM constants on the C/ARM
-/// sides (spelled out in `src/fn_1d88f4.c`); the port folds the bytes
-/// directly without arena scratch.
 fn strcmp_fold_lit(data: &[u8], s: u32, lit: &[u8]) -> i32 {
     let mut i = 0u32;
     let at = |j: u32| -> u8 {
@@ -637,55 +600,38 @@ fn strcmp_fold_lit(data: &[u8], s: u32, lit: &[u8]) -> i32 {
         as i32
 }
 
-/// fn_17c8c0, EU fn_17c970, KR fn_17c91c. Lowercase fold through the
-/// `D_8dc30c` class table (bit 1 covers exactly `A-Z`, verified from the
-/// ROM): the table index masks to a byte while the add applies to the
-/// full input.
 pub fn fold_17c8c0(c: u32) -> u32 {
     fold_lower(c)
 }
 
-/// fn_1769d0, EU fn_176a80, KR fn_176a2c. Case-insensitive 8-bit compare
-/// through `fn_17c8c0`.
 pub fn strcmp_ci_1769d0(arena: &[u8], a: u32, b: u32) -> i32 {
     strcmp_fold(arena, a, b)
 }
 
-/// fn_17c8dc, EU fn_17c98c, KR fn_17c938. Uppercase fold through the
-/// `D_8dc30c` class table (bit 2 covers `a-z`).
 pub fn fold_17c8dc(c: u32) -> u32 {
     fold_upper(c)
 }
 
-/// fn_195d30, EU fn_195de0, KR fn_195e1c. Scan for `c` (low byte),
-/// including the NUL terminator when `c == 0`; 0 on a miss.
 pub fn strchr_195d30(arena: &[u8], base: u32, c: u32) -> u32 {
     strchr8(arena, base, c as u8)
 }
 
-/// fn_195c90, EU fn_195d40, KR fn_195d7c. Append `src` to `dst`.
 pub fn strcat_195c90(arena: &mut [u8], dst: u32, src: u32) {
     strcat_at(arena, dst, src);
 }
 
-/// fn_195dac, EU fn_195e5c, KR fn_195e98. Append at most `n` bytes.
 pub fn strncat_195dac(arena: &mut [u8], dst: u32, src: u32, n: u32) {
     strnappend(arena, dst, src, n);
 }
 
-/// fn_195ae8, EU fn_195b98, KR fn_195bd4. Copy `n` bytes.
 pub fn memcpy_195ae8(arena: &mut [u8], dst: u32, src: u32, n: u32) {
     memcpy_at(arena, dst, src, n);
 }
 
-/// fn_195bec, EU fn_195c9c, KR fn_195cd8. Fill `n` bytes with `value`.
 pub fn memset_195bec(arena: &mut [u8], dst: u32, value: u8, n: u32) {
     memset_at(arena, dst, value, n);
 }
 
-/// fn_195aac, EU fn_195b5c, KR fn_195b98. Bounded byte compare; `n == 0`
-/// returns without reading either side, otherwise the first differing
-/// byte pair decides (including the pair at index 0 when `n == 1`).
 pub fn memcmp_195aac(arena: &[u8], mut a: u32, mut b: u32, n: u32) -> i32 {
     if n == 0 {
         return 0;
@@ -702,8 +648,6 @@ pub fn memcmp_195aac(arena: &[u8], mut a: u32, mut b: u32, n: u32) -> i32 {
     byte(arena, a) as i32 - byte(arena, b) as i32
 }
 
-/// fn_195b38, EU fn_195be8, KR fn_195c24. `memmove`: backwards when
-/// `dst` sits strictly inside `[src, src + n)`, forwards otherwise.
 pub fn memmove_195b38(arena: &mut [u8], dst: u32, src: u32, n: u32) {
     if dst > src && src.wrapping_add(n) > dst {
         let mut d = dst.wrapping_add(n);
@@ -730,7 +674,6 @@ pub fn memmove_195b38(arena: &mut [u8], dst: u32, src: u32, n: u32) {
     }
 }
 
-/// fn_195d90, EU fn_195e40, KR fn_195e7c. Byte length before the NUL.
 pub fn strlen_195d90(arena: &[u8], s: u32) -> i32 {
     let mut p = s;
     while byte(arena, p) != 0 {
@@ -739,17 +682,10 @@ pub fn strlen_195d90(arena: &[u8], s: u32) -> i32 {
     p.wrapping_sub(s) as i32
 }
 
-/// fn_283188, EU fn_283344, KR fn_2833f0. Membership in the `D_9154c8`
-/// u16 set (`09 0a 0d 20 00` from the ROM, NUL-terminated): the scan
-/// matches the terminator itself, so 0 counts as a member.
 pub fn isspace_283188(a: u32) -> u32 {
     u32::from(matches!(a, 0 | 9 | 10 | 13 | 32))
 }
 
-/// fn_202f9c, EU fn_203158, KR fn_203204. Open the two input streams
-/// then the two output streams; on any failure close what opened and
-/// zero the handle. The `name`/`type` arguments only feed the scripted
-/// open stub, which ignores them.
 pub fn stream_open_202f9c(
     arena: &mut [u8],
     p: u32,
@@ -840,17 +776,11 @@ fn is_word_ch(ch: u8) -> bool {
     }
 }
 
-/// Current mark position (`Mark.pos` at `+0x0c`, stride `0x18`).
 #[inline]
 fn mark_pos(arena: &[u8], marks: u32, idx: u32) -> u32 {
     word(arena, marks.wrapping_add(idx.wrapping_mul(0x18)).wrapping_add(0xc))
 }
 
-/// fn_1dbcb0, EU fn_1dbe6c, KR fn_1dbf18. Disambiguate the punctuation
-/// span `[start, end)`: build the orthography/map layers, run the depes
-/// rules (or take the direct path for `phon` mode and plain words), make
-/// room in the sentence, copy the result back token by token, and move
-/// the marks with it. The `fn_1738e8`/`fn_173dc0` calls are log-only.
 pub fn fe_disambig_1dbcb0(
     arena: &mut [u8],
     c: u32,
@@ -868,8 +798,7 @@ pub fn fe_disambig_1dbcb0(
     base: u32,
     host: &mut impl FeTextHost,
 ) -> u32 {
-    // The C keeps node/idx/cnt in stack locals and passes &node/&idx/&cnt:
-    // they are Rust locals here, never guest bytes.
+
     let env = word(arena, c);
     let heap = word(arena, env.wrapping_add(4));
     let mut r = 0u32;
@@ -897,7 +826,7 @@ pub fn fe_disambig_1dbcb0(
             None => return 0x89c0_200a,
         }
     }
-    // Build the two depes input layers.
+
     while *p_node != 0 && (from as u32) < end {
         let cur = u32::from(*p_node);
         let mut ty_w = 0u32;
@@ -913,7 +842,7 @@ pub fn fe_disambig_1dbcb0(
         }
         from = ty_w as u16;
         if (from as u32) < end && (ty == 6 || ty == 4) {
-            // Unchecked in the C: on failure `to` keeps its old value.
+
             let mut to_w = to as u32;
             r = host.lat_get_int(arena, h0, h1, cur, 2, 1, &mut to_w, &mut len);
             to = to_w as u16;
@@ -925,8 +854,7 @@ pub fn fe_disambig_1dbcb0(
                 }
                 p
             } else {
-                // The `_DT_` default is a C string literal; the port keeps
-                // its bytes in a scratch cell the casegen never observes.
+
                 put_word(arena, 0x6f0, 0x5f54_445f);
                 put_byte(arena, 0x6f4, 0);
                 0x6f0
@@ -1025,7 +953,7 @@ pub fn fe_disambig_1dbcb0(
                     .wrapping_sub(from as u32)
                     .wrapping_sub(pron_len.wrapping_mul(2))
                     .wrapping_add(2);
-                // The bound is an int expression: negative skips the loop.
+
                 let bound_i = bound as i32;
                 while (k as i32) < bound_i {
                     strcat_lit(arena, word(arena, c.wrapping_add(0x24)), b"~");
@@ -1105,7 +1033,7 @@ pub fn fe_disambig_1dbcb0(
         }
         k = k.wrapping_add(1);
     }
-    // Run the disambiguation rules unless the text is plain words.
+
     let mut olen = 0u16;
     let (o1, o2, o3): (u32, u32, u32);
     let direct = if strcmp_lit(arena, mode, b"phon") == 0 {
@@ -1252,7 +1180,7 @@ pub fn fe_disambig_1dbcb0(
         o2 = p2;
         o3 = p3;
     }
-    // Make room in the sentence for the normalised text.
+
     delta = (strlen8(arena, o1))
         .wrapping_add(delta as u32)
         .wrapping_sub(strlen8(arena, word(arena, c.wrapping_add(0x20)))) as u16 as i16;
@@ -1300,7 +1228,7 @@ pub fn fe_disambig_1dbcb0(
             k = k.wrapping_add(1);
         }
     }
-    // Copy the result back token by token and move the markers with it.
+
     from = start as u16;
     let mut prev_to = start as u16;
     let mut m = 0u16;
@@ -1385,7 +1313,7 @@ pub fn fe_disambig_1dbcb0(
                 }
                 m = m.wrapping_add(1);
             }
-            // Skip to the next X, space, tilde or NUL.
+
             if !skipped {
                 loop {
                     m = m.wrapping_add(1);
@@ -1412,8 +1340,7 @@ pub fn fe_disambig_1dbcb0(
                     return rc;
                 }
             }
-            // Every \x1e...\x1f segment of the normalisation becomes a
-            // token of its own.
+
             let mut seg = strchr8(arena, norm, 0x1e);
             let mut first = true;
             while seg != 0 {
@@ -1744,7 +1671,7 @@ pub fn fe_disambig_1dbcb0(
         }
         node = nx;
     }
-    // The tail after the last token.
+
     k_start = m;
     while byte(arena, o2.wrapping_add(m as u32)) != 0 {
         m = m.wrapping_add(1);
@@ -1798,8 +1725,6 @@ pub fn fe_disambig_1dbcb0(
     r
 }
 
-/// fn_203144, EU fn_203300, KR fn_2033ac. Validate, then run the `282af0`
-/// dictionary transform over the furnished buffers.
 pub fn dict_call_203144(
     arena: &mut [u8],
     p: u32,
@@ -1831,7 +1756,6 @@ pub fn dict_call_203144(
     )
 }
 
-/// `fn_195d58` against a static literal: -1/0/1 like `strcmp_at`.
 pub(crate) fn strcmp_lit(arena: &[u8], s: u32, lit: &[u8]) -> i32 {
     let mut i = 0u32;
     loop {
@@ -1851,9 +1775,6 @@ pub(crate) fn strcmp_lit(arena: &[u8], s: u32, lit: &[u8]) -> i32 {
     }
 }
 
-/// fn_198760, EU fn_198810, KR fn_19884c. Walk the tree at `t` for `key`
-/// through the scripted comparator. Returns the matching node offset, or
-/// 0 when the walk reaches the tree sentinel.
 pub fn tree_find_198760(arena: &mut [u8], t: u32, key: u32, host: &mut impl FeTextHost) -> u32 {
     let mut n = word(arena, t);
     loop {
@@ -1886,8 +1807,6 @@ pub fn tree_find_198760(arena: &mut [u8], t: u32, key: u32, host: &mut impl FeTe
     }
 }
 
-/// fn_176f2c lock wrapper: indirect through `word(word(vtbl)+8)+8`, 0 for
-/// a null slot, else the inner call on the target.
 fn lock_176f2c(arena: &[u8], p: u32, host: &mut impl FeTextHost) -> u32 {
     if p == 0 {
         return 0x8140_2007;
@@ -1900,7 +1819,6 @@ fn lock_176f2c(arena: &[u8], p: u32, host: &mut impl FeTextHost) -> u32 {
     host.lock_call(word(arena, p.wrapping_add(8)))
 }
 
-/// fn_176f5c unlock wrapper: indirect through `word(word(vtbl)+8)+12`.
 fn lock_176f5c(arena: &[u8], p: u32, host: &mut impl FeTextHost) -> u32 {
     if p == 0 {
         return 0x8140_2007;
@@ -1913,9 +1831,6 @@ fn lock_176f5c(arena: &[u8], p: u32, host: &mut impl FeTextHost) -> u32 {
     host.lock_call(word(arena, p.wrapping_add(8)))
 }
 
-/// fn_1966ac, EU fn_19675c, KR fn_196798. Look up `b` in the tree at
-/// `a + 24`, reporting the entry word at node offset 20. A null `out`
-/// models the C's null-pointer early return; callers pass a stack local.
 pub fn lookup_1966ac(
     arena: &mut [u8],
     a: u32,
@@ -1935,9 +1850,6 @@ pub fn lookup_1966ac(
     }
 }
 
-/// fn_1756d0, EU fn_175780, KR fn_17572c. Config lookup: lock, entry
-/// lookup, unlock. A null `p1` models the C's null-pointer early return;
-/// callers pass a stack local and `p2` is 0 (null) or an arena cell.
 pub fn config_1756d0(
     arena: &mut [u8],
     o: u32,
@@ -1984,11 +1896,6 @@ pub fn config_1756d0(
     k
 }
 
-/// fn_1d88f4, EU fn_1d8ab0, KR fn_1d8b5c. Destroy the FE object: free the
-/// five owned buffers, release the three registry resources, free the
-/// object. The frees are no-ops on every side; the zero stores are the
-/// observation. NOTE: the `p == 0` check after the `f2c` free is dead in
-/// practice (a null `p` faults on the `f2c` read first).
 pub fn fe_delete_1d88f4(arena: &mut [u8], p: u32, b: u32, host: &mut impl FeTextHost) -> u32 {
     let r = host.validate(b, 0xf383, 56);
     if r >= 0x8000_0000 {
@@ -2002,11 +1909,7 @@ pub fn fe_delete_1d88f4(arena: &mut [u8], p: u32, b: u32, host: &mut impl FeText
             word(arena, p.wrapping_add(0x2c)),
         );
     }
-    // NOTE: no `p->f2c = 0` store here. The src line compiles to nothing:
-    // the ROM has no `str [r4, #0x2c]` (base `fn_1d88f4` stores only
-    // +0x20/+0x24/+0x28/+0x34) and gcc -O2 drops it too. The null check
-    // below matches the ROM's kept `cmp r4, #0` (gcc drops it as well);
-    // it is unreachable in practice since a null `p` faults on the reads.
+
     if p == 0 {
         return r;
     }
@@ -2026,11 +1929,6 @@ pub fn fe_delete_1d88f4(arena: &mut [u8], p: u32, b: u32, host: &mut impl FeText
     0
 }
 
-/// fn_1d8a20, EU fn_1d8bdc, KR fn_1d8c88. Open the FE object: resolve the
-/// environment, acquire LINGDB/FE_DEPES/FE_DCTLKP, allocate the object,
-/// read the dictionary flags and the `fasttn`/`esctn` params. Failures
-/// after allocation tear down through `fe_delete_1d88f4` and zero `out`.
-/// `a0`/`a1` are ignored; the log calls are unobserved on every side.
 pub fn fe_open_1d8a20(
     arena: &mut [u8],
     a0: u32,
@@ -2113,8 +2011,7 @@ pub fn fe_open_1d8a20(
         if r < 0x8000_0000 {
             let f14 = word(arena, env.wrapping_add(0x14));
             let mut str_v = 0u32;
-            // The key is the nonzero "fecfg" literal on the C/ARM sides;
-            // the scripted comparator ignores key values, so 1 stands in.
+
             let rcfg = config_1756d0(arena, f14, 1, Some(&mut str_v), 0, host);
             if rcfg < 0x8000_0000 && found == 0 {
                 if strcmp_fold_lit(arena, str_v, b"mpthree") == 0
@@ -2157,9 +2054,6 @@ pub fn fe_open_1d8a20(
     r
 }
 
-/// fn_1d8dd8, EU fn_1d8f94, KR fn_1d9040. Refresh the FE cached flags:
-/// dictionary flags into `f32`, config voice check into `f33`. Returns
-/// the config lookup status.
 pub fn fe_refresh_1d8dd8(arena: &mut [u8], p: u32, b: u32, host: &mut impl FeTextHost) -> u32 {
     let r = host.validate(b, 0xf383, 56);
     if r >= 0x8000_0000 {
@@ -2195,9 +2089,6 @@ pub fn fe_refresh_1d8dd8(arena: &mut [u8], p: u32, b: u32, host: &mut impl FeTex
     r
 }
 
-/// fn_1d8f28, EU fn_1d90e4, KR fn_1d9190. Walk the lattice nodes for the
-/// span, copying each node span into `buf`. The type-name/log calls are
-/// unobserved on every side; only `buf` and the return are compared.
 pub fn fe_dump_1d8f28(
     arena: &mut [u8],
     c: u32,
@@ -2292,24 +2183,12 @@ pub fn fe_dump_1d8f28(
     r
 }
 
-/// `TokEdit` record: 14 bytes, all scalar (f00/from/to/type/op/str/ch/adj/
-/// lid at 0/2/4/6/7/8/0xa/0xb/0xc).
 const TOKEDIT_SIZE: u32 = 14;
 
 fn tok_base(toks: u32, i: u16) -> u32 {
     toks.wrapping_add(u32::from(i).wrapping_mul(TOKEDIT_SIZE))
 }
 
-/// fn_1d9508, EU fn_1d96c4, KR fn_1d9770. Tag the sentence langmaps: walk
-/// the lattice, load the tokens, paint the class map, realign/extend the
-/// pronunciation spans, insert one edit per class run, write the edits
-/// back. Cleanup frees are no-ops on every side, so every `goto cleanup`
-/// is a plain early return here, but the `strs[i] = 0` cleanup stores are
-/// real: the `strs` array lives in the observed pool on the integration
-/// rows. `fn_1d9340` calls are log-only (zero observation) and skipped;
-/// `fn_1d8f28` in the debug paths is real. `KEY_INIT` is the furnished
-/// `D_8f8980` default-key image (the Rust side has no ROM); the pointer
-/// variable is dereferenced by the casegen.
 fn clear_strs_1d9508(arena: &mut [u8], strs: u32, n_str: u16) {
     let mut i = 0u16;
     while i < n_str {
@@ -2328,8 +2207,7 @@ pub fn fe_tags_1d9508(
     host: &mut impl FeTextHost,
 ) -> u32 {
     const KEY_INIT: u32 = 0x760;
-    // Set-data used to live at c + 0x7c; the C passes &locals and the
-    // "lid" literal, which now travel through lat_set_field_bytes.
+
     let env = word(arena, c);
     let heap = word(arena, env.wrapping_add(4));
     let log = word(arena, env.wrapping_add(0x10));
@@ -2619,9 +2497,7 @@ pub fn fe_tags_1d9508(
             node = next;
         }
     }
-    // Pronunciation realign: a pron followed by spaces up to the end of
-    // its langmap swallows them. setField failures break out with `r`
-    // set; a second-setField failure takes the realign_fail path.
+
     r = 0;
     let mut i = 0u16;
     while i < n_tok {
@@ -2710,8 +2586,7 @@ pub fn fe_tags_1d9508(
         clear_strs_1d9508(arena, strs, n_str);
         return r;
     }
-    // Paint the class map with the pronunciation langmaps. NOTE: the
-    // inner id scan reuses `i`, resetting the outer loop (mirrored).
+
     i = 0;
     while i < n_tok {
         let tb = tok_base(toks, i);
@@ -2779,7 +2654,7 @@ pub fn fe_tags_1d9508(
         }
         i = i.wrapping_add(1);
     }
-    // Extend each pronunciation token to the end of its word.
+
     i = 0;
     while i < n_tok {
         let tb = tok_base(toks, i);
@@ -2837,7 +2712,7 @@ pub fn fe_tags_1d9508(
         }
         i = i.wrapping_add(1);
     }
-    // Pull the start of each pronunciation token back to its word start.
+
     i = 0;
     while i < n_tok {
         let tb = tok_base(toks, i);
@@ -2901,7 +2776,7 @@ pub fn fe_tags_1d9508(
         }
         i = i.wrapping_add(1);
     }
-    // Spaces between two regions belong to the region on their left.
+
     {
         let mut prev = byte(arena, cls);
         let mut k = 0u16;
@@ -2931,7 +2806,7 @@ pub fn fe_tags_1d9508(
             }
         }
     }
-    // Langmap tokens that are not phonetic get deleted.
+
     i = 0;
     while i < n_tok {
         let tb = tok_base(toks, i);
@@ -2942,7 +2817,7 @@ pub fn fe_tags_1d9508(
         }
         i = i.wrapping_add(1);
     }
-    // Insert a langmap token for every run of the same class and word.
+
     if sent_len != 0 {
         let mut prev_cls = byte(arena, cls);
         let mut prev_w = half(arena, word_idx);
@@ -3046,7 +2921,7 @@ pub fn fe_tags_1d9508(
             }
         }
     }
-    // Write the edits back into the lingdb.
+
     i = 0;
     while i < n_tok {
         let tb = tok_base(toks, i);
@@ -3109,8 +2984,7 @@ pub fn fe_tags_1d9508(
             }
             put_half(arena, tb, node);
             if byte(arena, tb.wrapping_add(0xc)) != 0 {
-                // The C passes the "lid" literal (a ROM address); the port
-                // keeps it in Rust and lets the host stage it.
+
                 r = host.lat_set_field_bytes(arena, h0, h1, u32::from(node), 6, 4, b"lid\0", &mut len);
                 if r >= 0x8000_0000 {
                     clear_strs_1d9508(arena, strs, n_str);
@@ -3193,20 +3067,12 @@ pub fn fe_tags_1d9508(
     r
 }
 
-/// fn_1d8ec8, EU fn_1d9084, KR fn_1d9130. Tok comparator for the
-/// 1dd914 mark sort: `f0c` first, then the type 1-after-8 rule, then
-/// `pos`. Same comparison as [`crate::normalization::token_order`],
-/// over arena element offsets.
 pub fn cmp_1d8ec8(arena: &[u8], a: u32, b: u32) -> i32 {
     let a = a as usize;
     let b = b as usize;
     crate::normalization::token_order(&arena[a..a + 24], &arena[b..b + 24])
 }
 
-/// fn_2409d4, EU fn_240b90, KR fn_240c3c. In-place quicksort over `n`
-/// `size`-byte elements at `base`, comparing element offsets with `cmp`.
-/// The comparator is reflexive-zero, so the `i` scan stops at the pivot
-/// from below and the `j` scan from above; both stay in range.
 pub fn qsort_2409d4(
     arena: &mut [u8],
     base: u32,
@@ -3265,24 +3131,12 @@ pub fn qsort_2409d4(
     }
 }
 
-/// Arena cell of `marks[idx].position`: 24-byte TextMarks, position at +12.
 fn mark_pos_cell(marks: u32, idx: u16) -> u32 {
     marks
         .wrapping_add(u32::from(idx).wrapping_mul(24))
         .wrapping_add(12)
 }
 
-/// `fn_1dd914` (FE_PUNCSPTN): space/punctuation normalization over the
-/// sentence lattice: type-5 merge pass, `fn_1dbcb0` disambiguation pass,
-/// span alignment pass, optional `fn_1d9508` tagging, mark sort, space
-/// collapsing, then the trailing type-4 sweep. The `fn_173dc0`/`fn_1738e8`
-/// calls are log-only. TextNormalizer layout per `src/fn_1dd914.c`:
-/// env@0 nodes@4 propsHandle@8 props@0x10 charsHandle@0x14 chars@0x1c
-/// orth@0x20 map@0x24 wts@0x28 text@0x2c shift@0x30 normalize@0x32
-/// flags@0x33 escape@0x34.
-/// The `" _"` separator set `fn_195d30` tests in `fn_1dd914`: space or
-/// underscore. The C passes a string literal (a ROM address); the port
-/// keeps the test in Rust, so no guest scratch is furnished.
 fn is_spud(byte: u8) -> bool {
     byte == b' ' || byte == b'_'
 }
@@ -3296,11 +3150,7 @@ pub fn fe_punctspat_1dd914(
     changed: u32,
     host: &mut impl FeTextHost,
 ) -> u32 {
-    // The C keeps node/length/to/from and friends in stack locals; the
-    // port does the same. No guest scratch: the old 0x70 NODE/IDX/CNT
-    // cells, the 0x76 " _" cell and the 0x7a set-data cell are gone.
-    // (The live host stages set-data through its own uncompared window,
-    // the way the ARM passes its stack slot.)
+
     let p_text = p.wrapping_add(0x2c);
     let env = word(arena, p);
     let heap = word(arena, env.wrapping_add(4));
@@ -3911,8 +3761,6 @@ pub fn fe_punctspat_1dd914(
     saved
 }
 
-/// `nextWord` from `src/fn_1e7260.c`: rescan `*pos` for a nonzero byte;
-/// on a word start advance `*end` past the word and its trailing NULs.
 fn next_word_1e7908(arena: &[u8], s: u32, len: u16, pos: &mut u16, end: &mut u16) -> bool {
     *end = *pos;
     while *pos < len {
@@ -3933,10 +3781,6 @@ fn next_word_1e7908(arena: &[u8], s: u32, len: u16, pos: &mut u16, end: &mut u16
     false
 }
 
-/// `shiftRecs` from `src/fn_1e7260.c`: shift the matching word record's
-/// new end by `delta`, then every later record plus any enclosing
-/// kind-5/6 span. Records are 12 bytes: node@0 kind@2 start@4 end@6
-/// nstart@8 nend@10.
 fn shift_recs_1e7908(arena: &mut [u8], recs: u32, n_recs: u16, start: u16, end: u16, delta: i16) {
     let mut w = 0u16;
     while w < n_recs {
@@ -3992,8 +3836,6 @@ fn shift_recs_1e7908(arena: &mut [u8], recs: u32, n_recs: u16, start: u16, end: 
     }
 }
 
-/// fn_1e7908 cleanup, EU fn_1e7908, KR fn_1e7b70.
-/// Release temporaries in ROM order, then clear the five layer pointers.
 fn cleanup_l1l5(
     arena: &mut [u8], p: u32, rc: u32, joined: u32, recs: u32, se: u32,
     host: &mut impl FeTextHost,
@@ -4015,11 +3857,6 @@ fn cleanup_l1l5(
     rc
 }
 
-/// `fn_1e7908` (FE word normalization): node-count pass, layer-build
-/// pass, out-process, word-compare patch pass, hyphen-join pass, then
-/// marker/position writeback. `fn_1738e8`/`fn_173dc0` calls are log-only.
-/// NormProcess layout per `src/fn_1e7260.c`: ctx@0 dp@4 h@8 out@0x10
-/// l1@0x20 l2@0x24 l3@0x28 l4@0x2c l5@0x30 hasL5@0x34 wbuf@0x38.
 pub fn fe_normproc_1e7908(
     arena: &mut [u8],
     p: u32,
@@ -4029,9 +3866,7 @@ pub fn fe_normproc_1e7908(
     done: u32,
     host: &mut impl FeTextHost,
 ) -> u32 {
-    // C string literals live in unobserved scratch the casegen never
-    // furnishes (0x688-0x700 gap), plus two u16 cells for the wordspan
-    // out-params that are C locals.
+
     const LIT_X: u32 = 0x6e0;
     const LIT_Y: u32 = 0x6e2;
     const LIT_TILDE: u32 = 0x6e4;
@@ -4122,8 +3957,6 @@ pub fn fe_normproc_1e7908(
     let mut l4 = 0u32;
     let mut l5 = 0u32;
 
-    // strcpy(buf, "normout") targets a stack local; out.process ignores
-    // its name argument on every side.
     if host.validate(b, 0xf3b3, 0x3c) >= 0x8000_0000 {
         return 0x8b80_2008;
     }
@@ -4379,8 +4212,7 @@ pub fn fe_normproc_1e7908(
                 u32::from(span),
             );
             j = 0;
-            // `end - start` is computed in int; only a non-negative span
-            // runs the loop.
+
             let span_i = (u32::from(end) as i32).wrapping_sub(u32::from(start) as i32);
             while (j as i32) < span_i {
                 strnappend(arena, l2, f5, 1);
@@ -4599,7 +4431,7 @@ pub fn fe_normproc_1e7908(
             return cleanup_l1l5(arena, p, rc, joined, recs, se, host);
         }
     }
-    // A failed process still reports success.
+
     if host.out_process(arena, ph0, ph1, 0) >= 0x8000_0000 {
         return cleanup_l1l5(arena, p, 0, joined, recs, se, host);
     }
@@ -4662,7 +4494,7 @@ pub fn fe_normproc_1e7908(
         return cleanup_l1l5(arena, p, rc, joined, recs, se, host);
     }
     n_orig = half(arena, TMP_NORIG);
-    // nO1/nOrig feed log-only lines.
+
     let _ = (n_o1, n_orig);
     w = 0;
     i = 0;
@@ -4969,8 +4801,7 @@ pub fn fe_normproc_1e7908(
                                 if rc >= 0x8000_0000 {
                                     return cleanup_l1l5(arena, p, rc, joined, recs, se, host);
                                 }
-                                // v8 is the u16 the get just wrote; only the low
-                                // half is observed (the C passes &u16).
+
                                 put_half(arena, SET_TMP, w_out as u16);
                                 rc = host.dp_set(
                                     arena, h0, h1, prev_node, 8, 1, SET_TMP, &mut tmp,
@@ -5059,7 +4890,6 @@ pub fn fe_normproc_1e7908(
     cleanup_l1l5(arena, p, rc, joined, recs, se, host)
 }
 
-/// fn_1763e4. Widening strcpy: copy bytes to u16 units including the NUL.
 pub fn strcpy_widen_1763e4(arena: &mut [u8], dst: u32, src: u32) {
     let mut d = dst;
     let mut s = src;
@@ -5074,8 +4904,6 @@ pub fn strcpy_widen_1763e4(arena: &mut [u8], dst: u32, src: u32) {
     }
 }
 
-/// fn_1765ac. u16 strcmp: scan while `a` has not ended and the pair
-/// matches, then return the difference at the stop point.
 pub fn strcmp16_1765ac(arena: &[u8], a: u32, b: u32) -> i32 {
     let mut aa = a;
     let mut bb = b;
@@ -5093,8 +4921,6 @@ pub fn strcmp16_1765ac(arena: &[u8], a: u32, b: u32) -> i32 {
     i32::from(half(arena, aa)) - i32::from(half(arena, bb))
 }
 
-/// fn_176624. u16 strlen: the post-increment scan ends past the NUL,
-/// so the unit count before it is the length.
 pub fn strlen16_176624(arena: &[u8], s: u32) -> i32 {
     let mut p = s;
     while half(arena, p) != 0 {
@@ -5103,7 +4929,6 @@ pub fn strlen16_176624(arena: &[u8], s: u32) -> i32 {
     p.wrapping_sub(s).wrapping_div(2) as i32
 }
 
-/// fn_176214. u16 strcpy including the NUL.
 pub fn strcpy16_176214(arena: &mut [u8], dst: u32, src: u32) {
     let mut d = dst;
     let mut s = src;
@@ -5118,8 +4943,6 @@ pub fn strcpy16_176214(arena: &mut [u8], dst: u32, src: u32) {
     }
 }
 
-/// fn_176514. u16 strchr with a full-width `u32` needle: units wider
-/// than 16 bits never match, so the scan ends at the NUL and misses.
 pub fn strchr16_176514(arena: &[u8], s: u32, c: u32) -> u32 {
     let mut p = s;
     while u32::from(half(arena, p)) != 0 && u32::from(half(arena, p)) != c {
@@ -5132,8 +4955,6 @@ pub fn strchr16_176514(arena: &[u8], s: u32, c: u32) -> u32 {
     }
 }
 
-/// fn_176644. u16 strncpy with pad semantics: `n` counts only nonzero
-/// units; when the NUL lands, `n - 1` zero units follow it.
 pub fn strncpy16_176644(arena: &mut [u8], dst: u32, src: u32, n: u32) {
     let mut d = dst;
     let mut s = src;
@@ -5161,7 +4982,6 @@ pub fn strncpy16_176644(arena: &mut [u8], dst: u32, src: u32, n: u32) {
     }
 }
 
-/// fn_176460. Narrowing strcpy: units with high bits become `?`.
 pub fn narrow_176460(arena: &mut [u8], dst: u32, src: u32) {
     let mut d = dst;
     let mut s = src;
@@ -5175,8 +4995,6 @@ pub fn narrow_176460(arena: &mut [u8], dst: u32, src: u32) {
     put_byte(arena, d, 0);
 }
 
-/// fn_17649c. Narrowing strncpy: low bytes, `n` counting only nonzero
-/// units, then `n - 1` pad zeros after an early NUL.
 pub fn narrow_n_17649c(arena: &mut [u8], dst: u32, src: u32, n: u32) {
     let mut d = dst;
     let mut s = src;
@@ -5203,7 +5021,6 @@ pub fn narrow_n_17649c(arena: &mut [u8], dst: u32, src: u32, n: u32) {
     }
 }
 
-/// fn_176538. u16 strstr: first occurrence of `b` in `a`, or 0.
 pub fn strstr16_176538(arena: &[u8], a: u32, b: u32) -> u32 {
     if half(arena, b) == 0 {
         return a;
@@ -5238,10 +5055,6 @@ pub fn strstr16_176538(arena: &[u8], a: u32, b: u32) -> u32 {
     }
 }
 
-/// Scratch slots for `fe_depes_2031b0`: the `fn_282af0` outputs the C
-/// keeps in stack locals, plus materialized copies of the stack u16
-/// arrays (`normal`, `spell`, `lid`, `dummy`, `punctuation`) so the
-/// arena-based string leaves serve both. Outside every compared window.
 const DEPES_SCRATCH_CTYPE: u32 = 0x770;
 const DEPES_SCRATCH_CAP: u32 = 0x774;
 const DEPES_SCRATCH_LANG: u32 = 0x778;
@@ -5251,8 +5064,6 @@ const DEPES_SCRATCH_LID: u32 = 0x7a0;
 const DEPES_SCRATCH_DUMMY: u32 = 0x7b0;
 const DEPES_SCRATCH_PUNCT: u32 = 0x7b8;
 
-/// Shared `cleanup` tail of `fn_2031b0`: free owned markers, then every
-/// buffer. Unobservable (free is a no-op on every host) but mirrored.
 #[allow(clippy::too_many_arguments)]
 fn cleanup_2031b0(
     arena: &mut [u8],
@@ -5308,13 +5119,6 @@ fn cleanup_2031b0(
     }
 }
 
-/// fn_2031b0. FE_DEPES fetch: classify the next chunk of the marker
-/// stream into one output unit and advance the stream. `fn_17497c` is
-/// stubbed to 0 (its gates cover log-only calls) and the `fn_1738e8` /
-/// `fn_173dc0` / `fn_17486c` / `fn_1748a0` calls are log-only. The
-/// four-unit `languageText` stack array overflows into its neighbours
-/// for long languages; only the widened string length and copy are
-/// ever read back, so those read the source narrow string directly.
 #[allow(clippy::too_many_lines)]
 pub fn fe_depes_2031b0(
     arena: &mut [u8],
@@ -5534,8 +5338,7 @@ pub fn fe_depes_2031b0(
         );
         return rc;
     }
-    // Materialize the stack u16 arrays (fn_1763e4 x5); language keeps
-    // pointing at `normal`.
+
     for (slot, bytes) in [
         (DEPES_SCRATCH_SPELL, b"spell\x00".as_slice()),
         (DEPES_SCRATCH_NORMAL, b"normal\x00".as_slice()),
@@ -6879,16 +6682,6 @@ pub fn fe_depes_2031b0(
     rc
 }
 
-/// fn_1d5234, EU fn_1d53f0, KR fn_1d549c. Create the sentence token spanning
-/// `[start, end)`: resolve the language (lowercased `language` when it is 3
-/// units and matches the `langcode` property, else `lid`), walk the cursor
-/// chain, insert the token with its text, convert `phonemes` through the
-/// synthesiser (or store `fallback` when conversion is unavailable), and
-/// move `phonemes`/`fallback` into fields 3/4. The `fn_1738e8`/`fn_173dc0`
-/// calls are log-only. `upper`/`key`/`lang` live on the C stack, so the
-/// host calls that take them receive 0 (the fuzz stubs ignore the key and
-/// upper bytes); a `noclmset` hit sets the local `setting_no` flag instead
-/// of a stack pointer.
 pub fn fe_token_1d5234(
     arena: &mut [u8],
     p: u32,
@@ -6945,14 +6738,14 @@ pub fn fe_token_1d5234(
         }
         lang[3] = 0;
         if strcmp_lang_ci(arena, &lang, setting) != 0 {
-            // language_ready: keep lang.
+
         } else {
             lang = *b"lid\0";
         }
     } else {
         lang = *b"lid\0";
     }
-    // language_ready:
+
     if *cursor == 0 {
         return rc;
     }
@@ -7173,7 +6966,7 @@ pub fn fe_token_1d5234(
                     } else {
                         converted = phonemes;
                     }
-                    // store_phonemes:
+
                     if converted != 0 {
                         let n_c = strlen8(arena, converted).wrapping_add(1) & 0xffff;
                         rc = host.lat_set_field(
@@ -7190,7 +6983,7 @@ pub fn fe_token_1d5234(
                 created = 1;
             }
         }
-        // advance:
+
         if position == end16 {
             return rc;
         }
@@ -7241,9 +7034,6 @@ pub fn fe_token_1d5234(
     rc
 }
 
-/// Case-insensitive compare of the stack `lang` bytes against the arena
-/// string at `setting`, following `fn_1769d0` (fold through `fn_17c8c0`,
-/// 0 when equal).
 fn strcmp_lang_ci(arena: &[u8], lang: &[u8; 4], setting: u32) -> i32 {
     let mut i = 0usize;
     if fold_17c8c0(u32::from(lang[0])) == fold_17c8c0(u32::from(byte(arena, setting))) {
@@ -7263,7 +7053,6 @@ fn strcmp_lang_ci(arena: &[u8], lang: &[u8; 4], setting: u32) -> i32 {
         .wrapping_sub(fold_17c8c0(u32::from(byte(arena, setting.wrapping_add(i as u32)))) as i32)
 }
 
-/// `fn_195d58(setting, "yes")`: 0 when the arena string is exactly `yes`.
 fn strcmp_yes(arena: &[u8], setting: u32) -> u32 {
     if byte(arena, setting) == b'y'
         && byte(arena, setting.wrapping_add(1)) == b'e'
@@ -7276,8 +7065,6 @@ fn strcmp_yes(arena: &[u8], setting: u32) -> u32 {
     }
 }
 
-/// `fn_175944` platform mock: status + u32 value from the `reg` block
-/// (counter at `+24`, three `(status, value)` pairs at `+0`/`+8`/`+16`).
 fn prop_get_u32_175944(arena: &mut [u8], reg: u32, out: &mut u32) -> u32 {
     if reg == 0 {
         *out = 0;
@@ -7290,7 +7077,6 @@ fn prop_get_u32_175944(arena: &mut [u8], reg: u32, out: &mut u32) -> u32 {
     word(arena, reg.wrapping_add(idx.wrapping_mul(8)))
 }
 
-/// `fn_195df8(s, lit, n)`: 0 when the first `n` bytes match.
 fn strncmp_lit(arena: &[u8], s: u32, lit: &[u8], n: u32) -> u32 {
     for i in 0..n {
         let e = if (i as usize) < lit.len() {
@@ -7308,8 +7094,6 @@ fn strncmp_lit(arena: &[u8], s: u32, lit: &[u8], n: u32) -> u32 {
     0
 }
 
-/// `fn_2409d4` with the `fn_1d5214` comparator: in-place quicksort over `n`
-/// 24-byte tokens. Same pivot/partition scheme as `qsort_2409d4`.
 fn qsort_1d5214(arena: &mut [u8], base: u32, n: u32) {
     const SIZE: u32 = 24;
     if n <= 1 {
@@ -7361,27 +7145,18 @@ fn qsort_1d5214(arena: &mut [u8], base: u32, n: u32) {
     }
 }
 
-/// Compare two 24-byte tokens at arena offsets via `token_position_order`.
 fn cmp_tok_1d5214(arena: &[u8], a: u32, b: u32) -> i32 {
     let sa = &arena[a as usize..(a.wrapping_add(24)) as usize];
     let sb = &arena[b as usize..(b.wrapping_add(24)) as usize];
     crate::normalization::token_position_order(sa, sb)
 }
 
-/// Furnished mirrors of the `fn_1d5ba8` ROM strings (see `_1d5ba8`).
 const BBA_NORMAL: u32 = 0xc40;
 const BBA_PHON: u32 = 0xc50;
 const BBA_U16_NORMAL: u32 = 0xc60;
 const BBA_U16_LID: u32 = 0xc70;
 const BBA_U16_LATIN: u32 = 0xc80;
 
-/// fn_1d5ba8, EU fn_1d5d64, KR fn_1d5e10. Sentence/word Process: drain the
-/// text/token inputs into LINGDB, annotate the tokens, walk kind 21/34/36
-/// markers building TN type names (with `fecfg`/`esctn`/`esclang` lookups),
-/// emit a `fn_1d5234` token per span, then sort and store the tokens.
-/// `fn_176f94` fails odd tags; `fn_1758ac` is a no-op; `fn_175944` follows
-/// the platform counter block; the `fn_1738e8`/`fn_173dc0` calls are
-/// log-only. ROM strings use the furnished mirrors above.
 pub fn fe_process_1d5ba8(
     arena: &mut [u8],
     p: u32,
@@ -7528,7 +7303,7 @@ pub fn fe_process_1d5ba8(
     if rc >= 0x8000_0000 {
         return rc;
     }
-    // process_tokens:
+
     rc = host.res_read(arena, in1_a, in1_b, &mut token_data, &mut token_bytes);
     if rc >= 0x8000_0000 {
         return rc;
@@ -7538,7 +7313,7 @@ pub fn fe_process_1d5ba8(
         Some(o) => o,
         None => return 0x8990_200a,
     };
-    // 195ae8 copy (token_bytes may be 0).
+
     if token_bytes != 0 {
         memcpy_at(arena, tokens, token_data, token_bytes);
     }
@@ -7578,7 +7353,7 @@ pub fn fe_process_1d5ba8(
     let mut user_buffer = 0u32;
     let mut user_active = 0u32;
     let mut user = 0u32;
-    // fecfg/current lookup.
+
     {
         let mut entry_out = 0u32;
         let mut found16 = 0u16;
@@ -7610,7 +7385,7 @@ pub fn fe_process_1d5ba8(
                 if prop_get_u32_175944(arena, props, &mut value) < 0x8000_0000 {
                     key[0..11].copy_from_slice(b"tnpausedur\0");
                     strcat_stack_key(&mut key, arena, mapped);
-                    // 1758ac no-op.
+
                 }
             }
             current = mapped;
@@ -7651,7 +7426,7 @@ pub fn fe_process_1d5ba8(
             continue;
         }
         if word(arena, tok.wrapping_add(12)) != first_position {
-            // Skip spaces/_/tab/newline/CR.
+
             loop {
                 let tp = word(arena, tok.wrapping_add(12));
                 let c = byte(arena, text_data.wrapping_add(tp.wrapping_sub(first_position)));
@@ -7661,14 +7436,13 @@ pub fn fe_process_1d5ba8(
                 put_word(arena, tok.wrapping_add(12), tp.wrapping_add(1));
             }
             let tok_pos2 = word(arena, tok.wrapping_add(12));
-            // Re-read last_position (updated per token below).
+
             if tok_pos2 != last_position {
                 let a = last_position.wrapping_sub(first_position) & 0xffff;
                 let b = tok_pos2.wrapping_sub(first_position) & 0xffff;
                 rc = fe_token_1d5234(
                     arena, p, db_a, db_b, &mut cursor, a, b, current, user_text,
-                    // The ROM passes `type` here (hooked on US/EU/KR; src
-                    // commit `4b542d7` fixed the old `language` argument).
+
                     typ, fallback, text_data, user, host,
                 );
                 if rc >= 0x8000_0000 {
@@ -7735,12 +7509,12 @@ pub fn fe_process_1d5ba8(
                 fallback = name;
             }
             let _ = length;
-            // token_done:
+
             last_position = word(arena, tok.wrapping_add(12));
             index = next;
             continue;
         }
-        // Non-34 path.
+
         user_active = 0;
         let language_length = strlen16_176624(arena, language) as u32;
         let capacity6 = strlen16_176624(arena, BBA_U16_NORMAL) as u32;
@@ -7867,7 +7641,7 @@ pub fn fe_process_1d5ba8(
                     let delimiter = sep;
                     let types = word(arena, entry_out);
                     let cap = (strlen16_176624(arena, typ) as u32).wrapping_add(1);
-                    // Replacement search loop.
+
                     let mut rcrep = 0x8990_2000u32;
                     let mut replacement = name;
                     loop {
@@ -7943,7 +7717,7 @@ pub fn fe_process_1d5ba8(
                     || strcmp_lit(arena, name, b"SMS") == 0
                     || strcmp_lit(arena, name, b"ADR") == 0
                 {
-                    // append_type.
+
                 } else {
                     let _ = domain_or_extra(arena, props, &mut *host, name);
                     do_default = true;
@@ -7972,7 +7746,7 @@ pub fn fe_process_1d5ba8(
                         arena[name as usize] = 0;
                     }
                 }
-                // append_type:
+
                 length = strlen8(arena, name) as u16;
                 if strcmp16_1765ac(arena, typ, BBA_U16_NORMAL) != 0
                     && strcmp_lit(arena, name, b"normal") != 0
@@ -8060,12 +7834,12 @@ pub fn fe_process_1d5ba8(
                 }
                 let _ = i;
             }
-            // terminate_name:
+
             if strncmp_lit(arena, name, b"normal", 6) != 0 && byte(arena, name) != 0 {
                 arena[name.wrapping_add(u32::from(length)) as usize] = 0;
             }
         }
-        // lookup_name:
+
         found = 0xffff;
         {
             let mut entry_out = 0u32;
@@ -8101,18 +7875,18 @@ pub fn fe_process_1d5ba8(
                     if prop_get_u32_175944(arena, props, &mut value) < 0x8000_0000 {
                         key[0..11].copy_from_slice(b"tnpausedur\0");
                         strcat_stack_key(&mut key, arena, mapped);
-                        // 1758ac no-op.
+
                     }
                 }
             }
             current = mapped;
         }
         user_text = 0;
-        // token_done:
+
         last_position = word(arena, tok.wrapping_add(12));
         index = next;
     }
-    // Final span token.
+
     rc = fe_token_1d5234(
         arena,
         p,
@@ -8123,8 +7897,7 @@ pub fn fe_process_1d5ba8(
         text_bytes.wrapping_sub(1) & 0xffff,
         current,
         user_text,
-        // The ROM passes `type` here (hooked on US/EU/KR; src commit
-        // `4b542d7` fixed the old `language` argument).
+
         typ,
         fallback,
         text_data,
@@ -8190,9 +7963,6 @@ pub fn fe_process_1d5ba8(
     rc
 }
 
-/// `domainmngrtntypes` membership probe with the `extraesctn` fallback call.
-/// Returns true on a hit (extra call skipped); the log outcome is ignored
-/// but both `suba1c` calls run exactly as in the C for script alignment.
 fn domain_or_extra(
     arena: &mut [u8],
     props: u32,
@@ -8220,7 +7990,6 @@ fn domain_or_extra(
     false
 }
 
-/// u8 strlen of a stack key buffer (up to first NUL).
 fn strlen_stack(key: &[u8]) -> u32 {
     let mut n = 0u32;
     while (n as usize) < key.len() && key[n as usize] != 0 {
@@ -8229,7 +7998,6 @@ fn strlen_stack(key: &[u8]) -> u32 {
     n
 }
 
-/// Append the arena string at `src` to the stack `key` (like `fn_195c90`).
 fn strcat_stack_key(key: &mut [u8], arena: &[u8], src: u32) {
     let mut d = 0usize;
     while d < key.len() && key[d] != 0 {
@@ -8247,9 +8015,6 @@ fn strcat_stack_key(key: &mut [u8], arena: &[u8], src: u32) {
     }
 }
 
-/// fn_202970, EU fn_202b2c, KR fn_202bd8. Copies the available window with
-/// `memcpy_195ae8`, advances both cursors, and divides through the
-/// unsigned fn_1994d0 divmod. `fac` is furnished as a readable pointer.
 pub fn window_fill(arena: &mut [u8], a: u32, b: u32, c: u32, d: u32) -> u32 {
     let n = (b as i32).wrapping_mul(c as i32) as u32;
     let avail = word(arena, d.wrapping_add(0xb0)).wrapping_sub(word(arena, d.wrapping_add(0xb4)));
@@ -8271,10 +8036,6 @@ pub fn window_fill(arena: &mut [u8], a: u32, b: u32, c: u32, d: u32) -> u32 {
     n / b
 }
 
-/// fn_1740e4, EU fn_174194, KR fn_174140. Grows the buffer through
-/// fn_1963e0 (the `r_ptrA` script here) and rebases both pointer tables.
-/// Comparisons run in the offset domain, which preserves the absolute
-/// order.
 pub fn rebase_grow(arena: &mut [u8], heap: u32, b: u32, needed: u32) -> u32 {
     let _ = heap;
     let mut rc = 0;
@@ -8328,9 +8089,6 @@ pub fn rebase_grow(arena: &mut [u8], heap: u32, b: u32, needed: u32) -> u32 {
     rc
 }
 
-/// fn_17db60, EU fn_17dc10, KR fn_17dbbc. Joins `a` and `b` with a slash
-/// into a fn_196394 buffer (the `r_ptrA` script here) and collapses `/./`
-/// and `/name/../` segments.
 pub fn join_norm(arena: &mut [u8], out: u32, a: u32, b: u32, flag: u32, alloc: u32) -> u32 {
     let _ = alloc;
     if a == 0 || b == 0 {
@@ -8395,8 +8153,6 @@ pub fn join_norm(arena: &mut [u8], out: u32, a: u32, b: u32, flag: u32, alloc: u
     0
 }
 
-/// fn_176a48, EU fn_176af8, KR fn_176aa4. Case-insensitive bounded compare
-/// through `fold_17c8c0`.
 pub fn fold_ncasecmp(arena: &[u8], a: u32, b: u32, n: u32) -> u32 {
     let mut i = 0u32;
     while n > i {
@@ -8420,10 +8176,6 @@ pub fn fold_ncasecmp(arena: &[u8], a: u32, b: u32, n: u32) -> u32 {
         - fold_17c8c0(byte(arena, b.wrapping_add(i)) as u32) as i32) as u32
 }
 
-/// fn_176054, EU fn_176104, KR fn_1760b0. Stores the source/length
-/// pair, allocating (`r_ptrA` here) or reallocating when the stored
-/// length is zero or short, then copies `n` bytes. The `fn_196428`
-/// release call on the empty-store path is counted at 0x60 (`r_inc`).
 pub fn buf_set_grow(arena: &mut [u8], p: u32, src: u32, n: u32, heap: u32) -> u32 {
     let _ = heap;
     if p == 0 {
@@ -8440,8 +8192,7 @@ pub fn buf_set_grow(arena: &mut [u8], p: u32, src: u32, n: u32, heap: u32) -> u3
     } else {
         let size = word(arena, p.wrapping_add(4));
         if size == 0 {
-            // `p->data = fn_196394(heap, n)` assigns before the null
-            // check, so a failed alloc still zeroes the cell.
+
             let e = rule_entry(arena, 0x5b0, 4);
             let d = word(arena, e);
             put_word(arena, p, d);
@@ -8463,11 +8214,6 @@ pub fn buf_set_grow(arena: &mut [u8], p: u32, src: u32, n: u32, heap: u32) -> u3
     0
 }
 
-/// fn_196db0, EU fn_196e60, KR fn_196e9c. Pushes a slot through
-/// [`vec_grow`](crate::normalization::vec_grow) into scratch cell
-/// 0x64, copies `size` bytes there, then runs the optional `cb`
-/// validator (the `rule_stA` script here, gated by the word at 0x60);
-/// a zero validator vote decrements the count and reports 0.
 pub fn vec_push_copy(arena: &mut [u8], p: u32, src: u32) -> u32 {
     if vec_grow(arena, p, 0x64) == 0 {
         return 0;
@@ -8485,4 +8231,3 @@ pub fn vec_push_copy(arena: &mut [u8], p: u32, src: u32) -> u32 {
     }
     1
 }
-

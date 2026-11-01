@@ -1,9 +1,7 @@
-//! Singing generator leaves. All buffers and ROM tables belong to the caller.
-//! No captured output is used to construct a result.
+
 
 use crate::boot::Memory;
 
-/// fn_16fb50, backend selector.
 pub fn engine_kind(object: &[u8]) -> u32 {
     match object[4] {
         x @ 0..=2 => x as u32,
@@ -12,13 +10,10 @@ pub fn engine_kind(object: &[u8]) -> u32 {
     }
 }
 
-/// fn_16fb14, region-dependent language lookup.
 pub fn language(object: &[u8], map: &[u8; 256]) -> u8 {
     map[object[5] as usize]
 }
 
-/// fn_744c94. The ROM permits max payload units plus one terminator.
-/// The caller supplies that extra unit. This copies embedded NULs too.
 pub fn append(dst: &mut [u16], max: usize, src: &[u16], n: usize) {
     let len = dst
         .iter()
@@ -29,7 +24,6 @@ pub fn append(dst: &mut [u16], max: usize, src: &[u16], n: usize) {
     dst[len + count] = 0;
 }
 
-/// fn_740e78. Mutable bitmap state remains caller-owned.
 pub struct CharacterTables<'a> {
     pub initialized: u8,
     pub bitmap: &'a mut [i8; 208],
@@ -55,7 +49,7 @@ pub fn special_character(c: u16, engine: u32, lang: u8, tables: &mut CharacterTa
                         tables.bitmap[ch - 0xb0] = 1;
                     }
                 }
-                // D_b65e5c is 0xb0 bytes before D_b65f0c.
+
                 let ch = tables.pairs[47] as usize;
                 if ch >= 0xb0 && ch - 0xb0 < 208 {
                     tables.bitmap[ch - 0xb0] = 1;
@@ -63,7 +57,7 @@ pub fn special_character(c: u16, engine: u32, lang: u8, tables: &mut CharacterTa
                 for i in [0x52, 0x53, 0x78] {
                     tables.bitmap[80 + i] = 1;
                 }
-                // The ROM does not set D_a7b428 here.
+
             }
             if c.wrapping_sub(0xb0) < 0x50 {
                 tables.bitmap[c as usize - 0xb0] != 0
@@ -115,8 +109,6 @@ pub struct Event {
     pub duration: i32,
 }
 
-/// fn_74481c, two-pass snapping and even redistribution.
-/// Negative/overflow arithmetic uses ARM's wrapping 32-bit semantics.
 pub fn snap_durations(out: &mut [i32], events: &[Event], last: i32) -> i32 {
     let n = out.len();
     assert!(n <= 64);
@@ -167,7 +159,6 @@ pub fn snap_durations(out: &mut [i32], events: &[Event], last: i32) -> i32 {
     0
 }
 
-/// The generator's ROM data. These are inputs, not captured generated strings.
 pub struct GeneratorTables<'a> {
     pub prefix: &'a [u16],
     pub pause_format: &'a [u16],
@@ -181,8 +172,6 @@ pub enum Error {
     MissingCallee(u32),
 }
 
-/// Integer-only UTF-16 formatting model for the %d formats used by singing.
-/// This is not a port of the complete fn_100164 wide printf family.
 fn decimal_format(out: &mut [u16], format: &[u16], values: &[i32]) -> usize {
     let mut pos = 0;
     let mut arg = 0;
@@ -242,9 +231,6 @@ fn command(dst: &mut [u16], max: usize, name: &[u8], value: i32) {
     append(dst, max, &buffer, n);
 }
 
-/// fn_7414e0 -> fn_741e8c western generator, limited to the non-random lyric
-/// path. An unbound random-filler call returns its exact entry, never fake text.
-/// The caller must not publish partial output on an error.
 #[allow(clippy::too_many_arguments)]
 pub fn generate_western(
     text: &[u16],
@@ -261,7 +247,6 @@ pub fn generate_western(
     )
 }
 
-/// Western generator with a caller-owned random source for fallback lyrics.
 #[allow(clippy::too_many_arguments)]
 pub fn generate_western_with_random(
     text: &[u16],
@@ -740,7 +725,6 @@ fn generate_western_inner(
     Ok(())
 }
 
-/// KR fn_7433b4 excludes the western prolonged-sound mark.
 pub fn special_character_korean(
     c: u16,
     engine: u32,
@@ -754,12 +738,10 @@ pub fn special_character_korean(
     }
 }
 
-/// Host owns the random source and its seed. fn_741198 retries rejected choices.
 pub trait RandomHost {
     fn random_below(&mut self, limit: u32) -> u32;
 }
 
-/// fn_18cb9c, also KR fn_18cc88. The ARM updates a caller-owned 64-bit LCG.
 pub struct SeededRandom {
     pub state: u64,
 }
@@ -773,12 +755,10 @@ impl RandomHost for SeededRandom {
     }
 }
 
-/// fn_741198 / KR fn_7436c4, including rejection and trailing space.
 pub fn random_fallback<H: RandomHost + ?Sized>(out: &mut [u16], max: usize, n: i32, host: &mut H) {
     random_fallback_inner(out, max, n, host, true);
 }
 
-/// KR fn_7436c4 omits the western trailing space.
 pub fn random_fallback_korean<H: RandomHost + ?Sized>(
     out: &mut [u16],
     max: usize,
@@ -821,7 +801,6 @@ fn random_fallback_inner<H: RandomHost + ?Sized>(
     }
 }
 
-/// fn_7439d8 -> fn_7443bc, KR layout and syllable timing.
 #[allow(clippy::too_many_arguments)]
 pub fn generate_korean<H: RandomHost + ?Sized>(
     text: &[u16],
@@ -1411,25 +1390,6 @@ pub fn generate_korean<H: RandomHost + ?Sized>(
     Ok(())
 }
 
-// ===== fn_741e8c song-note generator, guest-memory port (c3 round 16) =====
-//
-// 0x741e8c runs once per sing request before the scheduler: it turns the
-// lyric text (r0), the song events (r1, `eventCount` kind/duration pairs
-// built by the lyric stage) and the caller setup from fn_7414e0 into the
-// sung command string at `out`. Integer args after flags arrive on the
-// guest stack; the two floats arrive in s0/s1, which fn_7414e0 fills as
-// `(float)(s16 @ events+0x20c)` and `f32 @ events+0x210` (verified
-// word-for-word on 5 ARM runs).
-//
-// All arrays are caller-owned Rust locals (the C's stack frame); guest
-// state is touched only where the ARM touches it: the output string, the
-// fn_18cb9c generator word (fn_741198 path) and the fn_740e78 lang-2
-// bitmap. No guest-heap allocation happens, and no host services are
-// needed: every transitive callee is implemented below. The single Host
-// arm for wire-a is written up in the round-16 progress file.
-
-
-/// Guest addresses read by the song-note port (US).
 const NOTE_OBJ_PTR: u32 = 0x00ac_b580;
 const NOTE_LANG_MAP: u32 = 0x008c_80c3;
 const NOTE_RATE_FLAG: u32 = 0x00a7_b428;
@@ -1442,7 +1402,7 @@ const NOTE_CHAR_BITMAP: u32 = 0x00b6_5f0c;
 const NOTE_CHAR_PAIRS: u32 = 0x008b_f156;
 const NOTE_CHAR_EXTRA: u32 = 0x008b_f158;
 const NOTE_CHAR_SINGLE: u32 = 0x00b6_5e5c;
-/// Format literals pooled inside fn_741e8c's own address range.
+
 const NOTE_FMT_WAIT: u32 = 0x0074_31bc;
 const NOTE_FMT_MRK2: u32 = 0x0074_31d8;
 const NOTE_FMT_MRK1: u32 = 0x0074_31ea;
@@ -1453,11 +1413,9 @@ const NOTE_FMT_MRK30: u32 = 0x0074_3948;
 const NOTE_FMT_MRK31: u32 = 0x0074_395c;
 const NOTE_FMT_PAUSE: u32 = 0x0074_3970;
 const NOTE_FMT_EOS: u32 = 0x0074_3994;
-/// `(int)D_989680`: the C takes the symbol's address, which is 10000000.
+
 const NOTE_ROM_ADJUST: i32 = 0x0098_9680;
 
-/// The 20 guest arguments of fn_741e8c. `frequency`/`pitch` are the s0/s1
-/// floats; the rest are r0-r3 plus the 14 integer stack words in order.
 pub struct SongNoteArgs {
     pub text: u32,
     pub events: u32,
@@ -1481,8 +1439,6 @@ pub struct SongNoteArgs {
     pub capacity: i32,
 }
 
-/// fn_30209c divide step with the ARM's zero-divisor rule (quotient 0,
-/// remainder dividend). All divisors are nonzero on certified inputs.
 fn note_divmod(dividend: i32, divisor: i32) -> (i32, i32) {
     if divisor == 0 {
         return (0, dividend);
@@ -1493,7 +1449,6 @@ fn note_divmod(dividend: i32, divisor: i32) -> (i32, i32) {
     )
 }
 
-/// fn_1003dc: wide-string length in units.
 fn note_strlen(m: &Memory<'_>, mut p: u32) -> u32 {
     let mut n = 0u32;
     while m.half(p) != 0 {
@@ -1503,7 +1458,6 @@ fn note_strlen(m: &Memory<'_>, mut p: u32) -> u32 {
     n
 }
 
-/// First NUL position of the guest u16 string at `dst`, in units.
 fn note_out_len(m: &Memory<'_>, dst: u32) -> usize {
     let mut len = 0usize;
     while m.half(dst.wrapping_add((len as u32).wrapping_mul(2))) != 0 {
@@ -1512,9 +1466,6 @@ fn note_out_len(m: &Memory<'_>, dst: u32) -> usize {
     len
 }
 
-/// fn_744c94 over guest memory: append `n` units from the guest string at
-/// `src` after the terminator of `dst`, then re-terminate. Embedded NULs
-/// are copied, like the ROM.
 fn append_guest(m: &mut Memory<'_>, dst: u32, max: usize, src: u32, n: usize) {
     let len = note_out_len(m, dst);
     let count = n.min(max.saturating_sub(len));
@@ -1530,8 +1481,6 @@ fn append_guest(m: &mut Memory<'_>, dst: u32, max: usize, src: u32, n: usize) {
     );
 }
 
-/// Append ASCII bytes as u16 units (syllable pieces and the C literals of
-/// fn_741198, which take no conversions).
 fn append_ascii(m: &mut Memory<'_>, dst: u32, max: usize, bytes: &[u8]) {
     let len = note_out_len(m, dst);
     let count = bytes.len().min(max.saturating_sub(len));
@@ -1547,7 +1496,6 @@ fn append_ascii(m: &mut Memory<'_>, dst: u32, max: usize, bytes: &[u8]) {
     );
 }
 
-/// Emit one unit into the bounded render, counting the unbounded total.
 fn emit_unit(
     m: &mut Memory<'_>,
     out: u32,
@@ -1566,11 +1514,6 @@ fn emit_unit(
     }
 }
 
-/// fn_100164 subset used by the song path: literals, `%%` and `%d`
-/// (every song format is verified `%d`-only). Writes at most `size` units
-/// plus the terminator into guest memory and returns the unit count, or
-/// -1 when the output does not fit (the ARM's `r5 >= size` rule). None of
-/// the certified calls truncate.
 pub fn note_printf(
     m: &mut Memory<'_>,
     out: u32,
@@ -1595,7 +1538,7 @@ pub fn note_printf(
             if next == b'%' as u16 {
                 emit_unit(m, out, bound, &mut written, &mut total, b'%' as u16);
             } else {
-                // The only conversion the song formats use.
+
                 assert!(next == b'd' as u16);
                 let v = args[arg];
                 arg += 1;
@@ -1635,7 +1578,6 @@ pub fn note_printf(
     }
 }
 
-/// fn_1876ec: `fn_100164(out, min(size, count + 1), fmt, args)`.
 pub fn note_format(
     m: &mut Memory<'_>,
     out: u32,
@@ -1652,10 +1594,6 @@ pub fn note_format(
     note_printf(m, out, limit, fmt, args)
 }
 
-/// Emit a formatted command at the end of the guest string at `out`
-/// (the `fn_744c94(out, capacity, buffer, fn_1876ec(...))` idiom: the
-/// 32-unit buffer never binds on certified inputs, so rendering in place
-/// lands the same bytes at the same addresses).
 fn emit_format(
     m: &mut Memory<'_>,
     out: u32,
@@ -1667,9 +1605,7 @@ fn emit_format(
 ) {
     let len = note_out_len(m, out);
     let cap = capacity.max(0) as usize;
-    // The C formats into its 32/48-unit stack buffer (the `size` bound)
-    // and appends; the guest output has room, so one bounded render at
-    // the append point lands the same bytes.
+
     let bound = (cap.saturating_sub(len) as i32).min(size);
     note_format(
         m,
@@ -1681,9 +1617,6 @@ fn emit_format(
     );
 }
 
-/// fn_740e78 over guest memory, with the lang-2 bitmap kept at its guest
-/// globals (init follows the C: zero, fill from the ROM pairs, extra
-/// cell, then the three fixed cells). Other languages are pure.
 fn special_note(m: &mut Memory<'_>, c: u32, engine: u32, lang: u8) -> bool {
     let ascii = c.wrapping_sub(97) <= 25 || c.wrapping_sub(65) <= 25 || c.wrapping_sub(48) <= 9;
     if engine == 1 {
@@ -1767,9 +1700,6 @@ fn special_note(m: &mut Memory<'_>, c: u32, engine: u32, lang: u8) -> bool {
     }
 }
 
-/// fn_741198 over guest memory: the random filler lyric for a non-special
-/// segment. The generator word lives at its guest global and is advanced
-/// exactly like the ARM (every fn_18cb9c draw persists).
 fn random_fallback_guest(m: &mut Memory<'_>, dst: u32, max: usize, n: i32) {
     let lo = m.word(NOTE_RNG_STATE);
     let hi = m.word(NOTE_RNG_STATE.wrapping_add(4));
@@ -1804,8 +1734,6 @@ fn random_fallback_guest(m: &mut Memory<'_>, dst: u32, max: usize, n: i32) {
     m.put_word(NOTE_RNG_STATE.wrapping_add(4), (rng.state >> 32) as u32);
 }
 
-/// fn_741e8c: the song-note generator. Returns the output end pointer
-/// (r0 on the ARM: the terminating-NUL address).
 #[allow(clippy::too_many_lines)]
 pub fn song_notes(m: &mut Memory<'_>, a: &SongNoteArgs) -> u32 {
     let mut durations = [0i32; 64];
@@ -1823,8 +1751,6 @@ pub fn song_notes(m: &mut Memory<'_>, a: &SongNoteArgs) -> u32 {
     let mut control_starts = [0i32; 32];
     let mut special = [false; 64];
 
-    // fn_16fb14/fn_16fb50 over the engine object (re-read per character by
-    // the C, but the object is constant across the call).
     let obj = m.word(NOTE_OBJ_PTR);
     let engine = match m.byte(obj.wrapping_add(4)) {
         x @ 0..=2 => x as u32,
@@ -1833,7 +1759,6 @@ pub fn song_notes(m: &mut Memory<'_>, a: &SongNoteArgs) -> u32 {
     };
     let language = m.byte(NOTE_LANG_MAP.wrapping_add(m.byte(obj.wrapping_add(5)) as u32));
 
-    // Event table into caller-owned storage.
     let n_ev = a.event_count.max(0) as usize;
     let first_duration = m.word(a.events.wrapping_add(4)) as i32;
     let mut ev = [Event::default(); 64];
@@ -1844,7 +1769,6 @@ pub fn song_notes(m: &mut Memory<'_>, a: &SongNoteArgs) -> u32 {
         };
     }
 
-    // GCD of the durations (the C seeds from events[0] even when empty).
     let mut gcd = first_duration;
     let mut i = 0usize;
     while i < n_ev && gcd != 1 {
@@ -1914,9 +1838,6 @@ pub fn song_notes(m: &mut Memory<'_>, a: &SongNoteArgs) -> u32 {
         }
     }
 
-    // Text segmentation (the C reads text[512] once past the end when the
-    // first 512 units are nonzero; lyrics are caller-limited to 128, so
-    // the loop below, which stops at 512, matches on every real input).
     let mut n = 0usize;
     let mut active = false;
     char_count = 0;

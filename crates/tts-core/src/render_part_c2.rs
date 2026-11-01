@@ -1,12 +1,7 @@
-//! Render-path component matching and pronunciation-context construction.
-//!
-//! Property-tree adapters use the crate's offset-addressed frontend ports: their
-//! Memory must have base zero. Unmapped prefix bytes remain caller-owned.
-//! Component matching also supports a nonzero guest base.
+
+
 use crate::{boot::Memory, frontend, normalization, render_part_c};
 
-/// The component's indirect match method is a platform boundary. The returned
-/// list pointer is the method's stack-local output, not a captured engine result.
 pub trait MatchHost {
     fn component_match(
         &mut self,
@@ -20,8 +15,6 @@ fn half(m: &Memory<'_>, p: u32) -> u16 {
     u16::from_le_bytes([m.byte(p), m.byte(p + 1)])
 }
 
-/// fn_2c69a0 / EU 2c6b5c / KR 2c6c08.
-/// Find the first component advertising an exact or semicolon-delimited prefix.
 pub fn fn_2c69a0(
     m: &mut Memory<'_>,
     context: u32,
@@ -59,8 +52,7 @@ pub fn fn_2c69a0(
                     if frontend::compare_str_n(&m.bytes[a..], &m.bytes[b..], n as i32) == 0
                         && (m.byte(name + n) == 0 || m.byte(name + n) == b';')
                     {
-                        // Reload the array element, as the original does after
-                        // the indirect method and before the caller-visible store.
+
                         let found = m.word(m.word(context + 4) + u32::from(i) * 4);
                         m.put_word(out, found);
                     }
@@ -75,7 +67,6 @@ pub fn fn_2c69a0(
     }
 }
 
-/// Caller-owned ROM constants and cached environment pair.
 pub struct Environment<'a> {
     pub engine: render_part_c::Environment,
     pub max_markers_key: u32,
@@ -84,10 +75,7 @@ pub struct Environment<'a> {
     pub nts_prefix: &'a [u8],
     pub ipa_prefix: &'a [u8],
 }
-/// The existing frontend ports hold property tables under StateLock. select_lock
-/// chooses the lock token used by acquire/release; only its indirect platform
-/// methods are host work. Pronunciation sessions execute render part d's
-/// dictionary constructor and destructor ports.
+
 pub trait ContextHost:
     render_part_c::Host + frontend::StateLock + crate::boot_part_b::FormatHost
 {
@@ -124,11 +112,6 @@ fn nz(p: u32) -> Option<u32> {
     }
 }
 
-/// fn_2c2338 / EU 2c24f4 / KR 2c25a0.
-/// Initialize marker capacity, preserving the lookup's status and range rules.
-/// scratch is 24 caller-owned, disjoint writable bytes replacing machine-stack
-/// locals. Its contents are restored. compare_keys must compare immutable key
-/// strings using the same ordering as the property dictionary.
 pub fn fn_2c2338(
     m: &mut Memory<'_>,
     p: u32,
@@ -149,8 +132,7 @@ pub fn fn_2c2338(
     m.put_word(p + 96, value);
     m.put_word(p + 84, 0);
     m.put_half(p + 100, 200);
-    // The local C output starts at zero. The real getter overwrites it even
-    // when lookup fails. Scratch is restored on return, including error paths.
+
     let saved = m.word(scratch);
     m.put_word(scratch, 0);
     let properties = m.word(context + 20);
@@ -158,8 +140,7 @@ pub fn fn_2c2338(
         host.select_lock(m.word(properties + 4));
     }
     let key = env.max_markers_key;
-    // The frontend getter takes a pure key comparator because its output word
-    // shares the arena. Keys are immutable for the duration of the lookup.
+
     let mut lock = PropertyLock { host };
     let rc = frontend::get_param_uint(
         m.bytes,
@@ -180,8 +161,7 @@ pub fn fn_2c2338(
     if n.wrapping_sub(1) < 0xfffe {
         m.put_half(p + 100, n as u16);
     } else {
-        // fn_173dc0's null-logger fast path, then its real Rust formatter
-        // callee. No engine routine is replaced with a diagnostic script.
+
         let logger = m.word(context + 16);
         if logger != 0 && env.parser_category != 0 {
             let at = m.offset(scratch + 4);
@@ -214,9 +194,6 @@ impl<H: ContextHost> frontend::StateLock for PropertyLock<'_, H> {
     }
 }
 
-/// fn_2c3068 / EU 2c3224 / KR 2c32d0.
-/// Construct both optional pronunciation converters and release on failure.
-/// name_scratch is eight disjoint writable bytes, restored on return.
 pub fn fn_2c3068(
     m: &mut Memory<'_>,
     handle: [u32; 2],
@@ -280,9 +257,7 @@ pub fn fn_2c3068(
             }
         }
     }
-    // This real sibling port resolves the handle again before releasing the
-    // two converters. It deliberately does not replace failure cleanup with
-    // allocator-only calls.
+
     render_part_c::fn_2c3008(
         m,
         p,
@@ -350,15 +325,13 @@ impl<H: ContextHost + crate::render_part_d::DictionaryHost> render_part_c::Host
         self.host.output(m, f, a)
     }
 }
-/// Resource and reader routines not yet ported are dispatched by address.
-/// Indirect callbacks use the same method. Internal string/property helpers
-/// and the resource-open forwarding wrapper execute their existing Rust ports.
+
 pub trait ResourceHost: ContextHost {
-    /// Constants and workspace for the rebound resource-close port.
+
     fn close_runtime(&self) -> crate::leftovers_1::CloseRuntime {
         panic!("resource close requires caller-supplied CloseRuntime")
     }
-    /// Constants and workspace for the rebound RIFF constructor.
+
     fn open_runtime(&self) -> crate::leftovers_1::OpenRuntime {
         panic!("resource open requires caller-supplied OpenRuntime")
     }
@@ -366,7 +339,7 @@ pub trait ResourceHost: ContextHost {
         panic!("unbound broker tree comparator")
     }
     fn resource_call(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32;
-    /// Region-specific reader strings and disjoint stack workspace.
+
     fn reader_runtime(&self) -> crate::render_part_a::ReaderRuntime {
         panic!("reader requires caller-supplied ReaderRuntime")
     }
@@ -386,8 +359,7 @@ pub trait ResourceHost: ContextHost {
     fn reader_array_callback(&mut self, _method: u32, _args: &[u32]) {
         panic!("unbound external reader array callback")
     }
-    /// Region-specific broker constants and a disjoint 24-byte stack area.
-    /// Required when the real broker-open port is reached.
+
     fn data_open_globals(&self) -> crate::boot_part_b::DataOpenGlobals {
         panic!("broker open requires caller-supplied DataOpenGlobals")
     }
@@ -467,7 +439,7 @@ impl<H: ResourceHost> crate::boot_part_b::QueryHost for BrokerHost<'_, H> {
 }
 impl<H: ResourceHost> crate::boot_part_b::DataHost for BrokerHost<'_, H> {
     fn data_output(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32], out: u32) -> u32 {
-        // Keep the guest output address, including its no-write failure cases.
+
         let mut args = [0u32; 16];
         assert!(a.len() < args.len());
         args[..a.len()].copy_from_slice(a);
@@ -552,9 +524,9 @@ impl<H: ResourceHost> crate::render_part_a::ReaderHost for BrokerHost<'_, H> {
         )
     }
 }
-/// Immutable guest addresses for keys, path fragments and the reader format.
+
 pub struct ResourceEnvironment {
-    pub keys: [u32; 4], // langcode, fedataprefix, fedatapackaging, fecfg
+    pub keys: [u32; 4],
     pub clc: u32,
     pub clc_path: u32,
     pub slash: u32,
@@ -577,7 +549,7 @@ fn parameter(m: &Memory<'_>, config: u32, key: u32, host: &mut impl ResourceHost
     });
     (rc, value)
 }
-/// fn_2c5ef4. scratch is 160 disjoint caller-owned bytes, restored on return.
+
 pub fn fn_2c5ef4(
     m: &mut Memory<'_>,
     config: u32,
@@ -641,7 +613,7 @@ pub fn fn_2c5ef4(
     m.bytes[at..at + 160].copy_from_slice(&saved);
     result
 }
-/// fn_2c6194. Unfiltered configuration loader.
+
 pub fn fn_2c6194(
     m: &mut Memory<'_>,
     config: u32,
@@ -652,7 +624,7 @@ pub fn fn_2c6194(
 ) -> u32 {
     fn_2c5ef4(m, config, 0, mode, scratch, env, host)
 }
-/// fn_2c6434. scratch is 96 disjoint bytes replacing stack locals.
+
 pub fn fn_2c6434(
     m: &mut Memory<'_>,
     config: u32,
@@ -688,9 +660,7 @@ pub fn fn_2c6434(
         if rc >= 0x80000000 {
             return rc;
         }
-        // fn_243a94 is a pure ABI forwarding wrapper. Its existing arena
-        // port calls fn_242fd0, rebound below to its certified constructor.
-        // Use a collecting host to retain the wrapper's complete argument list.
+
         struct Collect {
             args: [u32; 9],
         }
@@ -828,9 +798,7 @@ impl<H: ContextHost> normalization::NormalizationHost for FetchHost<'_, H> {
         frontend::heap_release(bytes, nz(heap), nz(p), self.host)
     }
 }
-/// fn_2c0e30. Apply the UTF-16 marker value as a property string.
-/// scratch is a disjoint 24-byte caller-owned setter stack area, restored.
-/// The lock, tree operations and callbacks are the setter's actual boundaries.
+
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c0e30(
     m: &mut Memory<'_>,
@@ -898,7 +866,7 @@ pub fn fn_2c0e30(
     );
     m.bytes[at..at + 24].copy_from_slice(&saved);
     if result < 0x80000000 {
-        // fn_1738e8 has no direct Rust port. Null log is a real no-op.
+
         if m.word(engine + 16) != 0 {
             host.resource_call(
                 m,
@@ -926,8 +894,7 @@ fn build_name(m: &Memory<'_>, dst: &mut [u8; 8], prefix: &[u8], lang: u32) {
         prefix.len() + n < dst.len(),
         "pronunciation name exceeds original stack buffer"
     );
-    // Project the immutable inputs and the original eight-byte stack output
-    // into one local arena, then run the existing strcpy and strcat ports.
+
     let mut local = [0u8; 24];
     local[8..8 + prefix.len()].copy_from_slice(prefix);
     local[16..16 + n].copy_from_slice(&m.bytes[lang as usize..lang as usize + n]);
@@ -936,12 +903,9 @@ fn build_name(m: &Memory<'_>, dst: &mut [u8; 8], prefix: &[u8], lang: u32) {
     dst.copy_from_slice(&local[..8]);
 }
 
-/// Stack-independent parser inputs. The caller supplies the bytes of the
-/// uninitialised marker temporary too: the ROM does not initialise its extra
-/// word or structure padding before copying it to the marker arena.
 pub struct ParserEnvironment<'a> {
     pub separators: &'a [u8],
-    /// Region-specific boundary constants, required for modes 3 and 4.
+
     pub boundary: Option<&'a render_part_c::BoundaryData<'a>>,
     pub default_name: u32,
     pub parameters: [(u16, u32); 4],
@@ -978,7 +942,6 @@ fn parameter_tag(tag: u16) -> bool {
     matches!(tag, 7 | 31 | 36 | 21 | 20)
 }
 
-/// fn_2c2564. Remove leading blanks and maintain the reference/reset markers.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c2564(
     m: &mut Memory<'_>,
@@ -1088,7 +1051,7 @@ pub fn fn_2c2564(
                         j = j.wrapping_add(1);
                     }
                     add_blanks = false;
-                    // last is promoted to signed int in this C expression.
+
                     if i32::from(last) - 1 > 0 {
                         for j in 1..last {
                             let p = base + u32::from(j) * 40;
@@ -1221,9 +1184,6 @@ pub fn fn_2c2564(
     0
 }
 
-/// Caller-owned adapters for the property routines, not engine-call scripts.
-/// Tree, lock, before-change and element callback objects are the same
-/// boundaries used by frontend's real setter and removal ports.
 pub struct ParserRuntime<'a, 'b, H, L, O, B, E, C> {
     pub env: &'a Environment<'b>,
     pub parser: &'a ParserEnvironment<'b>,
@@ -1233,7 +1193,7 @@ pub struct ParserRuntime<'a, 'b, H, L, O, B, E, C> {
     pub before: &'a mut B,
     pub callback: &'a mut E,
     pub compare: &'a mut C,
-    /// 64 disjoint writable bytes replacing stack locals, restored on return.
+
     pub scratch: u32,
 }
 struct BorrowBefore<'a, B>(&'a mut B);
@@ -1326,7 +1286,6 @@ where
     }
 }
 
-/// fn_2c1e2c. Apply the final parameter marker of each of the four kinds.
 pub fn fn_2c1e2c<H, L, O, B, E, C>(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -1511,7 +1470,6 @@ fn parser_boundary(
     true
 }
 
-/// fn_2c0f74. Split a sentence, preserve parameters and trim/reset its references.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c0f74<H, L, O, B, E, C>(
     m: &mut Memory<'_>,
@@ -2012,7 +1970,7 @@ pub fn registry_release(
     }
     rc
 }
-/// fn_2c7f24. Close resource objects, then drop registrations in reverse order.
+
 pub fn fn_2c7f24(
     m: &mut Memory<'_>,
     handle: [u32; 2],
@@ -2295,7 +2253,7 @@ fn pronunciation_language(
             return 0;
         }
         if engine == 0 {
-            // setLanguage deliberately suppresses lookup/setup errors.
+
             return 0;
         }
         let props = m.word(engine + 20);
@@ -2486,7 +2444,7 @@ fn pronunciation_replace(
     }
     rc
 }
-/// fn_2c3450. Apply language changes and replace pronunciation event ranges.
+
 pub fn fn_2c3450(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -2537,7 +2495,7 @@ pub fn fn_2c3450(
     m.bytes[p.scratch as usize..p.scratch as usize + 64].copy_from_slice(&saved);
     rc
 }
-/// fn_2c322c. Open the text/event iterators and run pronunciation conversion.
+
 pub fn fn_2c322c(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -2618,14 +2576,6 @@ pub fn fn_2c322c(
     rc
 }
 
-/// Memory-passing pronunciation forms.
-///
-/// `fn_2c322c`'s iterator open/release and `pronunciation_replace`'s tail
-/// allocate through the arena-blind `FetchHost`, so the live render chain
-/// cannot serve them. These forms take the same host for resource and
-/// dictionary calls plus a [`ParserAllocatorM`] for every allocation, and
-/// route the iterator and conversion heap traffic through the guest heap on
-/// the caller's arena. The slice forms above are unchanged.
 struct ConversionHostM<'a, H> {
     host: &'a mut H,
     out: u32,
@@ -2665,8 +2615,7 @@ impl<H: ResourceHost + crate::render_part_d::DictionaryHost> render_part_c::Host
         }
     }
 }
-/// Memory-passing `pronunciation_convert`: the conversion buffers go
-/// through the guest heap on the caller's arena.
+
 fn pronunciation_convert_m(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -2782,8 +2731,7 @@ fn pronunciation_convert_m(
     }
     (rc, output, output_len)
 }
-/// Memory-passing `pronunciation_replace`: the insert grows through the
-/// guest heap and the replaced output releases through it.
+
 fn pronunciation_replace_m(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -2918,9 +2866,7 @@ fn pronunciation_replace_m(
     }
     rc
 }
-/// Memory-passing `fn_2c3450`: language switches run on the caller's host
-/// (their dictionary calls are already memory-passing) while replacement
-/// traffic goes through the guest heap.
+
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c3450_m(
     m: &mut Memory<'_>,
@@ -2973,8 +2919,7 @@ pub fn fn_2c3450_m(
     m.bytes[p.scratch as usize..p.scratch as usize + 64].copy_from_slice(&saved);
     rc
 }
-/// Memory-passing `fn_2c322c`: the text/event iterators open and release
-/// through the guest heap on the caller's arena.
+
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c322c_m(
     m: &mut Memory<'_>,
@@ -3063,7 +3008,7 @@ fn cached_pair(env: &Environment<'_>) -> [u8; 8] {
     frontend::load_pair(&mut out, &env.engine.cached_handle);
     out
 }
-/// fn_2c66c8. Destroy a pipeline, preserving the first failing close/release.
+
 pub fn fn_2c66c8(
     m: &mut Memory<'_>,
     p: u32,
@@ -3164,8 +3109,7 @@ pub struct PipelineEnvironment {
     pub slash: u32,
     pub colon: u32,
 }
-/// fn_2c6ac0. Match a pipeline component and open its typed resource.
-/// scratch is a disjoint 1040-byte area replacing buf and saved handles.
+
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c6ac0(
     m: &mut Memory<'_>,
@@ -3265,7 +3209,7 @@ pub fn fn_2c6ac0(
             ],
         );
         if rc >= 0x80000000 {
-            // flag only suppresses diagnostics; it never changes the status.
+
             let _ = flag;
             return rc;
         }
@@ -3362,8 +3306,7 @@ fn append_resource(m: &mut Memory<'_>, p: u32, src: u32, host: &mut impl Resourc
         grow: half(m, p + 24),
         heap: m.word(p + 28),
     };
-    // append_element borrows the arena exclusively. Run the real heap
-    // dispatcher first and return its result at the allocator boundary.
+
     let allocation = if block.cap < block.count.wrapping_add(1) && block.grow != 0 {
         let slots = frontend::divmod_u32(block.count, u32::from(block.grow))
             .0
@@ -3409,8 +3352,7 @@ fn append_resource(m: &mut Memory<'_>, p: u32, src: u32, host: &mut impl Resourc
     }
     rc
 }
-/// fn_2c6ddc. Reopen a registered object or query/open and register a new one.
-/// scratch is 96 disjoint writable bytes, restored before return.
+
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c6ddc(
     m: &mut Memory<'_>,
@@ -3505,7 +3447,7 @@ pub fn fn_2c6ddc(
 }
 
 pub trait PipelineLogger {
-    /// Indirect level method only; slot is the logger's callback object.
+
     fn level(&mut self, slot: u32) -> u32;
 }
 pub struct PipelineKeys {
@@ -3571,8 +3513,7 @@ impl<H: ResourceHost> crate::boot_part_b::ContextHost for TraceCreator<'_, '_, H
         resolve(m, handle, &self.env.engine)
     }
 }
-/// fn_2c7158. Construct a two-pass component pipeline, register objects and
-/// load its optional resources. stack is 1280 disjoint caller-owned bytes.
+
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c7158<H, L, O, B, E, C>(
     m: &mut Memory<'_>,
@@ -3948,15 +3889,12 @@ where
     rc
 }
 
-/// Caller-owned PCRE work buffers for render part d's live fn_2ef300 port.
-/// The RefCell enforces exclusive scratch use without allocating or retaining
-/// an arena borrow across parser callbacks.
 pub struct EscapeExecution<'a> {
     pub scratch: core::cell::RefCell<crate::render_part_d::EscapeScratch<'a>>,
     pub tables: &'a crate::regex::PcreTables<'a>,
 }
 pub struct EscapeEnvironment<'a> {
-    /// Required when an escape command is reached; plain text needs no regex buffers.
+
     pub execution: Option<EscapeExecution<'a>>,
     pub parameters: [(u16, u32); 4],
     pub spaces: &'a [u8],
@@ -4021,8 +3959,7 @@ fn escape_event(
         },
     )
 }
-/// fn_2c4914. Tokenize escape sequences into text and marker buffers.
-/// stack is 256 disjoint bytes for the original local event records.
+
 pub fn fn_2c4914<H, L, O, B, E, C>(
     m: &mut Memory<'_>,
     state: u32,
@@ -4076,7 +4013,7 @@ where
         if rc >= 0x80000000 {
             return rc;
         }
-        // Keep both C fetches even though the inQuote scan's result is dead.
+
         let (rc, _) = fetch_parser(m, buffers, 0x3f3, 1, rt.env, rt.host);
         if rc >= 0x80000000 {
             return rc;
@@ -4288,8 +4225,7 @@ where
                 consumed = consumed.wrapping_add(size);
             }
             m.put_word(event + 28, 0);
-            // Render part d landed this callee during round 3. Execute its
-            // real port rather than retaining the earlier scripted boundary.
+
             let parsed = {
                 let execution = escape
                     .execution
@@ -4644,9 +4580,7 @@ fn escape_append_m(
     m.put_half(buffer + 8, count);
     0
 }
-/// Counted guest-heap alloc with the caller's arena, through a
-/// render-part-c host. Mirrors `frontend::call_method` but passes the
-/// arena to the method instead of dropping it.
+
 fn call_on_heap_m(
     mem: &mut [u8],
     heap: Option<u32>,
@@ -4669,11 +4603,7 @@ fn call_on_heap_m(
         &[object, count, size],
     )
 }
-/// Memory-passing `fn_2c4914`: the escape-sequence processor with the guest
-/// heap on the caller's arena. Same boundaries as [`fn_2c4914`], but every
-/// allocation, counted alloc and release routes through `allocator`, the regex
-/// execution buffers come from the caller, and the counted method call
-/// dispatches through the host as a render-part-c host with the arena.
+
 pub fn fn_2c4914_m<H, L, O, B, E, C>(
     m: &mut Memory<'_>,
     state: u32,
@@ -4730,7 +4660,7 @@ where
         if rc >= 0x80000000 {
             return rc;
         }
-        // Keep both C fetches even though the inQuote scan's result is dead.
+
         let (rc, _) = fetch_parser_m(m, buffers, 0x3f3, 1, rt.env, allocator);
         if rc >= 0x80000000 {
             return rc;
@@ -4942,8 +4872,7 @@ where
                 consumed = consumed.wrapping_add(size);
             }
             m.put_word(event + 28, 0);
-            // Render part d landed this callee during round 3. Execute its
-            // real port rather than retaining the earlier scripted boundary.
+
             let parsed = {
                 let execution = escape
                     .execution
@@ -5251,7 +5180,7 @@ where
     rc
 }
 pub trait SegmentCallbackHost {
-    /// Retained legacy callback interface; D_2bd850 now executes its real port.
+
     fn previous_match(&mut self, event: &[u8], target: &[u8]) -> i32;
 }
 pub struct SegmentEnvironment<'a> {
@@ -5364,7 +5293,7 @@ fn segment_back(
                 let mut pair = [0u8; 80];
                 pair[..40].copy_from_slice(target);
                 pair[40..].copy_from_slice(event);
-                // Base 1 avoids the predicate's null-address guard.
+
                 segment_previous(
                     &mut Memory {
                         base: 1,
@@ -5475,7 +5404,7 @@ pub(crate) fn segment_send(
     if rc >= 0x80000000 {
         return rc;
     }
-    // Render part c owns fn_2be984. Keep the unported boundary explicit.
+
     let mut rc = host.resource_call(
         m,
         0x2be984,
@@ -5760,8 +5689,7 @@ where
     }
     rc
 }
-/// fn_2c0014. Select parser-mode windows, emit segments and add chunk splits.
-/// stack is 160 disjoint caller-owned bytes, restored on return.
+
 pub fn fn_2c0014<H, L, O, B, E, C>(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -5989,8 +5917,6 @@ where
     rc
 }
 
-/// Memory-passing allocator for sentence splitting. The allocator must not
-/// capture the arena. All callbacks receive the caller's current bytes last.
 pub trait ParserAllocatorM: frontend::HeapVtableM {
     fn calloc_m(&mut self, object: u32, count: u32, size: u32, memory: &mut [u8]) -> u32;
 }
@@ -6462,7 +6388,7 @@ pub fn fn_2c0e30_m(
     );
     m.bytes[at..at + 24].copy_from_slice(&saved);
     if result < 0x80000000 {
-        // fn_1738e8 has no direct Rust port. Null log is a real no-op.
+
         if m.word(engine + 16) != 0 {
             host.resource_call(
                 m,
@@ -6588,7 +6514,7 @@ pub fn fn_2c2564_m(
                         j = j.wrapping_add(1);
                     }
                     add_blanks = false;
-                    // last is promoted to signed int in this C expression.
+
                     if i32::from(last) - 1 > 0 {
                         for j in 1..last {
                             let p = base + u32::from(j) * 40;
@@ -6721,7 +6647,6 @@ pub fn fn_2c2564_m(
     0
 }
 
-/// Reentrant fn_2c0f74. Legacy handlers remain separate from the live allocator.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2c0f74_m<H, L, O, B, E, C>(
     m: &mut Memory<'_>,
@@ -7144,7 +7069,6 @@ where
     0
 }
 
-/// D_2bd850 binding used by the segmenter's backward-scan callback.
 pub fn segment_previous(m: &mut Memory<'_>, current: u32, previous: u32) -> u32 {
     render_part_c::fn_2bd850(m, current, previous)
 }

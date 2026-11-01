@@ -7,7 +7,6 @@ pub struct StreamKey<'a> {
     pub version: u16,
 }
 
-/// fn_14dff4 / EU fn_14e0b8 / KR fn_14dfd8.
 pub fn compare_stream_keys(left: Option<StreamKey<'_>>, right: Option<StreamKey<'_>>) -> i32 {
     match (left, right) {
         (None, None) => 0,
@@ -30,7 +29,6 @@ pub fn compare_stream_keys(left: Option<StreamKey<'_>>, right: Option<StreamKey<
     }
 }
 
-/// fn_14e084 / EU fn_14e148 / KR fn_14e068.
 pub fn retain_stream(references: Option<&mut u16>, context: bool, output: bool) -> u32 {
     match references {
         Some(references) if context && output => {
@@ -50,7 +48,7 @@ pub struct StreamPosition {
 }
 
 impl StreamPosition {
-    /// fn_151294 / EU fn_151358 / KR fn_151278.
+
     pub fn position(&self, validation: u32, output: &mut u32) -> u32 {
         if validation >= 0x80000000 {
             return validation;
@@ -63,7 +61,6 @@ impl StreamPosition {
         validation
     }
 
-    /// fn_15140c / EU fn_1514d0 / KR fn_1513f0.
     pub fn remaining(
         &self,
         validation: u32,
@@ -94,7 +91,6 @@ impl StreamPosition {
     }
 }
 
-/// fn_195974 / EU fn_195a24 / KR fn_195a60.
 pub fn initialize_version(output: Option<&mut [u8; 3]>) -> u32 {
     match output {
         Some(output) => {
@@ -105,7 +101,6 @@ pub fn initialize_version(output: Option<&mut [u8; 3]>) -> u32 {
     }
 }
 
-/// fn_1959a0 / EU fn_195a50 / KR fn_195a8c.
 pub fn initialize_build(output: Option<&mut [u16; 3]>) -> u32 {
     match output {
         Some(output) => {
@@ -116,7 +111,6 @@ pub fn initialize_build(output: Option<&mut [u16; 3]>) -> u32 {
     }
 }
 
-/// fn_190ea4 / EU fn_190f54 / KR fn_190f90.
 pub fn unsupported_interface(object_tag: u32, tag: u32, output: &mut u32) -> u32 {
     if tag != 0x68434c53 || object_tag != 0x73434c53 {
         return 0x80000008;
@@ -125,27 +119,22 @@ pub fn unsupported_interface(object_tag: u32, tag: u32, output: &mut u32) -> u32
     0x80000001
 }
 
-/// fn_151744 / EU fn_151808 / KR fn_151728.
 pub fn stream_element_callbacks(callbacks: &[u8]) -> &[u8] {
     callbacks
 }
 
-/// fn_15f410 / EU fn_15f4d4 / KR fn_15f3f4.
 pub fn finish_component_query() -> u32 {
     0
 }
 
-/// fn_18f488 / EU fn_18f538 / KR fn_18f574.
 pub fn finish_request() -> u32 {
     0
 }
 
-/// fn_18fb74 / EU fn_18fc24 / KR fn_18fc60.
 pub fn has_utf16_bom(text: &[u8; 2]) -> u32 {
     u32::from(matches!(text, [0xff, 0xfe] | [0xfe, 0xff]))
 }
 
-/// fn_1ce56c / EU fn_1ce728 / KR fn_1ce7d4.
 pub fn streaming_mode(state: Option<(u8, u8)>) -> u32 {
     state.map_or(
         0,
@@ -153,7 +142,6 @@ pub fn streaming_mode(state: Option<(u8, u8)>) -> u32 {
     )
 }
 
-/// fn_159238 / EU fn_1592fc / KR fn_15921c.
 pub fn set_parameter_without_marker<T>(
     first: T,
     second: u32,
@@ -199,7 +187,6 @@ fn restore_state(state: &mut u8, previous: u32, lock: &mut impl StateLock) {
     }
 }
 
-/// fn_18f24c / EU fn_18f2fc / KR fn_18f338.
 pub fn enter_request(
     state: &mut u8,
     next: u8,
@@ -209,7 +196,6 @@ pub fn enter_request(
     enter_state(state, next, previous, lock, 0x80002011)
 }
 
-/// fn_15ae7c / EU fn_15af40 / KR fn_15ae60.
 pub fn enter_pipeline(
     state: &mut u8,
     next: u8,
@@ -219,23 +205,19 @@ pub fn enter_pipeline(
     enter_state(state, next, previous, lock, 0x81202011)
 }
 
-/// fn_15af34 / EU fn_15aff8 / KR fn_15af18.
 pub fn restore_pipeline(state: &mut u8, previous: u32, lock: &mut impl StateLock) {
     restore_state(state, previous, lock);
 }
 
-/// fn_1959dc / EU fn_195a8c / KR fn_195ac8.
 pub fn restore_request(state: &mut u8, previous: u32, lock: &mut impl StateLock) {
     restore_state(state, previous, lock);
 }
 
-/// fn_18f3fc / EU fn_18f4ac / KR fn_18f4e8.
 pub fn notify(arguments: [u32; 4], mut callback: impl FnMut([u32; 4]) -> u32) -> u32 {
     callback(arguments);
     0
 }
 
-/// fn_1517e8 / EU fn_1518ac / KR fn_1517cc.
 pub fn resolve_engine<T: Copy>(
     object: T,
     validation: u32,
@@ -257,7 +239,6 @@ pub fn resolve_engine<T: Copy>(
     status
 }
 
-/// fn_15ae20 / EU fn_15aee4 / KR fn_15ae04.
 pub fn resolve_channel<T: Copy>(
     object: T,
     validation: u32,
@@ -279,7 +260,6 @@ pub fn resolve_channel<T: Copy>(
     }
 }
 
-/// fn_158a50 / EU fn_158b14 / KR fn_158a34.
 pub fn allocate_license(present: bool, mut resolve: impl FnMut() -> u32) -> u32 {
     if !present {
         return 0x81202007;
@@ -292,7 +272,6 @@ pub fn allocate_license(present: bool, mut resolve: impl FnMut() -> u32) -> u32 
     }
 }
 
-/// fn_158b58 / EU fn_158c1c / KR fn_158b3c.
 pub fn free_license(present: bool, mut resolve: impl FnMut() -> u32) -> u32 {
     if !present {
         return 0x81202007;
@@ -364,8 +343,6 @@ pub trait PipelineStages {
     ) -> PipelineReply;
 }
 
-/// Speech scheduling in fn_15429c / EU fn_154360 / KR fn_154280.
-/// Text analysis and voice-switch lifecycle operations belong to the stage adapter.
 pub fn process_text(
     state: &mut FrontendState<'_>,
     flush: u32,
@@ -527,25 +504,8 @@ pub fn process_text(
     result
 }
 
-// --- fn_2104b0 render-path text rewriting -----------------------------------
-//
-// The rewriter borrows every engine buffer from the caller. Text and event
-// records the engine lends are copied into caller-owned scratch, mutated
-// there, and appended from there, so no mutable aliasing or unsafe code is
-// needed. Only the appended bytes, position updates, release calls and the
-// ordered interface-call sequence are observable, and those match the
-// original exactly. The engine is assumed to lend disjoint storage per
-// pointer, as the real engine lends distinct record fields. Null text with a
-// count above 1, and missing event storage with a nonzero count, crash the
-// original; this API rejects those engine states instead.
-
 use crate::frontend_types::Error;
 
-/// fn_176f94 / EU fn_177044 / KR fn_176ff0.
-///
-/// Validates a component handle: `tag` must equal `expected`, and either
-/// `size` is zero or an object is present. Only nullness is observed; the
-/// object is never dereferenced.
 pub fn validate_handle(present: bool, tag: u32, expected: u32, size: u32) -> u32 {
     if tag == expected && (size == 0 || present) {
         0
@@ -554,11 +514,6 @@ pub fn validate_handle(present: bool, tag: u32, expected: u32, size: u32) -> u32
     }
 }
 
-/// fn_176c58 / EU fn_176d08 / KR fn_176cb4.
-///
-/// Renders unsigned `value` in `base` into `buffer` with a terminator, using
-/// the engine's lowercase digits. Bases below 2 hang the original in its
-/// divide loop; this API rejects them instead of hanging.
 pub fn render_unsigned(value: u32, buffer: &mut [u8], base: u32) -> Result<(), Error> {
     if value == 0 {
         if buffer.len() < 2 {
@@ -604,13 +559,6 @@ pub fn render_unsigned(value: u32, buffer: &mut [u8], base: u32) -> Result<(), E
     Ok(())
 }
 
-/// fn_176ac8 / EU fn_176b78 / KR fn_176b24.
-///
-/// Renders signed `value` in `base` into `buffer` with a terminator. A
-/// negative value in base 10 gets a leading `-`; other bases divide the
-/// negative value directly with truncation toward zero, keeping the engine's
-/// signed digit mapping. Bases below 2 hang the original in its divide loop;
-/// this API rejects them instead of hanging.
 pub fn render_signed(value: i32, buffer: &mut [u8], base: u32) -> Result<(), Error> {
     if value == 0 {
         if buffer.len() < 2 {
@@ -663,7 +611,6 @@ pub fn render_signed(value: i32, buffer: &mut [u8], base: u32) -> Result<(), Err
     Ok(())
 }
 
-/// One 24-byte text event record, as `fn_2104b0` reads and updates it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TextEvent {
     pub kind: u16,
@@ -686,18 +633,12 @@ impl TextEvent {
     }
 }
 
-/// The two-word handle the engine passes to its interfaces, by value.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RewriterHandle {
     pub first: u32,
     pub second: u32,
 }
 
-/// The text side of `fn_2104b0`'s engine: record traversal and field access.
-///
-/// The `bool` in the `get_text`/`get_events` result reports whether the
-/// engine lent storage. Byte counts are opaque engine values, except that a
-/// text count of 1 or less selects the `"##"` fallback without dereference.
 pub trait RewriterText {
     fn first(&mut self, input: RewriterHandle, table: u32, root: u16, out: &mut u16) -> u32;
     fn next(&mut self, input: RewriterHandle, node: u16, out: &mut u16) -> u32;
@@ -749,27 +690,20 @@ pub trait RewriterText {
     fn release(&mut self, input: RewriterHandle) -> u32;
 }
 
-/// The buffer side of `fn_2104b0`'s engine: ordered byte appends and output
-/// disposal.
 pub trait RewriterBuffer {
     fn append(&mut self, output: RewriterHandle, data: &[u8]) -> u32;
     fn release(&mut self, output: RewriterHandle) -> u32;
 }
 
-/// The position side of `fn_2104b0`'s engine: two `i32` words selected by
-/// `which`.
 pub trait RewriterPositions {
     fn get(&mut self, handle: RewriterHandle, out: &mut i32, which: u32) -> u32;
     fn set(&mut self, handle: RewriterHandle, value: i32, which: u32) -> u32;
 }
 
-/// The whole `fn_2104b0` engine: text, buffer and position access together.
 pub trait RewriterEngine: RewriterText + RewriterBuffer + RewriterPositions {}
 
 impl<T: RewriterText + RewriterBuffer + RewriterPositions> RewriterEngine for T {}
 
-/// Caller-owned `fn_2104b0` owner state: three output handles, the position
-/// handle and the star-preservation flag.
 pub struct TextRewriter {
     pub outputs: [RewriterHandle; 3],
     pub position_handle: RewriterHandle,
@@ -790,13 +724,6 @@ fn serialize_events(events: &[TextEvent], out: &mut [u8]) -> Result<usize, Error
     Ok(need)
 }
 
-/// fn_2104b0 / EU fn_21066c / KR fn_210718.
-///
-/// Rewrites one text record into the three output buffers. `event_scratch`
-/// holds the engine's event records, `text_scratch` the engine's text, and
-/// `event_bytes` the serialized events for the whole-record appends; the
-/// caller sizes all three for its workload. `active` is set to 1 once the
-/// handle validates, even when the first output is missing.
 #[allow(clippy::too_many_arguments)]
 pub fn rewrite_text(
     owner: &mut TextRewriter,
@@ -1347,17 +1274,10 @@ fn rewrite_long(
     Ok(*result)
 }
 
-/// fn_176fd4 / EU fn_177084 / KR fn_177030.
-///
-/// Copies the caller's 8-byte pair to the output. The original reads a
-/// global pair; the caller supplies its bytes.
 pub fn load_pair(out: &mut [u8; 8], value: &[u8; 8]) {
     out.copy_from_slice(value);
 }
 
-/// fn_1757a8 / EU fn_175858 / KR fn_175804.
-///
-/// Null-checks a handle without dereferencing it.
 pub fn check_handle(present: bool) -> u32 {
     if present {
         0
@@ -1366,24 +1286,15 @@ pub fn check_handle(present: bool) -> u32 {
     }
 }
 
-/// fn_17eb74 / EU fn_17ec24 / KR fn_17ebd0.
-///
-/// Reads the caller's license counter without changing it.
 pub fn license_counter(counter: u32) -> u32 {
     counter
 }
 
-/// fn_17eb3c / EU fn_17ebec / KR fn_17eb98.
-///
-/// Increments the caller's license counter and scales the feature.
 pub fn acquire_license(counter: &mut u32, feature: u32) -> u32 {
     *counter = counter.wrapping_add(1);
     feature.wrapping_mul(100000)
 }
 
-/// fn_17eb58 / EU fn_17ec08 / KR fn_17ebb4.
-///
-/// Decrements a nonzero caller's license counter.
 pub fn release_license(counter: &mut u32) -> u32 {
     if *counter != 0 {
         *counter -= 1;
@@ -1391,16 +1302,10 @@ pub fn release_license(counter: &mut u32) -> u32 {
     0
 }
 
-/// fn_17c7b8 / EU fn_17c868 / KR fn_17c814.
-///
-/// Low two bits of the caller's 256-entry class table at the low byte.
 pub fn char_class(table: &[u16; 256], c: u32) -> u32 {
     u32::from(table[(c & 0xff) as usize] & 3)
 }
 
-/// fn_17c8c0 / EU fn_17c970 / KR fn_17c91c.
-///
-/// Folds to lowercase when the class table's bit 0 is set for the low byte.
 pub fn ascii_fold(table: &[u16; 256], c: u32) -> u32 {
     if table[(c & 0xff) as usize] & 1 != 0 {
         c.wrapping_add(0x20)
@@ -1409,11 +1314,6 @@ pub fn ascii_fold(table: &[u16; 256], c: u32) -> u32 {
     }
 }
 
-/// fn_1769d0 / EU fn_176a80 / KR fn_176a2c.
-///
-/// Case-insensitive byte comparison through the class table. Inputs must be
-/// NUL-terminated within the borrowed slices; the original reads past the
-/// terminator only on difference.
 pub fn compare_folded(table: &[u16; 256], a: &[u8], b: &[u8]) -> i32 {
     let mut index = 0usize;
     if ascii_fold(table, a[0] as u32) == ascii_fold(table, b[0] as u32) {
@@ -1430,12 +1330,6 @@ pub fn compare_folded(table: &[u16; 256], a: &[u8], b: &[u8]) -> i32 {
     ascii_fold(table, a[index] as u32) as i32 - ascii_fold(table, b[index] as u32) as i32
 }
 
-/// fn_176a48 / EU fn_176af8 / KR fn_176aa4.
-///
-/// Bounded case-insensitive byte comparison through the class table. The
-/// limit uses the original unsigned comparison after the usual conversions,
-/// so a negative limit behaves as unbounded; inputs must still be
-/// NUL-terminated within the borrowed slices.
 pub fn compare_folded_bounded(table: &[u16; 256], a: &[u8], b: &[u8], n: i32) -> i32 {
     let mut index = 0u32;
     while (n as u32) > index {
@@ -1459,22 +1353,12 @@ pub fn compare_folded_bounded(table: &[u16; 256], a: &[u8], b: &[u8], n: i32) ->
         - ascii_fold(table, b[index as usize] as u32) as i32
 }
 
-/// Caller-owned array for `fn_196fbc` element removal.
 pub struct ElementArray<'a> {
     pub data: &'a mut [u8],
     pub elem_size: u16,
     pub count: u32,
 }
 
-/// fn_196fbc / EU fn_19706c / KR fn_1970a8.
-///
-/// Removes the element at `elem`, shifting the tail down with overlap-safe
-/// copy semantics and decrementing the count. `elem` is an element index;
-/// `None` is the null pointer and reports 0. `dtor`, when present, runs
-/// first on the element bytes, matching the engine's destructor ordering.
-/// An out-of-range index, including the one-past-end slot the original
-/// accepts before overrunning its copy length, reports 0 instead of
-/// accessing outside the borrowed slice.
 pub fn remove_element(
     array: &mut ElementArray<'_>,
     elem: Option<usize>,
@@ -1505,12 +1389,6 @@ pub fn remove_element(
     1
 }
 
-/// fn_175ef0 / EU fn_175fa0 / KR fn_175f4c.
-///
-/// Lock-guarded element removal. A missing owner or element reports
-/// `0x8b702007` without touching the lock; otherwise the lock is acquired,
-/// the element removed (a miss reports `0x8b702007`), and the lock
-/// released, with a failing release overriding a successful removal.
 pub fn remove_guarded(
     array: Option<&mut ElementArray<'_>>,
     elem: Option<usize>,
@@ -1533,9 +1411,6 @@ pub fn remove_guarded(
     status
 }
 
-/// fn_1970a0 / EU fn_197150 / KR fn_19718c.
-///
-/// Reads word 5 of the borrowed table; a missing table reports 0.
 pub fn word_at5(input: Option<&[u32; 6]>) -> u32 {
     match input {
         Some(words) => words[5],
@@ -1543,18 +1418,12 @@ pub fn word_at5(input: Option<&[u32; 6]>) -> u32 {
     }
 }
 
-/// Caller-owned element table for `fn_1970ac` slot lookup.
 pub struct ElementTable<'a> {
     pub data: &'a [u8],
     pub elem_size: u16,
     pub count: u32,
 }
 
-/// fn_1970ac / EU fn_19715c / KR fn_197198.
-///
-/// Writes the byte offset of slot `index` from the start of the table data.
-/// A missing table/output or an out-of-range index reports 0 without
-/// writing; the index/size product wraps mod 2^32 like the original.
 pub fn element_at(table: Option<&ElementTable<'_>>, index: u32, out: Option<&mut u32>) -> u32 {
     let (Some(table), Some(out)) = (table, out) else {
         return 0;
@@ -1566,11 +1435,6 @@ pub fn element_at(table: Option<&ElementTable<'_>>, index: u32, out: Option<&mut
     1
 }
 
-/// fn_195ae8 / EU fn_195b98 / KR fn_195bd4.
-///
-/// Copies `n` bytes forward from `src` to `dst`. Both sides must lend at
-/// least `n` bytes. The regions must not overlap: the original always
-/// copies forward, which safe borrowing cannot express for aliased slices.
 pub fn copy_bytes(dst: &mut [u8], src: &[u8], n: u32) {
     let n = n as usize;
     for i in 0..n {
@@ -1578,13 +1442,6 @@ pub fn copy_bytes(dst: &mut [u8], src: &[u8], n: u32) {
     }
 }
 
-/// Caller-owned growable block shared by `fn_196cfc` and `fn_196db0`.
-///
-/// `data` is an offset into caller memory (`0` is null). Words +12 and the
-/// high half of +24 are preserved bytes neither function reads. `callback`
-/// is the `fn_196db0` view of word +8 (presence only); `heap` is word +28,
-/// which `fn_196cfc` uses as the heap id and `fn_196db0` passes on as the
-/// callback cookie.
 pub struct GrowBlock {
     pub data: u32,
     pub elem_size: u16,
@@ -1595,21 +1452,12 @@ pub struct GrowBlock {
     pub heap: u32,
 }
 
-/// Scripted heap behind `fn_196cfc`/`fn_196a64`: offsets into caller memory,
-/// `0` fails.
 pub trait BlockHeap {
     fn alloc_block(&mut self, heap: u32, size: u32) -> u32;
     fn realloc_block(&mut self, heap: u32, data: u32, size: u32) -> u32;
     fn alloc_cells(&mut self, heap: u32, count: u32, size: u32) -> u32;
 }
 
-/// fn_196cfc / EU fn_196dac / KR fn_196de8.
-///
-/// Appends a slot, growing the block to the next quantum multiple first.
-/// Writes the new slot's offset and reports 1; a missing block/output, a
-/// failed heap call, or a zero growth quantum with growth needed reports 0.
-/// A zero quantum divides by zero on ARM (degenerate) and traps in C, so
-/// the port totalizes it to failure without touching the block.
 pub fn append_slot(
     block: Option<&mut GrowBlock>,
     heap: &mut impl BlockHeap,
@@ -1651,13 +1499,6 @@ pub fn append_slot(
     1
 }
 
-/// fn_196a64 / EU fn_196b14 / KR fn_196b50.
-///
-/// Allocates a 32-byte block and initializes it: zeros at words +0/+16/+20,
-/// `b`/`c`/`d` at words +4/+8/+12, the low half of `e` at +24 and the heap
-/// id `a` at +28. The half at +26 is preserved. Reports 1 with the block
-/// offset; mismatched `c`/`d` presence or a missing output fails before
-/// allocating, and heap failure writes a null output.
 pub fn create_block(
     heap: &mut impl BlockHeap,
     a: u32,
@@ -1695,13 +1536,6 @@ pub fn create_block(
     1
 }
 
-/// fn_196db0 / EU fn_196e60 / KR fn_196e9c.
-///
-/// Appends `src` as a new element: takes a slot, copies the element bytes
-/// into caller memory at the slot offset, and runs the callback with the
-/// source id, heap cookie and slot offset. A callback veto decrements the
-/// count and reports 0. Callback presence comes from `cb`, not from the
-/// block's address-valued word; callers pass `None` when it is null.
 pub fn append_element(
     block: Option<&mut GrowBlock>,
     mem: &mut [u8],
@@ -1729,15 +1563,6 @@ pub fn append_element(
     1
 }
 
-/// fn_175c40 / EU fn_175cf0 / KR fn_175c9c.
-///
-/// Lock-guarded owner append: appends `{owner_id, 0}` as a new element and
-/// reports the new last slot's offset through `q`. Missing owner/output
-/// reports `0x8b702007` without locking; lock failure returns without
-/// unlocking; append/lookup failures report `0x8b70200a`/`0x8b702100`, with
-/// a failing unlock overriding a success. The callback observes the owner
-/// id as the source id: the transient `k` has no stable offset-space
-/// address.
 pub fn append_owner(
     block: Option<&mut GrowBlock>,
     mem: &mut [u8],
@@ -1775,13 +1600,6 @@ pub fn append_owner(
     status
 }
 
-/// fn_198760 / EU fn_198810 / KR fn_19884c.
-///
-/// Searches the node tree for `key` with the caller's comparator. Nodes
-/// are 24-byte records in `mem` (`next` at +0, `prev` at +4, key at +16);
-/// links and `head` are offsets with `tree` as the sentinel. With `flag`
-/// set, walks to the last consecutive match. Reports the found offset, or
-/// `None` on a miss. The comparator must order like wrapping subtraction.
 pub fn find_node(
     mem: &[u8],
     tree: u32,
@@ -1822,12 +1640,6 @@ pub fn find_node(
     }
 }
 
-/// fn_1966ac + fn_1966ec (identical bodies) / EU fn_19675c + fn_19679c /
-/// KR fn_196798 + fn_1967d8.
-///
-/// Looks `key` up in the tree at `base` + 24 and reports the found node's
-/// value word through `out`. A missing base/output or a zero key reports
-/// `0x89002007` without searching; a miss reports `0x89002014`.
 pub fn lookup_value(
     mem: &[u8],
     base: Option<u32>,
@@ -1891,26 +1703,12 @@ fn store_block(mem: &mut [u8], at: u32, block: &GrowBlock) {
     mem_store(mem, at + 28, block.heap);
 }
 
-/// Caller-owned parameters for `fn_174e74`: heap id, optional tree base and
-/// optional extra-block offset into `mem`.
 pub struct RegisterParams {
     pub heap: u32,
     pub values: Option<u32>,
     pub extra: Option<u32>,
 }
 
-/// fn_174e74 / EU fn_174f24 / KR fn_174ed0.
-///
-/// Registers an owner: with a live key, looks up the values tree and
-/// appends the 12 owner bytes to the found entry's callback block (reached
-/// through the entry's value word plus 8), creating it from `def` when
-/// missing; with a null or empty key, appends to the extra block instead.
-/// A missing owner or a null `set` word reports
-/// `0x8b702007` without locking; lookup failures remap `0x89002007` /
-/// `0x89002014` to `0x8b702007` / `0x8b702014`; create/append failures
-/// report `0x8b70200a`; a failing unlock overrides a success. Key identity
-/// for the search is the second tuple element; the callback observes 0 as
-/// the source id since the transient owner has no stable offset.
 pub fn register_owner(
     params: Option<RegisterParams>,
     mem: &mut [u8],
@@ -2038,11 +1836,6 @@ fn nz(value: u32) -> Option<u32> {
     }
 }
 
-/// fn_195aac / EU fn_195b5c / KR fn_195b98.
-///
-/// Bounded byte comparison: compares up to `n` bytes and reports the
-/// first differing pair as unsigned bytes. A zero bound reports 0 without
-/// reading. Both sides must lend at least `n` bytes when `n` is nonzero.
 pub fn compare_bytes(a: &[u8], b: &[u8], n: u32) -> i32 {
     if n == 0 {
         return 0;
@@ -2056,10 +1849,6 @@ pub fn compare_bytes(a: &[u8], b: &[u8], n: u32) -> i32 {
     a[i] as i32 - b[i] as i32
 }
 
-/// fn_195d90 / EU fn_195e40 / KR fn_195e7c.
-///
-/// Reports the length of the NUL-terminated bytes at the start of `s`.
-/// The terminator must be within the borrowed slice.
 pub fn strlen_bytes(s: &[u8]) -> u32 {
     let mut len = 0u32;
     while s[len as usize] != 0 {
@@ -2068,19 +1857,12 @@ pub fn strlen_bytes(s: &[u8]) -> u32 {
     len
 }
 
-/// Scripted heap vtable behind `fn_196394` / `fn_1963e0` / `fn_196428`:
-/// `obj` is the heap object's context word (offset +4), the method words
-/// themselves are never read. Offsets into caller memory, `0` is null.
 pub trait HeapVtable {
     fn alloc_at(&mut self, obj: u32, size: u32) -> u32;
     fn realloc_at(&mut self, obj: u32, old: u32, size: u32) -> u32;
     fn release_at(&mut self, obj: u32, object: u32);
 }
 
-/// fn_196394 / EU fn_196444 / KR fn_196480.
-///
-/// Allocates `size` bytes through the heap's first method. A null heap or
-/// a zero size reports 0 without calling.
 pub fn heap_alloc(mem: &[u8], heap: Option<u32>, size: u32, vt: &mut impl HeapVtable) -> u32 {
     let Some(heap) = heap else {
         return 0;
@@ -2091,11 +1873,6 @@ pub fn heap_alloc(mem: &[u8], heap: Option<u32>, size: u32, vt: &mut impl HeapVt
     vt.alloc_at(mem_word(mem, heap + 4), size)
 }
 
-/// fn_1963e0 / EU fn_196490 / KR fn_1964cc.
-///
-/// Regrows `old` to `size` bytes through the heap's third method, or
-/// allocates through the first method when `old` is null. A null heap or
-/// a zero size reports 0 without calling.
 pub fn heap_realloc(
     mem: &[u8],
     heap: Option<u32>,
@@ -2117,10 +1894,6 @@ pub fn heap_realloc(
     }
 }
 
-/// fn_196428 / EU fn_1964d8 / KR fn_196514.
-///
-/// Releases `object` through the heap's fourth method. A null heap or a
-/// null object returns without calling.
 pub fn heap_release(mem: &[u8], heap: Option<u32>, object: Option<u32>, vt: &mut impl HeapVtable) {
     let Some(heap) = heap else {
         return;
@@ -2131,16 +1904,6 @@ pub fn heap_release(mem: &[u8], heap: Option<u32>, object: Option<u32>, vt: &mut
     vt.release_at(mem_word(mem, heap + 4), object);
 }
 
-/// fn_180d3c / EU fn_180dec / KR fn_180d98.
-///
-/// Allocates `size` bytes (rounded up to 4) from the arena's chunk
-/// list, growing it through `alloc` when no chunk fits. A fresh
-/// arena (zero total) grows by at least its minimum size, otherwise
-/// by at least the grow size; the new chunk links at the head or the
-/// tail and the total advances, then the used count advances by the
-/// rounded size. `alloc` takes the context heap and the chunk size
-/// with header and reports the new chunk or 0, in which case the
-/// arena is unchanged and 0 is returned.
 pub fn arena_alloc(
     mem: &mut [u8],
     arena: u32,
@@ -2205,11 +1968,6 @@ pub fn arena_alloc(
     result
 }
 
-/// Scripted tree operations behind `fn_198868` / `fn_198e34`: comparison,
-/// key creation, handle allocation and both releases. The `node` argument
-/// to `tree_init` is the new node's offset so the caller can see the key
-/// slot the original passes by pointer; a reported key is stored there
-/// whether creation succeeds or not, since the callback runs first.
 pub trait TreeOps {
     fn tree_cmp(&mut self, key: u32, node_key: u32) -> i32;
     fn tree_init(&mut self, key: u32, heap: u32, node: u32) -> (u32, Option<u32>);
@@ -2311,14 +2069,6 @@ pub(crate) fn rebalance(mem: &mut [u8], t: u32, mut n: u32, mut p: u32) {
     mem[(root + 12) as usize] = 1;
 }
 
-/// fn_198868 / EU fn_198918 / KR fn_198954.
-///
-/// Inserts `node` under `key` into the red-black tree rooted at `tree`
-/// (itself the sentinel header: root at +0, size at +24, heap id at +32,
-/// unique flag at +40). Nodes are 44-byte records. A duplicate key in a
-/// non-unique tree reports `0x89002002`; a failing key creation reports
-/// its status; otherwise the node is linked, counted, painted red,
-/// rebalanced and the creation status is reported.
 pub fn tree_insert(mem: &mut [u8], tree: u32, node: u32, key: u32, ops: &mut impl TreeOps) -> u32 {
     let mut p = tree;
     let mut x = mem_word(mem, tree);
@@ -2356,14 +2106,6 @@ pub fn tree_insert(mem: &mut [u8], tree: u32, node: u32, key: u32, ops: &mut imp
     rc
 }
 
-/// fn_198e34 / EU fn_198ee4 / KR fn_198f20.
-///
-/// Allocates a 24-byte node through the heap, takes an optional handle
-/// for `b`, and inserts under `a`. Reports 0 on success; heap failure
-/// reports `0x8900200a`, and a failed insert frees the handle, the node
-/// key and the node before reporting the insert status. The original's
-/// fourth argument is dead (never read by the ARM), so the port takes
-/// three.
 pub fn tree_alloc_insert(
     mem: &mut [u8],
     s: u32,
@@ -2406,11 +2148,6 @@ pub fn tree_alloc_insert(
     r
 }
 
-/// fn_19668c / EU fn_19673c / KR fn_196778.
-///
-/// Inserts into the tree 24 bytes past `base` under `key`, carrying
-/// `value` opaquely to the handle allocator. Any null argument reports
-/// `0x89002007` without touching the tree.
 pub fn insert_guarded(
     mem: &mut [u8],
     base: Option<u32>,
@@ -2428,18 +2165,10 @@ pub fn insert_guarded(
     tree_alloc_insert(mem, base.wrapping_add(24), key, value, heap_vt, ops)
 }
 
-/// Scripted element callback behind `fn_176104`: `a` is the element's
-/// first word, `q`/`r` the caller's opaque cookies.
 pub trait ElementCallback {
     fn call_element(&mut self, a: u32, q: u32, r: u32) -> u32;
 }
 
-/// fn_176104 / EU fn_1761b4 / KR fn_176160.
-///
-/// Runs the element callbacks of the table at `o` + 8, then the table at
-/// `p` + 12, each as `(first_word, q, r)`. Any null argument reports 0
-/// without running; a failed slot lookup reports `0x8b702100`; the first
-/// failing callback status is reported.
 pub fn run_element_callbacks(
     mem: &[u8],
     p: Option<u32>,
@@ -2491,16 +2220,6 @@ pub fn run_element_callbacks(
     0
 }
 
-/// fn_176054 / EU fn_176104 / KR fn_1760b0.
-///
-/// Stores `n` bytes from `src_off` into the `{data, size}` slot at
-/// `slot_at`, allocating when empty and regrowing when short. A zero
-/// length releases a live buffer and stores the source offset as-is. A
-/// null slot reports `0x8b702007`; heap failure reports `0x8b70200a`,
-/// storing the null first on the allocate path but not on regrow.
-/// The regrow call passes all three arguments (heap, data, length) as the
-/// ARM does; `src/fn_176054.c` line 19 drops the length (C defect: the
-/// callee then reads an unpassed third parameter).
 pub fn store_sized(
     mem: &mut [u8],
     slot_at: Option<u32>,
@@ -2545,15 +2264,6 @@ pub fn store_sized(
     0
 }
 
-/// fn_174b38 / EU fn_174be8 / KR fn_174b94.
-///
-/// Walks the element table at `obj` + 16, offering `{data, size}` to each
-/// entry's tree. A duplicate-key answer with `upd` set looks the entry up
-/// and replaces its value bytes, allocating or regrowing through the
-/// heap id at the entry's double-indirect word. `scratch` lends 12 bytes
-/// for the transient offered value. Lookup failures remap `0x890020xx`
-/// to `0x8b7020xx`; a null value slot reports `0x8b702007` and heap
-/// failure reports `0x8b70200a`.
 pub fn update_attr(
     mem: &mut [u8],
     obj: u32,
@@ -2655,9 +2365,6 @@ pub fn update_attr(
     r
 }
 
-/// Scripted change gate behind `fn_175170`: observes the callback's
-/// context with the key/data offsets and either reports a status or
-/// clears `allow` to veto, which reports `0x8b70200f`.
 pub trait BeforeChange {
     fn before(&mut self, context: u32, key: u32, data: u32, allow: &mut u8) -> u32;
 }
@@ -2707,18 +2414,6 @@ pub(crate) fn before_change(
     rc
 }
 
-/// fn_175170 / EU fn_175220 / KR fn_1751cc.
-///
-/// Sets the `key` parameter to `size` bytes at `data` under the caller's
-/// lock, gating on the value's then the parameters' change callbacks,
-/// pushing the update through `update_attr`, storing into the looked-up
-/// value slot, and notifying element callbacks. A lookup miss builds a
-/// transient value in the first 12 bytes of `scratch` and inserts it
-/// instead; the next 12 bytes serve `update_attr`. A null parameters
-/// base, key or data reports `0x8b702007` without locking; insert and
-/// notify failures on a miss remap `0x890020xx` to `0x8b7020xx`; a
-/// failing unlock overrides a success. `scratch` must be nonzero with 24
-/// writable bytes.
 #[allow(clippy::too_many_arguments)]
 pub fn set_param(
     mem: &mut [u8],
@@ -2855,11 +2550,6 @@ pub fn set_param(
     result
 }
 
-/// fn_1759a0 / EU fn_175a50 / KR fn_1759fc.
-///
-/// Sets parameter `key` to the NUL-terminated bytes at `s` (length plus
-/// terminator) without the update flag. A null `s` uses the empty string
-/// at `empty`.
 #[allow(clippy::too_many_arguments)]
 pub fn set_param_str(
     mem: &mut [u8],
@@ -2882,11 +2572,6 @@ pub fn set_param_str(
     )
 }
 
-/// fn_1759e0 / EU fn_175a90 / KR fn_175a3c.
-///
-/// Sets parameter `key` to the NUL-terminated bytes at `value` (length
-/// plus terminator) with the update flag. A null `value` uses the empty
-/// string at `empty`.
 #[allow(clippy::too_many_arguments)]
 pub fn set_param_kv(
     mem: &mut [u8],
@@ -2909,9 +2594,6 @@ pub fn set_param_kv(
     )
 }
 
-/// fn_195bec / EU fn_195c9c / KR fn_195cd8.
-///
-/// Fills `n` bytes at `dst` with the low byte of `val`; returns `dst`.
 pub fn fill_bytes(mem: &mut [u8], dst: u32, val: u32, n: u32) -> u32 {
     let value = val as u8;
     if n != 0 {
@@ -2929,10 +2611,6 @@ pub fn fill_bytes(mem: &mut [u8], dst: u32, val: u32, n: u32) -> u32 {
     dst
 }
 
-/// fn_195cd0 / EU fn_195d80 / KR fn_195dbc.
-///
-/// Copies the NUL-terminated bytes at `src` to `dst`, terminator
-/// included; returns `dst`.
 pub fn copy_str(mem: &mut [u8], dst: u32, src: u32) -> u32 {
     let mut d = dst as usize;
     let mut s = src as usize;
@@ -2948,10 +2626,6 @@ pub fn copy_str(mem: &mut [u8], dst: u32, src: u32) -> u32 {
     dst
 }
 
-/// fn_195d58 / EU fn_195e08 / KR fn_195e44.
-///
-/// Compares two NUL-terminated strings, normalizing the first differing
-/// byte difference to -1, 0 or 1.
 pub fn compare_str(a: &[u8], b: &[u8]) -> i32 {
     let mut i = 0usize;
     let mut d = a[0] as i32 - b[0] as i32;
@@ -2968,11 +2642,6 @@ pub fn compare_str(a: &[u8], b: &[u8]) -> i32 {
     }
 }
 
-/// fn_195b38 / EU fn_195be8 / KR fn_195c24.
-///
-/// Copies `n` bytes from `src` to `dst`, copying backwards when the
-/// ranges overlap with `dst` above `src` (wrapping address arithmetic,
-/// matching the ARM); returns `dst`.
 pub fn move_bytes(mem: &mut [u8], dst: u32, src: u32, n: u32) -> u32 {
     if dst > src && src.wrapping_add(n) > dst {
         let mut d = dst.wrapping_add(n) as usize;
@@ -3000,10 +2669,6 @@ pub fn move_bytes(mem: &mut [u8], dst: u32, src: u32, n: u32) -> u32 {
     dst
 }
 
-/// fn_195c90 / EU fn_195d40 / KR fn_195d7c.
-///
-/// Appends the NUL-terminated bytes at `src` to the NUL-terminated
-/// bytes at `dst`, terminator included; returns `dst`.
 pub fn append_str(mem: &mut [u8], dst: u32, src: u32) -> u32 {
     let mut d = dst as usize;
     while mem[d] != 0 {
@@ -3022,12 +2687,6 @@ pub fn append_str(mem: &mut [u8], dst: u32, src: u32) -> u32 {
     dst
 }
 
-/// fn_195df8 / EU fn_195ea8 / KR fn_195ee4.
-///
-/// Compares at most `n` bytes of two NUL-terminated strings, reporting
-/// the first differing byte difference (or the NUL-vs-byte difference
-/// when `a` ends first). A zero `n` reports 0; a negative `n` behaves
-/// as unbounded, matching the wrapping counter.
 pub fn compare_str_n(a: &[u8], b: &[u8], n: i32) -> i32 {
     if n == 0 {
         return 0;
@@ -3044,11 +2703,6 @@ pub fn compare_str_n(a: &[u8], b: &[u8], n: i32) -> i32 {
     a[i] as i32 - b[i] as i32
 }
 
-/// fn_1960a8 / EU fn_196158 / KR fn_196194.
-///
-/// Reports the offset of the first occurrence of the NUL-terminated
-/// needle at `s2` in the haystack at `s1`, or 0 on a miss. An empty
-/// needle matches at `s1`.
 pub fn find_substr(mem: &[u8], s1: u32, s2: u32) -> u32 {
     if mem[s2 as usize] == 0 {
         return s1;
@@ -3069,27 +2723,14 @@ pub fn find_substr(mem: &[u8], s1: u32, s2: u32) -> u32 {
     0
 }
 
-/// fn_17c7d0 / EU fn_17c880 / KR fn_17c82c.
-///
-/// Reports bit 2 (value 4) of the class-table entry for the low byte of
-/// `c`; the digit class.
 pub fn char_is_digit(table: &[u16; 256], c: u32) -> u32 {
     (table[(c & 0xff) as usize] & 4) as u32
 }
 
-/// fn_17c800 / EU fn_17c8b0 / KR fn_17c85c.
-///
-/// Reports bit 3 (value 8) of the class-table entry for the low byte of
-/// `c`; the whitespace class.
 pub fn char_is_space(table: &[u16; 256], c: u32) -> u16 {
     table[(c & 0xff) as usize] & 8
 }
 
-/// fn_14e084 / EU fn_14e148 / KR fn_14e068.
-///
-/// Increments the reference count at `p` + 22 and reports `p` through
-/// `out`. A null `p`, `b` or `out` reports `0x88f02007`; `b` is only
-/// null-checked.
 pub fn add_ref(mem: &mut [u8], p: Option<u32>, b: Option<u32>, out: Option<u32>) -> u32 {
     let (Some(p), Some(out)) = (p, out) else {
         return 0x88f02007;
@@ -3103,11 +2744,6 @@ pub fn add_ref(mem: &mut [u8], p: Option<u32>, b: Option<u32>, out: Option<u32>)
     0
 }
 
-/// fn_160ac4 / EU fn_160b88 / KR fn_160aa8.
-///
-/// Null-tolerant string comparison: two live strings defer to the
-/// folded comparison, otherwise a non-empty string against null reports
-/// 1 and anything else reports 0.
 pub fn compare_nullable(
     table: &[u16; 256],
     mem: &[u8],
@@ -3130,11 +2766,6 @@ pub fn compare_nullable(
     }
 }
 
-/// fn_17b654 / EU fn_17b704 / KR fn_17b6b0.
-///
-/// Releases the extra block at `p` + 12 when live, then releases `p`
-/// itself through the allocator at `p`; a null `p` reports
-/// `0x8a402007`.
 pub fn release_handle(mem: &[u8], p: Option<u32>, vt: &mut impl HeapVtable) -> u32 {
     let Some(p) = p else {
         return 0x8a402007;
@@ -3148,10 +2779,6 @@ pub fn release_handle(mem: &[u8], p: Option<u32>, vt: &mut impl HeapVtable) -> u
     0
 }
 
-/// fn_14dfc0 / EU fn_14e084 / KR fn_14dfa4.
-///
-/// Releases the head block when live, then releases `p` itself through
-/// `alloc`; a null `p` returns quietly.
 pub fn release_list(
     mem: &[u8],
     p: Option<u32>,
@@ -3168,10 +2795,6 @@ pub fn release_list(
     heap_release(mem, alloc, Some(p), vt);
 }
 
-/// fn_196830 / EU fn_1968e0 / KR fn_19691c.
-///
-/// Releases `p` through the owner behind its vtable; a null `p`
-/// reports `0x89002007`.
 pub fn release_owner(mem: &[u8], p: Option<u32>, vt: &mut impl HeapVtable) -> u32 {
     let Some(p) = p else {
         return 0x89002007;
@@ -3181,11 +2804,6 @@ pub fn release_owner(mem: &[u8], p: Option<u32>, vt: &mut impl HeapVtable) -> u3
     0
 }
 
-/// fn_160b0c / EU fn_160bd0 / KR fn_160af0.
-///
-/// Allocates an 8-byte object, stores the heap back-pointer, zeroes the
-/// two halfwords and reports the object through `out`. A null `out`
-/// reports `0x87f66006`; allocation failure reports `0x87f6600a`.
 pub fn alloc_obj(
     mem: &mut [u8],
     heap: Option<u32>,
@@ -3205,12 +2823,6 @@ pub fn alloc_obj(
     0
 }
 
-/// fn_19690c / EU fn_1969bc / KR fn_1969f8.
-///
-/// Duplicates the NUL-terminated string at `src` onto `heap` (length
-/// plus terminator) and reports the copy through `out`. A null `src`,
-/// `heap` or `out` reports `0x89002007`; allocation failure reports
-/// `0x8900200a`.
 pub fn clone_str(
     mem: &mut [u8],
     src: Option<u32>,
@@ -3233,13 +2845,6 @@ pub fn clone_str(
     0
 }
 
-/// fn_198a80 / EU fn_198b30 / KR fn_198b6c.
-///
-/// Reports the in-order successor of node `n` under the `end`
-/// sentinel: down the `a` side it returns the last node of the
-/// `next` chain, otherwise it climbs the `b` side while each node
-/// still points back at the previous one, reporting 0 when the climb
-/// reaches `end`.
 pub fn successor_node(mem: &[u8], end: u32, n: u32) -> u32 {
     let a = mem_word(mem, n + 4);
     if a != end {
@@ -3265,12 +2870,6 @@ pub fn successor_node(mem: &[u8], end: u32, n: u32) -> u32 {
     }
 }
 
-/// fn_196860 / EU fn_196910 / KR fn_19694c.
-///
-/// Advances the iterator at `it` to its pending node, reporting the
-/// node's value pair through `outa`/`outb` and fetching the following
-/// node; with no pending node it zeroes both outputs and reports
-/// `0x89002017`. A null iterator or output reports `0x89002007`.
 pub fn step_iter(
     mem: &mut [u8],
     it: Option<u32>,
@@ -3298,16 +2897,10 @@ pub fn step_iter(
     }
 }
 
-/// Scripted two-argument method behind `fn_1963b8`: observes the
-/// object word with both integer arguments and reports a status.
 pub trait MethodTable {
     fn call_at(&mut self, obj: u32, a: u32, b: u32) -> u32;
 }
 
-/// fn_1963b8 / EU fn_196468 / KR fn_1964a4.
-///
-/// Dispatches `(a, b)` through the method table at `p`; a null `p`
-/// or a null argument reports 0 without dispatching.
 pub fn call_method(
     mem: &[u8],
     p: Option<u32>,
@@ -3324,12 +2917,6 @@ pub fn call_method(
     vt.call_at(mem_word(mem, p + 4), a, b)
 }
 
-/// fn_17b500 / EU fn_17b5b0 / KR fn_17b55c.
-///
-/// Allocates a handle cell through the method table at `a`, stores the
-/// allocator back-pointer into the cell and reports the cell through
-/// `out`. A null `out` reports `0x8a402007`; allocation failure
-/// reports `0x8a40200a`.
 pub fn create_handle(
     mem: &mut [u8],
     a: Option<u32>,
@@ -3349,14 +2936,6 @@ pub fn create_handle(
     }
 }
 
-/// fn_1756d0 / EU fn_175780 / KR fn_17572c.
-///
-/// Looks `key` up in the tree at `o` + 8 under the caller's lock,
-/// reporting the found entry's value pair through `p1`/`p2` (both
-/// zeroed first, and zeroed again when the entry's size word is 0). A
-/// null object, key or `p1` reports `0x8b702007`; lookup failures
-/// remap `0x890020xx` to `0x8b7020xx`; a failing unlock overrides a
-/// success.
 pub fn lookup_param(
     mem: &[u8],
     obj: Option<u32>,
@@ -3415,12 +2994,6 @@ pub fn lookup_param(
     result
 }
 
-/// fn_176cd8 / EU fn_176d88 / KR fn_176d34.
-///
-/// Parses an unsigned decimal integer, skipping leading blanks and
-/// tabs and one optional `+`. Parsing walks the digit run from the
-/// right with a decimal multiplier (wrapping); any other byte in the
-/// scanned span, or no digits at all, reports 0, as does a null `s`.
 pub fn parse_uint(mem: &[u8], s: Option<u32>) -> i32 {
     let Some(s) = s else {
         return 0;
@@ -3466,11 +3039,6 @@ pub fn parse_uint(mem: &[u8], s: Option<u32>) -> i32 {
     val
 }
 
-/// fn_17c550 / EU fn_17c600 / KR fn_17c5ac.
-///
-/// Parses a signed decimal integer, skipping whitespace, taking one
-/// optional sign and accumulating the digit run (wrapping); no digits
-/// parses as 0.
 pub fn parse_int(table: &[u16; 256], mem: &[u8], s: u32) -> i32 {
     let mut p = s as usize;
     while char_is_space(table, mem[p] as u32) != 0 {
@@ -3499,11 +3067,6 @@ pub fn parse_int(table: &[u16; 256], mem: &[u8], s: u32) -> i32 {
     }
 }
 
-/// fn_175944 / EU fn_1759f4 / KR fn_1759a0.
-///
-/// Looks up `(a, b)` and, on success with a size above 1, reports the
-/// entry's value parsed as an unsigned integer through `out` (0
-/// otherwise); returns the lookup status. `out` is always stored.
 pub fn get_param_uint(
     mem: &mut [u8],
     a: Option<u32>,
@@ -3524,11 +3087,6 @@ pub fn get_param_uint(
     err
 }
 
-/// fn_175850 / EU fn_175900 / KR fn_1758ac.
-///
-/// Looks up `(a, b)` and, on success with a size above 1, reports the
-/// entry's value parsed as a signed integer through `out` (0
-/// otherwise); returns the lookup status. `out` is always stored.
 pub fn get_param_int(
     table: &[u16; 256],
     mem: &mut [u8],
@@ -3550,10 +3108,6 @@ pub fn get_param_int(
     err
 }
 
-/// fn_175a1c / EU fn_175acc / KR fn_175a78.
-///
-/// Looks up `(a, b)`, reporting the entry's value word through `c` and
-/// the lookup status to the caller.
 pub fn fetch_param(
     mem: &[u8],
     a: Option<u32>,
@@ -3565,11 +3119,6 @@ pub fn fetch_param(
     lookup_param(mem, a, b, c, None, lock, cmp)
 }
 
-/// fn_196c7c / EU fn_196d2c / KR fn_196d68.
-///
-/// Destroys the element array at `a`: runs the destructor over the
-/// live elements when present, releases the data block when live, then
-/// releases the array itself; reports 1, or 0 for a null array.
 pub fn destroy_array(
     mem: &[u8],
     a: Option<u32>,
@@ -3597,11 +3146,6 @@ pub fn destroy_array(
     1
 }
 
-/// fn_178818 / EU fn_1788c8 / KR fn_178874.
-///
-/// Releases the tag handle: a null registry or tag reports
-/// `0x81506007`, otherwise the host-owned begin/end trace runs and 0
-/// is reported.
 pub fn release_tag(registry: Option<u32>, tag: Option<u32>) -> u32 {
     if registry.is_none() || tag.is_none() {
         return 0x81506007;
@@ -3609,11 +3153,6 @@ pub fn release_tag(registry: Option<u32>, tag: Option<u32>) -> u32 {
     0
 }
 
-/// fn_176edc / EU fn_176f8c / KR fn_176f38.
-///
-/// Runs the object's `call(arg)` hook when present, then releases the
-/// object through its heap when the hook reports success. A null `p`
-/// reports `0x81402007`.
 pub fn release_guarded(
     mem: &[u8],
     p: Option<u32>,
@@ -3635,12 +3174,6 @@ pub fn release_guarded(
     rc
 }
 
-/// fn_196e28 / EU fn_196ed8 / KR fn_196f14.
-///
-/// Removes element `idx` from the array at `a`: runs the destructor
-/// over it when present, shifts the tail down with an overlapping
-/// move and decrements the count. A null array or an out-of-range
-/// index reports 0 without touching anything.
 pub fn remove_at(
     mem: &mut [u8],
     a: Option<u32>,
@@ -3674,12 +3207,6 @@ pub fn remove_at(
     1
 }
 
-/// fn_190078 / EU fn_190128 / KR fn_190164.
-///
-/// Copies the NUL-terminated UTF-16 string at `src` to `dst` as
-/// ASCII, replacing non-Latin1 units with `?`. A null source, or a
-/// source (with terminator) longer than `cap`, clears `dst` and
-/// reports `0x80000006` / `0x80000007`.
 pub fn copy_utf16_as_ascii(
     mem: &mut [u8],
     src: Option<u32>,
@@ -3714,13 +3241,6 @@ pub fn copy_utf16_as_ascii(
     0
 }
 
-/// fn_14de40 / EU fn_14df04 / KR fn_14de24.
-///
-/// Attaches the `(handle, type)` reference to the log object: stores
-/// both words, raises the severity floor through the type's hook when
-/// present, and marks the object ready once a fully-described type
-/// lands. A null log reports 0; an already-typed log reports
-/// `0x84b02000` without touching anything.
 pub fn attach_log_handle(
     mem: &mut [u8],
     log: Option<u32>,
@@ -3754,11 +3274,6 @@ pub fn attach_log_handle(
     0
 }
 
-/// fn_173fd8 / EU fn_174088 / KR fn_174034.
-///
-/// Reports the maximum level over the five slots and the trailing
-/// vtable entry, starting from 1 and clamped to 4 when the clamp
-/// byte is set. A null `p` reports 0.
 pub fn max_slot_level(
     mem: &[u8],
     p: Option<u32>,
@@ -3796,13 +3311,6 @@ pub fn max_slot_level(
     max
 }
 
-/// fn_14df44 / EU fn_14e008 / KR fn_14df28.
-///
-/// Makes an 8-byte heap word object through the context's method,
-/// copies the input's half word into it and duplicates the input's
-/// string onto it, reporting the object through `out`. A null input,
-/// context or `out` reports `0x88f02007`; method failure reports
-/// `0x88f0200a`; a failed duplication releases the object.
 pub fn clone_labeled_word(
     mem: &mut [u8],
     input: Option<u32>,
@@ -3829,13 +3337,6 @@ pub fn clone_labeled_word(
     r
 }
 
-/// fn_176e40 / EU fn_176ef0 / KR fn_176e9c.
-///
-/// Makes a 12-byte node through the allocator's method, links it to
-/// `o` and the allocator, then runs the object's create hook to fill
-/// the payload word. A null argument reports `0x81402007`; method
-/// failure reports `0x8140200a`; a failed create releases the node
-/// and clears `out`.
 pub fn create_node(
     mem: &mut [u8],
     o: Option<u32>,
@@ -3869,11 +3370,6 @@ pub fn create_node(
     rc
 }
 
-/// fn_17a2ec / EU fn_17a39c / KR fn_17a348.
-///
-/// Closes the tag iterator: releases the live entry and iterator,
-/// then the iterator itself, all through the context heap. A null
-/// iterator reports `0x81506007`.
 pub fn close_tag_iter(
     mem: &[u8],
     p: Option<u32>,
@@ -3896,11 +3392,6 @@ pub fn close_tag_iter(
     0
 }
 
-/// fn_1788c0 / EU fn_178970 / KR fn_17891c.
-///
-/// Closes the component-table iterator: releases the live key
-/// (clearing it), the live iterator, then the iterator itself, all
-/// through the context heap. A null iterator reports `0x81506007`.
 pub fn close_component_iter(
     mem: &mut [u8],
     p: Option<u32>,
@@ -3923,12 +3414,6 @@ pub fn close_component_iter(
     0
 }
 
-/// fn_177b7c / EU fn_177c2c / KR fn_177bd8.
-///
-/// Opens a broker object: clears `out`, makes a 12-byte object
-/// through the context heap's method and links it to the context
-/// logger and the broker. A null broker reports `0x81506007`;
-/// method failure reports `0x8150600a`.
 pub fn open_broker_object(
     mem: &mut [u8],
     _id: Option<u32>,
@@ -3951,12 +3436,6 @@ pub fn open_broker_object(
     0
 }
 
-/// fn_18f24c / EU fn_18f2fc / KR fn_18f338.
-///
-/// Sets the live-handle state byte under the handle lock: when the
-/// current state is 1 it is reported through `out` and replaced by
-/// `val`, otherwise `0x80002011` is reported. A failing lock
-/// overrides only a success.
 pub fn set_lh_state(
     mem: &mut [u8],
     p: u32,
@@ -3982,14 +3461,6 @@ pub fn set_lh_state(
     rc
 }
 
-/// fn_1758f8 + fn_1758ac / EU fn_1759a8 + fn_17595c / KR fn_175954 +
-/// fn_175908.
-///
-/// Formats the unsigned integer `c` into the first 16 bytes of the
-/// 40-byte `scratch` region and stores it as the `key` parameter
-/// with the given update flag. Mirrors the C wrappers, whose buffer
-/// lives on the machine stack; `scratch` must sit outside the
-/// observed ranges.
 #[allow(clippy::too_many_arguments)]
 pub fn set_param_uint(
     mem: &mut [u8],
@@ -4027,11 +3498,6 @@ pub fn set_param_uint(
     )
 }
 
-/// fn_1757b8 / EU fn_175868 / KR fn_175814.
-///
-/// Formats the signed integer `val` into the first 16 bytes of
-/// the 40-byte `scratch` region and stores it as the `key` parameter
-/// without update. See `set_param_uint` for the scratch convention.
 #[allow(clippy::too_many_arguments)]
 pub fn set_param_int(
     mem: &mut [u8],
@@ -4068,21 +3534,10 @@ pub fn set_param_int(
     )
 }
 
-/// fn_176fc0 / EU fn_177070 / KR fn_17701c.
-///
-/// Reports whether the two 64-bit halves match: 1 when `ah == bh`
-/// and `al == bl`, else 0.
 pub fn match_halves(al: u32, ah: u32, bl: u32, bh: u32) -> u32 {
     u32::from(ah == bh && al == bl)
 }
 
-/// fn_1987fc / EU fn_1988ac / KR fn_1988e8.
-///
-/// Searches the tree at `a` for `b`: walks down the `hi` side while
-/// the key compares greater, down the `lo` side while it compares
-/// smaller (or whenever the flag is set, remembering the node),
-/// reporting the node on an exact flagged-off match, the last
-/// remembered node when the walk ends, or 0.
 pub fn search_node(
     mem: &[u8],
     a: u32,
@@ -4107,10 +3562,6 @@ pub fn search_node(
     prev
 }
 
-/// fn_198f74 / EU fn_199024 / KR fn_199060.
-///
-/// Reports the last node of the `head`-terminated link chain, or 0
-/// when the chain holds fewer than two live nodes.
 pub fn last_link(mem: &[u8], head: u32) -> u32 {
     let mut p = mem_word(mem, head);
     if p != head {
@@ -4128,10 +3579,6 @@ pub fn last_link(mem: &[u8], head: u32) -> u32 {
     if p == head { 0 } else { p }
 }
 
-/// fn_198728 / EU fn_1987d8 / KR fn_198814.
-///
-/// Initializes the link node at `p` as a self-loop carrying
-/// `(a, b, c)`: self links, zeroed zero/flag2 words, set flag.
 pub fn init_link(mem: &mut [u8], p: u32, a: u32, b: u32, c: u32) {
     mem_store(mem, p + 24, 0);
     mem[p as usize + 12] = 1;
@@ -4144,27 +3591,14 @@ pub fn init_link(mem: &mut [u8], p: u32, a: u32, b: u32, c: u32) {
     mem_store(mem, p + 8, p);
 }
 
-/// fn_198fa8 / EU fn_199058 / KR fn_199094.
-///
-/// Sets the flag byte at `p` + 0x28.
 pub fn set_link_flag(mem: &mut [u8], p: u32) {
     mem[p as usize + 0x28] = 1;
 }
 
-/// fn_17b824 / EU fn_17b8d4 / KR fn_17b880.
-///
-/// Reports the word at `p` + 8, or 0 for a null `p`.
 pub fn deref_slot2(mem: &[u8], p: Option<u32>) -> u32 {
     p.map_or(0, |p| mem_word(mem, p + 8))
 }
 
-/// fn_17a814 / EU fn_17a8c4 / KR fn_17a870.
-///
-/// Steps the tag iterator, reporting the entry name through `name`
-/// and the entry value through `value` (null when the entry carries
-/// attributes), plus the entry name through `attributes` when wanted.
-/// A null iterator, `name` or `value` reports `0x81506007`; a name
-/// that does not match the iterator filter reports `0x81506017`.
 pub fn next_tag_entry(
     mem: &mut [u8],
     it: Option<u32>,
@@ -4208,12 +3642,6 @@ pub fn next_tag_entry(
     rc
 }
 
-/// fn_160fec / EU fn_1610b0 / KR fn_160fd0.
-///
-/// Maps a raw status `code` to the reported error: codes below
-/// `0x80000000` report 0, otherwise the `0x80001fff` masked code
-/// reports itself when known, `0x8000010e` when the mask is 0, and
-/// `0x80000000` when unknown.
 pub fn classify_code(code: u32) -> u32 {
     if code < 0x80000000 {
         return 0;
@@ -4239,14 +3667,6 @@ pub fn classify_code(code: u32) -> u32 {
     }
 }
 
-/// fn_14fe9c / EU fn_14ff60 / KR fn_14fe80.
-///
-/// Starts a direct stream read: validates the `(object, tag)`
-/// handle, then reports the readable window through `buffer` and
-/// `available`. Failures clear both outputs (`available` only when
-/// non-null) and report `0x88f02007` for a null output, a foreign
-/// stream kind or a bad handle, `0x88f02004` when rewound past the
-/// buffer base, and `0x88f0200a` for a null buffer with live data.
 pub fn read_direct_start(
     mem: &mut [u8],
     obj: Option<u32>,
@@ -4306,12 +3726,6 @@ pub fn read_direct_start(
     0
 }
 
-/// fn_198fb4 / EU fn_199064 / KR fn_1990a0.
-///
-/// Destroys the subtree at `n` down to the `end` sentinel:
-/// recurses left and right, runs the context's pair hooks over the
-/// live payload words, then releases the node through the context
-/// heap.
 pub fn destroy_subtree(
     mem: &[u8],
     c: u32,
@@ -4340,11 +3754,6 @@ pub fn destroy_subtree(
     heap_release(mem, nz(heap), Some(n), vt);
 }
 
-/// fn_176fec / EU fn_17709c / KR fn_177048.
-///
-/// Fetches the database word for `key`, reporting it through `out`.
-/// Lookup failure reports `0x81506014`; a missing entry reports 0
-/// without touching `out`.
 pub fn fetch_db_word(
     mem: &mut [u8],
     db: Option<u32>,
@@ -4363,10 +3772,6 @@ pub fn fetch_db_word(
     0
 }
 
-/// fn_195d30 / EU fn_195de0 / KR fn_195e1c.
-///
-/// Reports the offset of the first `ch` byte in the string at `s`,
-/// or 0 when absent.
 pub fn find_byte(mem: &[u8], s: u32, ch: u32) -> u32 {
     let c = ch as u8;
     let mut p = s as usize;
@@ -4376,10 +3781,6 @@ pub fn find_byte(mem: &[u8], s: u32, ch: u32) -> u32 {
     if mem[p] == c { p as u32 } else { 0 }
 }
 
-/// fn_195e38 / EU fn_195ee8 / KR fn_195f24.
-///
-/// Copies at most `n` bytes from `src` to `dst`, stopping after the
-/// terminator and padding the remainder with zeros; reports `dst`.
 pub fn copy_str_n(mem: &mut [u8], dst: u32, src: u32, n: u32) -> u32 {
     let mut d = dst as usize;
     let mut s = src as usize;
@@ -4421,11 +3822,6 @@ pub fn copy_str_n(mem: &mut [u8], dst: u32, src: u32, n: u32) -> u32 {
     dst
 }
 
-/// fn_1959dc / EU fn_195a8c / KR fn_195ac8.
-///
-/// Flags the live-handle error value: a zero `v` returns quietly,
-/// otherwise the value lands in the flag byte under the object lock;
-/// lock failure is traced through the host-owned diagnostic.
 pub fn flag_lh_error(mem: &mut [u8], p: u32, v: u32, lock: &mut impl StateLock) {
     if v == 0 {
         return;
@@ -4437,13 +3833,6 @@ pub fn flag_lh_error(mem: &mut [u8], p: u32, v: u32, lock: &mut impl StateLock) 
     lock.release();
 }
 
-/// fn_196794 / EU fn_196844 / KR fn_196880.
-///
-/// Allocates a 12-byte handle for a tree hit: looks `a` up in the
-/// table at `p` + 0x18 (exact search, or last-link scan when `a` is
-/// 0), choosing the ordered or the hashed search by `b`. A null `p`
-/// or `out` reports `0x89002007`, a miss `0x89002014`, method
-/// failure `0x8900200a`.
 pub fn alloc_handle_for_key(
     mem: &mut [u8],
     p: Option<u32>,
@@ -4492,13 +3881,6 @@ pub fn alloc_handle_for_key(
     rc
 }
 
-/// fn_1964e0 / EU fn_196590 / KR fn_1965cc.
-///
-/// Creates a 0x44-byte context object through the context's method,
-/// stores the five words and links it to the context, initializing
-/// the trailing sub-object (flagged when `flag` is 1). A null word
-/// or `out` reports `0x89002007`; method failure reports
-/// `0x8900200a`.
 #[allow(clippy::too_many_arguments)]
 pub fn create_ctx_object(
     mem: &mut [u8],
@@ -4536,11 +3918,6 @@ pub fn create_ctx_object(
     0
 }
 
-/// fn_19869c / EU fn_19874c / KR fn_198788.
-///
-/// Clears the tree at `t`: destroys both head subtrees, runs the
-/// vtable pair hooks over the head's live words, releases the head,
-/// then resets count, head and tail.
 pub fn clear_tree(
     mem: &mut [u8],
     t: u32,
@@ -4570,19 +3947,12 @@ pub fn clear_tree(
     mem_store(mem, t + 4, t);
 }
 
-/// NUL-terminated string at `s`, terminator included. The caller
-/// guarantees a terminator in bounds, matching the original's reads.
 pub(crate) fn terminated(mem: &[u8], s: u32) -> &[u8] {
     let at = s as usize;
     let end = at + mem[at..].iter().position(|&c| c == 0).unwrap() + 1;
     &mem[at..end]
 }
 
-/// Shared `copyBrokerName` static behind `fn_1789b0`/`fn_17a3b8`:
-/// duplicates `name` onto `heap`, reporting through `out`. A null
-/// name reports `0x81506000` (leaving `*out` zeroed); allocation
-/// failure reports `0x8150600a`. The original's null-`out` check is
-/// dead: both callers pass a live word.
 fn copy_heap_string(
     mem: &mut [u8],
     heap: Option<u32>,
@@ -4603,9 +3973,6 @@ fn copy_heap_string(
     0
 }
 
-/// `matchComponent` static behind `fn_178c24`: reports through
-/// `matched` whether `key` satisfies the `/`-separated wildcard
-/// `pattern`, allocating the segment scratch on `heap`.
 fn match_wildcard(
     mem: &mut [u8],
     heap: Option<u32>,
@@ -4649,13 +4016,6 @@ fn match_wildcard(
     0
 }
 
-/// fn_1772b0 / EU fn_177360 / KR fn_17730c.
-///
-/// Looks `name` up in the state's database, stepping the result
-/// handle while the folded comparison runs negative and reporting
-/// the value on an exact hit. A null `p` or `name`, a handle miss,
-/// a lock-release failure over success, or success without a value
-/// all report `0x8150600d`; other failures pass through.
 pub fn lookup_keyed_value(
     mem: &mut [u8],
     p: Option<u32>,
@@ -4724,12 +4084,6 @@ pub fn lookup_keyed_value(
     result
 }
 
-/// fn_1785c8 / EU fn_178678 / KR fn_178624.
-///
-/// Queries the broker's `component` table for `key`, reporting the
-/// word through `out`. Null inputs report `0x81506007`, a component
-/// miss `0x8150600d`, a key miss `0x81506014`. `flags` selects the
-/// host-owned diagnostic path only.
 pub fn query_tag_word(
     mem: &mut [u8],
     broker: Option<u32>,
@@ -4778,12 +4132,6 @@ pub fn query_tag_word(
     0
 }
 
-/// fn_1789b0 / EU fn_178a60 / KR fn_178a0c.
-///
-/// Opens a component-table iterator over `name`, reporting it
-/// through `out`. Null inputs report `0x81506007`, allocation
-/// failure `0x8150600a`; a key miss opens an empty iterator.
-/// Failures after allocation close and clear the iterator.
 pub fn open_component_iter(
     mem: &mut [u8],
     broker: Option<u32>,
@@ -4853,15 +4201,6 @@ pub fn open_component_iter(
     rc
 }
 
-/// fn_178c24 / EU fn_178cd4 / KR fn_178c80.
-///
-/// Steps the component iterator to the next entry matching its
-/// pattern, reporting the key and (when wanted) the attribute
-/// block. A null iterator reports `0x81506007`; a pattern overrun
-/// reports `0x81506017`. Attribute lookups use rodata literal keys,
-/// which compare greater than any numeric node key on both sides, so the
-/// row's comparator reports constant greater and only its call
-/// count is observed.
 pub fn next_component_entry(
     mem: &mut [u8],
     iterator: Option<u32>,
@@ -4960,13 +4299,6 @@ pub fn next_component_entry(
     rc
 }
 
-/// fn_17a3b8 / EU fn_17a468 / KR fn_17a414.
-///
-/// Opens a tag iterator over `component`/`query`, reporting it
-/// through `out`. Null or empty inputs report `0x81506007`, lookup
-/// failures `0x8150600d`, allocation failure `0x8150600a`. Failures
-/// after allocation close and clear the iterator. `segment` lends
-/// 128 bytes for the query-segment scratch.
 pub fn open_tag_iter(
     mem: &mut [u8],
     broker: Option<u32>,
@@ -5104,9 +4436,6 @@ pub fn open_tag_iter(
     failed_tag_iter(mem, &mut *out, &mut *hvt, rc)
 }
 
-/// Shared `failed` tail of [`open_tag_iter`]: closes a live
-/// iterator, clears the caller's word, and reports `rc`. The
-/// original's flag-selected diagnostic is host-owned.
 fn failed_tag_iter(
     mem: &mut [u8],
     out: &mut u32,
@@ -5138,18 +4467,6 @@ fn failed_tag_iter(
     rc
 }
 
-/// fn_192e5c / EU fn_192f0c / KR fn_192f48.
-///
-/// Resolves the voice matching the previous resolution, the voice
-/// name, or the voice id, scanning the pipeline components'
-/// parameter tags. Null `resolved`/`voice_id` reports `0x80000006`;
-/// no match reports `0x80000014`; allocation failure `0x8000000a`.
-/// `pipeline_query`/`params_query` locate the fixture copies of the
-/// query literals; `segment` lends `open_tag_iter` its scratch.
-/// `cmp` serves arena-addressed keys while `lcmp` serves the
-/// rodata-literal query: literal addresses compare less than any
-/// arena node on both sides, so that comparator reports constant
-/// less (only its call count is observed).
 #[allow(clippy::too_many_arguments)]
 pub fn resolve_voice(
     mem: &mut [u8],
@@ -5319,25 +4636,6 @@ pub fn resolve_voice(
     result
 }
 
-/// fn_15db94 / EU fn_15dc58 / KR fn_15db78.
-///
-/// Matches the voice record at `rec` against the query dictionary in
-/// `hdr` (`iter` at +12, `dict` at +14): a `xx-yy` record is first
-/// relocated, then the nine query words are fetched and compared
-/// against the record fields directly; on any mismatch the pipeline
-/// components are enumerated for the best scoring entry and the
-/// winning tags fill the record. Reports 0, `0x8950200d` when no
-/// pipeline matches, or the first unfiltered lookup error. `dict_keys`
-/// locates the nine query strings (language, langcode, langietf,
-/// langgroup, voice, gender, age, frequencyhz, voicemodel);
-/// `pipeline`, `priority` and `params_query` locate
-/// `"pipeline/*"`, `"PRIORITY"` and `"PARAMETERS/*"`; `es_us`/`es_mx`
-/// locate the langietf exception tags. `segment` lends
-/// `open_tag_iter` its 128-byte scratch; `scratch` lends 12 bytes
-/// (uint out, query langgroup, candidate langgroup) emulating the
-/// stack words the C aliases across loop iterations. `flags` is
-/// ignored. Null `hdr`/`rec` is a caller bug (the oracles crash
-/// there too).
 #[allow(clippy::too_many_arguments)]
 pub fn match_voice(
     mem: &mut [u8],
@@ -5521,8 +4819,6 @@ pub fn match_voice(
     0
 }
 
-/// Derives the `langgroup` word of a query vector: a 3-letter
-/// `langcode` folds to `xx` plus `x` in the scratch word.
 pub(crate) fn derive_langgroup(mem: &mut [u8], table: &[u16; 256], qv: &mut [u32; 11], np: u32) {
     if qv[1] != 0 && strlen_bytes(&mem[qv[1] as usize..]) == 3 {
         let lc = qv[1] as usize;
@@ -5534,8 +4830,6 @@ pub(crate) fn derive_langgroup(mem: &mut [u8], table: &[u16; 256], qv: &mut [u32
     }
 }
 
-/// Derives the `langgroup` word of a pipeline candidate, keeping an
-/// explicit tag when one matched.
 pub(crate) fn derive_langgroup_candidate(
     mem: &mut [u8],
     table: &[u16; 256],
@@ -5552,9 +4846,6 @@ pub(crate) fn derive_langgroup_candidate(
     }
 }
 
-/// Reports whether the record fields all match the query vector
-/// (null-tolerant compares plus the langietf 2-letter and es-us/es-mx
-/// exceptions).
 pub(crate) fn rec_field_matches(
     mem: &[u8],
     table: &[u16; 256],
@@ -5612,9 +4903,6 @@ pub(crate) fn rec_field_matches(
     true
 }
 
-/// Reports whether the record fields all match a pipeline candidate
-/// (folded compares; a missing candidate word fails a set record
-/// field).
 pub(crate) fn candidate_matches(
     mem: &[u8],
     table: &[u16; 256],
@@ -5683,8 +4971,6 @@ pub(crate) fn candidate_matches(
     true
 }
 
-/// The shared langietf matcher: 2-letter prefix rules, else a folded
-/// compare with the es-us/es-mx exceptions.
 fn langietf_matches(
     mem: &[u8],
     table: &[u16; 256],
@@ -5717,7 +5003,6 @@ fn langietf_matches(
     true
 }
 
-/// The es-us/es-mx exception tail of the langietf matcher.
 fn langietf_exception(
     mem: &[u8],
     table: &[u16; 256],
@@ -5742,7 +5027,6 @@ fn langietf_exception(
     true
 }
 
-/// Scores a pipeline candidate against the query vector, bit by bit.
 pub(crate) fn score_candidate(mem: &[u8], table: &[u16; 256], qv: &[u32; 11], cur: &[u32; 11]) -> u32 {
     let mut score = 0u32;
     let hit = |mem: &[u8], table: &[u16; 256], q: u32, c: u32| {
@@ -5779,8 +5063,6 @@ pub(crate) fn score_candidate(mem: &[u8], table: &[u16; 256], qv: &[u32; 11], cu
     score
 }
 
-/// Copies a possibly-null word as a NUL-terminated string (null
-/// reports the empty string).
 pub(crate) fn copy_str_or_empty(mem: &mut [u8], dst: u32, src: u32) {
     if src == 0 {
         mem[dst as usize] = 0;
@@ -5789,15 +5071,6 @@ pub(crate) fn copy_str_or_empty(mem: &mut [u8], dst: u32, src: u32) {
     }
 }
 
-/// fn_19611c / EU fn_1961cc / KR fn_196208.
-///
-/// Resolves the engine context for a voice handle: fast path when the
-/// handle matches the cached pair, otherwise validates the tag and the
-/// pointed-to word. The original falls back to a global default context
-/// and reads a global pair; the caller supplies both (`default_ctx` is
-/// the `&D_8d7640` token, `pair` the `D_8d7660` bytes). `p_addr` is the
-/// handle pointer's address token (0 when null, otherwise the offset,
-/// never 0) and `p_word` the word it points at.
 pub fn resolve_engine_context(
     p_addr: u32,
     p_word: Option<u16>,
@@ -5828,15 +5101,6 @@ pub fn resolve_engine_context(
     r
 }
 
-/// fn_1900f8 / EU fn_1901a8 / KR fn_1901e4.
-///
-/// Configures a voice (mode 0) and assembles its pipeline specification
-/// string. String literals live in caller memory (`lit_*`); `converted`
-/// (0x128 bytes) and `freq_buf` (32 bytes) are caller scratch.
-/// `configure` stands in for the voice method: it returns the status plus
-/// the bytes the method leaves in the converted record. `query` stands in
-/// for the broker-string lookup returning status and value; `notify`
-/// observes the release call.
 pub fn configure_voice(
     mem: &mut [u8],
     object: u32,
@@ -5888,8 +5152,7 @@ pub fn configure_voice(
         };
         mem_store(mem, converted + 0xb8, converted_freq);
         copy_str(mem, converted + 0xbc, voice + 0x62);
-        // voice->format is an array, so it decays to a non-null pointer
-        // and the C condition is always true; the "text" else is dead.
+
         copy_str(mem, converted + 0xf4, voice + 0x82);
         copy_str(mem, converted + 0x104, lit_pcm);
         let methods = mem_word(mem, object + 4);
@@ -5955,18 +5218,6 @@ pub fn configure_voice(
     }
 }
 
-/// fn_19310c / EU fn_1931bc / KR fn_1931f8.
-///
-/// Applies a parameter list (`vauto_ttsSetParamList`): validates the
-/// object and tag, resolves the engine context, dispatches each parameter
-/// to a numeric/string engine setting or a voice-field update, then
-/// reconfigures the voice and hands the specification to the voice
-/// method. `voice` (0x114 bytes) and `buffer` (128 bytes) are caller
-/// scratch for the locals; `converted`/`freq_buf` and the `lit_*`
-/// offsets serve the inner voice configuration as in `configure_voice`.
-/// Engine settings go through `set_num`/`set_str`, voice resolution
-/// through `resolve`/`release`, and the final hand-off through
-/// `set_voice` (spec bytes or `None` for the detach call).
 #[allow(clippy::too_many_arguments)]
 pub fn set_param_list(
     mem: &mut [u8],
@@ -6351,8 +5602,6 @@ pub fn set_param_list(
     )
 }
 
-/// Tail of `set_param_list`: write the mode/input/voice back unless the
-/// exit skipped it, release the request lock when held, and classify.
 fn finish_param_list(
     mem: &mut [u8],
     object: u32,
@@ -6387,7 +5636,6 @@ fn finish_param_list(
     classify_code(status)
 }
 
-/// Length of the NUL-terminated prefix, capped at the slice length.
 fn nul_len(s: &[u8]) -> usize {
     let mut n = 0;
     while n < s.len() && s[n] != 0 {
@@ -6396,10 +5644,6 @@ fn nul_len(s: &[u8]) -> usize {
     n
 }
 
-/// fn_19665c / EU fn_19670c / KR fn_196748.
-///
-/// Clears the owned subtree, then releases the object through its
-/// owner heap. `clear` stands in for the tree teardown.
 pub fn release_cleared(
     mem: &[u8],
     p: Option<u32>,
@@ -6414,10 +5658,6 @@ pub fn release_cleared(
     0
 }
 
-/// fn_196770 / EU fn_196820 / KR fn_19685c.
-///
-/// Clears the iterator's head subtree. `clear` stands in for the
-/// tree teardown.
 pub fn clear_iterator(p: Option<u32>, clear: &mut impl FnMut(u32)) -> u32 {
     let Some(p) = p else {
         return 0x89002007;
@@ -6426,18 +5666,11 @@ pub fn clear_iterator(p: Option<u32>, clear: &mut impl FnMut(u32)) -> u32 {
     0
 }
 
-/// fn_160b54 / EU fn_160c18 / KR fn_160b38.
-///
-/// Releases the cell through its own heap. A null `p` is a caller
-/// bug: the original dereferences it unconditionally.
 pub fn release_self(mem: &[u8], p: u32, vt: &mut impl HeapVtable) -> u32 {
     heap_release(mem, nz(mem_word(mem, p + 4)), Some(p), vt);
     0
 }
 
-/// fn_196368 / EU fn_196418 / KR fn_196454.
-///
-/// Frees the node through its own interface.
 pub fn free_node(mem: &[u8], node: Option<u32>, vt: &mut impl HeapVtable) -> u32 {
     let Some(node) = node else {
         return 0x80b02007;
@@ -6446,10 +5679,6 @@ pub fn free_node(mem: &[u8], node: Option<u32>, vt: &mut impl HeapVtable) -> u32
     0
 }
 
-/// fn_196318 / EU fn_1963c8 / KR fn_196404.
-///
-/// Allocates a node through the interface and links it back to the
-/// interface and context.
 pub fn alloc_node(
     mem: &mut [u8],
     iface: Option<u32>,
@@ -6470,13 +5699,6 @@ pub fn alloc_node(
     0
 }
 
-/// fn_174e00 / EU fn_174eb0 / KR fn_174e5c.
-///
-/// Tears down the engine shell at `s`: destroys the two element arrays,
-/// releases the cleared sub-object, runs the guarded teardown hook, then
-/// releases the shell through its own allocator. `dtor` stands in for the
-/// arrays' element destructor, `clear` for the sub-object teardown and
-/// `call` for the guarded hook. A null `s` reports `0x8b702007`.
 pub fn teardown_engine(
     mem: &mut [u8],
     s: Option<u32>,
@@ -6507,14 +5729,6 @@ pub fn teardown_engine(
     0
 }
 
-/// fn_177cc8 / EU fn_177d78 / KR fn_177d24.
-///
-/// Closes the broker object at `object`: when it is the context's active
-/// object the database lock is acquired, the iterator cleared and the
-/// lock released, folding a release failure into the report only when
-/// the clear succeeded; then the object is released through the
-/// context heap. `clear` stands in for the iterator teardown. A null
-/// `object` reports `0x81506007`.
 pub fn close_broker_object(
     mem: &[u8],
     object: Option<u32>,
@@ -6543,10 +5757,6 @@ pub fn close_broker_object(
     rc
 }
 
-/// fn_1985fc / EU fn_1986ac / KR fn_1986e8.
-///
-/// Stage-enter instrumentation hook: reports `0x88402007` for a null
-/// handle and 0 otherwise. The tag word is ignored.
 pub fn begin_stage_hook(handle: Option<u32>) -> u32 {
     if handle.is_some() {
         0
@@ -6555,10 +5765,6 @@ pub fn begin_stage_hook(handle: Option<u32>) -> u32 {
     }
 }
 
-/// fn_19860c / EU fn_1986bc / KR fn_1986f8.
-///
-/// Stage-exit instrumentation hook: reports `0x88402007` for a null
-/// handle and 0 otherwise. The tag word is ignored.
 pub fn end_stage_hook(handle: Option<u32>) -> u32 {
     if handle.is_some() {
         0
@@ -6567,9 +5773,6 @@ pub fn end_stage_hook(handle: Option<u32>) -> u32 {
     }
 }
 
-/// fn_176624 / EU fn_1766d4 / KR fn_176680.
-///
-/// Length of the NUL-terminated u16 string at `s`, in code units.
 pub fn u16_len(mem: &[u8], s: u32) -> u32 {
     let mut length = 0u32;
     while mem_half(mem, s.wrapping_add(length.wrapping_mul(2))) != 0 {
@@ -6578,10 +5781,6 @@ pub fn u16_len(mem: &[u8], s: u32) -> u32 {
     length
 }
 
-/// fn_176214 / EU fn_1762c4 / KR fn_176270.
-///
-/// Copies the NUL-terminated u16 string at `src` to `dst`, terminator
-/// included, and reports `dst`.
 pub fn u16_copy(mem: &mut [u8], dst: u32, src: u32) -> u32 {
     let mut i = 0u32;
     loop {
@@ -6596,15 +5795,8 @@ pub fn u16_copy(mem: &mut [u8], dst: u32, src: u32) -> u32 {
     dst
 }
 
-/// String-kind record types shared by `release_typed_buffer` and
-/// `duplicate_typed_string` (fn_1516c8 / fn_151610).
 const STRING_KINDS: [u16; 12] = [6, 12, 21, 50, 36, 39, 37, 34, 22, 40, 26, 29];
 
-/// fn_1516c8 / EU fn_15178c / KR fn_1516ac.
-///
-/// Releases the buffer of the record at `p` through `heap` when its
-/// type is a string kind and the buffer is live, clearing the slot.
-/// A null record is a silent no-op.
 pub fn release_typed_buffer(
     mem: &mut [u8],
     p: Option<u32>,
@@ -6620,12 +5812,6 @@ pub fn release_typed_buffer(
     }
 }
 
-/// fn_151610 / EU fn_1516d4 / KR fn_1515f4.
-///
-/// Duplicates the NUL-terminated u16 string of the record at `p` into
-/// `out` through `heap` when the type is a string kind. Reports 1, or
-/// 0 when the allocation fails. Null records and other types are a
-/// silent success.
 pub fn duplicate_typed_string(
     mem: &mut [u8],
     p: Option<u32>,
@@ -6655,12 +5841,6 @@ pub fn duplicate_typed_string(
     1
 }
 
-/// fn_151840 / EU fn_151904 / KR fn_151824.
-///
-/// Validates the `name` parameter value `s`: readmode accepts 1 through
-/// 4, waitfactor accepts 0 through 9, anything else reports `0x8120200f`.
-/// The validity flag is always stored. Unrecognized names and inactive
-/// engine contexts validate silently.
 pub fn validate_param(
     mem: &[u8],
     table: &[u16; 256],
@@ -6703,13 +5883,6 @@ pub fn validate_param(
     ret
 }
 
-/// fn_15f068 / EU fn_15f12c / KR fn_15f04c.
-///
-/// Closes the component-query object: validates the handle, closes the
-/// broker sub-object, runs the guarded teardown hook, then releases the
-/// object through its heap. The first error wins; the teardown slot is
-/// always cleared. `clear` stands in for the broker iterator teardown,
-/// `call` for the guarded hook.
 pub fn close_query_object(
     mem: &mut [u8],
     h_obj: Option<u32>,
@@ -6745,21 +5918,10 @@ pub fn close_query_object(
     rc
 }
 
-/// fn_1994d0 / EU fn_199580 / KR fn_1995bc.
-///
-/// Unsigned divide: reports `(quotient, remainder)` of `v / b`. The
-/// divisor is never 0 (callers gate it; the fuzzer excludes it).
 pub fn divmod_u32(v: u32, b: u32) -> (u32, u32) {
     (v / b, v % b)
 }
 
-/// fn_14e440 / EU fn_14e504 / KR fn_14e424.
-///
-/// Compacts the stream buffer at `state`: drops consumed bytes ahead
-/// of the slowest reader, destroys discarded elements, memmoves the
-/// tail, and shrinks or frees the buffer per the config minimums. A
-/// nonzero `required` forces the compact. `dtor` stands in for the
-/// element destructor. A null buffer or a kept buffer is a no-op.
 pub fn compact_stream_buffer(
     mem: &mut [u8],
     state: u32,
@@ -6859,14 +6021,6 @@ pub fn compact_stream_buffer(
     }
 }
 
-/// fn_15017c / EU fn_150240 / KR fn_150160.
-///
-/// Ends a direct stream read of `bytes_read` bytes: validates the
-/// `(stream, b)` handle pair, advances the stream position (clamped to
-/// the available bytes with error `0x88f02007` on overrun), raises the
-/// consumed high-water mark and compacts the state buffer. Non-direct
-/// streams and bad handles return errors. The trace logging is
-/// unobserved. `vt` and `dtor` serve the compaction step.
 pub fn read_direct_end(
     mem: &mut [u8],
     stream: Option<u32>,
@@ -6899,14 +6053,6 @@ pub fn read_direct_end(
     rc
 }
 
-/// fn_14e614 / EU fn_14e6d8 / KR fn_14e5f8.
-///
-/// Trace-logs a stream write: below verbosity 6 it returns at once,
-/// otherwise it logs the header shape for null or empty writes, the
-/// binary shape for non-text states, or the text shape plus the
-/// writer id. All logging is unobserved (void log stubs); `level` is
-/// the scripted `fn_173fd8` answer. Every logged field is still read
-/// so a wrong offset traps instead of passing silently.
 pub fn log_write(mem: &[u8], state: u32, buffer: Option<u32>, count: u32, level: u32) {
     let context = mem_word(mem, state.wrapping_add(4));
     let _log = mem_word(mem, context.wrapping_add(16));
@@ -6928,19 +6074,6 @@ pub fn log_write(mem: &[u8], state: u32, buffer: Option<u32>, count: u32, level:
     }
 }
 
-/// fn_1503b0 / EU fn_150474 / KR fn_150394.
-///
-/// Writes `count` bytes from `source` into the stream: validates the
-/// `(object, tag)` handle pair, grows the state buffer through
-/// compaction plus heap alloc/regrow (or takes the unbuffered path when
-/// nothing is stored), copies the bytes, runs the per-element copy
-/// callback with destroy rollback on failure, and advances the write
-/// position. Null sources, empty writes and non-writable kinds report
-/// `0x88f02007`; a backwards write position reports `0x88f02005`; an
-/// allocation or element-copy failure reports `0x88f0200a`. The trace
-/// logging (including the `fn_14e614` call) is unobserved. `source` and
-/// the state buffer must not overlap. `vt`, `copy` and `dtor` serve the
-/// heap and element steps.
 pub fn write_stream(
     mem: &mut [u8],
     object: Option<u32>,
@@ -7056,19 +6189,6 @@ pub fn write_stream(
     0
 }
 
-/// fn_150878 / EU fn_15093c / KR fn_15085c.
-///
-/// Begins a direct stream write of `count` bytes: validates the
-/// `(object, tag)` handle pair, reserves buffer space through
-/// compaction plus heap alloc/regrow (at least the object maximum),
-/// hands the write pointer back through `out`, and zeroes the
-/// region. Null handles fail validation; a null `out` reports
-/// `0x88f02007` without writing; empty writes, non-writable kinds
-/// and a backwards write position clear `out` and report
-/// `0x88f02007` (`0x88f02005` for the backwards position); an
-/// allocation failure clears `out` and reports `0x88f0200a`. The
-/// trace logging is unobserved. `vt` and `dtor` serve the compaction
-/// and heap steps.
 pub fn write_direct_start(
     mem: &mut [u8],
     object: Option<u32>,
@@ -7134,18 +6254,6 @@ pub fn write_direct_start(
     0
 }
 
-/// fn_150c0c / EU fn_150cd0 / KR fn_150bf0.
-///
-/// Ends a direct stream write of `count` bytes: validates the
-/// `(object, tag)` handle pair, runs the per-element copy callback
-/// over the fresh bytes with destroy rollback on failure, advances
-/// the write position, shrinks the buffer to the needed size past
-/// the object limit, and compacts the state buffer. Non-writable
-/// kinds and short capacities report `0x88f02007`; a backwards write
-/// position reports `0x88f02005`; an element-copy failure reports
-/// `0x88f0200a`. The trace logging (including the `fn_14e614` call)
-/// is unobserved. `vt`, `copy` and `dtor` serve the heap and element
-/// steps.
 pub fn write_direct_end(
     mem: &mut [u8],
     object: Option<u32>,
@@ -7216,17 +6324,6 @@ pub fn write_direct_end(
     0
 }
 
-/// fn_150fbc / EU fn_151080 / KR fn_150fa0.
-///
-/// Copies up to `count` bytes from the source stream into the
-/// destination stream: validates the destination handle, peeks the
-/// source's readable window, writes what fits, and consumes the
-/// source bytes. Reports `0x88f02007` for an empty write, a
-/// non-writable kind or a failed peek, and the write's own status
-/// otherwise; `written` takes the copied count (0 on every early
-/// path) and must be valid (the original faults on null). `data`
-/// and `avail` are scratch words for the peek outputs. `vt`,
-/// `copy` and `dtor` serve the write and consume steps.
 #[allow(clippy::too_many_arguments)]
 pub fn write_copy(
     mem: &mut [u8],
@@ -7284,10 +6381,6 @@ pub fn write_copy(
     rc
 }
 
-/// fn_281618 / EU fn_2817d4 / KR fn_281880.
-///
-/// Duplicates a NUL-terminated string. The allocation hook represents
-/// fn_196394, with the caller's heap handle and requested byte count.
 pub fn duplicate_voice_name(
     mem: &mut [u8],
     ctx: u32,
@@ -7305,7 +6398,7 @@ pub fn duplicate_voice_name(
     if dst == 0 {
         return 0x88e0200a;
     }
-    // strcpy reads the source after the allocation result is stored.
+
     let mut i = 0u32;
     loop {
         let byte = mem[source.wrapping_add(i) as usize];
@@ -7318,16 +6411,10 @@ pub fn duplicate_voice_name(
     0
 }
 
-/// Direct fn_1963b8 hook, preserving both full-width allocation arguments.
 pub trait VoiceNodeAllocator: HeapVtable {
     fn alloc_items_at(&mut self, ctx: u32, count: u32, width: u32) -> u32;
 }
 
-/// fn_281224 / EU fn_2813e0 / KR fn_28148c.
-///
-/// Replaces a voice node's payload. Failed allocations leave the partial
-/// replacement in the node, rather than releasing it as the constructor does.
-/// `amount` carries the soft-float argument's unmodified bits.
 pub fn update_voice_node(
     mem: &mut [u8],
     ctx: u32,
@@ -7372,15 +6459,6 @@ pub fn update_voice_node(
     0
 }
 
-/// fn_28107c / EU fn_281238 / KR fn_2812e4.
-///
-/// Creates a voice node: kind 1 takes no payload, otherwise
-/// `name` and `items` must both be null or both be present. The
-/// node carries `value`/`value2` plus the low byte of `kind`;
-/// with a payload the name duplicates through `dup` and
-/// `count` words copy from `items` via [`move_bytes`]. A failed
-/// duplicate or items allocation releases the partial node and
-/// reports null.
 pub fn create_voice_node(
     mem: &mut [u8],
     ctx: u32,
@@ -7444,12 +6522,6 @@ pub fn create_voice_node(
     node
 }
 
-/// fn_281024 / EU fn_2811e0 / KR fn_28128c.
-///
-/// Releases a node chain: walks the next links from `n` and
-/// releases each node's two payload words (when nonzero) plus the
-/// node itself through the owner's heap. A null owner drops every
-/// release.
 pub fn release_node_chain(
     mem: &[u8],
     n: Option<u32>,
@@ -7471,18 +6543,6 @@ pub fn release_node_chain(
     }
 }
 
-/// fn_15cdcc / EU fn_15ce90 / KR fn_15cdb0.
-///
-/// Writes `count` elements from `input` into `field` of `record`:
-/// variable-length fields allocate through the database arena (at
-/// `object + 4`) and store the pointer, fixed-length fields copy in
-/// place up to their length, and the count anchor, `written` and the
-/// dirty flag update on success. Fields of the word list (whose data
-/// anchor is `word_anchor`) additionally intern the strings of word
-/// entries. `descs` holds the record layouts (272 bytes each, as in
-/// the ROM table); a record type beyond it reports `0x89203e0d`
-/// like a missing layout. A null `input` reads nothing and is only
-/// valid with an empty write. `alloc` serves the arena grows.
 pub fn write_field(
     mem: &mut [u8],
     object: Option<u32>,
@@ -7597,21 +6657,6 @@ pub fn write_field(
     0
 }
 
-/// fn_15b758 / EU fn_15b81c / KR fn_15b73c.
-///
-/// Creates a linguistic record of `rectype` (valid: 1..=4): regrows
-/// the record list through the heap when full, carves the node from
-/// the database arena with the `sizes` table, stamps id/type,
-/// zeroes the kind-0 layout fields from `layouts`, and publishes
-/// the node. `rectype` arrives full 32-bit and is gated unsigned.
-/// `sizes`/`layouts` are the `D_8d8274`/`D_8d7ca0` windows. The
-/// field offset comes from 20 bytes below the source's member
-/// (kind at layout+20+20i, offset at layout+12+20i): the ROM loop
-/// addresses it there on all three regions while
-/// `src/fn_15b758.c` reads one slot higher, a reported C defect.
-/// The trace logging is unobserved. Returns `0x89203e09` (bad
-/// type), `0x89203e10` (empty/full count), `0x8920200a` (alloc
-/// failure) or `0x89203e11` (missing node).
 pub fn create_record(
     mem: &mut [u8],
     db: u32,
@@ -7692,14 +6737,6 @@ pub fn create_record(
     0x89203e11
 }
 
-/// fn_15c1e4 / EU fn_15c2a8 / KR fn_15c1c8.
-///
-/// Clones records[`index`] through [`create_record`] and splices
-/// the copy after the source, reporting the copy's id at `out`.
-/// `scratch` is a caller-owned word for the inner call's node
-/// output (unobserved, like [`open_stream`]'s scratch). Returns
-/// `0x89202008` (bad handle), `0x89203e11` (missing source),
-/// `0x89203e04` (type-1 source) or the create status.
 pub fn clone_record(
     mem: &mut [u8],
     db: Option<u32>,
@@ -7756,17 +6793,6 @@ pub fn clone_record(
     rc
 }
 
-/// fn_15bf74 / EU fn_15c038 / KR fn_15bf58.
-///
-/// Creates a `child_type` record under the parent at `index:
-/// validates the handle, checks the child type against the parent
-/// type through `parent_table`, creates the record, links it in
-/// (splicing before the matching child or taking the first free
-/// child slot), and reports its id through `out`. A child type
-/// below 2 reports `0x89203e02`, a parent mismatch `0x89203e03`,
-/// and a full child pair `0x89203e1b`. `scratch` takes the fresh
-/// node; `parent_table` must cover `child_type` (the row pins it
-/// below 32: wider values read region-divergent bytes).
 #[allow(clippy::too_many_arguments)]
 pub fn create_child_record(
     mem: &mut [u8],
@@ -7850,15 +6876,6 @@ pub fn create_child_record(
     rc
 }
 
-/// fn_15c2f0 / EU fn_15c3b4 / KR fn_15c2d4.
-///
-/// Creates the predecessor of the record at `index`: with a live
-/// second reference it clones the referenced record, with only a
-/// first reference it creates a same-typed child under the
-/// referenced parent, and with neither it reports `0x89203e06`.
-/// Type-1 records report `0x89203e05`. `result_slot` takes the
-/// inner id, `scratch` the fresh node. `parent_table` serves the
-/// child path (same under-32 envelope as [`create_child_record`]).
 #[allow(clippy::too_many_arguments)]
 pub fn create_prev_record(
     mem: &mut [u8],
@@ -7932,15 +6949,6 @@ pub fn create_prev_record(
     err
 }
 
-/// fn_14e0b4 / EU fn_14e178 / KR fn_14e098.
-///
-/// Releases a stream state: a null state is a no-op, a multiply
-/// referenced state just loses one reference, otherwise the content
-/// type, readers, remaining buffer elements and the buffer and state
-/// itself are destroyed and released through the context heap. The
-/// `heap` argument is vestigial (the original ignores it) and the
-/// input-logging block is unobserved, so this port covers the
-/// `logInput == 0` behavior.
 pub fn release_stream_state(
     mem: &mut [u8],
     state: Option<u32>,
@@ -7987,20 +6995,6 @@ pub fn release_stream_state(
     heap_release(mem, nz(heap), Some(base), vt);
 }
 
-/// fn_14f918 / EU fn_14f9dc / KR fn_14f8fc.
-///
-/// Closes a stream: validates the `(object, tag)` handle pair, then
-/// either unlinks a kind-0 stream from its list (removing the first
-/// matching entry through the `fn_1970ac` walk and the `fn_196e28`
-/// compaction) or clears a writer stream's writer and eos and
-/// trace-logs the write; finally releases the state and the stream
-/// itself through the context allocator. `level` is the scripted
-/// `fn_173fd8` answer for the inner [`log_write`]; all trace
-/// logging is unobserved. `remove_dtor` serves a non-null list
-/// destructor (the harness keeps it null and asserts it never
-/// fires); `dtor` serves the state release. A kind-0 close needs a
-/// non-null list with at least one entry: the original dereferences
-/// the walk cursor afterwards, so an empty list crashes it too.
 pub fn close_stream(
     mem: &mut [u8],
     object: Option<u32>,
@@ -8058,30 +7052,19 @@ pub fn close_stream(
     0
 }
 
-/// Scripted answers for the stubbed map/list/context interfaces behind
-/// [`open_stream`]: the map-find status, the map-insert status, the
-/// reader-append status, and the context-resolve status plus context.
 pub struct OpenScripts {
-    /// `fn_196794` status (`(rc & 0x1fff) == 20` means absent-but-ok).
+
     pub rc794: u32,
-    /// `fn_19668c` map-insert status.
+
     pub rc68c: u32,
-    /// `fn_196db0` reader-append status.
+
     pub rc_db0: u32,
-    /// `fn_19611c` context-resolve status.
+
     pub rc_611c: u32,
-    /// `fn_19611c` context output.
+
     pub ctx_611c: u32,
 }
 
-/// fn_14ed4c / EU fn_14ee10 / KR fn_14ed30.
-///
-/// Sets the stream-config pipeline position: validates the `(config,
-/// tag)` handle pair, resolves the context, then stores the low 16
-/// bits of `position` at `config+8`. `position` arrives full 32-bit
-/// and narrows on store. The context feeds only the trace logging,
-/// which is unobserved (void log stubs, like [`open_stream`]).
-/// Returns the validate status on failure, else the resolve status.
 pub fn set_pipeline_pos(
     mem: &mut [u8],
     config: Option<u32>,
@@ -8099,19 +7082,6 @@ pub fn set_pipeline_pos(
     scripts.rc_611c
 }
 
-/// fn_14f010 / EU fn_14f0d4 / KR fn_14eff4.
-///
-/// Opens a stream: validates the `(config, tag)` handle pair, rejects
-/// empty or overlong content types, walks same-type states newest
-/// first, then either opens the found state (mode 0) or creates one
-/// (modes 1/2) through heap allocation, reader-list creation, the
-/// map insert and a balancing release, and finally publishes the
-/// stream handle. `id` arrives full 32-bit and narrows on store.
-/// `synthdata`/`markers` are the `D_8d7764`/`D_8d77a8` windows,
-/// `scratch` a 128-byte lowercase buffer. The trace logging is
-/// unobserved, as are the 196794 iterator, the new key version and
-/// the 196830 call. `D_14e3ac` is verified byte-identical across
-/// regions, so its content is a constant.
 pub fn open_stream(
     mem: &mut [u8],
     table: &[u16; 256],
@@ -8307,34 +7277,19 @@ pub fn open_stream(
     rc
 }
 
-/// Scripted answers for the stubbed map interfaces behind
-/// [`insert_ling_entry`]: the lock/unlock, find and insert statuses
-/// plus the found entry.
 pub struct InsertScripts {
-    /// `fn_176f2c` lock status.
+
     pub lock: u32,
-    /// `fn_1966ac` find status.
+
     pub find: u32,
-    /// `fn_1966ac` entry output (`None` inserts).
+
     pub found: Option<u32>,
-    /// `fn_19668c` insert status.
+
     pub insert: u32,
-    /// `fn_176f5c` unlock status.
+
     pub unlock: u32,
 }
 
-/// fn_17b0f8 / EU fn_17b1a8 / KR fn_17b154.
-///
-/// Inserts or updates a linguistic map entry: the three handles
-/// null-check up front, then the lock runs, then a successful find
-/// overwrites the found entry with 20 bytes from the pair while a
-/// failed find inserts a fresh stack-built entry, and the unlock
-/// status merges last. Matches `src/fn_17ae04.c:162` and the ARM,
-/// which is identical across regions. The owner/map words flow only
-/// into stubbed interfaces, and the fresh entry is built on the C
-/// stack for the stubbed insert, so neither is reproduced here. A
-/// successful find always yields an entry (real-map contract), which
-/// the row's fixtures guarantee.
 pub fn insert_ling_entry(
     mem: &mut [u8],
     o: Option<u32>,
@@ -8361,34 +7316,19 @@ pub fn insert_ling_entry(
     rc
 }
 
-/// Scripted answers for the stubbed map interfaces behind
-/// [`release_ling_entry`]: the lock/unlock, find and remove
-/// statuses plus the found entry.
 pub struct ReleaseScripts {
-    /// `fn_176f2c` lock status.
+
     pub lock: u32,
-    /// `fn_1966ac` find status.
+
     pub find: u32,
-    /// `fn_1966ac` entry output (`None` removes nothing).
+
     pub found: Option<u32>,
-    /// `fn_19672c` remove status.
+
     pub remove: u32,
-    /// `fn_176f5c` unlock status.
+
     pub unlock: u32,
 }
 
-/// fn_17b1c4 / EU fn_17b274 / KR fn_17b220.
-///
-/// Releases one reference on a linguistic map entry: a failed find
-/// remaps its status, a zero count reports `0x8b602011`, any other
-/// count above one decrements, and the last reference snapshots the
-/// 32-byte entry, removes it from the map, then runs the release
-/// callback with the owner halves and the snapshot. Callback
-/// presence comes from `cb`, not from the entry's address-valued
-/// word; callers pass `None` when it is null. Matches
-/// `src/fn_17ae04.c:186` and the ARM, which is identical across
-/// regions. A successful find always yields an entry (real-map
-/// contract), which the row's fixtures guarantee.
 pub fn release_ling_entry(
     mem: &mut [u8],
     o: Option<u32>,
@@ -8432,15 +7372,6 @@ pub fn release_ling_entry(
     rc
 }
 
-/// fn_17b2b0 / EU fn_17b360 / KR fn_17b30c.
-///
-/// Drops an unreferenced linguistic map entry: with no map the
-/// lock status flows through, a referenced entry reports
-/// `0x8b602011`, and only a zero count reaches the remove. Reads
-/// the map word and the entry's refcount; writes nothing. Matches
-/// `src/fn_17ae04.c:222` and the ARM, which is identical across
-/// regions. A successful find always yields an entry (real-map
-/// contract), which the row's fixtures guarantee.
 pub fn drop_ling_entry(
     mem: &[u8],
     o: Option<u32>,
@@ -8474,40 +7405,23 @@ pub fn drop_ling_entry(
     rc
 }
 
-/// Scripted answers for the stubbed interfaces behind
-/// [`create_ling_table`]: the acquire/alloc/owner-open/map-create
-/// statuses plus their outputs.
 pub struct CreateScripts {
-    /// `fn_19611c` context-acquire status.
+
     pub acquire: u32,
-    /// `fn_19611c` context output.
+
     pub ctx: Option<u32>,
-    /// `fn_1963b8` allocation output (`None` reports `0x8b60200a`).
+
     pub alloc: Option<u32>,
-    /// `fn_176e40` owner-open status.
+
     pub owner_rc: u32,
-    /// `fn_176e40` owner output (written before the status check,
-    /// like the stub).
+
     pub owner: u32,
-    /// `fn_1964e0` map-create status.
+
     pub create: u32,
-    /// `fn_1964e0` map output (written before the status check,
-    /// like the stub).
+
     pub map: u32,
 }
 
-/// fn_17ae04 / EU fn_17aeb4 / KR fn_17ae60.
-///
-/// Creates a linguistic table object: acquires the context,
-/// allocates and publishes the object, opens the owner, creates
-/// the map. A failed owner open frees the object and reports the
-/// status; a failed map create destroys the owner, frees the
-/// object and reports `0x8b60200a`. The object handle re-reads
-/// from `out` at each step like the source; the ROM's map-config
-/// words flow only into the stubbed create. Matches
-/// `src/fn_17ae04.c:71` and the ARM, which is identical across
-/// regions. A successful acquire always yields a context
-/// (real-context contract), which the row's fixtures guarantee.
 pub fn create_ling_table(
     mem: &mut [u8],
     h: [u32; 2],
@@ -8546,53 +7460,37 @@ pub fn create_ling_table(
     0
 }
 
-/// Scripted answers for the stubbed teardown interfaces behind
-/// [`close_worker`]: the lock/unlock, context acquire and every
-/// subsystem release status.
 pub struct TeardownScripts {
-    /// `fn_176f2c` lock status.
+
     pub lock: u32,
-    /// `fn_176f5c` unlock status.
+
     pub unlock: u32,
-    /// `fn_19611c` context-acquire status.
+
     pub acquire: u32,
-    /// `fn_19611c` context output.
+
     pub ctx: Option<u32>,
-    /// `fn_17b1c4` LINGDB release status (overwrites on failure).
+
     pub lingdb: u32,
-    /// `fn_160b54` worker release status.
+
     pub worker: u32,
-    /// `fn_14dc30` log release status.
+
     pub log: u32,
-    /// `fn_17b2b0` PHONMAP drop status.
+
     pub phonmap: u32,
-    /// `fn_17b2b0` SYNTHSTREAM drop status.
+
     pub synthstream: u32,
-    /// `fn_17af38` linguistic teardown status.
+
     pub teardown: u32,
-    /// `fn_174e00` parameters release status.
+
     pub params: u32,
-    /// `fn_177cc8` synthesis release status.
+
     pub synthfin: u32,
-    /// `fn_176edc` mutex destroy status.
+
     pub mutex: u32,
-    /// `fn_196238` engine release status.
+
     pub engine: u32,
 }
 
-/// fn_190edc / EU fn_190f8c / KR fn_190fc8.
-///
-/// Closes a synthesis worker: validates the tag and magic, locks
-/// to sample the state, then tears down the linguistic, worker,
-/// voice, log, parameters, synthesis, mutex and engine pieces in
-/// order, publishing the completion callback last. A LINGDB
-/// failure overwrites the running status and the voice release
-/// assigns it directly; every other failure merges first-wins.
-/// Early exits report raw codes, late ones map through
-/// [`classify_code`]. Matches `src/fn_190edc.c:73` and the ARM,
-/// which is identical across regions. A successful acquire always
-/// yields a context (real-context contract), which the row's
-/// fixtures guarantee.
 pub fn close_worker(
     mem: &mut [u8],
     handle: Option<u32>,
@@ -8699,59 +7597,50 @@ pub fn close_worker(
     classify_code(status)
 }
 
-/// Scripted answers for the stubbed open interfaces behind
-/// [`open_worker`]: the task/stream/mutex/engine/context
-/// bring-up, every subsystem publish status and the allocation.
 pub struct OpenWorkerScripts {
-    /// `fn_196318` task status.
+
     pub task_rc: u32,
-    /// `fn_177b7c` stream status.
+
     pub stream_rc: u32,
-    /// `fn_176e40` mutex status.
+
     pub mutex_rc: u32,
-    /// `fn_176e40` mutex output (written before the status check,
-    /// like the stub).
+
     pub mutex: u32,
-    /// `fn_1961d0` engine status.
+
     pub engine_rc: u32,
-    /// `fn_1961d0` engine output (written before the status check,
-    /// like the stub).
+
     pub engine: [u32; 2],
-    /// `fn_19611c` context-acquire status.
+
     pub acquire: u32,
-    /// `fn_19611c` context output.
+
     pub ctx: Option<u32>,
-    /// `fn_14dc94` log output (its status is ignored).
+
     pub log: u32,
-    /// `fn_174ca8` parameters status.
+
     pub params_rc: u32,
-    /// `fn_174ca8` parameters output (written before the status
-    /// check, like the stub).
+
     pub params: u32,
-    /// `fn_17ae04` linguistic status.
+
     pub ling_rc: u32,
-    /// `fn_17ae04` linguistic output (written before the status
-    /// check, like the stub).
+
     pub ling: u32,
-    /// `fn_1758ac` property status (both calls share it).
+
     pub prop: u32,
-    /// `fn_1759a0` name status.
+
     pub name: u32,
-    /// `fn_1757b8` marker status.
+
     pub mrk: u32,
-    /// `fn_17b0f8` insert status (both calls share it).
+
     pub insert: u32,
-    /// Voice `setup` status.
+
     pub setup_rc: u32,
-    /// Voice `setup` voice-pair output (written before the status
-    /// check, like the hook).
+
     pub voice: [u32; 2],
-    /// `fn_160b0c` worker status.
+
     pub worker_rc: u32,
-    /// `fn_160b0c` worker output (written before the status check,
-    /// like the stub).
+
     pub worker: u32,
-    /// Factory `allocate` output (`None` reports `0x8000000a`).
+
     pub alloc: Option<u32>,
 }
 
@@ -8776,18 +7665,6 @@ fn open_cleanup(
     classify_code(status)
 }
 
-/// fn_19126c / EU fn_19131c / KR fn_191358.
-///
-/// Opens a synthesis worker: validates the factory handle,
-/// allocates the lifecycle object, brings up the task, stream,
-/// mutex, engine and context, publishes parameters, linguistic
-/// data, properties and voice, then starts the worker and hands
-/// the pair back. Any failure unwinds through the full teardown
-/// when a context exists, else releases the object. Matches
-/// `src/fn_19126c.c:135` and the ARM across regions (EU/KR
-/// replace the US-only completion hook with a stack spill of
-/// identical size). A successful acquire always yields a context
-/// (real-context contract), which the row's fixtures guarantee.
 #[allow(clippy::too_many_arguments)]
 pub fn open_worker(
     mem: &mut [u8],
@@ -8804,8 +7681,7 @@ pub fn open_worker(
     if tag != 0x68434c53 {
         return 0x80000008;
     }
-    // The source dereferences the owner before its null check, so a
-    // null owner with a passing tag faults; fixtures never do that.
+
     let owner = owner.unwrap();
     if mem_word(mem, owner) != 0x73434c53 {
         return 0x80000008;
@@ -8847,8 +7723,7 @@ pub fn open_worker(
     mem_store(mem, state + 12, scripts.engine[1]);
     status = scripts.engine_rc;
     if status < 0x80000000 {
-        // The stub publishes its output before the status check, so
-        // a failed acquire can still plant a null context.
+
         mem_store(mem, state + 16, scripts.ctx.unwrap_or(0));
         status = scripts.acquire;
     }
@@ -8909,20 +7784,6 @@ pub fn open_worker(
     0
 }
 
-/// fn_154108 / EU fn_1541cc / KR fn_1540ec.
-///
-/// Ends components `start..end`: stamps the cursor, fires the begin
-/// hook per component, closes the marker stream for the component
-/// whose name matches the pending name while closing, ends it,
-/// fires the end hook, and keeps the first component error. A live
-/// scratch block is released and cleared. Matches
-/// `src/fn_151914.c:1241` and the ARM, which is identical across
-/// regions. The C takes a `u16` start but the ARM compares the full
-/// register without narrowing, so the port takes `u32` (ARM width);
-/// callers pass small component indices and the row's fixtures stay
-/// within bounds. The log calls are dropped (unobserved); the
-/// begin/end hooks stay as callbacks because the scheduler replay
-/// records them.
 #[allow(clippy::too_many_arguments)]
 pub fn close_components(
     mem: &mut [u8],
@@ -8969,24 +7830,6 @@ pub fn close_components(
     rc
 }
 
-/// fn_153c5c / EU fn_153d20 / KR fn_153c40.
-///
-/// Starts components `start..end`: clears the pending name, scans
-/// the pipeline for the post-processor window while closing,
-/// then per component sets the stage, fires the begin hook, opens
-/// the marker/text streams on name match while closing, starts
-/// it, fires the end hook, keeps a start failure, else stamps the
-/// cursor and reports through the callback. While closing the
-/// scratch block is dropped and the marker list is reallocated
-/// and filled. Matches `src/fn_151914.c:1149` and the ARM, which
-/// is identical across regions. The C takes a `u16` start but the
-/// ARM compares the full register without narrowing, so the port
-/// takes `u32` (ARM width); callers pass small component indices
-/// and the row's fixtures stay within bounds. The log calls are
-/// dropped (unobserved); the list walk is skipped (its reads are
-/// unobservable and its frees ignored) while the realloc keeps a
-/// `None` fault like the C. The stage hooks stay as callbacks
-/// because the scheduler replay records them.
 #[allow(clippy::too_many_arguments)]
 pub fn start_components(
     mem: &mut [u8],
@@ -9047,8 +7890,7 @@ pub fn start_components(
     let mut s = start;
     while rc < 0x80000000 && s < end {
         let next = s.wrapping_add(1);
-        // Both verdicts are discarded, matching the C; the
-        // signatures still carry them for the row's slots.
+
         let _ = set_stage(pipe_a, pipe_b, next & 0xffff);
         let comp = mem_word(mem, comps.wrapping_add(s.wrapping_mul(4)));
         let name = mem_word(mem, comp + 4);
@@ -9079,7 +7921,7 @@ pub fn start_components(
         }
         rc = r2;
         if r2 >= 0x80000000 {
-            // Error log dropped (unobserved).
+
         } else {
             mem_store16(mem, out + 78, next as u16);
             if let Some(cb) = cb.as_mut() {
@@ -9100,11 +7942,6 @@ pub fn start_components(
     rc
 }
 
-/// Scripted leaf values behind [`start_synthesis`]: the voice-pair
-/// loader, independent frequency and sample-bits queries,
-/// the string query, the lexicon bind, the
-/// mime check, the scratch and list allocators, and the pipe
-/// binder with its prep word.
 pub struct StartSynthesisScripts {
     pub t_pair: [u32; 2],
     pub freq_rc: u32,
@@ -9122,23 +7959,6 @@ pub struct StartSynthesisScripts {
     pub prep: u32,
 }
 
-/// fn_15668c / EU fn_156750 / KR fn_156670.
-///
-/// Binds the synthesis output: license gate, output clear,
-/// scratch alloc, rate setup, stats note, parameter log, pipe
-/// and aux creation, mime check, post-pair open, component
-/// start, output open, callback bind, then flush or return.
-/// Matches `src/fn_151914.c:2157` and the ARM, which is
-/// identical across regions. The ROM patches the license and
-/// stats calls out (always-licensed, stats verdict 0), which
-/// the port mirrors; the component starter runs through
-/// [`start_components`]. Fail edges report through `fail` and
-/// the done-path flusher through `flush`; the row's scripts
-/// keep both unreached (a null scratch takes the early return,
-/// and status != 2 forces the shared open pair null so the
-/// flusher is skipped). The log calls are dropped
-/// (unobserved); the `& 0x1fff == 2` open exemption only gates
-/// a dropped log, so a failing post-pair open fails directly.
 #[allow(clippy::too_many_arguments)]
 pub fn start_synthesis(
     mem: &mut [u8],
@@ -9355,10 +8175,6 @@ pub fn start_synthesis(
     fail(1, 0, 0)
 }
 
-/// ROM `D_` string bytes read by `fn_157a80` and its in-unit
-/// callees (identical on US/EU/KR, verified from the images).
-/// The log-only names stay host dummies in the harness and are
-/// not needed here.
 pub const CREATE_SYNTHSTREAM: &[u8] = b"SYNTHSTREAM";
 pub const CREATE_SYNTHSTREAM_LO: &[u8] = b"synthstream";
 pub const CREATE_LINGDB: &[u8] = b"LINGDB";
@@ -9383,12 +8199,12 @@ pub const CREATE_NUANKEY: &[u8] = b"__NUAN_alternative_esc_seq__";
 pub const CREATE_COMPANY: &[u8] = b"companyname";
 pub const CREATE_APPNAME: &[u8] = b"applicationname";
 pub const CREATE_VOICEMODEL: &[u8] = b"voicemodel";
-/// Compare-only literals, NUL-terminated for the fold loops.
+
 pub const CREATE_CPR_Z: &[u8] = b"cpr\0";
 pub const CREATE_USELECT_Z: &[u8] = b"uselect/\0";
 pub const CREATE_SELECT_Z: &[u8] = b"select/\0";
 pub const CREATE_SELCPR_Z: &[u8] = b"select/cpr\0";
-/// Callback-registration keys (`D_8d7974` order, ROM bytes).
+
 pub const CREATE_CBKEYS: [&[u8]; 7] = [
     CREATE_LOOPLIMIT,
     CREATE_MARKERMODE,
@@ -9398,33 +8214,27 @@ pub const CREATE_CBKEYS: [&[u8]; 7] = [
     CREATE_NUANKEY,
     CREATE_COMPANY,
 ];
-/// License-key query and expected descramble (in-unit literals).
+
 pub const CREATE_TXMKEY: &[u8] = b"txm ypy hwb &53(1@+- _={[]?/>.<,";
 pub const CREATE_TXMWANT: &[u8] = b"4:\x014CS5]@AJGW^CL\x1e\"\x168&9\x17\x0b\x18\x11\x0e\x1a\x04\x184\0";
-/// Escape-sequence template head (in-unit literal).
+
 pub const CREATE_ESCHEAD: &[u8] = b"[header]\nlanguage = *\n[data]\n/";
-/// Escape-sequence template tail (ROM bytes: the `src/`
-/// literal lacks the backslash, see the round-28 C defect).
+
 pub const CREATE_ESCTAIL: &[u8] = b"/ --> \"\\x1b\" \n";
-/// Voice-install MIME and key argument (in-unit literals).
+
 pub const CREATE_VOICEMIME: &[u8] = b"application/x-vocalizer-rettt+text";
-/// `D_8d7968` compare/copy/release (US ROM values; the row
-/// never observes them).
+
 pub const CREATE_CMP: u32 = 0x4;
 pub const CREATE_CPY: u32 = 0x151774;
 pub const CREATE_REL: u32 = 0x1517cc;
-/// `&D_8d79d8` / `&D_8d7970` (US ROM addresses, stored into the
-/// 17b0f8 buffers; the row skips those words).
+
 pub const CREATE_D_79D8: u32 = 0x8d79d8;
 pub const CREATE_D_7970: u32 = 0x8d7970;
 
-/// Byte length before the NUL (`fn_195d90` on a slice).
 fn cstrlen(s: &[u8]) -> u32 {
     s.iter().position(|&c| c == 0).unwrap() as u32
 }
 
-/// Case-insensitive 8-bit compare through the proven
-/// `fn_17c8c0` fold (`fn_1769d0` on slices).
 fn cmp_fold(a: &[u8], b: &[u8]) -> i32 {
     let mut i = 0;
     loop {
@@ -9437,7 +8247,6 @@ fn cmp_fold(a: &[u8], b: &[u8]) -> i32 {
     }
 }
 
-/// Bounded case-insensitive compare (`fn_176a48` on slices).
 fn cmp_fold_n(a: &[u8], b: &[u8], n: u32) -> i32 {
     let mut i = 0;
     while n > i {
@@ -9457,50 +8266,46 @@ fn cmp_fold_n(a: &[u8], b: &[u8], n: u32) -> i32 {
     }
 }
 
-/// External calls of the `fn_157a80` unit that live outside
-/// `src/fn_151914_merged.c`. Offsets address the caller's
-/// `mem`; strings are passed as bytes for logging. Methods
-/// named after the caller's use; the doc names the callee.
 pub trait CreateHooks {
-    /// `fn_176f94`: validate the open pair.
+
     fn check_open(&mut self, obj: u32, b: u32) -> u32;
-    /// `fn_19611c`: resolve `(a, b)` to `(status, context)`.
+
     fn resolve_ctx(&mut self, a: u32, b: u32) -> (u32, u32);
-    /// `fn_1963b8`: allocate the object (0 is failure).
+
     fn alloc_object(&mut self, n: u32, size: u32) -> u32;
-    /// `fn_176e40`: make the object mutex.
+
     fn make_mutex(&mut self, pad8: u32, heap: u32) -> (u32, u32);
-    /// `fn_196a64`: make the parameter callback (0 fails).
+
     fn make_param_cb(&mut self, heap: u32, cmp: u32, cpy: u32, rel: u32) -> (u32, u32);
-    /// `fn_17b058`: query the component registry.
+
     fn query_comp(&mut self, comp: u32, name: &[u8]) -> (u32, u32);
-    /// `fn_17f278`: register a missing component.
+
     fn register_comp(&mut self, c: u32, d: u32, name: &[u8], lname: &[u8], param_cb: u32) -> u32;
-    /// `fn_17b1c4`: release a registry handle.
+
     fn release_comp(&mut self, comp: u32, name: &[u8]);
-    /// `fn_17b0f8`: insert a registry entry.
+
     fn insert_comp(&mut self, comp: u32, name: &[u8], buf: &[u8; 20]) -> u32;
-    /// `fn_173fd8`: log verbosity.
+
     fn log_level(&mut self, log: u32) -> u32;
-    /// `fn_174e74`: register a parameter callback.
+
     fn reg_param_cb(&mut self, params: u32, key: Option<&[u8]>, this: u32) -> u32;
-    /// `fn_175a1c`: query a parameter string.
+
     fn query_param(&mut self, params: u32, key: &[u8]) -> (u32, u32);
-    /// `fn_1757a8`: keep a present parameter.
+
     fn touch_param(&mut self, params: u32, value: &[u8]);
-    /// `fn_1758ac`: set a numeric default.
+
     fn set_default_num(&mut self, params: u32, key: &[u8], value: u32);
-    /// `fn_1759a0`: set a string default.
+
     fn set_default_str(&mut self, params: u32, key: &[u8], value: &[u8]);
-    /// `fn_175944`: query a numeric parameter.
+
     fn query_num(&mut self, params: u32, key: &[u8]) -> (u32, u32);
-    /// `fn_17eb90`: license token.
+
     fn lic_token(&mut self, c: u32, d: u32) -> (u32, u32);
-    /// `fn_17f614`: trace the pipeline.
+
     fn trace_pipeline(&mut self, ha: u32, hb: u32, mime: &[u8], param_cb: u32) -> (u32, u32, u8);
-    /// `fn_1529b4`: start the object.
+
     fn start_object(&mut self, ctx: u32, obj: u32) -> u32;
-    /// `fn_151914`: install the escape mapping.
+
     #[allow(clippy::too_many_arguments)]
     fn install_voice(
         &mut self,
@@ -9511,24 +8316,18 @@ pub trait CreateHooks {
         len: u32,
         blob: (u32, u32),
     ) -> (u32, u32, u32);
-    /// `fn_176fd4`: the null pair.
+
     fn null_pair(&mut self) -> (u32, u32);
-    /// `fn_196394`: allocate a temp string (never fails here).
+
     fn alloc_temp(&mut self, heap: u32, size: u32) -> u32;
-    /// `fn_196428`: free a temp string.
+
     fn free_temp(&mut self, heap: u32, ptr: u32);
-    /// `fn_1523cc`: tear down a failed create.
+
     fn teardown(&mut self, ctx: u32);
-    /// `fn_151bf8`: release a replaced voice.
+
     fn release_voice(&mut self, h: (u32, u32), ptr: u32, n: u32);
 }
 
-/// fn_15ae20 / EU fn_15aee4 / KR fn_15ae04.
-///
-/// Validate the open pair and resolve its context. Returns the
-/// check status (mapping the `0x1fff == 8` failure to
-/// `0x81202008`); on success stores the object into `out` and,
-/// when `slot` is present, resolves `(a, b)` into it.
 pub fn open_object<H: CreateHooks>(
     hooks: &mut H,
     mem: &[u8],
@@ -9555,12 +8354,6 @@ pub fn open_object<H: CreateHooks>(
     }
 }
 
-/// fn_15accc / EU fn_15ad90 / KR fn_15acb0.
-///
-/// Descramble the `txm` license key from `params` with the
-/// 3-byte rotating key and report whether it matches. The
-/// caller guarantees the queried string is shorter than the
-/// 100-byte scratch, matching the original's stack buffer.
 pub fn check_key<H: CreateHooks>(hooks: &mut H, mem: &[u8], params: u32) -> u32 {
     let (rc, src) = hooks.query_param(params, CREATE_TXMKEY);
     if rc >= 0x80000000 || src == 0 {
@@ -9592,10 +8385,6 @@ pub fn check_key<H: CreateHooks>(hooks: &mut H, mem: &[u8], params: u32) -> u32 
     u32::from(cmp_fold(&buf, CREATE_TXMWANT) == 0)
 }
 
-/// fn_15b128 / EU fn_15b1ec / KR fn_15b10c.
-///
-/// Classify the license state: 2 for a keyed license, 1 for a
-/// CPR-voiced trace that survives the entry walk, 0 otherwise.
 pub fn license_kind<H: CreateHooks>(hooks: &mut H, mem: &[u8], ctx: u32, obj: u32, trace: u32) -> u32 {
     let lic = mem_word(mem, obj.wrapping_add(0x10));
     let (rc, inst) = hooks.resolve_ctx(mem_word(mem, lic), mem_word(mem, lic.wrapping_add(4)));
@@ -9637,11 +8426,6 @@ pub fn license_kind<H: CreateHooks>(hooks: &mut H, mem: &[u8], ctx: u32, obj: u3
     1
 }
 
-/// fn_15af9c / EU fn_15b060 / KR fn_15af80.
-///
-/// Install the alternate escape-sequence mapping for `value`
-/// (0 skips the string build). Returns the install status, or
-/// the replaced pair head, or the value's first byte.
 pub fn install_esc_seq<H: CreateHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -9701,8 +8485,6 @@ pub fn install_esc_seq<H: CreateHooks>(
     rc
 }
 
-/// Shared takedown for the `fn_157a80` fail paths: release the
-/// half-built object and zero the out pair.
 fn fail_create<H: CreateHooks>(hooks: &mut H, mem: &mut [u8], ctx: u32, out: u32, rc: u32) -> u32 {
     hooks.teardown(ctx);
     mem_store(mem, out, 0);
@@ -9710,18 +8492,6 @@ fn fail_create<H: CreateHooks>(hooks: &mut H, mem: &mut [u8], ctx: u32, out: u32
     rc
 }
 
-/// fn_157a80 / EU fn_157b44 / KR fn_157a64.
-///
-/// Create a synthesis object for the `(obj, b)` open pair:
-/// resolve the context, allocate and wire the object, bind the
-/// stream/lingua/component/inet providers, install parameter
-/// defaults and callbacks, license and start the pipeline, and
-/// report the pair through `out`. The `D_7974` callback list,
-/// the `D_8d7968` triple, and the `&D_` buffer words are the US
-/// ROM values (the row leaves the addresses unobserved). Log
-/// calls are elided (void, unobserved), as are the dead `inet`
-/// buffer stores. `mime`/`out` are 0 for null; `opts` points
-/// at 5 words.
 #[allow(clippy::too_many_arguments)]
 pub fn create_object<H: CreateHooks>(
     hooks: &mut H,
@@ -9946,33 +8716,30 @@ pub fn create_object<H: CreateHooks>(
     }
     rc
 }
-/// License-feature map behind `fn_158c4c`'s kind guard
-/// (`D_8d7969` bytes 0,3,0,6, identical on US/EU/KR).
+
 pub const PIPE_KIND_MAP: [u8; 4] = [0, 3, 0, 6];
-/// Parameter key for the pipeline-set analysis toggle.
+
 pub const PIPE_ANALYSIS_KEY: &[u8] = b"textanalysison";
-/// Toggle values (in-unit literals).
+
 pub const PIPE_YES: &[u8] = b"yes";
 pub const PIPE_NO: &[u8] = b"no";
-/// Guard name for the pipeline enter/leave pair (in-unit literal).
+
 pub const PIPE_GUARD_NAME: &[u8] = b"ttseg_PipelineSet";
 
-/// Cross-TU calls made by `fn_158c4c` (void log calls elided).
 pub trait PipeHooks {
-    /// `fn_176f94`: open the `(obj, b)` handle (tag/size fixed by the caller).
+
     fn check_open(&mut self, obj: u32, b: u32) -> u32;
-    /// `fn_19611c`: resolve `(a, b)` to the context.
+
     fn resolve_ctx(&mut self, a: u32, b: u32) -> (u32, u32);
-    /// `fn_1759a0`: set the analysis toggle.
+
     fn set_textanalysis(&mut self, params: u32, on: bool);
-    /// `fn_176f2c`: lock a mutex.
+
     fn lock(&mut self, mutex: u32) -> u32;
-    /// `fn_176f5c`: unlock a mutex.
+
     fn unlock(&mut self, mutex: u32) -> u32;
-    /// `fn_175c40`: open a pending parameter edit.
+
     fn query_pending(&mut self, params: u32) -> (u32, u32);
-    /// `fn_17f614`: trace the pipeline for `name`; returns
-    /// (status, pipeline, reactivate flag).
+
     fn trace_pipe(
         &mut self,
         ha: u32,
@@ -9981,32 +8748,28 @@ pub trait PipeHooks {
         cs: u32,
         stream: u32,
     ) -> (u32, u32, u8);
-    /// `fn_175a1c`: query a parameter string.
+
     fn query_param(&mut self, params: u32, key: &[u8]) -> (u32, u32);
-    /// `fn_1529b4`: start the object.
+
     fn start_object(&mut self, ctx: u32, obj: u32) -> u32;
-    /// `fn_17eb74`: licensed count for a feature.
+
     fn lic_count(&mut self, feat: u32) -> u32;
-    /// `fn_17eb3c`: licensed feature probe.
+
     fn lic_feat(&mut self, feat: u32) -> u32;
-    /// `fn_17eb58`: release the license token.
+
     fn release_token(&mut self, token: u32);
-    /// `fn_151f80`: license-state notify.
+
     fn notify_lic(&mut self, ctx: u32, channel: u32, kind: u32, mode: u32);
-    /// `fn_17ec38`: release a pipeline.
+
     fn release_pipe(&mut self, pipe: u32) -> u32;
-    /// `fn_175ce0`: roll a pending edit back.
+
     fn rollback_pending(&mut self, params: u32, pending: u32) -> u32;
-    /// `fn_175ef0`: release a pending edit.
+
     fn release_pending(&mut self, params: u32, pending: u32) -> u32;
-    /// `fn_1805f0`: reactivate the current stream.
+
     fn reactivate(&mut self, cs: u32);
 }
 
-/// fn_1517e8 / EU fn_1518ac / KR fn_1517cc.
-///
-/// Open the `(a, b)` pipeline handle and resolve its context;
-/// reports the object through `obj` (the handle itself).
 pub fn open_pipeline_ctx<H: PipeHooks>(
     hooks: &mut H,
     mem: &[u8],
@@ -10031,7 +8794,6 @@ pub fn open_pipeline_ctx<H: PipeHooks>(
     rc
 }
 
-/// `StateLock` over a `PipeHooks` mutex cell.
 struct PipeLock<'h, H: PipeHooks> {
     hooks: &'h mut H,
     mutex: u32,
@@ -10046,7 +8808,6 @@ impl<H: PipeHooks> StateLock for PipeLock<'_, H> {
     }
 }
 
-/// Sign-normalized byte compare (`fn_195d58`).
 pub(crate) fn pipe_cmp(a: &[u8], b: &[u8]) -> i32 {
     let mut i = 0;
     loop {
@@ -10064,7 +8825,6 @@ pub(crate) fn pipe_cmp(a: &[u8], b: &[u8]) -> i32 {
     }
 }
 
-/// fn_15accc mirror for the pipeline path (same key/want pair).
 fn pipe_check_key<H: PipeHooks>(hooks: &mut H, mem: &[u8], params: u32) -> u32 {
     let (rc, src) = hooks.query_param(params, CREATE_TXMKEY);
     if rc >= 0x80000000 || src == 0 {
@@ -10096,7 +8856,6 @@ fn pipe_check_key<H: PipeHooks>(hooks: &mut H, mem: &[u8], params: u32) -> u32 {
     u32::from(cmp_fold(&buf, CREATE_TXMWANT) == 0)
 }
 
-/// fn_15b128 mirror for the pipeline path.
 pub(crate) fn pipe_license_kind<H: PipeHooks>(
     hooks: &mut H,
     mem: &[u8],
@@ -10145,19 +8904,11 @@ pub(crate) fn pipe_license_kind<H: PipeHooks>(
     1
 }
 
-/// Hooks for the TTSEG license allocate/free twins.
 pub trait LicenseOpHooks {
-    /// `fn_1517e8`: open the `(a, b)` handle; reports ctx and lic.
+
     fn open_handle(&mut self, a: u32, b: u32, ctx: &mut u32, lic: &mut u32) -> u32;
 }
 
-/// fn_158a50 / EU fn_158b14 / KR fn_158a34, twin fn_158b58 / EU fn_158c1c /
-/// KR fn_158b3c.
-///
-/// TTSEG license allocate/free: both resolve the `(a, b)` handle and
-/// report the fixed unlicensed status. Log calls are elided (void,
-/// unobserved); `c` only feeds the null check (the mode string goes
-/// to the log, which never reads it).
 pub fn license_op<H: LicenseOpHooks>(hooks: &mut H, a: u32, b: u32, c: u32) -> u32 {
     if c == 0 {
         return 0x81202007;
@@ -10171,14 +8922,6 @@ pub fn license_op<H: LicenseOpHooks>(hooks: &mut H, a: u32, b: u32, c: u32) -> u
     0x81203d09
 }
 
-/// fn_158c4c / EU fn_158d10 / KR fn_158c30.
-///
-/// Set the TTSEG pipeline: open the handle, store the status,
-/// flip the analysis toggle, enter the guard, and either
-/// install the traced pipeline (switching the license state
-/// when the kind moves) or roll the pending edit back.
-/// `name` is 0 for null; `d` feeds the status byte and the
-/// toggle. Log calls are elided (void, unobserved).
 pub fn set_pipeline<H: PipeHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -10343,8 +9086,6 @@ pub fn set_pipeline<H: PipeHooks>(
     rc
 }
 
-/// License-state switch shared by the count and feature paths
-/// (previous-count drop or token release, notifies, stores).
 #[allow(clippy::too_many_arguments)]
 fn pipe_switch<H: PipeHooks>(
     hooks: &mut H,
@@ -10382,33 +9123,23 @@ fn pipe_switch<H: PipeHooks>(
     hooks.unlock(mem_word(mem, channel.wrapping_add(0x90)));
 }
 
-/// Input-bind buffer behind `fn_15b2a0` (1028 stack bytes).
 pub const BIND_BUF_LEN: usize = 1028;
 
-/// Cross-TU calls made by `fn_15b2a0` (void log calls elided).
 pub trait BindHooks {
-    /// `fn_1985fc`: open the bind stage.
+
     fn begin_stage(&mut self, obj: u32, arg: u32);
-    /// `fn_19860c`: close the bind stage.
+
     fn end_stage(&mut self, obj: u32, arg: u32);
-    /// `src.a` callback: fill `buf` (zeroed by the row) and
-    /// report the byte count through `size`.
+
     fn get_input(&mut self, b: u32, size: &mut u32, buf: &mut [u8; BIND_BUF_LEN]) -> u32;
-    /// `m24` of the bind object: drop the pair.
+
     fn drop_pair(&mut self, a: u32, b: u32);
-    /// `m34` of the bind object: push the filled buffer.
+
     fn push_input(&mut self, a: u32, b: u32, buf: &[u8; BIND_BUF_LEN]) -> u32;
-    /// `fn_176fd4`: a fresh null pair.
+
     fn null_pair(&mut self) -> (u32, u32);
 }
 
-/// fn_15b2a0 / EU fn_15b364 / KR fn_15b284.
-///
-/// Pull one input buffer through the `src` callback and push
-/// it into the bind object: a nonzero low 13 bits drops the
-/// pair, a clean status with bytes pushes them and advances
-/// `prep`, and a clean empty read drops the pair with
-/// `0x01202003`. Log calls are elided (void, unobserved).
 pub fn bind_input<H: BindHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -10445,15 +9176,8 @@ pub fn bind_input<H: BindHooks>(
     r
 }
 
-/// Synthesis marker record size in bytes (`Marker` in fn_151914.c).
 pub const MARKER_LEN: usize = 24;
 
-/// fn_152ed4 / EU fn_152f98 / KR fn_152eb8.
-///
-/// Scan markers at `[start, end)` for the first one selected by
-/// `flags`. With a null count the scan stops after the first hit;
-/// otherwise it counts every hit whose position does not exceed the
-/// first hit's. Reports the first hit's offset, or 0 for none.
 pub fn filter_markers(
     mem: &[u8],
     flags: u32,
@@ -10525,10 +9249,6 @@ pub fn filter_markers(
     first.unwrap_or(0)
 }
 
-/// fn_19861c / EU fn_1986cc / KR fn_198708.
-///
-/// Resume instrumentation hook: reports `0x88402007` for a null
-/// handle and 0 otherwise. The tag arguments are ignored.
 pub fn resume_stage_hook(handle: Option<u32>) -> u32 {
     if handle.is_some() {
         0
@@ -10537,11 +9257,6 @@ pub fn resume_stage_hook(handle: Option<u32>) -> u32 {
     }
 }
 
-/// fn_176f2c / EU fn_176fdc / KR fn_176f88.
-///
-/// Acquire the state lock: dispatch through the vtable's lock slot
-/// with the lock target. A null handle reports `0x81402007`; a null
-/// slot reports 0 without calling.
 pub fn acquire_lock(mem: &[u8], p: Option<u32>, mut call: impl FnMut(u32) -> u32) -> u32 {
     let Some(p) = p else {
         return 0x81402007;
@@ -10553,11 +9268,6 @@ pub fn acquire_lock(mem: &[u8], p: Option<u32>, mut call: impl FnMut(u32) -> u32
     call(mem_word(mem, p.wrapping_add(8)))
 }
 
-/// fn_176f5c / EU fn_17700c / KR fn_176fb8.
-///
-/// Release the state lock: dispatch through the vtable's unlock slot
-/// with the lock target. A null handle reports `0x81402007`; a null
-/// slot reports 0 without calling.
 pub fn release_lock(mem: &[u8], p: Option<u32>, mut call: impl FnMut(u32) -> u32) -> u32 {
     let Some(p) = p else {
         return 0x81402007;
@@ -10569,11 +9279,6 @@ pub fn release_lock(mem: &[u8], p: Option<u32>, mut call: impl FnMut(u32) -> u32
     call(mem_word(mem, p.wrapping_add(8)))
 }
 
-/// fn_19672c / EU fn_1967dc / KR fn_196818.
-///
-/// Remove `key` from the tree at `p` + 24: a null base or zero key
-/// reports `0x89002007`, a miss reports `0x89002014`, and a hit runs
-/// `remove` over the tree base and found node and reports 0.
 pub fn remove_tree_value(
     mem: &[u8],
     p: Option<u32>,
@@ -10599,31 +9304,25 @@ pub fn remove_tree_value(
     }
 }
 
-/// Cross-TU calls made by `fn_175ce0` (queue flush + param removal).
 pub trait FlushHooks {
-    /// `fn_196794`: open the pending queue iterator.
+
     fn open_iter(&mut self) -> (u32, u32);
-    /// `fn_196860`: fetch the next pending entry, if any.
+
     fn next_entry(&mut self) -> Option<(u32, u32, u32)>;
-    /// `fn_196830`: close the pending queue iterator.
+
     fn close_iter(&mut self);
-    /// `fn_175170` / `fn_174b38`: write a parameter value.
+
     fn write_param(&mut self, key: u32, data: u32, size: u32, remove: bool) -> u32;
-    /// `fn_176f2c` / `fn_176f5c`: lock and unlock the parameter set.
+
     fn lock(&mut self) -> u32;
-    /// `fn_176f5c`: unlock (see `lock`).
+
     fn unlock(&mut self) -> u32;
-    /// `fn_1966ac` + `fn_1970a0`: resolve a live value for removal.
+
     fn resolve_for_remove(&mut self, key: u32) -> (u32, Option<(u32, u32)>);
-    /// `fn_19672c`: drop the value from the table.
+
     fn drop_value(&mut self, key: u32) -> u32;
 }
 
-/// fn_175ce0 / EU fn_175d90 / KR fn_175d3c.
-///
-/// Flush the pending queue into the parameter set: nonzero entries
-/// update, zero-size entries remove (a `0x11` miss updates with an
-/// empty string, a `0x14` miss skips). Reports the first error.
 pub fn flush_pending<H: FlushHooks>(hooks: &mut H, handle: u32, present: bool) -> u32 {
     if handle == 0 || !present {
         return 0x8b702007;
@@ -10685,10 +9384,6 @@ fn remove_pending_param<H: FlushHooks>(hooks: &mut H, key: u32) -> u32 {
     r
 }
 
-/// fn_178530 / EU fn_1785e0 / KR fn_17858c.
-///
-/// Release a broker interface: reports 0 when both registry and
-/// component are present, `0x81506007` otherwise. Log calls are void.
 pub fn release_broker_interface(reg: Option<u32>, comp: Option<u32>) -> u32 {
     if reg.is_some() && comp.is_some() {
         0
@@ -10697,10 +9392,6 @@ pub fn release_broker_interface(reg: Option<u32>, comp: Option<u32>) -> u32 {
     }
 }
 
-/// fn_19862c / EU fn_1986dc / KR fn_198718.
-///
-/// Trace-open hook: reports 0 for a present handle,
-/// `0x88402007` for null. Further arguments are ignored.
 pub fn begin_trace_hook(handle: Option<u32>) -> u32 {
     if handle.is_some() {
         0
@@ -10709,10 +9400,6 @@ pub fn begin_trace_hook(handle: Option<u32>) -> u32 {
     }
 }
 
-/// fn_19863c / EU fn_1986ec / KR fn_198728.
-///
-/// Trace-close hook: reports 0 when both the handle and log are
-/// present, `0x88402007` otherwise. Further arguments are ignored.
 pub fn end_trace_hook(handle: Option<u32>, log: Option<u32>) -> u32 {
     if handle.is_some() && log.is_some() {
         0
@@ -10721,10 +9408,6 @@ pub fn end_trace_hook(handle: Option<u32>, log: Option<u32>) -> u32 {
     }
 }
 
-/// fn_1985c4 / EU fn_198674 / KR fn_1986b0.
-///
-/// Release a trace entry: validate the handle tag, freeing the entry
-/// through `free` on success. Reports the validation status.
 pub fn release_trace_entry(
     mem: &[u8],
     p: Option<u32>,
@@ -10741,24 +9424,17 @@ pub fn release_trace_entry(
     rc
 }
 
-/// Scripted cross-TU statuses plus the found entry for `fn_17b058`.
 pub struct AcquireScripts {
-    /// `fn_176f2c` lock status.
+
     pub lock: u32,
-    /// `fn_1966ac` find status.
+
     pub find: u32,
-    /// `fn_1966ac` entry output.
+
     pub found: Option<u32>,
-    /// `fn_176f5c` unlock status.
+
     pub unlock: u32,
 }
 
-/// fn_17b058 / EU fn_17b108 / KR fn_17b0b4.
-///
-/// Acquire a linguistic map entry: a failed find remaps its status,
-/// otherwise the entry is stored to `out` and its reference count
-/// increments. Reports the find status (or the unlock status when the
-/// find succeeded and the unlock failed).
 pub fn acquire_ling_entry(
     mem: &mut [u8],
     o: Option<u32>,
@@ -10788,29 +9464,21 @@ pub fn acquire_ling_entry(
     rc
 }
 
-/// Cross-TU calls made by `fn_17ec38` (pipeline teardown).
 pub trait TeardownHooks {
-    /// Trace open/close calls (returns ignored).
+
     fn trace(&mut self, _which: u32) {}
-    /// Per-component trace brackets (returns ignored).
+
     fn trace_comp(&mut self, _index: u32, _closing: bool) {}
-    /// `vt->close`: close one component handle; reports its status.
+
     fn close_comp(&mut self, h0: u32, h1: u32) -> u32;
-    /// `fn_178530`: release one component vtable; reports its status.
+
     fn release_broker(&mut self) -> u32;
-    /// `fn_1985c4`: release the trace entry (return ignored).
+
     fn release_trace(&mut self) {}
-    /// `fn_196428`: free one heap block.
+
     fn free_block(&mut self, heap: u32, block: u32);
 }
 
-/// fn_17ec38 / EU fn_17ece8 / KR fn_17ec94.
-///
-/// Tear down a pipeline: in reverse, drop refcounted components,
-/// close the rest whose handle differs from `null_pair`, release
-/// each vtable, and free each name and struct; then release the
-/// trace entry, free the extras array, field4, and pipeline.
-/// Reports the first close/release error.
 pub fn teardown_pipeline<H: TeardownHooks>(
     mem: &mut [u8],
     cs: Option<u32>,
@@ -10913,40 +9581,25 @@ pub fn teardown_pipeline<H: TeardownHooks>(
     r
 }
 
-/// Cross-TU calls made by `fn_1805f0` (pipeline reopen).
 pub trait ReopenHooks {
-    /// `fn_1759a0`: write one named parameter (return ignored).
+
     fn write_named(&mut self, tag: &[u8], val: &[u8]);
-    /// `fn_17a3b8`: open a tag iterator; reports `(status, live)`.
+
     fn open_tags(&mut self) -> (u32, bool);
-    /// `fn_17a814`: fetch the next tag, if any.
+
     fn next_tag(&mut self) -> Option<(u32, Option<u32>)>;
-    /// `fn_17a2ec`: close the tag iterator.
+
     fn close_tags(&mut self);
-    /// `fn_17b058`: acquire the named object entry.
+
     fn acquire_entry(&mut self) -> (u32, Option<(u32, u32, u32)>);
-    /// `o->reopen`: reopen one entry handle; reports its status.
+
     fn reopen_entry(&mut self, h0: u32, h1: u32) -> u32;
-    /// `fn_17b1c4`: release one entry by tag.
+
     fn release_entry(&mut self, tag: u32);
-    /// `vt->unload`: unload one component handle; reports its status.
+
     fn unload_comp(&mut self, h0: u32, h1: u32) -> u32;
 }
 
-/// fn_1805f0 / EU fn_1806a0 / KR fn_18064c.
-///
-/// Reopen a pipeline under a new voice name: seed the fixed
-/// parameters, apply registry tags, reopen each listed object, then
-/// unload every component. Reports the first object/unload error, or
-/// `0x81202004` for a malformed object tag.
-///
-/// The unload slot follows the ROM (vt+0x18), not the decomp's
-/// `c->vt->unload` at +0x24 (src/fn_17ec38.c:732,734; reported C
-/// defect, all regions). Likewise the malformed-tag error returns
-/// immediately: the ROM jumps to done while the decomp `break`s
-/// into 17a2ec + the unload loop (src/fn_17ec38.c:706-711), and an
-/// unload error also returns at once while the decomp continues
-/// the loop (src/fn_17ec38.c:735-737).
 pub fn reopen_pipeline<H: ReopenHooks>(
     mem: &[u8],
     cs: u32,
@@ -10956,7 +9609,7 @@ pub fn reopen_pipeline<H: ReopenHooks>(
     let mut rc = 0u32;
     let count = mem_half(mem, cs.wrapping_add(12));
     let name = mem_word(mem, cs.wrapping_add(4));
-    // Fixed parameter seed (the last tag is D_17f9cc).
+
     hooks.write_named(b"pipeline", read_cstr(mem, name));
     for (tag, val) in [
         (&b"mlset"[..], &b""[..]),
@@ -10996,10 +9649,7 @@ pub fn reopen_pipeline<H: ReopenHooks>(
             let val = match val {
                 Some(v) if tag != 0 && mem[v as usize] != 0 => v,
                 _ => {
-                    // C defect: src/fn_17ec38.c:706-711 `break`s to
-                    // 17a2ec + the unload loop, but the ROM jumps to
-                    // done (US 0x180880 b 0x1809fc; all regions
-                    // agree), skipping both. The port follows the ROM.
+
                     return 0x81202004;
                 }
             };
@@ -11028,19 +9678,12 @@ pub fn reopen_pipeline<H: ReopenHooks>(
     while i < count as u32 {
         let c = mem_word(mem, comps.wrapping_add(i * 4));
         let vt = mem_word(mem, c.wrapping_add(8));
-        // C defect: src/fn_17ec38.c:732,734 reads c->vt->unload
-        // at +0x24, but the ROM loads vt+0x18 (US 0x1808c4 e5900018
-        // null-check / 0x1808f4 e5902018 call; same EU/KR), so the
-        // port follows the ROM. The r2/r3 the ROM passes (its own
-        // fn pointer, log residue) are ignored by the callee.
+
         if mem_word(mem, vt.wrapping_add(0x18)) != 0 {
             let h0 = mem_word(mem, c.wrapping_add(12));
             let h1 = mem_word(mem, c.wrapping_add(16));
             let r2 = hooks.unload_comp(h0, h1);
-            // C defect: src/fn_17ec38.c:735-737 logs an unload
-            // error and continues, but the ROM jumps to done (US
-            // 0x180940 b 0x1809fc; all regions agree). The port
-            // follows the ROM.
+
             if r2 >= 0x80000000 {
                 return r2;
             }
@@ -11052,7 +9695,7 @@ pub fn reopen_pipeline<H: ReopenHooks>(
 }
 
 fn compare_tag_prefix(mem: &[u8], tag: u32, filter: &[u8]) -> bool {
-    // Mirrors fn_195df8(tag, filter, 11) == 0.
+
     let mut i = 0usize;
     while i < 11 {
         let a = mem[tag as usize + i];
@@ -11074,13 +9717,8 @@ fn read_cstr(mem: &[u8], at: u32) -> &[u8] {
     &mem[start..start + len]
 }
 
-/// Cross-TU calls made by `fn_1530d0` (US 1530d0 / EU 153194 / KR 1530b4),
-/// the output pump: the user's `putOutput` sink plus the pcm/marker
-/// stream methods and the marker-array realloc.
 pub trait EmitHooks {
-    /// `p->putOutput(user, msg, &buf, &len, arr, &nmark)`: deliver one
-    /// buffer. `markers` holds the `n_in` entries at `arr` (empty when
-    /// `arr` is null). Reports `(status, buf, len, nmark)`.
+
     fn put_output(
         &mut self,
         user: u32,
@@ -11089,23 +9727,18 @@ pub trait EmitHooks {
         n_in: u32,
         markers: &[u8],
     ) -> (u32, Option<u32>, u32, u32);
-    /// `p->vt->getAvail`: reports `(status, avail, eos)`.
+
     fn get_avail(&mut self, a: u32, b: u32) -> (u32, u32, u8);
-    /// `p->vt->getBuf`: reports `(status, buf, len)`.
+
     fn get_buf(&mut self, a: u32, b: u32) -> (u32, Option<u32>, u32);
-    /// `p->vt->getPos`: reports `(status, pos)`.
+
     fn get_pos(&mut self, a: u32, b: u32) -> (u32, u32);
-    /// `p->vt->consume`: consume `n` units; reports its status.
+
     fn consume(&mut self, a: u32, b: u32, n: u32) -> u32;
-    /// `fn_1963e0`: grow the marker array; reports the new block, if any.
+
     fn realloc_markers(&mut self) -> Option<u32>;
 }
 
-/// Pump pending pcm/markers out through the user's `putOutput` sink.
-///
-/// `p` is the `TtsSynth`, `sent` the optional delivery flag. Returns the
-/// terminal status: a hook error, `0x8120200a` when the marker array
-/// cannot grow, `0x81202807` for an empty user buffer, else 0.
 pub fn emit_output<H: EmitHooks>(
     mem: &mut [u8],
     p: u32,
@@ -11346,8 +9979,7 @@ pub fn emit_output<H: EmitHooks>(
         }
         if let Some(mk) = mk_buf {
             let mut j = first;
-            // Scan to &markers[markerAvail] (src/fn_151914.c:1093
-            // matches the ROM since 300e7b8).
+
             let stop = mk.wrapping_add(marker_avail.wrapping_mul(24));
             while j != stop {
                 let ty = u16::from_le_bytes(mem[j as usize..j as usize + 2].try_into().unwrap());
@@ -11382,7 +10014,7 @@ pub fn emit_output<H: EmitHooks>(
         mem_store(mem, o.wrapping_add(0x68), nmark);
         out_buf = buf.unwrap_or(0);
         if rc >= 0x80000000 {
-            // Error is only logged; fall through to the state update.
+
         } else if out_buf == 0 || mem_word(mem, o.wrapping_add(0x64)) == 0 {
             rc = 0x81202807;
         }
@@ -11407,39 +10039,25 @@ pub fn emit_output<H: EmitHooks>(
     rc
 }
 
-/// Cross-TU calls made by `fn_1561b8` (US 1561b8 / EU 15627c / KR 15619c),
-/// the output teardown: stream close/release, the null pair, the lex
-/// close/free pair, and the pipeline swap pair. The inner
-/// `fn_1530d0` pump arrives through [`EmitHooks`].
 pub trait SynthTeardownHooks {
-    /// `p->vt->close`: closes one stream; reports its status. Serves
-    /// the pp/pcm/marker closes and the marker-stream close inside
-    /// `fn_154108` (which ignores the status).
+
     fn close_stream(&mut self, a: u32, b: u32) -> u32;
-    /// `c->vt->processEnd`: ends one component; reports its status.
+
     fn process_end(&mut self, h0: u32, h1: u32) -> u32;
-    /// `p->vt->release` / `p->vt2->release`: reports its status.
+
     fn release_stream(&mut self, a: u32, b: u32) -> u32;
-    /// `fn_176fd4`: the null pair (`D_8d7660`).
+
     fn null_pair(&mut self) -> (u32, u32);
-    /// `fn_175ce0`: reports its status.
+
     fn lex_close(&mut self, params: u32, lex: u32) -> u32;
-    /// `fn_175ef0`: reports its status.
+
     fn lex_free(&mut self, params: u32, lex: u32) -> u32;
-    /// `fn_17ec38`: tears down the outgoing pipeline; reports its status.
+
     fn retire_pipeline(&mut self, cs: u32) -> u32;
-    /// `fn_1805f0`: reopens the incoming pipeline; reports its status.
+
     fn reopen_pipeline_cs(&mut self, cs: u32) -> u32;
 }
 
-/// `fn_1561b8` / EU `fn_15627c` / KR `fn_15619c`.
-///
-/// Tears the output side down: ends components `0..curComp`, closes
-/// the pp/pcm/marker streams (flushing the pump first for pcm),
-/// sends DONE, frees the marker array, swaps in the pending
-/// pipeline, releases the pipe/aux streams, and closes the lex
-/// handle. Returns the first error in that order, else 0. `err`,
-/// `in_len` and `dur` feed only the dropped trace call.
 pub fn teardown_synth<H: SynthTeardownHooks + EmitHooks>(
     mem: &mut [u8],
     p: u32,
@@ -11584,23 +10202,20 @@ pub fn teardown_synth<H: SynthTeardownHooks + EmitHooks>(
     rc
 }
 
-/// Audio event record moved by `fn_22d6dc` (24 bytes).
 pub const INSERT_EVENT_LEN: u32 = 24;
 
-/// Cross-TU calls made by `fn_22d6dc` (void log calls and the
-/// log-gate probe elided: neither writes an observed byte).
 pub trait InserterPumpHooks {
-    /// Buffer `available`: report `count` bytes with end flag `end`.
+
     fn buf_available(&mut self, h0: u32, h1: u32, count: &mut u32, end: &mut u8) -> u32;
-    /// Buffer `read`: expose `*count` input bytes at `*data`.
+
     fn buf_read(&mut self, h0: u32, h1: u32, data: &mut u32, count: &mut u32) -> u32;
-    /// Buffer `write`: expose the output events at `*data`.
+
     fn buf_write(&mut self, h0: u32, h1: u32, data: &mut u32, count: u32) -> u32;
-    /// Buffer `consume`: release `n` input bytes.
+
     fn buf_consume(&mut self, h0: u32, h1: u32, n: u32) -> u32;
-    /// Buffer `close`.
+
     fn buf_close(&mut self, h0: u32, h1: u32) -> u32;
-    /// Buffer `copy`: move `n` bytes, reporting `moved`.
+
     fn buf_copy(
         &mut self,
         d0: u32,
@@ -11610,11 +10225,11 @@ pub trait InserterPumpHooks {
         n: u32,
         moved: &mut u32,
     ) -> u32;
-    /// Buffer `position`: report the read position.
+
     fn buf_position(&mut self, h0: u32, h1: u32, pos: &mut u32) -> u32;
-    /// Buffer `commit`: publish `n` output bytes.
+
     fn buf_commit(&mut self, h0: u32, h1: u32, n: u32) -> u32;
-    /// Inserter `resolve`: map `uri` to a name.
+
     fn ins_resolve(
         &mut self,
         s0: u32,
@@ -11624,8 +10239,7 @@ pub trait InserterPumpHooks {
         n1: u32,
         out: &mut u32,
     ) -> u32;
-    /// Inserter `open`: start an insertion, writing position,
-    /// remaining and handle.
+
     fn ins_open(
         &mut self,
         s0: u32,
@@ -11635,24 +10249,14 @@ pub trait InserterPumpHooks {
         rem: &mut u32,
         ins: &mut (u32, u32),
     ) -> u32;
-    /// Inserter `close`.
+
     fn ins_close(&mut self, h0: u32, h1: u32, flag: u32) -> u32;
-    /// `fn_22c85c`: run one insertion step (stubbed in the row:
-    /// the render never reaches it).
+
     fn pump_remote(&mut self, mem: &mut [u8], base: u32) -> u32;
-    /// `fn_176fd4`: a fresh null pair.
+
     fn null_pair(&mut self) -> (u32, u32);
 }
 
-/// fn_22d6dc / EU fn_22d898 / KR fn_22d944.
-///
-/// Pump one events buffer through the audio inserter at `base`:
-/// with an insertion already open, step it and tear it down when
-/// it drains; with input events, rebase their positions, fold
-/// type-8 timing and open type-0x1a insertions, then commit the
-/// sorted outputs; with neither, close out ended streams or copy
-/// the audio tail. Reports progress through `status` (1 open, 0
-/// stalled, 2 drained).
 pub fn pump_insertion<H: InserterPumpHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -11904,18 +10508,13 @@ pub fn pump_insertion<H: InserterPumpHooks>(
     rc
 }
 
-/// Cross-TU calls made by `fn_1fe040` and `fn_1fe094`.
 pub trait TextStateHooks {
-    /// `fn_19611c`: resolve the state's handle to a context.
+
     fn resolve_context(&mut self, h0: u32, h1: u32, ctx: &mut u32) -> u32;
-    /// `fn_1970a0`: read the source count.
+
     fn read_count(&mut self, src: u32) -> u32;
 }
 
-/// fn_1fe040 / EU fn_1fe1fc / KR fn_1fe2a8.
-///
-/// Refresh the text state's item count from its source once the
-/// handle resolves.
 pub fn refresh_text_count<H: TextStateHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -11940,16 +10539,11 @@ pub fn refresh_text_count<H: TextStateHooks>(
     result
 }
 
-/// Element destructor behind `fn_19703c`.
 pub trait ItemsDtorHooks {
-    /// Run one element destructor over `elem` with `ctx`.
+
     fn destroy_elem(&mut self, elem: u32, ctx: u32);
 }
 
-/// fn_19703c / EU fn_1970ec / KR fn_197128.
-///
-/// Run the items destructor over every element, then clear the
-/// count. A null block destroys nothing.
 pub fn destroy_items<H: ItemsDtorHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -11973,15 +10567,11 @@ pub fn destroy_items<H: ItemsDtorHooks>(
     1
 }
 
-/// Cross-TU calls made by `fn_1fe094`.
 pub trait TextResetHooks: ItemsDtorHooks {
-    /// `fn_19611c`: resolve the state's handle to a context.
+
     fn resolve_context(&mut self, h0: u32, h1: u32, ctx: &mut u32) -> u32;
 }
 
-/// fn_1fe094 / EU fn_1fe250 / KR fn_1fe2fc.
-///
-/// Clear the text state's items once the handle resolves.
 pub fn clear_text_items<H: TextResetHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12006,20 +10596,13 @@ pub fn clear_text_items<H: TextResetHooks>(
     result
 }
 
-/// Cross-TU calls made by `fn_230274` (the switch name is a
-/// literal, so only the flag value crosses).
 pub trait SwitchHooks {
-    /// `fn_175944`: read the pipeline-switch flag into `val`.
+
     fn read_switch(&mut self, obj: u32, val: &mut u32) -> u32;
-    /// `fn_196770`: close the pipes for `arg`.
+
     fn close_pipes(&mut self, arg: u32) -> u32;
 }
 
-/// fn_230274 / EU fn_230430 / KR fn_2304dc.
-///
-/// Report the pipeline-switch state: an executing switch
-/// returns early, otherwise the pipes close and the slot is
-/// marked done.
 pub fn pipeline_switch<H: SwitchHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12047,16 +10630,11 @@ pub fn pipeline_switch<H: SwitchHooks>(
     r
 }
 
-/// Stream release behind `fn_1f4cb0`.
 pub trait PromptReleaseHooks {
-    /// Release one `(object, tag)` stream handle.
+
     fn release_stream(&mut self, h0: u32, h1: u32) -> u32;
 }
 
-/// fn_1f4cb0 / EU fn_1f4e6c / KR fn_1f4f18.
-///
-/// Release the prompt processor's input then output streams,
-/// clearing each slot. Reports the last release status.
 pub fn release_prompt<H: PromptReleaseHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12078,16 +10656,11 @@ pub fn release_prompt<H: PromptReleaseHooks>(
     r
 }
 
-/// Slot release behind `fn_211348`.
 pub trait SlotReleaseHooks {
-    /// Release one `(obj, arg)` slot.
+
     fn release_slot(&mut self, obj: u32, arg: u32) -> u32;
 }
 
-/// fn_211348 / EU fn_211504 / KR fn_2115b0.
-///
-/// Release the three resource slots in order, clearing each
-/// one. Reports the last release status.
 pub fn release_slots<H: SlotReleaseHooks>(hooks: &mut H, mem: &mut [u8], base: u32, b: u32) -> u32 {
     let mut r = validate_handle(true, b, 0xf381, 52);
     if r >= 0x80000000 {
@@ -12109,18 +10682,13 @@ pub fn release_slots<H: SlotReleaseHooks>(hooks: &mut H, mem: &mut [u8], base: u
     r
 }
 
-/// Stream close behind `fn_1f43f0`.
 pub trait StreamCloseHooks {
-    /// Close one `(h0, h1)` stream handle.
+
     fn close_stream(&mut self, h0: u32, h1: u32) -> u32;
-    /// `fn_176fd4`: a fresh null pair.
+
     fn null_pair(&mut self) -> (u32, u32);
 }
 
-/// fn_1f43f0 / EU fn_1f45ac / KR fn_1f4658.
-///
-/// Close both stream handles, resetting each slot to a null
-/// pair. Reports the last close status.
 pub fn close_streams<H: StreamCloseHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12143,16 +10711,11 @@ pub fn close_streams<H: StreamCloseHooks>(
     r
 }
 
-/// Vtable method call behind `fn_200e2c` / `fn_201264`.
 pub trait VMethodHooks {
-    /// Call the method with `(c, d)`.
+
     fn call_method(&mut self, c: u32, d: u32) -> u32;
 }
 
-/// fn_200e2c / EU fn_200fe8 / KR fn_201094.
-///
-/// Dispatch `(c, d)` through vtable method 7 once the handle
-/// validates. The row plants the probe at slot +28.
 pub fn call_method7<H: VMethodHooks>(hooks: &mut H, mem: &[u8], base: u32, q: u32) -> u32 {
     if validate_handle(true, q, 0xf383, 0x20) >= 0x80000000 {
         return 0x8bb02008;
@@ -12163,11 +10726,6 @@ pub fn call_method7<H: VMethodHooks>(hooks: &mut H, mem: &[u8], base: u32, q: u3
     )
 }
 
-/// fn_201264 / EU fn_201420 / KR fn_2014cc.
-///
-/// Dispatch `(c, d)` through vtable method 8 once the handle
-/// validates. The row plants the probe at slot +32 (one past
-/// the declared `m[8]`, which the engine sizes generously).
 pub fn call_method8<H: VMethodHooks>(hooks: &mut H, mem: &[u8], base: u32, q: u32) -> u32 {
     if validate_handle(true, q, 0xf383, 0x20) >= 0x80000000 {
         return 0x8bb02008;
@@ -12178,16 +10736,11 @@ pub fn call_method8<H: VMethodHooks>(hooks: &mut H, mem: &[u8], base: u32, q: u3
     )
 }
 
-/// Word allocator behind `fn_1ce1bc`.
 pub trait AllocRecHooks {
-    /// Allocate `n` `size`-byte units from `heap`.
+
     fn alloc_word(&mut self, heap: u32, n: u32, size: u32) -> Option<u32>;
 }
 
-/// fn_1ce1bc / EU fn_1ce378 / KR fn_1ce424.
-///
-/// Allocate one back-reference cell holding the object address
-/// and report it through `out`.
 pub fn create_backref<H: AllocRecHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12213,23 +10766,17 @@ pub fn create_backref<H: AllocRecHooks>(
     rc
 }
 
-/// Context calls behind `fn_22e084`.
 pub trait CtxResetHooks {
-    /// Outer `release` of `(a, b)` with `flag`.
+
     fn release_pair(&mut self, a: u32, b: u32, flag: u32) -> u32;
-    /// Inner `free` of `(a, b)`.
+
     fn free_pair(&mut self, a: u32, b: u32) -> u32;
-    /// Outer `detach` of `(a, b)`.
+
     fn detach_pair(&mut self, a: u32, b: u32) -> u32;
-    /// `fn_176fd4`: a fresh null pair.
+
     fn null_pair(&mut self) -> (u32, u32);
 }
 
-/// fn_22e084 / EU fn_22e240 / KR fn_22e2ec.
-///
-/// Tear down the context: release the trailing handle, clear the
-/// counters, free the four live handles in order (first error
-/// sticks), then detach the stale one.
 pub fn reset_ctx<H: CtxResetHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12274,19 +10821,16 @@ pub fn reset_ctx<H: CtxResetHooks>(
     ret
 }
 
-/// Text-stream calls behind `fn_18fdc0`.
 pub trait TextOpenHooks {
-    /// `fn_19611c`: resolve the engine handle to an environment.
+
     fn resolve_env(&mut self, h0: u32, h1: u32, env: &mut u32) -> u32;
-    /// `fn_175a1c`: report `(rc, mime-offset)` for the properties;
-    /// the offset is the planted default on error.
+
     fn mime_type(&mut self, props: u32) -> (u32, u32);
-    /// Planted prefix offset: the UTF-8 mark when `utf8`, the
-    /// UTF-16 mark otherwise.
+
     fn prefix_off(&mut self, utf8: bool) -> u32;
-    /// Interface `create`: open a stream for `(h0, h1)` into `out`.
+
     fn stream_create(&mut self, h0: u32, h1: u32, out: &mut (u32, u32)) -> u32;
-    /// Interface `open`: bind `name` bytes to `out`.
+
     fn stream_open(
         &mut self,
         h0: u32,
@@ -12297,24 +10841,18 @@ pub trait TextOpenHooks {
         y: u32,
         out: &mut (u32, u32),
     ) -> u32;
-    /// Interface `buffer`: expose `count` bytes at `*data`.
+
     fn stream_buffer(&mut self, h0: u32, h1: u32, data: &mut u32, count: u32) -> u32;
-    /// Interface `commit`: publish `n` bytes.
+
     fn stream_commit(&mut self, h0: u32, h1: u32, n: u32) -> u32;
-    /// Interface `close`.
+
     fn stream_close(&mut self, h0: u32, h1: u32) -> u32;
-    /// Interface `destroy`.
+
     fn stream_destroy(&mut self, h0: u32, h1: u32) -> u32;
-    /// `fn_176fd4`: a fresh null pair.
+
     fn null_pair(&mut self) -> (u32, u32);
 }
 
-/// fn_18fdc0 / EU fn_18fe70 / KR fn_18feac.
-///
-/// Open a text stream for the request: resolve the environment,
-/// pick the prefix mark from the input MIME type, stage
-/// prefix plus text into the stream buffer and commit. Reports
-/// the first error, destroying a half-opened stream.
 pub fn open_text<H: TextOpenHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12401,29 +10939,21 @@ pub fn open_text<H: TextOpenHooks>(
     rc
 }
 
-/// Language-database reset calls behind `fn_15bab0`.
 pub trait LdResetHooks {
-    /// `fn_1738e8`: reset-begin trace on the table logger.
+
     fn log_begin(&mut self, vt4: u32);
-    /// `fn_173dc0`: reset-failure trace with `code`.
+
     fn log_error(&mut self, vt4: u32, code: u32);
-    /// `fn_1738e8`: reset-end trace reporting `r`.
+
     fn log_end(&mut self, vt4: u32, r: u32);
-    /// `fn_1963b8`: allocate the scratch buffer; 0 on failure.
+
     fn alloc_buf(&mut self, vt1: u32, n: u32) -> u32;
-    /// `fn_180ea0`: reset the block pool at `at` (zero each
-    /// block back to its base and clear the tally word).
+
     fn reset_pool(&mut self, mem: &mut [u8], at: u32);
-    /// `fn_15b758`: loader reset into `x`.
+
     fn load_reset(&mut self, x: &mut u32) -> u32;
 }
 
-/// fn_15bab0 / EU fn_15bb74 / KR fn_15ba94.
-///
-/// Reset the language database: validate the handle, allocate the
-/// scratch buffer on first use, reset the block pool and delegate
-/// to the loader reset. Mode 2 skips straight to the tail; any
-/// other non-1 mode is rejected.
 pub fn ld_reset<H: LdResetHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12464,12 +10994,10 @@ pub fn ld_reset<H: LdResetHooks>(
     r
 }
 
-/// Dual-stream open calls behind `fn_1f3dc0`.
 pub trait DualStreamHooks {
-    /// Stream-name token for output `i` (the name bytes ride
-    /// with the create call and are never dereferenced).
+
     fn name_off(&mut self, i: u32) -> u32;
-    /// Interface `create`: open the named stream into `out`.
+
     fn stream_create(
         &mut self,
         h0: u32,
@@ -12477,16 +11005,12 @@ pub trait DualStreamHooks {
         name: u32,
         out: &mut (u32, u32),
     ) -> u32;
-    /// Interface `release`.
+
     fn stream_release(&mut self, h0: u32, h1: u32);
-    /// `fn_176fd4`: a fresh null pair.
+
     fn null_pair(&mut self) -> (u32, u32);
 }
 
-/// fn_1f3dc0 / EU fn_1f3f7c / KR fn_1f4028.
-///
-/// Open both processor output streams; a failed open releases
-/// the earlier outputs and reports the failure.
 pub fn open_dual<H: DualStreamHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12532,11 +11056,10 @@ pub fn open_dual<H: DualStreamHooks>(
     result
 }
 
-/// Prompt-stream open calls behind `fn_1f4724`.
 pub trait PromptStreamsHooks {
-    /// Stream-name token for `table` (0 input, 1 output), entry `i`.
+
     fn name_off(&mut self, table: u32, i: u32) -> u32;
-    /// Interface `create`: open the named stream into `out`.
+
     fn stream_create(
         &mut self,
         h0: u32,
@@ -12546,17 +11069,12 @@ pub trait PromptStreamsHooks {
         y: u32,
         out: &mut (u32, u32),
     ) -> u32;
-    /// Interface `getMode`.
+
     fn query_mode(&mut self) -> u32;
-    /// Interface `release`.
+
     fn stream_release(&mut self, h0: u32, h1: u32);
 }
 
-/// fn_1f4724 / EU fn_1f48e0 / KR fn_1f498c.
-///
-/// Open both prompt input streams then both output streams (the
-/// second output carries the interface mode); a failed open
-/// releases the earlier streams and reports the failure.
 pub fn open_prompt<H: PromptStreamsHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12642,11 +11160,10 @@ pub fn open_prompt<H: PromptStreamsHooks>(
     result
 }
 
-/// Triple-stream open calls behind `fn_210398`.
 pub trait TripleStreamsHooks {
-    /// Stream-name token for output `i`.
+
     fn name_off(&mut self, i: u32) -> u32;
-    /// Interface `create`: open the named stream into `out`.
+
     fn stream_create(
         &mut self,
         h0: u32,
@@ -12655,17 +11172,12 @@ pub trait TripleStreamsHooks {
         x: u32,
         out: &mut (u32, u32),
     ) -> u32;
-    /// Interface `get_value`.
+
     fn query_value(&mut self) -> u32;
-    /// Interface `destroy`.
+
     fn stream_destroy(&mut self, h0: u32, h1: u32);
 }
 
-/// fn_210398 / EU fn_210554 / KR fn_210600.
-///
-/// Open the three resource streams (the middle one carries the
-/// interface value); a failed open destroys the earlier
-/// resources and reports the failure.
 pub fn open_triple<H: TripleStreamsHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12707,23 +11219,15 @@ pub fn open_triple<H: TripleStreamsHooks>(
     result
 }
 
-/// Voice-query calls behind `fn_15eef0`.
 pub trait VoiceQueryHooks {
-    /// `fn_1738e8`: match-begin trace on the header logger.
+
     fn log_begin(&mut self, logger: u32);
-    /// `fn_1738e8`: match-end trace reporting `rc`.
+
     fn log_end(&mut self, logger: u32, rc: u32);
-    /// `fn_15db94`: match `vrec` against the header, updating
-    /// the record in place.
+
     fn match_voice(&mut self, hdr: &[u8; 32], vrec: &mut [u8; 296], flags: u32) -> u32;
 }
 
-/// fn_15eef0 / EU fn_15efb4 / KR fn_15eed4.
-///
-/// Find the voice for the query: copy the header with the
-/// caller's name/language overrides, match a scratch copy of
-/// the record, fill "text"/"pcm" defaults for empty slots and
-/// write the record back.
 pub fn find_voice<H: VoiceQueryHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12769,9 +11273,8 @@ pub fn find_voice<H: VoiceQueryHooks>(
     rc
 }
 
-/// Audio-stream open calls behind `fn_22d460`.
 pub trait AudioOpenHooks {
-    /// Interface `open`: open the named stream into `out`.
+
     fn stream_open(
         &mut self,
         h0: u32,
@@ -12781,20 +11284,14 @@ pub trait AudioOpenHooks {
         y: u32,
         out: &mut (u32, u32),
     ) -> u32;
-    /// Interface `markerMode`.
+
     fn query_marker_mode(&mut self) -> u32;
-    /// Audio-open failure trace.
+
     fn audio_open_failed(&mut self, logger: u32);
-    /// Content-open failure trace with `code`.
+
     fn content_open_failed(&mut self, logger: u32, code: u32);
 }
 
-/// fn_22d460 / EU fn_22d61c / KR fn_22d6c8.
-///
-/// Open the synthesiser audio streams: two L16 streams named
-/// for the sample rate, then two marker streams. A failed
-/// second or third open stops the chain; the first and last
-/// failures only trace.
 pub fn open_audio<H: AudioOpenHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12851,9 +11348,8 @@ pub fn open_audio<H: AudioOpenHooks>(
     rc
 }
 
-/// Segment-score calls behind `fn_15b404`.
 pub trait SegmentScoreHooks {
-    /// `fn_15668c`: score the segment; the gate for the rest.
+
     #[allow(clippy::too_many_arguments)]
     fn score_segment(
         &mut self,
@@ -12868,21 +11364,14 @@ pub trait SegmentScoreHooks {
         o0: u32,
         o1: u32,
     ) -> u32;
-    /// `fn_15429c`: refresh the object.
+
     fn refresh_object(&mut self) -> u32;
-    /// Table method `m44`: resolve the handle count into `n`.
+
     fn resolve_count(&mut self, handle: u32, flag: u32, n: &mut u32);
-    /// `fn_1561b8`: combine the outputs.
+
     fn combine_outputs(&mut self, o1: u32, o2: u32) -> u32;
 }
 
-/// fn_15b404 / EU fn_15b4c8 / KR fn_15b3e8.
-///
-/// Score the segment: gate on the segment scorer, refresh the
-/// object, publish the tally word, scale the resolved handle
-/// count by the sub-object divisors (taking the multiply-first
-/// path below 0x418937) and report the combiner status when
-/// the refresh succeeded.
 pub fn score_segment<H: SegmentScoreHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -12939,29 +11428,28 @@ pub fn score_segment<H: SegmentScoreHooks>(
     }
 }
 
-/// TTSEG synthesise calls behind `fn_15961c`.
 pub trait SynthesizeHooks {
-    /// `fn_1517e8`: resolve the engine into `ctx`/`seg`.
+
     fn resolve_engine(&mut self, a: u32, b: u32, ctx: &mut u32, seg: &mut u32) -> u32;
-    /// `fn_1738e8`: synthesise-begin trace.
+
     fn log_begin(&mut self, log: u32);
-    /// `fn_173dc0`: synthesise-failure trace with `code`.
+
     fn log_error(&mut self, log: u32, code: u32);
-    /// `fn_1738e8`: synthesise-end trace reporting `r`.
+
     fn log_end(&mut self, log: u32, r: u32);
-    /// `fn_15ae7c`: open the synthesiser into `state`.
+
     fn begin_synth(&mut self, state: &mut u8) -> u32;
-    /// `fn_15af34`: close the synthesiser.
+
     fn end_synth(&mut self, state: u8);
-    /// `fn_19862c`: tear down the trace handle.
+
     fn teardown_handle(&mut self, h0: u32, h1: u32);
-    /// `fn_1985fc`: reset the trace handle.
+
     fn reset_handle(&mut self, h0: u32, h1: u32);
-    /// `fn_19860c`: release the trace handle.
+
     fn release_handle(&mut self, h0: u32, h1: u32);
-    /// `fn_19863c`: report the synthesis output words.
+
     fn report_synthesis(&mut self, h0: u32, h1: u32, log: u32, c: u32, x: u32, y: u32);
-    /// `fn_15b404`: score the segment into `x`/`y`.
+
     #[allow(clippy::too_many_arguments)]
     fn score(
         &mut self,
@@ -12980,16 +11468,6 @@ pub trait SynthesizeHooks {
     ) -> u32;
 }
 
-/// fn_15961c / EU fn_1596e0 / KR fn_159600.
-///
-/// Synthesise the segment: resolve the engine, open the
-/// synthesiser, score live traces through the segment scorer
-/// and close up. Reports 0x81202011 for a missing trace.
-///
-/// Note: the ROM `fn_1517e8` writes only its second out-word,
-/// so a successful resolve leaves `ctx` null and the trace
-/// below faults; the row scripts both out-words to exercise
-/// the orchestration the source describes.
 pub fn synthesize_ttseg<H: SynthesizeHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -13049,34 +11527,27 @@ pub fn synthesize_ttseg<H: SynthesizeHooks>(
     r
 }
 
-/// Language-database open calls behind `fn_15bc18`.
 pub trait DbOpenHooks {
-    /// `fn_19611c`: resolve the environment into `env`.
+
     fn resolve_env(&mut self, p: Option<u32>, a: u32, env: &mut u32) -> u32;
-    /// `fn_1738e8`: open-begin trace.
+
     fn log_begin(&mut self, log: u32);
-    /// `fn_173dc0`: open-failure trace with `code`.
+
     fn log_error(&mut self, log: u32, code: u32);
-    /// `fn_1738e8`: open-end trace reporting `r`.
+
     fn log_end(&mut self, log: u32, r: u32);
-    /// `fn_1963b8`: allocate the object; 0 on failure.
+
     fn alloc_obj(&mut self) -> u32;
-    /// `fn_175944`: query parameter `i` into `out`.
+
     fn query_param(&mut self, i: u32, out: &mut u32) -> u32;
-    /// `fn_180d00`: initialise the record pool at `at`.
+
     fn init_pool(&mut self, mem: &mut [u8], at: u32, ctx: u32, initial: u32, grow: u32);
-    /// `fn_15bab0`: reset the database.
+
     fn reset_db(&mut self, obj: u32) -> u32;
-    /// `fn_15b5f0`: close the database.
+
     fn close_db(&mut self, h0: u32, h1: u32);
 }
 
-/// fn_15bc18 / EU fn_15bcdc / KR fn_15bbfc.
-///
-/// Open the language database: resolve the environment,
-/// allocate the object, read the record/pool sizes with
-/// built-in defaults, initialise the pool and reset. A
-/// failed reset closes the handle and clears the outputs.
 pub fn open_db<H: DbOpenHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -13138,22 +11609,15 @@ pub fn open_db<H: DbOpenHooks>(
     ret
 }
 
-/// Language-database clear calls behind `fn_15b518`.
 pub trait DbClearHooks {
-    /// `fn_1738e8`: clear-begin trace.
+
     fn log_begin(&mut self, log: u32);
-    /// `fn_1738e8`: clear-end trace reporting `r`.
+
     fn log_end(&mut self, log: u32, r: u32);
-    /// `fn_180ea0`: reset the block pool at `at` (zero each
-    /// block back to its base and clear the tally word).
+
     fn reset_pool(&mut self, mem: &mut [u8], at: u32);
 }
 
-/// fn_15b518 / EU fn_15b5dc / KR fn_15b4fc.
-///
-/// Clear the language database: validate the handle, drop the
-/// pending byte, reset the record pool for live objects and
-/// mark the generation flag.
 pub fn clear_db<H: DbClearHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -13176,29 +11640,23 @@ pub fn clear_db<H: DbClearHooks>(
     0
 }
 
-/// Language-database close calls behind `fn_15b5f0`.
 pub trait DbCloseHooks {
-    /// `fn_1738e8`: close-begin trace.
+
     fn log_open_begin(&mut self, log: u32);
-    /// `fn_1738e8`: close-end trace reporting `r`.
+
     fn log_open_end(&mut self, log: u32, r: u32);
-    /// `fn_1738e8`: clear-begin trace.
+
     fn log_clear_begin(&mut self, log: u32);
-    /// `fn_1738e8`: clear-end trace reporting `r`.
+
     fn log_clear_end(&mut self, log: u32, r: u32);
-    /// `fn_180f8c`: free the block pool at `at`.
+
     fn free_pool(&mut self, mem: &mut [u8], at: u32);
-    /// `fn_180ea0`: reset the block pool at `at`.
+
     fn reset_pool(&mut self, mem: &mut [u8], at: u32);
-    /// `fn_196428`: release `obj` to `heap`.
+
     fn free_obj(&mut self, heap: u32, obj: u32);
 }
 
-/// fn_15b5f0 / EU fn_15b6b4 / KR fn_15b5d4.
-///
-/// Close the language database: validate the handle, free the
-/// record pool, run the clear sequence and release the live
-/// object and the object itself.
 pub fn close_db<H: DbCloseHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -13231,28 +11689,19 @@ pub fn close_db<H: DbCloseHooks>(
     0
 }
 
-/// Output-device calls behind `fn_191948`.
 pub trait SetOutDeviceHooks {
-    /// `fn_1738e8`: set-device-begin trace.
+
     fn log_begin(&mut self, log: u32);
-    /// `fn_19611c`: resolve the engine pair into `ctx`.
+
     fn resolve_ctx(&mut self, e0: u32, e1: u32, ctx: &mut u32) -> u32;
-    /// `fn_18f24c`: lock `vauto_ttsSetOutDevice` into `locked`.
+
     fn set_state(&mut self, obj: u32, locked: &mut u8) -> u32;
-    /// `fn_1959dc`: release the state.
+
     fn flag_state(&mut self, obj: u32, locked: u8);
-    /// `fn_1738e8`: set-device-end trace.
+
     fn log_end(&mut self, log: u32);
 }
 
-/// fn_191948 / EU fn_1919f8 / KR fn_191a34.
-///
-/// Set the output device pair: validate the handle tag and
-/// magic, resolve the engine, take the state lock and store
-/// the device words. Missing handles report raw 0x80000008,
-/// a missing device 0x80000006 and an empty device
-/// 0x80000012; scripted failures classify through
-/// `fn_160fec`.
 pub fn set_out_device<H: SetOutDeviceHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -13297,17 +11746,16 @@ pub fn set_out_device<H: SetOutDeviceHooks>(
     classify_code(result)
 }
 
-/// Resource-load calls behind `fn_194454`.
 pub trait ResourceLoadHooks {
-    /// `fn_176fd4`: reset a handle pair to the default.
+
     fn init_pair(&mut self, pair: &mut (u32, u32));
-    /// `fn_1738e8`: load-begin trace.
+
     fn log_begin(&mut self, log: u32);
-    /// `fn_18f24c`: lock `vauto_ttsResourceLoad` into `locked`.
+
     fn set_state(&mut self, obj: u32, locked: &mut u8) -> u32;
-    /// `fn_190078`: copy the resource name into `name`.
+
     fn copy_name(&mut self, resource: Option<u32>, name: &mut [u8; 128]) -> u32;
-    /// Resource `load` vtable call; writes `start` on success.
+
     #[allow(clippy::too_many_arguments)]
     fn load(
         &mut self,
@@ -13320,21 +11768,12 @@ pub trait ResourceLoadHooks {
         g1: u32,
         start: &mut (u32, u32),
     ) -> u32;
-    /// `fn_1959dc`: release the state.
+
     fn flag_state(&mut self, obj: u32, locked: u8);
-    /// `fn_1738e8`: load-end trace.
+
     fn log_end(&mut self, log: u32);
 }
 
-/// fn_194454 / EU fn_194504 / KR fn_194540.
-///
-/// Load a named resource: validate the handle tag and magic,
-/// take the state lock, render the UTF-16 resource name to
-/// ASCII and call the resource `load` entry. A loaded handle
-/// lands in `out`; failures clear it. Missing handles report
-/// raw 0x80000008, missing names/handles 0x80000006 and an
-/// empty size 0x80000007; later failures classify through
-/// `fn_160fec`.
 #[allow(clippy::too_many_arguments)]
 pub fn load_resource<H: ResourceLoadHooks>(
     hooks: &mut H,
@@ -13402,36 +11841,25 @@ pub fn load_resource<H: ResourceLoadHooks>(
     classify_code(result)
 }
 
-/// Stop calls behind `fn_194790`.
 pub trait StopSynthHooks {
-    /// `fn_1738e8`: stop-begin trace.
+
     fn log_begin(&mut self, log: u32);
-    /// `fn_176f2c`: acquire the lock.
+
     fn acquire(&mut self, lock: u32) -> u32;
-    /// `fn_173dc0`: stop-failure trace with `code`/`status`.
+
     fn log_error(&mut self, log: u32, code: u32, status: u32);
-    /// `fn_176f5c`: release the lock.
+
     fn release(&mut self, lock: u32) -> u32;
-    /// `fn_195a44`: flag the voice.
+
     fn flag_voice(&mut self, obj: u32) -> u32;
-    /// Methods-table stop call.
+
     fn call_stop(&mut self, a: u32, b: u32) -> u32;
-    /// `fn_18f340`: stop the output state.
+
     fn stop_output(&mut self, obj: u32) -> u32;
-    /// `fn_1738e8`: stop-end trace.
+
     fn log_end(&mut self, log: u32);
 }
 
-/// fn_194790 / EU fn_194840 / KR fn_19487c.
-///
-/// Stop synthesis: validate the handle tag and magic,
-/// hold the lock across the type check, flag the voice,
-/// run the methods-table stop call and stop the output
-/// state. A stop status whose low 13 bits are 0x11
-/// counts as success; a failed output stop replaces a
-/// zero status. Missing handles report raw 0x80000008
-/// and a wrong type raw 0x80000011; other failures
-/// classify through `fn_160fec`.
 pub fn stop_synth<H: StopSynthHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -13480,23 +11908,22 @@ pub fn stop_synth<H: StopSynthHooks>(
     classify_code(r)
 }
 
-/// Voice-stop calls behind `fn_190410`.
 pub trait StopVoiceHooks {
-    /// `fn_1900f8`: apply the mode change.
+
     fn apply_mode(&mut self, voice: u32) -> u32;
-    /// Voice-table configure call.
+
     fn configure(&mut self, h0: u32, h1: u32, buf: u32, mode: u32) -> u32;
-    /// `fn_176fd4`: read the timestamp pair.
+
     fn timestamp(&mut self) -> (u32, u32);
-    /// `fn_195a44`: start or stop the voice with `flag`.
+
     fn start_voice(&mut self, voice: u32, flag: u32) -> u32;
-    /// `fn_176f2c`: acquire the lock.
+
     fn acquire(&mut self, lock: u32) -> u32;
-    /// `fn_176f5c`: release the lock.
+
     fn release_lock(&mut self, lock: u32) -> u32;
-    /// `fn_173dc0`: lock-failure trace with `status`.
+
     fn log_lock_error(&mut self, log: u32, status: u32);
-    /// Voice-table render call.
+
     fn render(
         &mut self,
         h0: u32,
@@ -13506,16 +11933,10 @@ pub trait StopVoiceHooks {
         n0: u32,
         n1: u32,
     ) -> u32;
-    /// Buffer-table release call.
+
     fn release_buffer(&mut self, b0: u32, b1: u32) -> u32;
 }
 
-/// Check the stopped flag behind `fn_190410`.
-///
-/// Acquires the lock, reports a lock failure through
-/// the trace call, else reads `state == 6` under the
-/// lock and releases it. Returns the flag and the
-/// trailing status.
 fn check_stopped<H: StopVoiceHooks>(
     hooks: &mut H,
     mem: &[u8],
@@ -13534,18 +11955,6 @@ fn check_stopped<H: StopVoiceHooks>(
     }
 }
 
-/// fn_190410 / EU fn_1904c0 / KR fn_1904fc.
-///
-/// Stop the voice: on a mode change apply the new
-/// mode and reconfigure, else reconfigure only when
-/// the flag pair is incomplete. Stamp the time, clear
-/// the counters, start the voice and render the
-/// buffer unless already stopped. Always release the
-/// buffer, stop the started voice, reconfigure when
-/// the flag pair is incomplete and re-check the
-/// stopped flag; a stopped voice at the end reports
-/// 0x80002807. A failed mode apply restores the old
-/// mode.
 pub fn stop_voice<H: StopVoiceHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -13631,44 +12040,33 @@ pub fn stop_voice<H: StopVoiceHooks>(
     result
 }
 
-/// Stream-close calls behind `fn_14ea44`.
 pub trait CloseStreamHooks {
-    /// `fn_176f94`: validate the config handle.
+
     fn check(&mut self, obj: u32, tag: u32) -> u32;
-    /// `fn_19611c`: resolve the context pair into `ctx`.
+
     fn resolve_ctx(&mut self, obj: u32, tag: u32, ctx: &mut u32) -> u32;
-    /// `fn_1738e8`: close-begin trace.
+
     fn log_begin(&mut self, log: u32);
-    /// `fn_196794`: open the entry iterator into `iter`.
+
     fn open_iter(&mut self, streams: u32, iter: &mut u32) -> u32;
-    /// `fn_196860`: read the next key/state pair.
+
     fn next_entry(&mut self, iter: u32, key: &mut u32, state: &mut u32) -> u32;
-    /// `fn_173dc0`: unterminated-writer trace.
+
     fn log_writer(&mut self, log: u32, writer_id: u32, content_type: u32, version: u32);
-    /// `fn_173dc0`: module-release trace.
+
     fn log_module(&mut self, log: u32, module_id: u32, content_type: u32, version: u32);
-    /// `fn_196428`: free `obj` from `heap`.
+
     fn free_obj(&mut self, heap: u32, obj: u32);
-    /// `fn_1970ac`: read the reader slot `index` into `reader`; 1 continues.
+
     fn next_reader(&mut self, readers: u32, index: u32, reader: &mut u32) -> u32;
-    /// `fn_196830`: close the entry iterator.
+
     fn close_iter(&mut self, iter: u32);
-    /// `fn_19665c`: close the stream map.
+
     fn close_streams(&mut self, streams: u32) -> u32;
-    /// `fn_1738e8`: close-end trace with `rc`.
+
     fn log_end(&mut self, log: u32, rc: u32);
 }
 
-/// fn_14ea44 / EU fn_14eb08 / KR fn_14ea28.
-///
-/// Close the synth stream: resolve the context,
-/// walk every map entry releasing its writer and
-/// readers and clamping references above one down
-/// to one, then close the map. A failed iterator
-/// open still closes the map when the low 13 bits
-/// of the status are 20; a closed map frees the
-/// config. Handle and resolve failures return
-/// their raw status.
 pub fn close_synth_stream<H: CloseStreamHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -13750,26 +12148,25 @@ pub fn close_synth_stream<H: CloseStreamHooks>(
     rc
 }
 
-/// User-prompt insertion calls behind `fn_1ff4fc`.
 pub trait InsertPromptHooks {
-    /// `fn_176f94`: validate the domain handle.
+
     fn check(&mut self, handle: u32, start: u32) -> u32;
-    /// `fn_19611c`: resolve the key pair into `manager`.
+
     fn resolve(&mut self, a: u32, b: u32, manager: &mut u32) -> u32;
-    /// `fn_196394`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_text(&mut self, heap: u32, size: u32) -> Option<u32>;
-    /// `fn_1fe418`: build the prompt for `text` into `prompt`.
+
     fn build_prompt(
         &mut self,
         handle: u32,
         text: u32,
         prompt: &mut [u32; 9],
     ) -> u32;
-    /// `fn_1738e8`: insertion trace.
+
     fn log_insert(&mut self, log: u32);
-    /// `fn_196428`: free `text` back to `heap`.
+
     fn free_text(&mut self, heap: u32, text: u32);
-    /// `fn_2784c8`: rewrite the prompt at `pos` into the out words.
+
     #[allow(clippy::too_many_arguments)]
     fn rewrite_prompt(
         &mut self,
@@ -13784,15 +12181,12 @@ pub trait InsertPromptHooks {
         args_b: u32,
         c: u32,
     ) -> u32;
-    /// `fn_1738e8`: rewrite trace.
+
     fn log_rewrite(&mut self, log: u32);
-    /// `fn_173dc0`: allocation-failure trace.
+
     fn log_no_memory(&mut self, log: u32);
 }
 
-/// Recode a NUL-terminated u16 string at `src` into ASCII at `dst`.
-///
-/// `fn_176460`: units with a set high byte become `?`.
 fn recode_176460(mem: &mut [u8], dst: u32, src: u32) {
     let mut s = src;
     let mut d = dst;
@@ -13808,14 +12202,6 @@ fn recode_176460(mem: &mut [u8], dst: u32, src: u32) {
     mem[d as usize] = 0;
 }
 
-/// fn_1ff4fc / EU fn_1ff6b8 / KR fn_1ff764.
-///
-/// Insert user prompts: for every type-40 token recode
-/// its text, build the prompt and rewrite it into the
-/// out words, which may move the token array and the
-/// count under the loop. A failed allocation reports
-/// 0x88e0200a; build and rewrite failures return their
-/// raw status.
 #[allow(clippy::too_many_arguments)]
 pub fn insert_prompt<H: InsertPromptHooks>(
     hooks: &mut H,
@@ -13893,40 +12279,28 @@ pub fn insert_prompt<H: InsertPromptHooks>(
     rc
 }
 
-/// Text-to-speech calls behind `fn_191e40`.
 pub trait ProcessTextHooks {
-    /// `fn_176fd4`: read the timestamp pair.
+
     fn timestamp(&mut self) -> (u32, u32);
-    /// `fn_1738e8`: processing-begin trace.
+
     fn log_begin(&mut self, log: u32);
-    /// `fn_18f24c`: lock the engine; returns the status and the lock byte.
+
     fn lock_engine(&mut self, engine: u32) -> (u32, u8);
-    /// `fn_1959dc`: unlock the engine.
+
     fn unlock_engine(&mut self, engine: u32, locked: u8);
-    /// `fn_18fdc0`: process the request into `state`.
+
     fn process_request(
         &mut self,
         engine: u32,
         request: u32,
         state: &mut (u32, u32),
     ) -> u32;
-    /// `fn_190410`: stop the voice over `state`.
+
     fn stop_voice_call(&mut self, engine: u32, s0: u32, s1: u32) -> u32;
-    /// `fn_1738e8`: processing-end trace.
+
     fn log_end(&mut self, log: u32);
 }
 
-/// fn_191e40 / EU fn_191ef0 / KR fn_191f2c.
-///
-/// Process text to speech: validate the engine
-/// handle and lock it, validate the request,
-/// process it unless the engine is not ready,
-/// and stop the voice over the result. Engine
-/// failures report raw 0x80000008, an unready
-/// engine raw 0x80000880; lock, request and
-/// processing failures classify through
-/// `fn_160fec`. The engine unlocks whenever the
-/// lock call set the lock byte.
 pub fn process_text2speech<H: ProcessTextHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -13982,13 +12356,12 @@ pub fn process_text2speech<H: ProcessTextHooks>(
     classify_code(result)
 }
 
-/// Prompt pre-processing calls behind `fn_1f48cc`.
 pub trait PreprocessHooks {
-    /// `fn_176f94`: validate the processor.
+
     fn check(&mut self, proc: u32, tag: u32) -> u32;
-    /// Stream-table available call.
+
     fn available(&mut self, h0: u32, h1: u32, avail: &mut u32, ended: &mut u8) -> u32;
-    /// Stream-table transfer call.
+
     fn transfer(
         &mut self,
         oh0: u32,
@@ -13997,9 +12370,9 @@ pub trait PreprocessHooks {
         ih1: u32,
         count: &mut u32,
     ) -> u32;
-    /// Stream-table release call.
+
     fn release(&mut self, h0: u32, h1: u32) -> u32;
-    /// Stream-table read call.
+
     fn read_stream(
         &mut self,
         h0: u32,
@@ -14007,15 +12380,15 @@ pub trait PreprocessHooks {
         ptr: &mut u32,
         len: &mut u32,
     ) -> u32;
-    /// `fn_196394`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_text(&mut self, heap: u32, size: u32) -> Option<u32>;
-    /// `fn_1963b8`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_events(&mut self, heap: u32, size: u32) -> Option<u32>;
-    /// `fn_173dc0`: allocation-failure trace.
+
     fn log_no_memory(&mut self, log: u32);
-    /// Position-table get call.
+
     fn get_position(&mut self, h0: u32, h1: u32, pos: &mut u32) -> u32;
-    /// Transform-table transform call.
+
     fn transform(
         &mut self,
         h0: u32,
@@ -14024,26 +12397,16 @@ pub trait PreprocessHooks {
         events: &mut u32,
         count: &mut u32,
     ) -> u32;
-    /// Stream-table write call.
+
     fn write_stream(&mut self, h0: u32, h1: u32, data: u32, len: u32) -> u32;
-    /// Stream-table consume call.
+
     fn consume(&mut self, h0: u32, h1: u32, bytes: u32) -> u32;
-    /// Position-table set call.
+
     fn set_position(&mut self, h0: u32, h1: u32, pos: u32) -> u32;
-    /// `fn_196428`: free `ptr` back to `heap`.
+
     fn free_buf(&mut self, heap: u32, ptr: u32);
 }
 
-/// fn_1f48cc / EU fn_1f4a88 / KR fn_1f4b34.
-///
-/// Pre-process the prompt: without available
-/// text forward pending events and release the
-/// outputs at end, else read the text and
-/// events, transform them, write both outputs,
-/// consume both inputs and advance the
-/// position by the text growth. Allocation
-/// failures report 0x8c80200a; every other
-/// failure returns its raw status.
 pub fn preprocess_prompt<H: PreprocessHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -14216,13 +12579,12 @@ pub fn preprocess_prompt<H: PreprocessHooks>(
     result
 }
 
-/// Prompt-table calls behind `fn_200e64`.
 pub trait PromptOrthHooks {
-    /// `fn_176f94`: validate the prompter.
+
     fn check(&mut self, p: u32, check: u32, f1: u32, f2: u32) -> u32;
-    /// Data-table find call.
+
     fn find(&mut self, h0: u32, h1: u32, f1: u32, f2: u32, id: &mut u16) -> u32;
-    /// Data-table type call.
+
     fn data_type(
         &mut self,
         h0: u32,
@@ -14231,7 +12593,7 @@ pub trait PromptOrthHooks {
         flag: u32,
         ty: &mut u16,
     ) -> u32;
-    /// Data-table get call; `ptr` is an arena offset.
+
     fn get(
         &mut self,
         h0: u32,
@@ -14241,7 +12603,7 @@ pub trait PromptOrthHooks {
         ptr: &mut u32,
         len: &mut u16,
     ) -> u32;
-    /// Data-table set call; `ptr` is an arena offset.
+
     #[allow(clippy::too_many_arguments)]
     fn set(
         &mut self,
@@ -14253,7 +12615,7 @@ pub trait PromptOrthHooks {
         ptr: u32,
         written: &mut u16,
     ) -> u32;
-    /// Transform-table process call; `None` is the null pointer.
+
     #[allow(clippy::too_many_arguments)]
     fn process(
         &mut self,
@@ -14266,30 +12628,20 @@ pub trait PromptOrthHooks {
         h1: u32,
         delta: &mut i16,
     ) -> u32;
-    /// Position-table get call.
+
     fn get_position(&mut self, h0: u32, h1: u32, pos: &mut u32) -> u32;
-    /// Position-table set call.
+
     fn set_position(&mut self, h0: u32, h1: u32, pos: u32) -> u32;
-    /// `fn_196394`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_orth(&mut self, heap: u32, size: u32) -> Option<u32>;
-    /// `fn_1963b8`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_records(&mut self, heap: u32, size: u32) -> Option<u32>;
-    /// `fn_196428`: free `ptr` back to `heap`.
+
     fn free_buf(&mut self, heap: u32, ptr: u32);
-    /// `fn_173dc0`: allocation-failure trace.
+
     fn log_no_memory(&mut self, log: u32, code: u32, flag: u32);
 }
 
-/// fn_200e64 / EU fn_201020 / KR fn_2010cc.
-///
-/// Resolve the prompt orthography and its
-/// records, run the transform, store a
-/// non-empty result back, shift the first
-/// record and the stream position by the
-/// returned delta and release both buffers.
-/// A failing check reports 0x8bb02008 and an
-/// allocation failure 0x8bb0200a; every other
-/// failure returns its raw status.
 pub fn prompt_orth<H: PromptOrthHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -14339,8 +12691,7 @@ pub fn prompt_orth<H: PromptOrthHooks>(
         return result;
     }
     let mut count = length;
-    // The empty-source path copies the empty orthography instead of
-    // the fetched one; its record copy runs over the flag-1 source.
+
     let size = if have_source {
         strlen_bytes(&mem[source_orth as usize..]).wrapping_add(1)
     } else {
@@ -14455,13 +12806,12 @@ pub fn prompt_orth<H: PromptOrthHooks>(
     result
 }
 
-/// Token-table calls behind `fn_1f3ea0`.
 pub trait PromptTokenHooks {
-    /// `fn_176f94`: validate the prompter.
+
     fn check(&mut self, p: u32, check: u32, f1: u32, f2: u32) -> u32;
-    /// Token-table first call.
+
     fn first(&mut self, h0: u32, h1: u32, a: u32, b: u32, out: &mut u16) -> u32;
-    /// Token-table getCount call.
+
     fn get_count(
         &mut self,
         h0: u32,
@@ -14470,7 +12820,7 @@ pub trait PromptTokenHooks {
         flag: u32,
         attr: &mut u16,
     ) -> u32;
-    /// Token-table getPointer call; `ptr` is an arena offset.
+
     fn get_pointer(
         &mut self,
         h0: u32,
@@ -14480,7 +12830,7 @@ pub trait PromptTokenHooks {
         ptr: &mut u32,
         len: &mut u16,
     ) -> u32;
-    /// Prompt-table process call; `None` is the null pointer.
+
     #[allow(clippy::too_many_arguments)]
     fn process(
         &mut self,
@@ -14497,7 +12847,7 @@ pub trait PromptTokenHooks {
         s1: u32,
         delta: &mut i16,
     ) -> u32;
-    /// Token-table kind probe; shares the get script with `get_pause`.
+
     fn get_kind(
         &mut self,
         h0: u32,
@@ -14508,7 +12858,7 @@ pub trait PromptTokenHooks {
         kind: &mut u8,
         count: &mut u16,
     ) -> u32;
-    /// Token-table pause probe; shares the get script with `get_kind`.
+
     fn get_pause(
         &mut self,
         h0: u32,
@@ -14519,9 +12869,9 @@ pub trait PromptTokenHooks {
         pause: &mut u16,
         count: &mut u16,
     ) -> u32;
-    /// Token-table next call.
+
     fn next(&mut self, h0: u32, h1: u32, token: u16, out: &mut u16) -> u32;
-    /// Token-table set call; `ptr` is an arena offset.
+
     #[allow(clippy::too_many_arguments)]
     fn set(
         &mut self,
@@ -14533,9 +12883,7 @@ pub trait PromptTokenHooks {
         ptr: u32,
         written: &mut u16,
     ) -> u32;
-    /// Token-table pause store; the C passes a stack slot, so the
-    /// value crosses the hook instead of a pointer. Shares the set
-    /// script with `set`.
+
     #[allow(clippy::too_many_arguments)]
     fn set_pause(
         &mut self,
@@ -14547,35 +12895,22 @@ pub trait PromptTokenHooks {
         value: u16,
         written: &mut u16,
     ) -> u32;
-    /// Position-table get call.
+
     fn get_position(&mut self, h0: u32, h1: u32, pos: &mut u32) -> u32;
-    /// Position-table set call.
+
     fn set_position(&mut self, h0: u32, h1: u32, pos: u32) -> u32;
-    /// `fn_196394`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_text(&mut self, heap: u32, size: u32) -> Option<u32>;
-    /// `fn_1963b8`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_records(&mut self, heap: u32, size: u32) -> Option<u32>;
-    /// `fn_196428`: free `ptr` back to `heap`.
+
     fn free_buf(&mut self, heap: u32, ptr: u32);
-    /// `fn_173dc0`: allocation-failure trace.
+
     fn log_no_memory(&mut self, log: u32, code: u32, flag: u32);
-    /// `fn_1738e8`: pause-store trace.
+
     fn log_pause(&mut self, log: u32, level: u32, flag: u32);
 }
 
-/// fn_1f3ea0 / EU fn_1f405c / KR fn_1f4108.
-///
-/// Resolve the prompt text and its records,
-/// run the transform, walk the token chain
-/// storing a pause of 5 across phrase-kind
-/// boundaries, store a surviving result back,
-/// shift the first record and the stream
-/// position by the returned delta and release
-/// both buffers. A failing check reports
-/// 0x8ba02008 and an allocation failure
-/// 0x8ba0200a; a rejected root returns the
-/// root probe's status, and every other
-/// failure returns its raw status.
 pub fn prompt_token<H: PromptTokenHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -14801,31 +13136,21 @@ pub fn prompt_token<H: PromptTokenHooks>(
     result
 }
 
-/// Ling-database open calls behind `fn_2100f0`.
 pub trait LingOpenHooks {
-    /// `fn_19611c`: resolve the context into `ctx`.
+
     fn resolve_ctx(&mut self, object: u32, tag: u32, ctx: &mut u32) -> u32;
-    /// `fn_17b058`: acquire the next resource into `res`.
+
     fn acquire(&mut self, db: u32, res: &mut u32) -> u32;
-    /// `fn_17b1c4`: release resource `which` (0 LINGDB, 1 SYNTHSTREAM, 2 FE_DEPES).
+
     fn release_name(&mut self, db: u32, which: u32);
-    /// `fn_196394`: allocate the 52-byte object; `None` on failure.
+
     fn alloc_obj(&mut self, heap: u32) -> Option<u32>;
-    /// `fn_173dc0`: open-failure trace with `code`.
+
     fn log_error(&mut self, log: u32, code: u32);
-    /// `fn_175944`: query `usewordorthography` into `out`.
+
     fn query_ortho(&mut self, props: u32, out: &mut u32) -> u32;
 }
 
-/// fn_2100f0 / EU fn_2102ac / KR fn_210358.
-///
-/// Open the ling database: resolve the context, acquire
-/// the LINGDB, SYNTHSTREAM and FE_DEPES resources,
-/// allocate the object and wire the resource pointers.
-/// A set `usewordorthography` property enables word
-/// orthography. A missing `out` reports 0x89a02007 and a
-/// failed allocation 0x89a0200a; resolve and acquire
-/// failures return their raw status.
 pub fn open_ling<H: LingOpenHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -14889,29 +13214,19 @@ pub fn open_ling<H: LingOpenHooks>(
     rc
 }
 
-/// Prompt open calls behind `fn_1f3ac8`.
 pub trait PromptOpenHooks {
-    /// `fn_19611c`: resolve the environment into `env`.
+
     fn resolve_env(&mut self, h0: u32, h1: u32, env: &mut u32) -> u32;
-    /// `fn_17b058`: acquire the next resource into `res`.
+
     fn acquire(&mut self, res: u32, out: &mut u32) -> u32;
-    /// `fn_17b1c4`: release resource `which` (0 LINGDB, 1 SYNTHSTREAM, 2 DOMAINMNGR, 3 FE_DEPES).
+
     fn release_name(&mut self, res: u32, which: u32);
-    /// `fn_196394`: allocate the 0x34-byte object; `None` on failure.
+
     fn alloc_obj(&mut self, heap: u32) -> Option<u32>;
-    /// `fn_173dc0`: open-failure trace with `code`.
+
     fn log_error(&mut self, log: u32, code: u32);
 }
 
-/// fn_1f3ac8 / EU fn_1f3c84 / KR fn_1f3d30.
-///
-/// Open the prompt processor: resolve the environment,
-/// acquire the LINGDB, SYNTHSTREAM, DOMAINMNGR and
-/// FE_DEPES resources, allocate the object and wire the
-/// resource table and handle pairs. A missing `out`
-/// reports 0x8ba02007 and a failed allocation
-/// 0x8ba0200a; resolve and acquire failures return
-/// their raw status.
 pub fn open_prompt_proc<H: PromptOpenHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -14980,23 +13295,15 @@ pub fn open_prompt_proc<H: PromptOpenHooks>(
     rc
 }
 
-/// Parameter-set calls behind `fn_151df8`.
 pub trait SetParamHooks {
-    /// `fn_19611c`: resolve the handle into `ctx`.
+
     fn resolve_ctx(&mut self, h0: u32, h1: u32, ctx: &mut u32) -> u32;
-    /// `fn_1738e8`: parameter-change trace.
+
     fn log_change(&mut self, log: u32);
-    /// `fn_15af9c`: apply the escape-sequence parameter.
+
     fn apply_esc(&mut self, ctx: u32, p: u32, value: u32) -> u32;
 }
 
-/// fn_151df8 / EU fn_151ebc / KR fn_151ddc.
-///
-/// Set a synthesis parameter by name: resolve the
-/// context, then store the parsed value into the loop
-/// detector limit, marker mode or output buffer size,
-/// or apply the escape-sequence parameter. Empty values
-/// and failed resolves report 0.
 pub fn set_synth_param<H: SetParamHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -15033,29 +13340,19 @@ pub fn set_synth_param<H: SetParamHooks>(
     r
 }
 
-/// Domain-manager open calls behind `fn_200a2c`.
 pub trait DomainOpenHooks {
-    /// `fn_19611c`: resolve the handle into `env`.
+
     fn resolve_env(&mut self, h0: u32, h1: u32, env: &mut u32) -> u32;
-    /// `fn_17b058`: acquire the next resource into `res`.
+
     fn acquire(&mut self, rm: u32, out: &mut u32) -> u32;
-    /// `fn_17b1c4`: release resource `which` (0 LINGDB, 1 DOMAINMNGR, 2 FE_DEPES).
+
     fn release_name(&mut self, rm: u32, which: u32);
-    /// `fn_196394`: allocate the 32-byte object; `None` on failure.
+
     fn alloc_obj(&mut self, heap: u32) -> Option<u32>;
-    /// `fn_173dc0`: open-failure trace with `code`.
+
     fn log_error(&mut self, log: u32, code: u32);
 }
 
-/// fn_200a2c / EU fn_200be8 / KR fn_200c94.
-///
-/// Open the domain manager: resolve the environment,
-/// acquire the LINGDB, DOMAINMNGR and FE_DEPES
-/// resources, allocate the object and wire the table
-/// and handle pairs. A missing `out` reports
-/// 0x8bb02007 and a failed allocation 0x8bb0200a;
-/// resolve and acquire failures return their raw
-/// status.
 pub fn open_domain<H: DomainOpenHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -15115,36 +13412,27 @@ pub fn open_domain<H: DomainOpenHooks>(
     rc
 }
 
-/// Stream open calls behind `fn_14e7a0`.
 pub trait StreamOpenHooks {
-    /// `fn_19611c`: resolve the handle into `ctx`.
+
     fn resolve_ctx(&mut self, h0: u32, h1: u32, ctx: &mut u32) -> u32;
-    /// `fn_1738e8`: open-begin trace.
+
     fn log_begin(&mut self, log: u32);
-    /// `fn_1963b8`: allocate the 32-byte config; `None` on failure.
+
     fn alloc_cfg(&mut self, heap: u32) -> Option<u32>;
-    /// `fn_173dc0`: open-failure trace with `code`.
+
     fn log_error(&mut self, log: u32, code: u32);
-    /// `fn_175944`: query tuning value `which` (0 allocation, 1 move, 2 free).
+
     fn query_u32(&mut self, props: u32, which: u32, out: &mut u32) -> u32;
-    /// `fn_175850`: query the log-input flag.
+
     fn query_log_input(&mut self, props: u32, out: &mut u32);
-    /// `fn_1964e0`: create the stream map into `streams`.
+
     fn create_map(&mut self, heap: u32, streams: &mut u32) -> u32;
-    /// `fn_196428`: release the config.
+
     fn free_cfg(&mut self, heap: u32, cfg: u32);
-    /// `fn_1738e8`: open-end trace reporting `rc`.
+
     fn log_end(&mut self, log: u32, rc: u32);
 }
 
-/// fn_14e7a0 / EU fn_14e864 / KR fn_14e784.
-///
-/// Open the synth stream: resolve the context,
-/// allocate the config, read the allocation tuning
-/// values with built-in defaults and create the
-/// stream map. A missing `out` reports 0x88f02006
-/// and a failed allocation 0x88f0200a; resolve and
-/// map failures return their raw status.
 pub fn open_synth_stream<H: StreamOpenHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -15211,49 +13499,38 @@ pub fn open_synth_stream<H: StreamOpenHooks>(
     rc
 }
 
-/// Language-list calls behind `fn_15f594`.
 pub trait LangListHooks {
-    /// `fn_176f94`: validate the handle.
+
     fn check(&mut self, o: u32, a1: u32) -> u32;
-    /// `fn_1738e8`: list-begin trace.
+
     fn log_begin(&mut self, log: u32);
-    /// `fn_173dc0`: list-failure trace with `code`.
+
     fn log_error(&mut self, log: u32, code: u32);
-    /// `fn_177b7c`: open the broker object into `comp`.
+
     fn open_broker(&mut self, name: u32, db: u32, comp: &mut u32) -> u32;
-    /// `fn_1789b0`: open the component iterator into `iter`.
+
     fn open_comp_iter(&mut self, comp: u32, iter: &mut u32) -> u32;
-    /// `fn_178c24`: fetch the next component key into `k`.
+
     fn next_comp(&mut self, iter: u32, k: &mut u32) -> u32;
-    /// `fn_17a3b8`: open the tag iterator into `iter`.
+
     fn open_tag_iter(&mut self, db: u32, k: u32, iter: &mut u32) -> u32;
-    /// `fn_17a814`: fetch the next tag pair.
+
     fn next_tag(
         &mut self,
         iter: u32,
         tag: &mut Option<u32>,
         value: &mut Option<u32>,
     ) -> u32;
-    /// `fn_17a2ec`: close the tag iterator.
+
     fn close_tag(&mut self, iter: u32);
-    /// `fn_1788c0`: close the component iterator.
+
     fn close_comp_iter(&mut self, iter: u32);
-    /// `fn_177cc8`: close the broker object.
+
     fn close_comp(&mut self, comp: u32);
-    /// `fn_1738e8`: list-end trace reporting `rc`/`count`.
+
     fn log_end(&mut self, log: u32, rc: u32, count: u32);
 }
 
-/// fn_15f594 / EU fn_15f658 / KR fn_15f578.
-///
-/// List the available languages: walk the broker's
-/// components, collect each one's language tags into
-/// an entry and store deduplicated entries into
-/// `user` up to `*maxPtr`, which then reports the
-/// count. String copies use the proven byte copy
-/// with the measured length; dedup folds through
-/// `fold`. A bad handle reports 0x89502008 and
-/// missing inputs 0x89502007; a full list reports 9.
 pub fn get_lang_list<H: LangListHooks>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -15318,9 +13595,7 @@ pub fn get_lang_list<H: LangListHooks>(
                 let Some(t) = tag else {
                     continue;
                 };
-                // The C only tests the tag; a null value with a live
-                // tag faults in `fn_195cd0`, which the engine never
-                // produces. Read offset 0 there instead of faulting.
+
                 let v = value.unwrap_or(0);
                 if compare_str(&mem[t as usize..], b"language\0") == 0 {
                     let n = cstrlen(&mem[v as usize..]) + 1;
@@ -15369,7 +13644,6 @@ pub fn get_lang_list<H: LangListHooks>(
     rc
 }
 
-/// Caller-owned calls used by the domain manager API.
 pub trait DomainApi {
     fn resolve(&mut self, first: u32, second: u32, context: &mut u32) -> u32;
     fn find(&mut self, map: u32, name: u32, item: &mut u32) -> u32;
@@ -15380,7 +13654,7 @@ pub trait DomainApi {
     fn free(&mut self, heap: u32, text: u32);
     fn slot(&mut self, list: u32, index: u32, item: &mut u32) -> u32;
     fn build(&mut self, mem: &mut [u8], database: u32, args: u32, output: u32) -> u32;
-    /// Diagnostic-only fn_1738e8 and fn_173dc0 boundaries.
+
     fn trace(&mut self, log: u32, code: u32, name: u32, status: u32);
 }
 
@@ -15395,8 +13669,6 @@ fn domain_context(mem: &[u8], handle: Option<u32>, tag: u32, api: &mut impl Doma
     if rc >= 0x80000000 { Err(rc) } else { Ok((context, rc)) }
 }
 
-/// fn_1fe0e4 / EU fn_1fe2a0 / KR fn_1fe34c.
-/// Enable a named domain by appending its map value to the active list.
 pub fn enable_domain(mem: &mut [u8], handle: Option<u32>, tag: u32, name: u32, api: &mut impl DomainApi) -> u32 {
     let (context, _) = match domain_context(mem, handle, tag, api) {
         Ok(v) => v, Err(rc) => return rc,
@@ -15417,8 +13689,6 @@ pub fn enable_domain(mem: &mut [u8], handle: Option<u32>, tag: u32, name: u32, a
     rc
 }
 
-/// fn_1fe210 / EU fn_1fe3cc / KR fn_1fe478.
-/// Remove the first matching domain from the mandatory prefix of the list.
 pub fn disable_domain(mem: &mut [u8], handle: Option<u32>, tag: u32, name: u32, api: &mut impl DomainApi) -> u32 {
     let (context, _) = match domain_context(mem, handle, tag, api) {
         Ok(v) => v, Err(rc) => return rc,
@@ -15443,8 +13713,6 @@ pub fn disable_domain(mem: &mut [u8], handle: Option<u32>, tag: u32, name: u32, 
     rc
 }
 
-/// fn_1fe328 / EU fn_1fe4e4 / KR fn_1fe590.
-/// Pop enabled domains beyond the manager's minimum count.
 pub fn disable_optional_domains(mem: &mut [u8], handle: Option<u32>, tag: u32, api: &mut impl DomainApi) -> u32 {
     let (context, rc) = match domain_context(mem, handle, tag, api) {
         Ok(v) => v, Err(rc) => return rc,
@@ -15460,8 +13728,6 @@ pub fn disable_optional_domains(mem: &mut [u8], handle: Option<u32>, tag: u32, a
     rc
 }
 
-/// fn_1fe418 / EU fn_1fe5d4 / KR fn_1fe680.
-/// Split "domain::arguments", try databases in reverse order, and free the copy.
 pub fn build_domain_prompt(mem: &mut [u8], handle: u32, text: u32, output: u32, api: &mut impl DomainApi) -> u32 {
     let context = mem_word(mem, handle.wrapping_add(8));
     if output != 0 {
@@ -15503,23 +13769,17 @@ pub fn build_domain_prompt(mem: &mut [u8], handle: u32, text: u32, output: u32, 
     rc
 }
 
-/// fn_1fe580 / EU fn_1fe73c / KR fn_1fe7e8.
-/// Probe a domain prompt without retaining its decoded output.
 pub fn domain_prompt_exists(handle: Option<u32>, tag: u32, text: u32, mut build: impl FnMut(u32, u32, u32) -> u32) -> u32 {
     if validate_handle(handle.is_some(), tag, 0x11d, 0x48) >= 0x80000000 { return 0; }
     u32::from(build(handle.unwrap(), text, 0) < 0x80000000)
 }
 
-/// fn_1fe5c4 / EU fn_1fe780 / KR fn_1fe82c.
-/// Validate a domain handle and forward prompt decoding.
 pub fn decode_domain_prompt(handle: Option<u32>, tag: u32, text: u32, output: u32, mut build: impl FnMut(u32, u32, u32) -> u32) -> u32 {
     let rc = validate_handle(handle.is_some(), tag, 0x11d, 0x48);
     if rc >= 0x80000000 { return rc; }
     build(handle.unwrap(), text, output)
 }
 
-/// fn_2817c0 / EU fn_28197c / KR fn_281a28.
-/// Unlink the first node with the requested tag, preserving the list's tail.
 pub fn remove_domain_key(mem: &mut [u8], list: u32, key: u32, mut release: impl FnMut(u32, u32)) -> u32 {
     let mut prev = 0u32;
     let mut cur = mem_word(mem, list.wrapping_add(4));
@@ -15543,8 +13803,6 @@ pub fn remove_domain_key(mem: &mut [u8], list: u32, key: u32, mut release: impl 
     0x85002014
 }
 
-/// fn_281864 / EU fn_281a20 / KR fn_281acc.
-/// Drain the domain-key list and release every detached node.
 pub fn clear_domain_keys(mem: &mut [u8], list: u32, mut release: impl FnMut(u32, u32)) -> u32 {
     loop {
         let cur = mem_word(mem, list.wrapping_add(4));
@@ -15556,8 +13814,6 @@ pub fn clear_domain_keys(mem: &mut [u8], list: u32, mut release: impl FnMut(u32,
     }
 }
 
-/// fn_281948 / EU fn_281b04 / KR fn_281bb0.
-/// Move a tagged key to its new ordered position without allocating.
 pub fn reposition_domain_key(mem: &mut [u8], list: u32, tag: u32, key: u32) -> u32 {
     let mut node = mem_word(mem, list.wrapping_add(4));
     if node == 0 { return 0x85002014; }
@@ -15610,8 +13866,6 @@ pub fn reposition_domain_key(mem: &mut [u8], list: u32, tag: u32, key: u32) -> u
     0
 }
 
-/// fn_281338 / EU fn_2814f4 / KR fn_2815a0.
-/// Resolve the resource context and release its optional database array.
 pub fn release_domain_databases(mem: &mut [u8], object: Option<u32>, mut resolve: impl FnMut(u32, u32, &mut u32) -> u32,
     mut release: impl FnMut(u32)) -> u32 {
     let Some(object) = object else { return 0x88e02007; };
@@ -15626,16 +13880,12 @@ pub fn release_domain_databases(mem: &mut [u8], object: Option<u32>, mut resolve
     rc
 }
 
-
-
-/// Caller-owned property queries and diagnostic boundaries for APDB validation.
 pub trait DomainValidation {
     fn property(&mut self, props: u32, name: &[u8], value: &mut u32) -> u32;
     fn mismatch(&mut self, log: u32, strict: bool, domain: &[u8], attribute: &[u8], voice: Option<&[u8]>, apdb: &[u8]);
     fn version_mismatch(&mut self, log: u32, reduction: bool, voice: Option<&[u8]>, apdb: &[u8]);
 }
 
-/// fn_27df20 / EU fn_27e0dc / KR fn_27e188.
 pub fn match_domain_attribute(mem: &[u8], engine: u32, strict: u32, domain: &[u8], attribute: &[u8], apdb: &[u8], alternate: Option<&[u8]>, api: &mut impl DomainValidation) -> u32 {
     let mut current = 0;
     let rc = api.property(mem_word(mem, engine + 20), attribute, &mut current);
@@ -15648,8 +13898,6 @@ pub fn match_domain_attribute(mem: &[u8], engine: u32, strict: u32, domain: &[u8
     0
 }
 
-/// fn_27e0d4 / EU fn_27e290 / KR fn_27e33c.
-/// Validate voice identity and raw/reduction versions, caching state 1 or 2.
 pub fn validate_domain(mem: &mut [u8], ctx: u32, api: &mut impl DomainValidation) {
     let engine = mem_word(mem, mem_word(mem, ctx) + 8);
     let domain = mem_word(mem, ctx + 88);
@@ -15682,8 +13930,6 @@ pub fn validate_domain(mem: &mut [u8], ctx: u32, api: &mut impl DomainValidation
     mem[(ctx+13) as usize] = if ok { 2 } else { 1 };
 }
 
-/// fn_27e400 / EU fn_27e5bc / KR fn_27e668.
-/// Query each index once, append nonempty names and separators, and return unsupported.
 pub fn list_domain_names(mem: &mut [u8], ctx: u32, output: u32, api: &mut impl DomainValidation, mut slot: impl FnMut(u32, u32, &mut u32) -> u32, mut append: impl FnMut(u32, Option<&[u8]>)) -> u32 {
     if mem[(ctx+13) as usize] == 0 { validate_domain(mem, ctx, api); }
     if mem[(ctx+13) as usize] == 2 {
@@ -15702,15 +13948,13 @@ pub fn list_domain_names(mem: &mut [u8], ctx: u32, output: u32, api: &mut impl D
     0x88e02014
 }
 
-
-/// Remaining caller-owned database and iterator operations for consultation.
 pub trait DomainConsultation: DomainApi + VoiceNodeAllocator {
     fn allocate_name(&mut self, heap: u32, size: u32) -> u32;
     fn map_iter(&mut self, map: u32, iterator: &mut u32) -> u32;
     fn map_next(&mut self, iterator: u32, key: &mut u32, value: &mut u32) -> u32;
     fn map_close(&mut self, iterator: u32);
     fn expand_original(&mut self, mem: &mut [u8], database: u32, text: u32, entries: u32, count: u32, head: u32) -> u32;
-    /// The original optional begin/end text and marker diagnostics.
+
     fn consultation_log(&mut self, mem: &[u8], log: u32, text: u32, entries: u32, count: u32, status: Option<u32>);
 }
 
@@ -15758,9 +14002,6 @@ fn consult_active_domains(mem: &mut [u8], manager:u32, text:u32, entries:u32, co
     rc
 }
 
-/// fn_1fe600 / EU fn_1fe7bc / KR fn_1fe868.
-/// Split original orthography into prompt spans, apply active databases, and
-/// release every temporary node. All text/marker changes stay in caller memory.
 pub fn consult_original_domains(mem:&mut [u8], handle:Option<u32>, tag:u32, text:u32, entries:u32, count:u32, api:&mut impl DomainConsultation)->u32 {
     let (ctx,mut rc)=match domain_context(mem,handle,tag,api){Ok(v)=>v,Err(rc)=>return rc};
     let manager=handle.unwrap();let heap=mem_word(mem,ctx+4);let log=mem_word(mem,ctx+16);
@@ -15818,9 +14059,6 @@ pub fn consult_original_domains(mem:&mut [u8], handle:Option<u32>, tag:u32, text
     rc
 }
 
-
-/// fn_279c28 / EU fn_279de4 / KR fn_279e90.
-/// Format the APDB character-class matching diagnostic into a caller buffer.
 pub fn format_domain_match(mem:&mut [u8], flag:u32, kind:u32, ch:u32, n:u32, chars:u32, mark:u32, out:u32)->u32 {
     const NAMES:[&[u8];8]=[b"[*]",b"[S]",b"[P]",b"[S|P]",b"[...]",b"[p]",b"[P|...]",b"[PG]"];
     fn class(mem:&mut [u8],at:&mut usize,kind:u32,ch:u32){
@@ -15834,9 +14072,6 @@ pub fn format_domain_match(mem:&mut [u8], flag:u32, kind:u32, ch:u32, n:u32, cha
     append(mem,out,b")");out
 }
 
-/// fn_27b678 / EU fn_27b834 / KR fn_27b8e0.
-/// Find a normalized text span and count missing prompt separators.
-/// Compare candidate positions with the selected record's position, not the first record.
 pub fn domain_normalized_span(mem:&mut [u8],text:u32,recs:u32,n:u32,mut index:u32,counts:[u32;3],start_out:u32,end_out:u32)->u32 {
     if n==0 || index>=n || mem_half(mem,recs)!=0x4000 || mem_half(mem,recs+index*24)!=0x22 {return 0;}
     for p in counts {mem_store16(mem,p,0);}
@@ -15859,8 +14094,6 @@ pub fn domain_normalized_span(mem:&mut [u8],text:u32,recs:u32,n:u32,mut index:u3
     if actual<=expected {mem_store16(mem,counts[1],expected.wrapping_sub(actual));1}else{0}
 }
 
-
-/// Caller-owned domain database-vector lifecycle operations.
 pub trait DomainDatabaseList {
     fn resolve(&mut self, first:u32, second:u32, context:&mut u32)->u32;
     fn create(&mut self, heap:u32, config:[u32;3], single:u32, array:&mut u32)->u32;
@@ -15869,8 +14102,6 @@ pub trait DomainDatabaseList {
     fn no_memory(&mut self, log:u32);
 }
 
-/// fn_281384 / EU fn_281540 / KR fn_2815ec.
-/// Initialize a domain's database vector, releasing partial allocation on error.
 pub fn initialize_domain_databases(mem:&mut [u8],first:u32,second:u32,out:u32,config:[u32;3],api:&mut impl DomainDatabaseList)->u32 {
     let mut context=0;let mut rc=api.resolve(first,second,&mut context);
     if rc>=0x80000000 {return rc;}
@@ -15887,21 +14118,11 @@ pub fn initialize_domain_databases(mem:&mut [u8],first:u32,second:u32,out:u32,co
     rc
 }
 
-/// fn_281464 / EU fn_281620 / KR fn_2816cc.
-/// Append one database handle to a domain's vector.
 pub fn append_domain_database(mem:&[u8],domain:Option<u32>,value:u32,api:&mut impl DomainDatabaseList)->u32 {
     let Some(domain)=domain else{return 0x88e02007;};
     if api.append(mem_word(mem,domain+8),value)==0 {0x88e0200a}else{0}
 }
 
-
-// ---- Additive reentrant hook entries. Legacy traits/entries above are unchanged. ----
-/// Live-memory counterpart of CreateHooks. Memory is the final argument so
-/// scalar guest reads finish before its exclusive reborrow. Guest-owned
-/// strings use u32 offsets for touch_param, trace_pipeline and install_voice;
-/// constant/local byte slices keep their existing signatures. No arena slice
-/// may remain borrowed across a callback that receives mutable memory.
-/// Every existing CreateHooks implementation is adapted without modification.
 pub trait CreateHooksM {
     #[allow(clippy::too_many_arguments)]
     fn check_open_m(&mut self, obj: u32, b: u32, mem: &mut [u8]) -> u32;
@@ -16382,8 +14603,6 @@ pub fn create_object_m<H: CreateHooksM>(
     rc
 }
 
-/// Live-memory heap and tree callbacks. Legacy implementations get a blanket
-/// adapter. New dispatchers implement the M trait directly, not both traits.
 pub trait HeapVtableM {
     #[allow(clippy::too_many_arguments)]
     fn alloc_at_m(&mut self, obj: u32, size: u32, mem: &mut [u8]) -> u32;

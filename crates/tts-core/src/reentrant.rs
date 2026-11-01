@@ -1,11 +1,7 @@
-//! Live-memory adapters for dictionary, pool, vector and lattice calls.
-//!
-//! Guest values remain addresses across callbacks. No arena view is retained.
-//! Scratch words model callee out-parameters formerly placed on the ARM stack;
-//! callers must provide disjoint writable scratch, not engine-owned storage.
+
+
 use crate::boot::{Calls, Memory};
 
-/// Region-dependent constant strings, kept separate from guest object addresses.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LiteralM {
     NumberOutputTranscriptions,
@@ -20,12 +16,6 @@ pub enum LiteralM {
     FactorError,
 }
 
-/// Common memory-last dispatch for these additive entries. Existing boot call
-/// dispatchers adapt without changes; legacy typed entries remain available.
-///
-/// The blanket adapter retains selection's normalized-literal convention.
-/// A live dispatcher must recognize that convention, or implement HooksM on a
-/// newtype and resolve literal_m to mapped guest strings for its ROM region.
 pub trait HooksM {
     fn call_m(&mut self, address: u32, args: &[u32], mem: &mut Memory<'_>) -> u32;
     fn literal_m(&self, _literal: LiteralM) -> u32 {
@@ -65,7 +55,6 @@ fn r(x: i32, s: u32) -> i32 {
     x >> (s & 255).min(31)
 }
 
-/// fn_26b718. scratch is one word for the read callback's data address.
 pub fn contains_m(
     m: &mut Memory<'_>,
     hooks: &mut impl HooksM,
@@ -101,7 +90,6 @@ pub fn contains_m(
     0
 }
 
-/// fn_196cfc. Reads the vector again after allocation; callbacks see live bytes.
 pub fn vec_grow_m(m: &mut Memory<'_>, hooks: &mut impl HooksM, p: u32, out: u32) -> u32 {
     if p == 0 || out == 0 {
         return 0;
@@ -137,8 +125,6 @@ pub fn vec_grow_m(m: &mut Memory<'_>, hooks: &mut impl HooksM, p: u32, out: u32)
     1
 }
 
-/// fn_2db4a0. Diagnostic literal pointers use the selection ROM sentinel.
-/// Free callbacks may destroy a block: its successor is saved before the call.
 pub fn free_pool_m(m: &mut Memory<'_>, hooks: &mut impl HooksM, p: u32) {
     if p == 0 || m.word(p) == 0 {
         return;
@@ -180,8 +166,6 @@ pub fn free_pool_m(m: &mut Memory<'_>, hooks: &mut impl HooksM, p: u32) {
     m.put_word(p + 16, 0);
 }
 
-/// fn_2a1f50. Row pointers are loaded at each ARM access, including duplicate
-/// or overlapping rows. No simultaneous mutable Rust row references are made.
 pub fn factor_lattice_m(m: &mut Memory<'_>, hooks: &mut impl HooksM, context: u32, p: u32) {
     let mut shift = 0u32;
     while at(m, row(m, p, 0), 0) < 0x1fffffff {
@@ -255,7 +239,6 @@ pub fn factor_lattice_m(m: &mut Memory<'_>, hooks: &mut impl HooksM, context: u3
     }
 }
 
-/// fn_2a2224. Input, output, row data and row pointers may alias.
 pub fn forward_lattice_m(
     m: &mut Memory<'_>,
     hooks: &mut impl HooksM,
@@ -315,8 +298,6 @@ pub fn forward_lattice_m(
     }
 }
 
-/// fn_282324. scratch contains six words: setting, language output, language
-/// code (four bytes), records, count, and the temporary separator string.
 pub fn lookup_transcriptions_m(
     m: &mut Memory<'_>,
     hooks: &mut impl HooksM,
@@ -469,9 +450,6 @@ pub fn lookup_transcriptions_m(
     status
 }
 
-/// fn_2a47bc with live pool teardown. Unlike the legacy host boundary this
-/// entry executes fn_2db4a0, not a scripted pool reply. Heap tags are reloaded
-/// after each callback, including the two separately freed buffers.
 pub fn release_shared_stream_m(m: &mut Memory<'_>, hooks: &mut impl HooksM, p: u32) {
     let refs = h(m, p + 0x1c);
     if refs == 0 {

@@ -1,47 +1,45 @@
-//! Boot path lane two. Guest rodata addresses are supplied by the caller.
+
 use crate::boot::Memory;
-/// Return the module interface table D_8f88b0 supplied by the caller.
+
 pub fn fn_1d75ac(m: &mut Memory<'_>, index: u32, out: u32, table: u32) -> u32 {
     if index <= 1 { m.put_word(out, table); 0 } else { 0x89902001 }
 }
-/// Return the module interface table D_8f8954 supplied by the caller.
+
 pub fn fn_1d88c8(m: &mut Memory<'_>, index: u32, out: u32, table: u32) -> u32 {
     if index <= 1 { m.put_word(out, table); 0 } else { 0x8bf02001 }
 }
-/// Return the module interface table D_8f89c8 supplied by the caller.
+
 pub fn fn_1de860(m: &mut Memory<'_>, index: u32, out: u32, table: u32) -> u32 {
     if index <= 1 { m.put_word(out, table); 0 } else { 0x89c02001 }
 }
-/// Return the module interface table D_8f8bb0 supplied by the caller.
+
 pub fn fn_1e3ecc(m: &mut Memory<'_>, index: u32, out: u32, table: u32) -> u32 {
     if index <= 1 { m.put_word(out, table); 0 } else { 0x8a702001 }
 }
-/// Return the module interface table D_8f8c30 supplied by the caller.
+
 pub fn fn_1e5110(m: &mut Memory<'_>, index: u32, out: u32, table: u32) -> u32 {
     if index <= 1 { m.put_word(out, table); 0 } else { 0x89602001 }
 }
-/// Return the module interface table D_8f8cd8 supplied by the caller.
+
 pub fn fn_1e60cc(m: &mut Memory<'_>, index: u32, out: u32, table: u32) -> u32 {
     if index <= 1 { m.put_word(out, table); 0 } else { 0x81102001 }
 }
-/// Return the module interface table D_8f8ec0 supplied by the caller.
+
 pub fn fn_1ea344(m: &mut Memory<'_>, index: u32, out: u32, table: u32) -> u32 {
     if index <= 1 { m.put_word(out, table); 0 } else { 0x8b802001 }
 }
-/// Return the module interface table D_8f8f88 supplied by the caller.
+
 pub fn fn_1ee6d8(m: &mut Memory<'_>, index: u32, out: u32, table: u32) -> u32 {
     if index <= 1 { m.put_word(out, table); 0 } else { 0x89802001 }
 }
 
-/// Reentrant dictionary-interface result. Pointers remain guest addresses.
 #[derive(Clone, Copy)]
 pub struct Part { pub status:u32, pub result:u32, pub tag:u16, pub separator:u8 }
 pub trait Parts {
-    /// `tn` selects `nrpart_tn`, otherwise `nrpart_g2p`, in `fecfg`.
-    /// `prior` preserves result/separator when the callback leaves an output untouched.
+
     fn get_part(&mut self,m:&mut Memory<'_>,method:u32,handle:[u32;2],tn:bool,prior:Part)->Part;
 }
-/// Read and parse both token-normalization switches through the engine vtable.
+
 pub fn fn_1e512c(m:&mut Memory<'_>,o:u32,h:&mut impl Parts)->u32 {
     let mut rc=0;
     let mut prior=Part{status:0,result:0,tag:0xffff,separator:0};
@@ -62,7 +60,7 @@ pub fn fn_1e512c(m:&mut Memory<'_>,o:u32,h:&mut impl Parts)->u32 {
     }
     rc
 }
-/// Append a unique token name. All allocation uses the existing guest heap port.
+
 pub fn fn_1e3ef8(m:&mut Memory<'_>,o:u32,name:u32,h:&mut impl crate::boot_part_e::Host)->u32 {
     let mut i=0u16;
     while i<m.half(o+0x6c) {
@@ -86,7 +84,7 @@ pub fn fn_1e3ef8(m:&mut Memory<'_>,o:u32,name:u32,h:&mut impl crate::boot_part_e
     h.call(m,0x173dc0,&[m.word(m.word(o)+16),m.word(o+0x48),0x5df0,0]);
     0x8960200a
 }
-/// Backend query, calling the landed lane-5 backend port.
+
 pub fn fn_1e5f2c(m:&mut Memory<'_>,p:u32,tag:u32,out:u32,g:&ContextGlobals,h:&mut impl crate::boot_part_e::Host)->u32 {
     if crate::frontend::validate_handle(p!=0,tag,0x3815,0x30)>>31!=0 {return 0x81102008;}
     if p==0 {return 0x81102007;}
@@ -94,14 +92,12 @@ pub fn fn_1e5f2c(m:&mut Memory<'_>,p:u32,tag:u32,out:u32,g:&ContextGlobals,h:&mu
     crate::boot_port_5::fn_265b3c(m,&mut Backend{host:h,g},backend,out)
 }
 
-/// The pair sentinel and fallback context used by fn_19611c.
 pub struct ContextGlobals {pub empty:[u8;8],pub fallback:u32}
 fn context(m:&Memory<'_>,a:u32,b:u32,g:&ContextGlobals)->(u32,u32) {
     let mut p=0;
     let empty_a=u32::from_le_bytes(g.empty[..4].try_into().unwrap());
     let empty_b=u32::from_le_bytes(g.empty[4..].try_into().unwrap());
-    // The real resolver compares the sentinel and validates the tag before
-    // dereferencing the handle. Invalid tags may carry unmapped pointers.
+
     let pointed=if a==0 || b!=0x1e61 || (a==empty_a && b==empty_b) {None}else{Some(m.half(a))};
     let r=crate::frontend::resolve_engine_context(a,pointed,b,&g.empty,g.fallback,&mut p);
     (r,p)
@@ -125,7 +121,7 @@ impl<H:crate::boot_part_e::Host> crate::component_live_b::Host for PcreInit<'_,H
         }
     }
 }
-/// Open the synthesis setup and its PCRE workspace with the landed PCRE ports.
+
 pub fn fn_1d79dc(m:&mut Memory<'_>,h0:u32,h1:u32,out:u32,g:&ContextGlobals,h:&mut impl crate::boot_part_e::Host)->u32 {
     if out==0 {return 0x8bf02007;}
     m.put_word(out,0);m.put_word(out+4,0);
@@ -145,8 +141,6 @@ pub fn fn_1d79dc(m:&mut Memory<'_>,h0:u32,h1:u32,out:u32,g:&ContextGlobals,h:&mu
     open.m.put_word(out+4,0xf618);open.m.put_word(out,buf);rc
 }
 
-/// Reset and load the six synthesis-setup arrays. The cursor scratch word is
-/// caller-owned and restored on every return, including callee errors.
 pub fn fn_1d7c3c(m:&mut Memory<'_>,o:u32,tag:u32,base:u32,limit:u32,scratch:u32,h:&mut impl crate::boot_part_e::Host)->u32 {
     let saved=m.word(scratch);m.put_word(scratch,14);
     let rc=setup(m,o,tag,base,limit,scratch,h);m.put_word(scratch,saved);rc
@@ -189,11 +183,9 @@ fn setup(m:&mut Memory<'_>,o:u32,tag:u32,base:u32,limit:u32,cursor:u32,h:&mut im
     m.put_word(o+0x0c,1);0
 }
 
-/// Guest string addresses used by the config and dictionary path builders.
 pub struct ConfigStrings {pub langcode:u32,pub voice:u32,pub fecfg:u32,pub prefix:u32,pub packaging:u32,pub clc:u32,pub clc_slash:u32,pub slash:u32,pub colon:u32,pub sysdct_slash:u32}
 fn config(m:&mut Memory<'_>,o:u32,key:u32,slot:u32,h:&mut impl crate::boot_part_e::Host)->u32 {
-    // Standard comparator and callback-free locks use the existing live bridge.
-    // Nonstandard comparators/locks remain explicit engine dispatch, never a success fallback.
+
     if let Some(r)=m.boot_lookup_pure(0x175a1c,&[o,key,slot],0x196980) {r}
     else {h.call(m,0x175a1c,&[o,key,slot])}
 }
@@ -204,8 +196,7 @@ fn lower(m:&mut Memory<'_>,p:u32){
         let at=m.offset(p+i as u32);m.bytes[at]=crate::normalization::tolower_240ba0(m.bytes[at] as u32) as u8;i=i.wrapping_add(1);
     }
 }
-/// Add the language-family, language and voice token names. scratch is 128
-/// disjoint caller-owned bytes; restoration includes every error path.
+
 pub fn fn_1e5278(m:&mut Memory<'_>,p:u32,k:&ConfigStrings,scratch:u32,h:&mut impl crate::boot_part_e::Host)->u32 {
     let saved=core::array::from_fn::<_,128,_>(|i|m.byte(scratch+i as u32));
     let rc=language_tokens(m,p,k,scratch,h);
@@ -227,8 +218,7 @@ fn language_tokens(m:&mut Memory<'_>,p:u32,k:&ConfigStrings,s:u32,h:&mut impl cr
     let rc=fn_1e3ef8(m,p,s+32,h);if rc>>31!=0{return rc;}
     fn_1e3ef8(m,p,s+64,h)
 }
-/// Construct the dictionary resource path, retaining the source's first lookup
-/// status even when optional prefix/packaging queries fail.
+
 pub fn fn_1ebe84(m:&mut Memory<'_>,owner:u32,dst:u32,flag:u32,k:&ConfigStrings,slot:u32,h:&mut impl crate::boot_part_e::Host)->u32 {
     let saved=m.word(slot);m.put_word(slot,0);
     let rc=path(m,owner,dst,flag,k,slot,h);m.put_word(slot,saved);rc
@@ -269,7 +259,7 @@ struct EngineCalls<'a,H>{host:&'a mut H,s:u32}
 impl<H:crate::boot_part_e::Host> crate::boot::Calls for EngineCalls<'_,H>{
     fn call_wide(&mut self,_:&mut Memory<'_>,f:u32,_:&[u32])->u64 {panic!("unbound wide registry callee {f:x}")}
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {
-        if f==0x198760 && m.word(m.word(a[0]+36)+8)==0x196980 {
+        if f==0x198760 && crate::rom_region::to_us(crate::rom_region::Rom::from_entry(m.word(m.word(a[0]+36)+8)),m.word(m.word(a[0]+36)+8))==0x196980 {
             let mem=&*m.bytes;
             return crate::frontend::find_node(mem,a[0],m.word(a[0]),m.byte(a[0]+40),a[1],|x,y| match (x,y) {
                 (0,0)=>0,(0,_)=>-1,(_,0)=>1,_=>crate::normalization::strcmp_at(mem,x,y)
@@ -300,7 +290,7 @@ fn registry_release(m:&mut Memory<'_>,reg:u32,name:u32,s:u32,h:&mut impl crate::
         refs=m.half(entry+28);cb=m.word(entry+24);
     }
     let remove=if find>>31==0 && refs==1 && cb!=0 {invoke(m,0x19672c,&[m.word(reg+16),name],s+128,h)}else{0};
-    // Removal can reenter and replace the registry's handle halves.
+
     image[32..36].copy_from_slice(&m.word(reg).to_le_bytes());image[36..40].copy_from_slice(&m.word(reg+4).to_le_bytes());
     let scripts=crate::frontend::ReleaseScripts{lock:rc,find,found:if find>>31==0{Some(0)}else{None},remove,unlock:0};
     let callback=if cb==0 {None}else{Some(|ha,hb,tmp:&mut [u8;32]|{
@@ -313,8 +303,7 @@ fn registry_release(m:&mut Memory<'_>,reg:u32,name:u32,s:u32,h:&mut impl crate::
     if find>>31==0 && (refs!=1 || cb==0) {m.put_half(entry+28,u16::from_le_bytes([image[28],image[29]]));}
     let unlock=invoke(m,0x176f5c,&[m.word(reg+12)],s+128,h);if unlock>>31!=0 && status>>31==0 {status=unlock;}status
 }
-/// Open a phonmap mark wrapper. Resource registry and heap calls are live Rust.
-/// scratch is 768 disjoint caller-owned bytes, restored by each nested bridge.
+
 pub fn fn_1e36bc(m:&mut Memory<'_>,source_type:u32,source_name:u32,out:u32,g:&ContextGlobals,synth:u32,phon:u32,diagnostics:[u32;4],s:u32,h:&mut impl crate::boot_part_e::Host)->u32 {
     if out==0{return 0x8a702007;}
     let (rc,ctx)=context(m,source_type,source_name,g);if rc>>31!=0{return rc;}
@@ -348,9 +337,6 @@ pub fn fn_1e36bc(m:&mut Memory<'_>,source_type:u32,source_name:u32,out:u32,g:&Co
     h.call(m,0x1738e8,&[m.word(ctx+16),0x8f8b6e,4,0,diagnostics[3],rc]);rc
 }
 
-/// fn_1e0d14. Close a phonmap object: every reader, the word map and the
-/// object itself. `scratch` is one caller-owned word outside the arena that
-/// receives the map iterator handle.
 pub fn fn_1e0d14<H: crate::boot_port_6b::Host>(m:&mut Memory<'_>,p:u32,tag:u32,scratch:u32,h:&mut H)->u32 {
     let mut rc=crate::frontend::validate_handle(p!=0,tag,0x72a4,0x238);
     if rc>>31!=0 {return rc;}
@@ -382,10 +368,6 @@ pub fn fn_1e0d14<H: crate::boot_port_6b::Host>(m:&mut Memory<'_>,p:u32,tag:u32,s
     rc
 }
 
-/// fn_1964e0. Create the map object: the five callback words, the owner and
-/// the embedded tree. The callback words are the caller's canonical tokens;
-/// the map factory stores them verbatim, exactly like the ARM copies the
-/// ROM callback addresses into the object.
 pub fn fn_1964e0(m:&mut Memory<'_>,ctx:u32,flag:u32,cb:[u32;5],out:u32,h:&mut impl crate::boot_part_e::Host)->u32 {
     assert_eq!(m.base,0,"this port requires absolute arena indexes");
     if cb[0]==0||cb[1]==0||cb[2]==0||cb[3]==0||cb[4]==0||out==0 {return 0x89002007;}
@@ -399,14 +381,6 @@ pub fn fn_1964e0(m:&mut Memory<'_>,ctx:u32,flag:u32,cb:[u32;5],out:u32,h:&mut im
     0
 }
 
-/// fn_1ec8b4. The product version check of the dictionary context.
-///
-/// The dictionary lookup is the certified boot-port-2b port. `key` and
-/// `text` are the guest strings the lookup uses and `required` is the word
-/// D_8f8f40. `scratch` is five caller-owned words: the value pointer, the
-/// count, the separator and the two end pointers of the version scan.
-/// The logger is null in the certified scene, so the log calls carry the
-/// module and the code but no format text.
 pub fn fn_1ec8b4(
     m:&mut Memory<'_>,
     ctx:u32,
@@ -462,7 +436,6 @@ pub fn fn_1ec8b4(
     rc
 }
 
-/// fn_252d6c. Release the synthesis fetch table and every entry's f8 handle.
 pub fn fn_252d6c(m:&mut Memory<'_>,e:u32,g:&ContextGlobals,h:&mut impl crate::boot_part_e::Host)->u32 {
     if e==0 {return 0x81102007;}
     let (rc,env)=context(m,m.word(e),m.word(e+4),g);
@@ -479,16 +452,6 @@ pub fn fn_252d6c(m:&mut Memory<'_>,e:u32,g:&ContextGlobals,h:&mut impl crate::bo
     0
 }
 
-/// fn_1e0f10. Open a phonmap object for the handle pair `h0`/`h1` and store
-/// the object and its tag in `out`. `scratch` is one caller-owned word outside
-/// the arena that receives the voice string pointer; the map iterator handle
-/// of the closing path uses the next word. On a successful voice lookup the
-/// phonmap readers load through fn_1e0400_m and the word map publishes;
-/// otherwise the object closes instead of publishing (src/fn_1e0d14.c).
-/// Caller-owned inputs of the fn_1e0400 phonmap load: the region's
-/// D_8f8ad4 word, the string-map/token-reader environment, and the five
-/// word-map callbacks the ARM stores verbatim (copy, destroy, compare,
-/// retain, release) in the region's own addresses.
 pub struct PhonmapOpen<'a> {
     pub ver: u32,
     pub env: &'a crate::boot_port_6b::Env6b<'a>,
@@ -511,8 +474,7 @@ pub fn fn_1e0f10<H: crate::boot_port_6b::Host + crate::render_part_a::ReaderHost
         m.put_word(newobj,h0);m.put_word(newobj+4,h1);m.put_word(newobj+8,ctx);
         rc=config(m,m.word(ctx+0x14),k.voice,scratch,h);
         if rc>>31==0 {
-            // src/fn_1e0d14.c fn_1e0f10: load the phonmap readers, then
-            // release the voice string the config lookup returned.
+
             let val=m.word(scratch);
             rc=crate::boot_port_6b::fn_1e0400_m(m,h,newobj,val,v.ver,v.env);
             if val!=0 {crate::boot_part_e::Host::call(h,m,0x1757a8,&[m.word(ctx+0x14),val]);}
@@ -534,7 +496,6 @@ pub fn fn_1e0f10<H: crate::boot_port_6b::Host + crate::render_part_a::ReaderHost
     rc
 }
 
-/// fn_195d58. The byte-string comparison of the key list.
 fn cmp195d58(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     let (mut x, mut y) = (a, b);
     loop {
@@ -550,9 +511,6 @@ fn cmp195d58(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     }
 }
 
-/// The broker host of fn_1ecd04. The certified scene reaches the allocator
-/// seam and the two logger calls; the rest of the broker machine is
-/// unreachable and reports the null-argument status.
 pub struct Broker<'a, H>(pub &'a mut H);
 impl<H: crate::boot_part_b::Host> crate::boot_part_b::Host for Broker<'_, H> {
     fn thread_id(&mut self) -> u32 {
@@ -594,14 +552,9 @@ impl<H: crate::boot_part_b::Host> crate::boot_part_b::DataHost for Broker<'_, H>
         0x89002007
     }
 }
-/// The guest "rb" mode string of the file service, supplied by the scene.
+
 const RB_MODE: u32 = 0x10810;
-/// fn_173000. The ROM file service boundary.
-///
-/// The handle object is allocated through the caller's heap, the source
-/// vtable's `get` slot is tried first and its `open` slot is used when the
-/// probe answers with one. A failing service releases the handle and clears
-/// the caller's out word.
+
 fn file_open(
     m: &mut Memory<'_>,
     src: u32,
@@ -653,13 +606,6 @@ impl<H: crate::boot_part_b::Host> crate::reentrant::HooksM for DictHooks<'_, H> 
     }
 }
 
-/// fn_1ecd04. The dictionary-exists query of the fe_dctlkp context.
-///
-/// The handle check is the certified boot-port-1 port, the key list is walked
-/// with fn_195d58 and the resource is opened with the certified boot-part-b
-/// broker port over the real broker scene. `scratch` is caller-owned words
-/// outside the compared arena: the opened handle, the broker scratch and the
-/// dictionary buffer.
 pub fn fn_1ecd04(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -706,8 +652,7 @@ pub fn fn_1ecd04(
         ctype_table: 0,
         brokerstring_key: 0,
     };
-    // The fallback broker names live in the caller's scratch, outside the
-    // compared arena: the ROM keeps them in its rodata.
+
     for (at, name) in [(scratch + 0x50, &b"sysdct\0"[..]), (scratch + 0x60, &b"lid\0"[..])] {
         let o = m.offset(at);
         m.bytes[o..o + name.len()].copy_from_slice(name);
@@ -755,10 +700,6 @@ pub fn fn_1ecd04(
     rc2
 }
 
-/// The guest strings of the fn_1ee808 row. The ROM keeps them in its own
-/// rodata; the certified scene keeps the same text in the arena, so the
-/// Rust host, the native oracle and the three ROM regions compare the same
-/// bytes.
 pub struct DestructorStrings {
     pub extraesclang: u32,
     pub extraesctn: u32,
@@ -768,27 +709,16 @@ pub struct DestructorStrings {
     pub lingdb: u32,
 }
 
-/// The canonical guest address of D_8f902c. The native oracle links the
-/// symbol to the same word and the three ROM regions read it through the
-/// relocated literal pool of fn_1ee808.
 const D_8F902C: u32 = 0x13800;
-/// The canonical guest address of D_8d7660, the current handle pair. The
-/// native oracle links the symbol to the same word and the three ROM regions
-/// read it through the relocated literal pool of fn_176fd4.
+
 const D_8D7660: u32 = 0x102c0;
-/// The scratch layout of the fn_1ee808 row: the iterator handle, the value
-/// slot of the map lookup, the entry slot of the registry lookup and the
-/// 32-byte entry copy. The callback slot of the array lookup follows the
-/// value slot inside fn_174f9c.
+
 const DS_ITER: u32 = 0;
 const DS_VALUE: u32 = 4;
 const DS_ENTRY: u32 = 16;
 const DS_COPY: u32 = 32;
 const DS_TEARDOWN: u32 = 64;
 
-/// fn_176f2c and fn_176f5c. The lock acquire and release. The inner table
-/// holds the acquire at +8 and the release at +12, and the call takes the
-/// lock's target word.
 fn destructor_lock(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32,slot:u32)->u32 {
     if p==0 {return 0x81402007;}
     let f=m.word(m.word(m.word(p)+8)+slot);
@@ -796,8 +726,6 @@ fn destructor_lock(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32,
     h.call(m,f,&[m.word(p+8)])
 }
 
-/// fn_198760. The exact tree search. The comparator is the map's own
-/// compare callback, so the scene's seam counts every comparison.
 fn tree_find(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,tree:u32,key:u32)->u32 {
     let cmp=m.word(m.word(tree+36)+8);
     let mut n=m.word(tree);
@@ -812,7 +740,6 @@ fn tree_find(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,tree:u32,key
     0
 }
 
-/// The flag walk of fn_198760: the last node that still compares equal.
 fn tree_last(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,tree:u32,start:u32,key:u32,cmp:u32)->u32 {
     let mut last=start;
     loop {
@@ -827,7 +754,6 @@ fn tree_last(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,tree:u32,sta
     last
 }
 
-/// fn_1987fc. The lower bound search of a tree whose flag is set.
 fn tree_lower(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,tree:u32,key:u32)->u32 {
     let cmp=m.word(m.word(tree+36)+8);
     let mut cur=m.word(tree);
@@ -841,7 +767,6 @@ fn tree_lower(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,tree:u32,ke
     prev
 }
 
-/// fn_198f74. The first node of a tree, the leftmost node of the root.
 fn tree_first(m:&mut Memory<'_>,tree:u32)->u32 {
     let mut n=m.word(tree);
     if n==tree {return 0;}
@@ -850,14 +775,12 @@ fn tree_first(m:&mut Memory<'_>,tree:u32)->u32 {
     n
 }
 
-/// fn_1966ac. The map lookup: the tree search and the node's value word.
 fn fn_1966ac(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,a:u32,b:u32,o:u32)->u32 {
     if a==0||b==0||o==0 {return 0x89002007;}
     let e=tree_find(m,h,a+24,b);
     if e!=0 {m.put_word(o,m.word(e+20));0} else {0x89002014}
 }
 
-/// fn_1970ac. The bounded fixed-stride item of the callback array.
 fn fn_1970ac(m:&mut Memory<'_>,p:u32,i:u32,out:u32)->u32 {
     if p==0||out==0||i>=m.word(p+20) {return 0;}
     let size=m.half(p+4) as u32;
@@ -865,8 +788,6 @@ fn fn_1970ac(m:&mut Memory<'_>,p:u32,i:u32,out:u32)->u32 {
     1
 }
 
-/// fn_196e28. Remove one element of the callback array: the element
-/// destructor runs, the tail moves down and the count drops.
 fn fn_196e28(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,a:u32,idx:u32)->u32 {
     if a==0 {return 0;}
     let n=m.word(a+0x14);
@@ -887,9 +808,6 @@ fn fn_196e28(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,a:u32,idx:u3
     1
 }
 
-/// fn_174f9c. Remove the first callback whose three-word key matches. The
-/// values tree answers the lookup and the callback array answers the
-/// removal; the lock is taken for the whole search.
 fn fn_174f9c(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32,key:u32,a:[u32;3],s:u32)->u32 {
     if p==0 {return 0x8b702007;}
     let rc=destructor_lock(m,h,m.word(p+4),8);
@@ -911,7 +829,6 @@ fn fn_174f9c(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32,key:u3
     status
 }
 
-/// The callback search of fn_174f9c.
 fn find_remove(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,list:u32,a:[u32;3],s:u32)->u32 {
     if list==0 {return 0x8b702014;}
     let mut i=0u32;
@@ -927,8 +844,6 @@ fn find_remove(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,list:u32,a
     }
 }
 
-/// fn_196794. Open an iterator over the map. A zero key starts at the
-/// first node, a nonzero key searches the tree.
 fn fn_196794(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32,key:u32,mode:u32,out:u32)->u32 {
     if p==0||out==0 {return 0x89002007;}
     let mut rc=0u32;
@@ -950,15 +865,12 @@ fn fn_196794(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32,key:u3
     rc
 }
 
-/// fn_196830. The iterator close: the map's heap releases the handle.
 fn fn_196830(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32)->u32 {
     if p==0 {return 0x89002007;}
     crate::boot_part_e::release(m,m.word(m.word(p)+0x14),p,h);
     0
 }
 
-/// fn_1968cc. The iterator step close: the current node leaves the tree
-/// and the handle's reference word is cleared.
 fn fn_1968cc(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32)->u32 {
     if p==0 {return 0x89002007;}
     let r=m.word(p+4);
@@ -968,8 +880,6 @@ fn fn_1968cc(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32)->u32 
     0
 }
 
-/// fn_198f1c. The tree node close: the node leaves the tree, the map's key
-/// and value destructors run and the heap releases the node.
 fn fn_198f1c(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,o:u32,a:u32) {
     crate::normalization::rb_erase(m.bytes,o,a);
     let heap=m.word(o+0x20);
@@ -981,7 +891,6 @@ fn fn_198f1c(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,o:u32,a:u32)
     crate::boot_part_e::release(m,heap,a,h);
 }
 
-/// fn_198fb4. The tree destroy of one subtree.
 fn fn_198fb4(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,c:u32,n:u32,end:u32) {
     if n==end {return;}
     fn_198fb4(m,h,c,m.word(n),end);
@@ -995,7 +904,6 @@ fn fn_198fb4(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,c:u32,n:u32,
     crate::boot_part_e::release(m,heap,n,h);
 }
 
-/// fn_19869c. The tree destroy of the whole map.
 fn fn_19869c(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,t:u32) {
     let n=m.word(t);
     if n!=t {
@@ -1014,7 +922,6 @@ fn fn_19869c(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,t:u32) {
     m.put_word(t+4,t);
 }
 
-/// fn_19665c. The map close: the tree goes first, then the map itself.
 fn fn_19665c(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32)->u32 {
     if p==0 {return 0x89002007;}
     fn_19869c(m,h,p+0x18);
@@ -1022,7 +929,6 @@ fn fn_19665c(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32)->u32 
     0
 }
 
-/// fn_19672c. Remove one key from the map.
 fn fn_19672c(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32,q:u32)->u32 {
     if p==0||q==0 {return 0x89002007;}
     let t=tree_find(m,h,p+0x18,q);
@@ -1032,8 +938,6 @@ fn fn_19672c(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32,q:u32)
     }
 }
 
-/// fn_17b1c4. Close one named resource of the registry: the entry leaves
-/// the map, its own destructor runs and the lock is released.
 fn fn_17b1c4(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,o:u32,name:u32,s:u32)->u32 {
     if o==0||name==0 {return 0x8b602007;}
     let lock=m.word(o+0xc);
@@ -1069,11 +973,6 @@ fn fn_17b1c4(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,o:u32,name:u
     rc
 }
 
-/// fn_26c858. The engine instance teardown.
-///
-/// The port is public so the boot-port-2c lane can bind it as the pipeline
-/// release of fn_26caec: the ARM's fail path calls it with the object
-/// fn_26caec allocated.
 pub fn fn_26c858(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32,s:&DestructorStrings,scratch:u32)->u32 {
     let mut err=0u32;
     let tab=m.word(p+0xc);
@@ -1156,10 +1055,6 @@ pub fn fn_26c858(m:&mut Memory<'_>,h:&mut impl crate::boot_part_e::Host,p:u32,s:
     err
 }
 
-/// fn_1ee808. The parameters destructor of the synthesis object: the two
-/// parameter callbacks leave the parameters block, the value map is emptied
-/// and closed, the three registry entries are closed and the object itself
-/// goes back to the heap.
 pub fn fn_1ee808(
     m:&mut Memory<'_>,
     p:u32,

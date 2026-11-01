@@ -37,8 +37,6 @@ impl FrameSynthesis<'_, '_, '_> {
         }
     }
 
-    /// fn_1b7e6c / EU fn_1b7f1c / KR fn_1b80b8.
-    /// Clip overlap-add output into two spans, applying effects in stream order.
     pub fn render(
         &mut self,
         mut incoming: &[i16],

@@ -6,7 +6,6 @@ pub struct NamedMapping<'a> {
     pub value: u8,
 }
 
-/// fn_2fb170 / EU fn_2fb32c / KR fn_2fb3d8.
 pub fn lookup_named_mapping(entries: &[NamedMapping<'_>], key: u8) -> u8 {
     let mut index = 0;
     search_records(entries, |entry| key.cmp(&entry.name[0]), &mut index)
@@ -19,7 +18,6 @@ pub struct SymbolRecord {
     pub input_offset: usize,
 }
 
-/// fn_2fbc58 / EU fn_2fbe14 / KR fn_2fbec0.
 pub fn bind_symbol_record<'a>(
     records: &'a mut [SymbolRecord],
     indices: &[u16; 256],
@@ -36,7 +34,6 @@ pub fn bind_symbol_record<'a>(
     Ok(record)
 }
 
-/// fn_240854 / EU fn_240a10 / KR fn_240abc.
 pub fn invalid_utf8_offset(
     input: &[u8],
     length: i32,
@@ -99,7 +96,6 @@ pub fn invalid_utf8_offset(
     Ok(-1)
 }
 
-/// fn_2409d4 / EU fn_240b90 / KR fn_240c3c.
 pub fn sort_voice_records<T>(
     records: &mut [T],
     compare: &mut impl FnMut(&T, &T) -> core::cmp::Ordering,
@@ -147,7 +143,6 @@ pub struct DictionarySignatures<'a> {
     pub plain: &'a [u8; 4],
 }
 
-/// fn_2ff374 / EU fn_2ff530 / KR fn_2ff5dc.
 pub fn unwrap_dictionary(
     image: &mut [u8],
     cursor: &mut usize,

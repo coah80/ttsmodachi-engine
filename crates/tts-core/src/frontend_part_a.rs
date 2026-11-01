@@ -1,4 +1,4 @@
-//! Scheduler and resource-operation leaves. All addresses refer to the US ROM.
+
 fn word(mem: &[u8], at: u32) -> u32 {
     u32::from_le_bytes(mem[at as usize..at as usize + 4].try_into().unwrap())
 }
@@ -6,10 +6,9 @@ fn store(mem: &mut [u8], at: u32, value: u32) {
     mem[at as usize..at as usize + 4].copy_from_slice(&value.to_le_bytes());
 }
 
-/// External scheduler dependencies; offsets refer to caller-owned memory.
 pub trait SchedulerHooks {
     fn validate(&mut self, object: u32, tag: u32, magic: u32, size: u32) -> u32;
-    /// Resolve a channel or instance to status, context and object offsets.
+
     fn resolve(&mut self, channel: bool, handle: [u32; 2]) -> (u32, u32, u32);
     fn close_channel(&mut self, context: u32, object: &mut u32) -> u32;
     fn enter(
@@ -35,23 +34,20 @@ pub trait SchedulerHooks {
     ) -> u32;
 }
 
-/// fn_15db04 / EU fn_15dbc8 / KR fn_15dae8.
 pub fn lingdb_class_close() -> u32 {
     0
 }
-/// fn_15db0c / EU fn_15dbd0 / KR fn_15daf0.
+
 pub fn lingdb_unsupported() -> u32 {
     0x89202001
 }
-/// fn_15db14 / EU fn_15dbd8 / KR fn_15daf8.
-///
-/// The read-only ROM table is supplied by the caller, including its rebased pointers.
+
 pub fn lingdb_table_value(table: &[[u32; 2]], index: u32, output: &mut u32) -> u32 {
-    // ARM forms the byte offset with LSL #3, discarding the high three bits.
+
     *output = table[(index.wrapping_mul(8) / 8) as usize][1];
     0
 }
-/// fn_15becc / EU fn_15bf90 / KR fn_15beb0.
+
 pub fn reopen_lingdb(object: u32, tag: u32, hooks: &mut impl SchedulerHooks) -> u32 {
     if hooks.validate(object, tag, 0xb2c2, 0x38) >= 0x80000000 {
         0x89202008
@@ -59,7 +55,7 @@ pub fn reopen_lingdb(object: u32, tag: u32, hooks: &mut impl SchedulerHooks) -> 
         0
     }
 }
-/// fn_157984 / EU fn_157a48 / KR fn_157968.
+
 pub fn close_scheduler_channel(handle: [u32; 2], hooks: &mut impl SchedulerHooks) -> u32 {
     let (status, context, mut object) = hooks.resolve(true, handle);
     if status >= 0x80000000 {
@@ -67,7 +63,7 @@ pub fn close_scheduler_channel(handle: [u32; 2], hooks: &mut impl SchedulerHooks
     }
     hooks.close_channel(context, &mut object)
 }
-/// fn_15ac54 / EU fn_15ad18 / KR fn_15ac38.
+
 pub fn scheduler_contains(
     mem: &[u8],
     handle: [u32; 2],
@@ -90,7 +86,6 @@ pub fn scheduler_contains(
     }
 }
 
-/// Arguments to a resource load. None denotes a null pointer, not arena offset zero.
 pub struct ResourceLoad {
     pub handle: [u32; 2],
     pub name: Option<u32>,
@@ -121,7 +116,7 @@ fn enter_resource(mem: &mut [u8], object: u32, hooks: &mut impl SchedulerHooks) 
     }
     (status, old)
 }
-/// fn_151914 / EU fn_1519d8 / KR fn_1518f8.
+
 pub fn load_scheduler_resource(
     mem: &mut [u8],
     request: &ResourceLoad,
@@ -153,7 +148,7 @@ pub fn load_scheduler_resource(
     hooks.restore(mem, context, object, previous);
     status
 }
-/// fn_151bf8 / EU fn_151cbc / KR fn_151bdc.
+
 pub fn unload_scheduler_resource(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -211,7 +206,7 @@ fn set_resource_enabled(
         status = 0x81202008;
         let mut i = 0u16;
         while status & 0x1fff == 8 {
-            // Methods may change the resource list, so reload its links and bound.
+
             let list = word(mem, object.wrapping_add(0x7c));
             let count_at = list.wrapping_add(12) as usize;
             let count = u16::from_le_bytes(mem[count_at..count_at + 2].try_into().unwrap());
@@ -237,7 +232,7 @@ fn set_resource_enabled(
     hooks.restore(mem, context, object, previous);
     status
 }
-/// fn_159240 / EU fn_159304 / KR fn_159224.
+
 pub fn enable_scheduler_resource(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -247,7 +242,7 @@ pub fn enable_scheduler_resource(
 ) -> u32 {
     set_resource_enabled(mem, handle, resource, arg, true, hooks)
 }
-/// fn_159440 / EU fn_159504 / KR fn_159424.
+
 pub fn disable_scheduler_resource(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -258,7 +253,6 @@ pub fn disable_scheduler_resource(
     set_resource_enabled(mem, handle, resource, arg, false, hooks)
 }
 
-/// Formatter dependency used by the product-list wrappers.
 pub trait ProductFormatter {
     fn version(&mut self, mem: &mut [u8], output: u32, full: bool);
 }
@@ -289,7 +283,7 @@ fn product_list(
     }
     validation
 }
-/// fn_15a664 / EU fn_15a728 / KR fn_15a648.
+
 pub fn scheduler_products(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -302,7 +296,7 @@ pub fn scheduler_products(
         mem, output, count, validation, 0x81202008, 0x81202007, hooks,
     )
 }
-/// fn_15f418 / EU fn_15f4dc / KR fn_15f3fc.
+
 pub fn query_products(
     mem: &mut [u8],
     object: u32,
@@ -317,13 +311,12 @@ pub fn query_products(
     )
 }
 
-/// Dependencies used by scheduler close and output-availability operations.
 pub trait SchedulerCoreHooks: SchedulerHooks {
     fn close_instance(&mut self, mem: &mut [u8], context: u32, force: u32, object: &mut u32)
         -> u32;
     fn output_step(&mut self, mem: &mut [u8], process: bool, object: u32, mode: u32) -> u32;
 }
-/// fn_158920 / EU fn_1589e4 / KR fn_158904.
+
 pub fn close_scheduler_instance(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -340,7 +333,7 @@ pub fn close_scheduler_instance(
     }
     hooks.close_instance(mem, context, 1, &mut object) & 0x7fffffff
 }
-/// fn_15a4b8 / EU fn_15a57c / KR fn_15a49c.
+
 pub fn break_scheduler(mem: &mut [u8], handle: [u32; 2], hooks: &mut impl SchedulerHooks) -> u32 {
     let (mut rc, _, object) = hooks.resolve(false, handle);
     if rc >= 0x80000000 {
@@ -353,7 +346,7 @@ pub fn break_scheduler(mem: &mut [u8], handle: [u32; 2], hooks: &mut impl Schedu
     let state = object.wrapping_add(0x30) as usize;
     if matches!(mem[state], 3 | 4) {
         mem[state] = 6;
-        // fn_18f488 is a ROM linker-inlined zero-return stub, with no effects.
+
     } else {
         rc = 0x81202011;
     }
@@ -363,7 +356,7 @@ pub fn break_scheduler(mem: &mut [u8], handle: [u32; 2], hooks: &mut impl Schedu
     }
     rc
 }
-/// fn_1560f8 / EU fn_1561bc / KR fn_1560dc.
+
 pub fn scheduler_output_available(
     mem: &mut [u8],
     object: u32,
@@ -397,7 +390,6 @@ pub fn scheduler_output_available(
     rc
 }
 
-/// License allocation and notification dependencies, owned by the caller.
 pub trait SchedulerLicenseHooks {
     fn ports(&mut self, feature: u32) -> u32;
     fn token(&mut self, feature: u32) -> u32;
@@ -413,7 +405,7 @@ pub trait SchedulerLicenseHooks {
         description: &[u8],
     );
 }
-/// fn_151f80 / EU fn_152044 / KR fn_151f64.
+
 pub fn scheduler_license_usage(
     mem: &[u8],
     context: u32,
@@ -446,7 +438,7 @@ pub fn scheduler_license_usage(
         &text[..len + 1],
     );
 }
-/// fn_152d48 / EU fn_152e0c / KR fn_152d2c.
+
 pub fn configure_scheduler_license(
     mem: &mut [u8],
     context: u32,
@@ -467,7 +459,7 @@ pub fn configure_scheduler_license(
         _ => return 0x81202007,
     };
     let base = channel.wrapping_add(0x30).wrapping_add(kind * 24);
-    // SWIlicenseFree is linker-inlined to a zero-return stub in the ROM.
+
     let requested = if kind == 3 { 1 } else { word(mem, base) };
     if kind != 3 && requested == 0 {
         return 0;
@@ -494,7 +486,6 @@ pub fn configure_scheduler_license(
     }
 }
 
-/// Stream map operations used by fn_14ee3c. All pointers are arena offsets.
 pub trait SchedulerStreamHooks {
     fn validate(&mut self, handle: [u32; 2], magic: u32, size: u32) -> u32;
     fn context(&mut self, handle: [u32; 2], context: &mut u32) -> u32;
@@ -503,7 +494,7 @@ pub trait SchedulerStreamHooks {
     fn clear(&mut self, iterator: u32);
     fn end(&mut self, iterator: u32);
 }
-/// fn_14ee3c / EU fn_14ef00 / KR fn_14ee20.
+
 pub fn reset_scheduler_streams(
     mem: &[u8],
     handle: [u32; 2],
@@ -545,7 +536,6 @@ pub fn reset_scheduler_streams(
     }
 }
 
-/// Vtable enumeration methods. Floating payloads are forwarded as unchanged bits.
 pub trait SchedulerListHooks: SchedulerHooks {
     fn enumerate(&mut self, mem: &mut [u8], slot: u32, args: &[u32]) -> u32;
 }
@@ -571,7 +561,7 @@ fn scheduler_list(
     args[3..3 + tail.len()].copy_from_slice(tail);
     hooks.enumerate(mem, slot, &args[..3 + tail.len()])
 }
-/// fn_15a7f8 / EU fn_15a8bc / KR fn_15a7dc.
+
 pub fn scheduler_languages(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -582,7 +572,7 @@ pub fn scheduler_languages(
 ) -> u32 {
     scheduler_list(mem, handle, product, 0x20, &[entries, count], hooks)
 }
-/// fn_15a8fc / EU fn_15a9c0 / KR fn_15a8e0.
+
 pub fn scheduler_voices(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -601,7 +591,7 @@ pub fn scheduler_voices(
         hooks,
     )
 }
-/// fn_15aa10 / EU fn_15aad4 / KR fn_15a9f4.
+
 pub fn scheduler_documents(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -620,7 +610,7 @@ pub fn scheduler_documents(
         hooks,
     )
 }
-/// fn_15ab2c / EU fn_15abf0 / KR fn_15ab10.
+
 pub fn scheduler_speech_databases(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -640,11 +630,10 @@ pub fn scheduler_speech_databases(
     )
 }
 
-/// Stream reclamation after advancing a reader.
 pub trait SchedulerReadHooks: SchedulerHooks {
     fn reclaim(&mut self, mem: &mut [u8], state: u32);
 }
-/// fn_14fad8 / EU fn_14fb9c / KR fn_14fabc.
+
 pub fn read_scheduler_stream(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -694,7 +683,6 @@ pub fn read_scheduler_stream(
     rc
 }
 
-/// fn_1529b4 / EU fn_152a78 / KR fn_152998.
 pub fn increase_scheduler_license(
     mem: &mut [u8],
     context: u32,
@@ -760,7 +748,7 @@ pub fn increase_scheduler_license(
                 .wrapping_add(word(mem, base.wrapping_add(12)))
                 > word(mem, base.wrapping_add(8))
             {
-                // The second ports query supplies the diagnostic value, even when logging is disabled.
+
                 licensing.ports(feature);
             }
             5
@@ -774,7 +762,6 @@ pub fn increase_scheduler_license(
     rc
 }
 
-/// Destruction dependencies for a scheduler channel. ROM licensing SWIs have no effects.
 pub trait SchedulerChannelCloseHooks {
     fn component_query(&mut self, component: u32, release: bool) -> u32;
     fn component_close(&mut self, pair: [u32; 2]) -> u32;
@@ -789,7 +776,7 @@ fn first_error(status: &mut u32, next: u32) {
         *status = next;
     }
 }
-/// fn_1520b0 / EU fn_152174 / KR fn_152094.
+
 pub fn destroy_scheduler_channel(
     mem: &mut [u8],
     context: u32,
@@ -862,7 +849,6 @@ pub fn destroy_scheduler_channel(
     rc
 }
 
-/// Object-open dependencies for the component-query service.
 pub trait SchedulerQueryOpenHooks {
     fn context(&mut self, handle: [u32; 2], output: &mut u32) -> u32;
     fn allocate(&mut self, heap: u32) -> u32;
@@ -875,7 +861,7 @@ pub trait SchedulerQueryOpenHooks {
     fn mutex_close(&mut self, mutex: u32) -> u32;
     fn free(&mut self, heap: u32, object: u32);
 }
-/// fn_15f164 / EU fn_15f228 / KR fn_15f148.
+
 pub fn open_scheduler_query(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -949,7 +935,6 @@ pub fn open_scheduler_query(
     rc
 }
 
-/// Database iteration dependencies for query voice/document enumeration.
 pub trait SchedulerMetadataHooks {
     fn validate(&mut self, object: u32, tag: u32) -> u32;
     fn component(&mut self, name: u32, database: u32, output: &mut u32) -> u32;
@@ -1064,7 +1049,7 @@ fn metadata_list(
     hooks.release(component);
     rc
 }
-/// fn_15f988 / EU fn_15fa4c / KR fn_15f96c.
+
 pub fn query_scheduler_voices(
     mem: &mut [u8],
     object: u32,
@@ -1077,7 +1062,7 @@ pub fn query_scheduler_voices(
 ) -> u32 {
     metadata_list(mem, object, tag, name, filter, entries, count, false, hooks)
 }
-/// fn_15fd98 / EU fn_15fe5c / KR fn_15fd7c.
+
 pub fn query_scheduler_documents(
     mem: &mut [u8],
     object: u32,
@@ -1091,7 +1076,6 @@ pub fn query_scheduler_documents(
     metadata_list(mem, object, tag, name, filter, entries, count, true, hooks)
 }
 
-/// External effects used when destroying a synthesis instance.
 pub trait SchedulerInstanceCloseHooks {
     fn pipeline_close(&mut self, pipeline: u32) -> u32;
     fn component_remove(&mut self, registry: u32, name: &[u8], release: bool) -> u32;
@@ -1117,8 +1101,7 @@ fn replace_error(status: &mut u32, next: u32) {
         *status = next;
     }
 }
-/// fn_1523cc / EU fn_152490 / KR fn_1523b0.
-/// Parameter names and callback address tokens are supplied by the caller.
+
 pub fn destroy_scheduler_instance(
     mem: &mut [u8],
     context: u32,
@@ -1197,7 +1180,7 @@ pub fn destroy_scheduler_instance(
         );
         mem[object.wrapping_add(0x78) as usize] = 0;
     }
-    // SWIlexiconClose is a linker-inlined, zero-return ROM stub.
+
     if word(mem, object.wrapping_add(0x74)) != 0 {
         store(mem, object.wrapping_add(0x74), 0);
     }
@@ -1272,7 +1255,6 @@ pub fn destroy_scheduler_instance(
     rc
 }
 
-/// Dependencies of the scheduler channel constructor.
 pub trait SchedulerChannelOpenHooks {
     fn context(&mut self, handle: [u32; 2], context: &mut u32) -> u32;
     fn allocate(&mut self, heap: u32) -> u32;
@@ -1302,7 +1284,7 @@ fn query_channel_word(
     store(mem, object.wrapping_add(at), value);
     rc
 }
-/// fn_157080 / EU fn_157144 / KR fn_157064.
+
 pub fn open_scheduler_channel(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -1514,7 +1496,6 @@ pub fn open_scheduler_channel(
     result.0
 }
 
-/// Synthesis dependencies of the cooperative scheduler entry.
 pub trait SchedulerCooperativeHooks: SchedulerHooks {
     fn initialize(
         &mut self,
@@ -1536,7 +1517,7 @@ pub trait SchedulerCooperativeHooks: SchedulerHooks {
     fn trace_leave(&mut self, handle: [u32; 2]);
     fn trace_end(&mut self, handle: [u32; 2], logger: u32, token: u32, length: u32, duration: u32);
 }
-/// fn_159820 / EU fn_1598e4 / KR fn_159804.
+
 pub fn synthesize_scheduler_cooperatively(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -1666,7 +1647,6 @@ pub fn synthesize_scheduler_cooperatively(
     rc
 }
 
-/// URI and stream boundaries used by the scheduler Speak entry.
 pub trait SchedulerSpeakHooks: SchedulerHooks {
     fn register_inet(&mut self, components: u32, vtable: u32, pair: [u32; 2]) -> u32;
     fn unregister_inet(&mut self, components: u32) -> u32;
@@ -1678,7 +1658,7 @@ pub trait SchedulerSpeakHooks: SchedulerHooks {
         strings: &mut [u32; 3],
         source: &mut [u32; 2],
     ) -> u32;
-    /// Returns rc, f1, f2 and flags, plus the opened stream pair.
+
     fn uri_pipe(&mut self, pair: [u32; 2], aux: Option<[u32; 2]>, pipe: &mut [u32; 2]) -> [u32; 4];
     fn uri_base(&mut self, pipe: [u32; 2], flags: u32, base: u32, f1: u32, f2: u32) -> u32;
     fn uri_free(&mut self, pair: [u32; 2], text: u32);
@@ -1706,9 +1686,6 @@ pub trait SchedulerSpeakHooks: SchedulerHooks {
     );
 }
 
-/// fn_159c6c / EU fn_159d30 / KR fn_159c50.
-/// Resolve a URI, install its properties, open the source and synthesize it.
-/// All stream pairs and parsed strings belong to the caller's hooks.
 pub fn speak_scheduler(
     mem: &mut [u8],
     handle: [u32; 2],

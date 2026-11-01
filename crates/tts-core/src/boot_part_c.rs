@@ -1,6 +1,4 @@
-//! Boot leaves and byte-exact RVCT memory helpers.
-//! Guest pointers use the caller-owned arena in crate::boot::Memory.
-//! Tree inputs must be finite and all dereferenced addresses must be in the arena.
+
 
 use crate::boot::Memory;
 
@@ -21,12 +19,10 @@ impl Memory<'_> {
         i16::from_le_bytes(self.bytes[i..i + 2].try_into().unwrap()) as i32
     }
 
-    /// fn_1b033c, US/EU default. See reset_cursor_in_region for KR.
     pub fn reset_cursor(&mut self, p: u32) {
         self.reset_cursor_in_region(p, CursorRegion::UsEu);
     }
 
-    /// Reset with the sentinel selected from the caller's region state.
     pub fn reset_cursor_in_region(&mut self, p: u32, region: CursorRegion) {
         let base = self.c_word(p);
         self.c_put(p.wrapping_add(12), 0);
@@ -42,8 +38,6 @@ impl Memory<'_> {
         self.c_put(p.wrapping_add(20), 0);
     }
 
-    /// fn_1abd98. Compose a signed 64-bit millisecond timestamp.
-    /// The ROM literal is 0x36ee80, not a load from that guest address.
     pub fn timestamp(&mut self, out: u32, date: [i32; 3], time: [i32; 4]) {
         let days = calendar_days(date[0], date[1], date[2]);
         let v = (days as i64)
@@ -56,7 +50,6 @@ impl Memory<'_> {
         self.c_put(out, v as u32);
     }
 
-    /// fn_1b4f74. Convert days to optional year/month/day outputs in ROM store order.
     pub fn calendar_date(&mut self, year: u32, month: u32, day: u32, days: i32) {
         let days = days.wrapping_sub(60);
         let mut era = days / 146097;
@@ -104,7 +97,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_2ebc88. Signed bounds check followed by wrapping 32-byte slot lookup.
     pub fn vector_slot(&self, p: u32, index: i32) -> u32 {
         if index < 0 || self.c_word(p.wrapping_add(8)) as i32 <= index {
             return 0;
@@ -114,13 +106,11 @@ impl Memory<'_> {
             .wrapping_add((index as u32).wrapping_mul(32))
     }
 
-    /// fn_3034d4. Test the first two bytes of a resolved symbol.
     pub fn is_internal_symbol(&self, symbols: u32, key: i32) -> u32 {
         let p = self.vector_slot(symbols, key);
         u32::from(p != 0 && self.c_byte(p) == b'_' && self.c_byte(p.wrapping_add(1)) == b'I')
     }
 
-    /// fn_304aa0. Search a chained coordinate bucket.
     pub fn coordinate_value(&self, table: u32, a: i32, b: i32) -> u32 {
         let idx = coordinate_hash(a, b) as u32;
         let mut n = self.c_word(self.c_word(table).wrapping_add(idx.wrapping_mul(4)));
@@ -133,13 +123,10 @@ impl Memory<'_> {
         0
     }
 
-    /// fn_3023b0. RVCT memclr, returning the advanced destination register.
     pub fn rvct_memclr(&mut self, p: u32, count: u32) -> u32 {
         self.rvct_word_fill(p, count, 0)
     }
 
-    /// fn_3023b4. RVCT fill entry: r2 is a repeated WORD, not a byte.
-    /// Tail halfword/byte stores restart at the low bits of that word.
     pub fn rvct_word_fill(&mut self, mut p: u32, mut count: u32, word: u32) -> u32 {
         while count >= 4 {
             self.c_put(p, word);
@@ -159,8 +146,6 @@ impl Memory<'_> {
         p
     }
 
-    /// fn_30253c. RVCT memcpy front end for nonoverlapping objects.
-    /// Unlike ISO memcpy, the ROM leaves the END address in r0.
     pub fn rvct_copy(&mut self, mut dst: u32, mut src: u32, count: u32) -> u32 {
         for _ in 0..count {
             let b = self.c_byte(src);
@@ -171,7 +156,6 @@ impl Memory<'_> {
         dst
     }
 
-    /// fn_2e6750. Two-key directory search. index is the regional global's address.
     pub fn directory_search(&mut self, pp: u32, index: u32) -> i32 {
         let q = self.c_word(pp);
         let ka = self.c_word(q.wrapping_add(8)) as i32;
@@ -232,7 +216,6 @@ impl Memory<'_> {
         -1
     }
 
-    /// fn_303510. Search a finite nested candidate tree for an entry pair.
     pub fn candidate_contains(&self, e: u32, tab: u32, symbols: u32) -> u32 {
         if tab == 0 {
             return 0;
@@ -275,7 +258,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_3035e4. Resolve a named candidate attribute, preserving out on failure.
     pub fn candidate_attribute(&self, e: u32, tab: u32, symbols: u32) -> Option<u32> {
         if tab == 0 {
             return None;
@@ -330,7 +312,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_30374c. Resolve operands and compare their zero-terminated byte strings.
     pub fn compare_operands(
         &self,
         kind: i32,
@@ -348,7 +329,6 @@ impl Memory<'_> {
         u32::from((kind == 2 && equal) || (kind == 3 && !equal))
     }
 
-    /// fn_303868. Evaluate a finite predicate tree with ROM short-circuit order.
     pub fn evaluate_predicate(&self, n: u32, context: u32, symbols: u32) -> u32 {
         if n == 0 {
             return 1;
@@ -377,7 +357,6 @@ impl Memory<'_> {
     }
 }
 
-/// fn_1abca0. Gregorian date to the engine's day count, with ARM wrapping arithmetic.
 pub fn calendar_days(year: i32, month: i32, day: i32) -> i32 {
     let mut y = year.wrapping_sub(2000);
     let mp = if month <= 2 {
@@ -401,7 +380,6 @@ pub fn calendar_days(year: i32, month: i32, day: i32) -> i32 {
         .wrapping_add(59)
 }
 
-/// fn_304a48. Signed serpentine coordinate hash; signed division truncates toward zero.
 pub fn coordinate_hash(a: i32, b: i32) -> i32 {
     let m1 = b % 20;
     let t = (a % 200).wrapping_mul(20);
@@ -412,25 +390,20 @@ pub fn coordinate_hash(a: i32, b: i32) -> i32 {
     }
 }
 
-/// Platform services used by the isolated runtime and allocator leaves.
-/// Returned addresses are guest addresses within caller-owned memory.
 pub trait BootHost {
     fn svc(&mut self, number: u8, registers: [u32; 4]) -> [u32; 4];
     fn errno_address(&mut self) -> u32;
     fn allocate(&mut self, memory: &mut Memory<'_>, allocator: u32, size: u32) -> u32;
 }
 
-/// fn_11bcac. Raw SVC 0x0a veneer. Preserve the platform's register result.
 pub fn svc_0a(host: &mut impl BootHost, registers: [u32; 4]) -> [u32; 4] {
     host.svc(0x0a, registers)
 }
 
-/// fn_18f244. Raw SVC 0x3c veneer.
 pub fn svc_3c(host: &mut impl BootHost, registers: [u32; 4]) -> [u32; 4] {
     host.svc(0x3c, registers)
 }
 
-/// fn_11bc00. Busy-delay leaf's final r0, including signed overflow of SUBS.
 pub fn delay_result(count: i32) -> i32 {
     if count > 2 {
         -(count & 1)
@@ -439,13 +412,12 @@ pub fn delay_result(count: i32) -> i32 {
     }
 }
 
-/// fn_1a2ea8. The return-only entry leaves r0 unchanged.
 pub fn return_leaf(value: u32) -> u32 {
     value
 }
 
 impl Memory<'_> {
-    /// fn_3042c4. Single-thread RVCT static guard, not a synchronized Rust guard.
+
     pub fn acquire_guard(&mut self, guard: u32) -> u32 {
         if self.c_word(guard) != 0 {
             return 0;
@@ -454,7 +426,6 @@ impl Memory<'_> {
         1
     }
 
-    /// fn_1007d0. Zero-terminated u16 substring lookup.
     pub fn wide_substring(&self, mut haystack: u32, needle: u32) -> u32 {
         loop {
             let mut offset = 0u32;
@@ -476,8 +447,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_10062c. Locale-table lowercase. table contains classification bytes.
-    /// Valid inputs index that caller-supplied table, just as in the ROM.
     pub fn locale_lower(&self, table: u32, character: u32) -> u32 {
         if self.c_byte(table.wrapping_add(character)) & 0x10 != 0 {
             character.wrapping_add(32)
@@ -486,8 +455,6 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_1003ee. Wide case-insensitive comparison through the RVCT locale.
-    /// The fn_2ffdd8 helper folds only values at or below 0x7f.
     pub fn wide_case_compare(&self, table: u32, mut a: u32, mut b: u32) -> i32 {
         loop {
             let x = self.c_half(a) as u16 as u32;
@@ -511,15 +478,12 @@ impl Memory<'_> {
         }
     }
 
-    /// fn_100c16. Store errno and return the address supplied by the runtime.
     pub fn set_errno(&mut self, host: &mut impl BootHost, error: u32) -> u32 {
         let address = host.errno_address();
         self.c_put(address, error);
         address
     }
 
-    /// fn_304afc. Insert a coordinate value after duplicate checking.
-    /// Allocation is a host service; this function never allocates Rust storage.
     pub fn insert_coordinate(
         &mut self,
         host: &mut impl BootHost,
@@ -560,20 +524,14 @@ impl Memory<'_> {
     }
 }
 
-/// Cursor-reset ABI variation verified in the regional ROMs.
 #[derive(Clone, Copy)]
 pub enum CursorRegion {
     UsEu,
     Kr,
 }
 
-/// Dependencies outside a leaf. Results are r0 and up to two out-values.
-/// Function IDs and constant addresses use the US symbol map. The host resolves
-/// them to platform services; no guest stack or host pointer escapes this API.
-/// Byte-returning dependencies 1b449c, 1babcc and 1b35a0 must return
-/// zero-extended bytes, as required by their actual ROM ABI.
 pub trait BootCHost {
-    /// Resolve a data symbol in the active region.
+
     fn address(&self, us: u32) -> u32 {
         us
     }
@@ -589,8 +547,6 @@ impl Memory<'_> {
         self.bytes[i..i + 2].copy_from_slice(&value.to_le_bytes());
     }
 
-    /// fn_1b1b40. Signed-byte packed key, at most seven UTF-16 code units.
-    /// table is the region's resolved D_b80c90, 32 entries of 16 bytes.
     pub fn morphology_lookup(&self, input: u32, table: u32) -> u32 {
         let (mut lo, mut hi) = (0u32, 0u32);
         for n in 0..8u32 {
@@ -615,7 +571,6 @@ impl Memory<'_> {
         0
     }
 
-    /// fn_1b36fc. Forward the four input words plus the three fixed arguments.
     pub fn set_stream_property<H: BootCHost>(&mut self, h: &mut H, args: [u32; 4]) -> u8 {
         h.invoke(
             self,
@@ -624,7 +579,6 @@ impl Memory<'_> {
         )[0] as u8
     }
 
-    /// fn_1b4104. Allocate and initialize the 12-byte stream wrapper.
     pub fn create_stream_wrapper<H: BootCHost>(
         &mut self,
         h: &mut H,
@@ -654,7 +608,6 @@ impl Memory<'_> {
         rc as u8 as u32
     }
 
-    /// fn_1b3368. Allocate a 76-byte bounded substream.
     pub fn create_substream<H: BootCHost>(&mut self, h: &mut H, args: [u32; 8], out: u32) -> u32 {
         let [heap, a1, a2, a3, a4, a5, a6, a7] = args;
         let a = h.invoke(self, 0x1b2140, &[heap, 76]);
@@ -707,7 +660,6 @@ impl Memory<'_> {
         err as u8 as u32
     }
 
-    /// fn_1a8cf8. Initialize the stream state and copy caller-owned settings.
     pub fn initialize_stream<H: BootCHost>(
         &mut self,
         h: &mut H,
@@ -759,8 +711,6 @@ impl Memory<'_> {
         r[0] as u8 as u32
     }
 
-    /// fn_1aaa80. Construct, read, validate, then publish or release a stream.
-    /// The float is a raw soft-float ABI word, not a formatting conversion.
     pub fn open_stream<H: BootCHost>(&mut self, h: &mut H, args: [u32; 5], out: u32) -> u32 {
         let [heap, a1, a2, a3, float_bits] = args;
         let a = h.invoke(self, 0x1b2140, &[heap, 84]);
@@ -773,7 +723,7 @@ impl Memory<'_> {
             let result = h.invoke(self, 0x1a86a0, &[p, 0]);
             r = result[0];
             if r == 0 {
-                // armlink folds fn_1b4248's constant return into this caller.
+
                 if result[2] as u8 == 1 || result[1] as u8 == 1 {
                     r = 4;
                 }
@@ -789,7 +739,6 @@ impl Memory<'_> {
         r as u8 as u32
     }
 
-    /// fn_1a175c. Drain both queues, silence the active prefix, reset playback.
     pub fn reset_playback<H: BootCHost>(&mut self, h: &mut H, p: u32) {
         if self.c_byte(p + 4) == 0 {
             return;
@@ -803,7 +752,7 @@ impl Memory<'_> {
         }
         let f = f32::from_bits(self.c_word(p + 0x58)) + (self.c_word(p + 0x68) as i32 as f32);
         self.c_put(p + 0x54, 0);
-        // VFP saturates out-of-range conversions and maps NaN to zero.
+
         let n = (f as i32).min(self.c_word(p + 0x40) as i32);
         for i in 0..n.max(0) as u32 {
             self.c_put(self.c_word(p + 0x3c) + i * 4, 0);
@@ -816,14 +765,11 @@ impl Memory<'_> {
         self.c_put(p + 0x78, 1.0f32.to_bits());
         self.c_put(p + 0x2908, 0x80000000);
         self.c_put(p + 0x291c, 0x80000000);
-        // This leaf delegates the reset dependency to the host, so its
-        // region-dependent store order remains outside the playback routine.
+
         h.invoke(self, 0x1b033c, &[self.c_word(p + 0x44)]);
     }
 }
 
-/// fn_1b45b4. RVCT unsigned 64-bit quotient/remainder.
-/// Division by zero invokes the runtime handler, which chooses the quotient.
 pub fn unsigned_divmod<H: BootCHost>(
     memory: &mut Memory<'_>,
     h: &mut H,
@@ -838,9 +784,6 @@ pub fn unsigned_divmod<H: BootCHost>(
     }
 }
 
-/// Live state at an internal RVCT divide/remainder label.
-/// This is not an ordinary C-call ABI. The caller preserves the partial quotient
-/// and carry when suspending and resuming a division.
 #[derive(Clone, Copy)]
 pub struct DivisionContinuation {
     pub remainder: u32,
@@ -884,8 +827,7 @@ fn division_finish(s: DivisionContinuation) -> (u32, u32) {
         rem,
     )
 }
-/// fn_30209c internal continuations, including the signed normalization block.
-/// Only r0/r1 are division outputs. Other live registers are internal work.
+
 pub fn signed_divide_continue<H: BootCHost>(
     memory: &mut Memory<'_>,
     host: &mut H,
@@ -1048,7 +990,7 @@ pub fn signed_divide_continue<H: BootCHost>(
 }
 
 impl Memory<'_> {
-    /// fn_1a1d18. Convert a signed millisecond clock to the packed calendar ABI.
+
     pub fn unpack_clock(&mut self, out: u32, input: u32) {
         let n = (self.c_word(input) as u64 | ((self.c_word(input + 4) as u64) << 32)) as i64;
         let n = n.wrapping_add(0x395f7cfc8400);
@@ -1085,8 +1027,6 @@ impl Memory<'_> {
     }
 }
 
-/// fn_1bf98c consumes the word following the caller's BL. Actions 0..3 resume
-/// one of four caller continuations; actions 4..7 return a selected/quiet NaN.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FloatDispatch {
     pub value: u32,
@@ -1128,14 +1068,6 @@ pub fn float_dispatch(a: u32, b: u32, incoming_r2: u32, word: u32) -> FloatDispa
     }
 }
 
-/// Guest calls used by the stream validator and chart driver. Output words are
-/// local C out-parameters, never native pointers. The host must implement the
-/// actual dependency, including virtual methods addressed by their guest PC.
-/// 2e6750 takes the two local query keys and returns the bounds pointer in
-/// out[0]. 2e68a4 takes the current bounds value and returns its updated pointer
-/// in out[0]. Other out-parameters retain C argument order. 1b2140 returns its
-/// byte status in out[0]; 1b3368 returns its object in out[0]. Virtual methods
-/// omit local out-pointer arguments and return those values through out instead.
 pub trait BootC5Host {
     fn address(&self, us: u32) -> u32 {
         us
@@ -1145,9 +1077,7 @@ pub trait BootC5Host {
 }
 
 impl Memory<'_> {
-    /// fn_307950. Complete chart driver, including its live-frame continuations.
-    /// args: table, end, start, span, config, counter, output, expected,
-    /// h9, i10, allocator. Tables and linked lists must be finite.
+
     pub fn chart_driver(&mut self, h: &mut impl BootC5Host, args: [u32; 11]) -> u32 {
         let [tab, last, start, span, cfg, ctr, out, exp, h9, i10, alloc] = args;
         let mut pos = start as i32;
@@ -1308,8 +1238,6 @@ impl Memory<'_> {
         ret
     }
 
-    /// fn_1a86a0. Read, recover and validate a stream section. The two output
-    /// bytes are guest addresses and retain their original store order.
     pub fn validate_stream(
         &mut self,
         h: &mut impl BootC5Host,

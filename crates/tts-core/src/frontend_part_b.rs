@@ -1,4 +1,4 @@
-//! Caller-owned linguistic and domain glue.
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Boundary {
     Validate,
@@ -46,11 +46,10 @@ pub enum Boundary {
     ReleaseWorker,
     ResetHandle,
 }
-/// Host boundaries use caller-owned offsets, never native pointers.
-/// The reply is status/result followed by up to two output words.
+
 pub trait Host {
     fn call(&mut self, operation: Boundary, arguments: &[u32]) -> [u32; 3];
-    /// Memory-aware boundary for callers whose host services mutate their graphs.
+
     fn call_memory(&mut self, operation: Boundary, _memory: &mut [u8], arguments: &[u32]) -> [u32; 3] {
         self.call(operation, arguments)
     }
@@ -75,7 +74,6 @@ fn release(m: &[u8], p: u32, labels: &[u32], h: &mut impl Host) {
     call(h, Boundary::Free, &[word(m, env + 4), p]);
 }
 
-/// fn_200c18 / EU fn_200dd4 / KR fn_200e80.
 pub fn fn_200c18(m: &[u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     let rc = validate(p, tag, 62339, 32, h);
     if rc >= 0x80000000 {
@@ -88,7 +86,6 @@ pub fn fn_200c18(m: &[u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     0
 }
 
-/// fn_1f3d24 / EU fn_1f3ee0 / KR fn_1f3f8c.
 pub fn fn_1f3d24(m: &[u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     let rc = validate(p, tag, 62338, 52, h);
     if rc >= 0x80000000 {
@@ -101,7 +98,6 @@ pub fn fn_1f3d24(m: &[u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     0
 }
 
-/// fn_200c88 / EU fn_200e44 / KR fn_200ef0.
 pub fn fn_200c88(m: &[u8], p: u32, tag: u32, a: u32, h: &mut impl Host) -> u32 {
     let rc = validate(p, tag, 0xf383, 32, h);
     if rc >= 0x80000000 {
@@ -114,7 +110,6 @@ pub fn fn_200c88(m: &[u8], p: u32, tag: u32, a: u32, h: &mut impl Host) -> u32 {
     )
 }
 
-/// fn_200d38 / EU fn_200ef4 / KR fn_200fa0.
 pub fn fn_200d38(m: &[u8], p: u32, tag: u32, a: u32, b: u32, h: &mut impl Host) -> u32 {
     let rc = validate(p, tag, 0xf383, 32, h);
     if rc >= 0x80000000 {
@@ -127,7 +122,6 @@ pub fn fn_200d38(m: &[u8], p: u32, tag: u32, a: u32, b: u32, h: &mut impl Host) 
     )
 }
 
-/// fn_200d80 / EU fn_200f3c / KR fn_200fe8.
 pub fn fn_200d80(m: &[u8], p: u32, tag: u32, a: u32, b: u32, h: &mut impl Host) -> u32 {
     let rc = validate(p, tag, 0xf383, 32, h);
     if rc >= 0x80000000 {
@@ -140,7 +134,6 @@ pub fn fn_200d80(m: &[u8], p: u32, tag: u32, a: u32, b: u32, h: &mut impl Host) 
     )
 }
 
-/// fn_200dc8 / EU fn_200f84 / KR fn_201030.
 pub fn fn_200dc8(m: &[u8], p: u32, tag: u32, a: u32, b: u32, h: &mut impl Host) -> u32 {
     let rc = validate(p, tag, 0xf383, 32, h);
     if rc >= 0x80000000 {
@@ -153,7 +146,6 @@ pub fn fn_200dc8(m: &[u8], p: u32, tag: u32, a: u32, b: u32, h: &mut impl Host) 
     )
 }
 
-/// fn_1fd854 / EU fn_1fda10 / KR fn_1fdabc.
 pub fn fn_1fd854(m: &[u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     let rc = validate(p, tag, 0x11d, 72, h);
     if rc >= 0x80000000 {
@@ -206,17 +198,14 @@ fn pause(m: &[u8], p: u32, tag: u32, operation: u32, h: &mut impl Host) -> u32 {
     call(h, Boundary::ConvertError, &[rc])
 }
 
-/// fn_194920 / EU fn_1949d0 / KR fn_194a0c.
 pub fn fn_194920(m: &[u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     pause(m, p, tag, 64, h)
 }
 
-/// fn_194a4c / EU fn_194afc / KR fn_194b38.
 pub fn fn_194a4c(m: &[u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     pause(m, p, tag, 128, h)
 }
 
-/// fn_194644 / EU fn_1946f4 / KR fn_194730.
 pub fn fn_194644(m: &[u8], p: u32, tag: u32, resource: [u32; 2], h: &mut impl Host) -> u32 {
     if !object_valid(m, p, tag, 0x684f424a) {
         return 0x80000008;
@@ -234,7 +223,6 @@ pub fn fn_194644(m: &[u8], p: u32, tag: u32, resource: [u32; 2], h: &mut impl Ho
     call(h, Boundary::ConvertError, &[rc])
 }
 
-/// fn_1954b8 / EU fn_195568 / KR fn_1955a4.
 pub fn fn_1954b8(m: &[u8], p: u32, tag: u32, count: Option<&mut u16>) -> u32 {
     if !object_valid(m, p, tag, 0x68434c53) {
         return 0x80000008;
@@ -246,7 +234,6 @@ pub fn fn_1954b8(m: &[u8], p: u32, tag: u32, count: Option<&mut u16>) -> u32 {
     0x80000001
 }
 
-/// fn_1fdd0c / EU fn_1fdec8 / KR fn_1fdf74.
 pub fn fn_1fdd0c(m: &[u8], p: u32, h: &mut impl Host) -> u32 {
     let [rc, env, _] = session(m, p, h);
     if rc >= 0x80000000 {
@@ -281,7 +268,6 @@ pub fn fn_1fdd0c(m: &[u8], p: u32, h: &mut impl Host) -> u32 {
     rc
 }
 
-/// fn_1fdec0 / EU fn_1fe07c / KR fn_1fe128.
 pub fn fn_1fdec0(m: &mut [u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     let rc = validate(p, tag, 0x11d, 72, h);
     if rc >= 0x80000000 {
@@ -377,7 +363,6 @@ fn toggle(
     code
 }
 
-/// fn_200030 / EU fn_2001ec / KR fn_200298.
 pub fn fn_200030(
     m: &mut [u8],
     p: u32,
@@ -389,7 +374,6 @@ pub fn fn_200030(
     toggle(m, p, tag, target, target_tag, true, h)
 }
 
-/// fn_20018c / EU fn_200348 / KR fn_2003f4.
 pub fn fn_20018c(
     m: &mut [u8],
     p: u32,
@@ -401,7 +385,6 @@ pub fn fn_20018c(
     toggle(m, p, tag, target, target_tag, false, h)
 }
 
-/// fn_1f4498 / EU fn_1f4654 / KR fn_1f4700.
 pub fn fn_1f4498(m: &[u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     let rc = validate(p, tag, 0xf424, 64, h);
     if rc >= 0x80000000 {
@@ -420,7 +403,6 @@ pub fn fn_1f4498(m: &[u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     0
 }
 
-/// fn_1f4558 / EU fn_1f4714 / KR fn_1f47c0.
 pub fn fn_1f4558(
     m: &mut [u8],
     handle: [u32; 2],
@@ -466,7 +448,7 @@ pub fn fn_1f4558(
     }
     *output = [p, 0xf424];
     if status >= 0x80000000 {
-        // The inlined close suppresses its own error mapping.
+
         if validate(p, 0xf424, 0xf424, 64, h) < 0x80000000 {
             let env = word(m, p);
             for (at, label) in [(4, 1), (8, 2), (28, 3)] {
@@ -481,7 +463,6 @@ pub fn fn_1f4558(
     status
 }
 
-/// fn_200cc8 / EU fn_200e84 / KR fn_200f30.
 pub fn fn_200cc8(m: &[u8], p: u32, tag: u32, args: [u32; 7], h: &mut impl Host) -> u32 {
     if validate(p, tag, 0xf383, 32, h) >= 0x80000000 {
         return 0x8bb02008;
@@ -527,7 +508,6 @@ fn widen(m: &mut [u8], src: u32, dst: u32, cap: u16) -> u32 {
     0
 }
 
-/// fn_194b7c / EU fn_194c2c / KR fn_194c68.
 pub fn fn_194b7c(
     m: &mut [u8],
     p: u32,
@@ -580,8 +560,6 @@ pub fn fn_194b7c(
     call(h, Boundary::ConvertError, &[rc])
 }
 
-/// Property writer for fn_195570. The host consumes the temporary filename
-/// before returning; no pointer to the local buffer escapes.
 pub trait FilenameHost: Host {
     fn set_filename(&mut self, properties: u32, filename: &[u8]) -> u32;
 }
@@ -602,7 +580,6 @@ fn append_utf16(m: &[u8], src: u32, dst: &mut [u8]) -> u32 {
     0
 }
 
-/// fn_195570 / EU fn_195620 / KR fn_19565c.
 pub fn fn_195570(
     m: &[u8],
     p: u32,
@@ -627,8 +604,7 @@ pub fn fn_195570(
     if dir != 0 && half(m, dir) != 0 {
         append_utf16(m, dir, &mut buf);
         len = buf.iter().position(|&b| b == 0).unwrap();
-        // As in ROM, successful nonempty directory conversion supplies
-        // the byte before the terminator.
+
         if len != 0 && buf[len - 1] != b'/' {
             buf[len] = b'/';
             len += 1;
@@ -644,13 +620,11 @@ pub fn fn_195570(
     call(h, Boundary::ConvertError, &[rc])
 }
 
-/// Formatter and callback boundaries for fn_18f430.
 pub trait FormatHost {
     fn format(&mut self, input: u32, size: u32, output: &mut [u8; 2048]) -> u32;
     fn notify(&mut self, context: u32, arg: u32, text: &[u8; 2048]);
 }
 
-/// fn_18f430 / EU fn_18f4e0 / KR fn_18f51c.
 pub fn fn_18f430(
     m: &[u8],
     callback: u32,
@@ -668,7 +642,6 @@ pub fn fn_18f430(
     0
 }
 
-/// fn_1906cc / EU fn_19077c / KR fn_1907b8.
 pub fn fn_1906cc(m: &mut [u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     if !object_valid(m, p, tag, 0x68434c53) {
         return 0x80000008;
@@ -687,8 +660,7 @@ pub fn fn_1906cc(m: &mut [u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     let user = word(m, p + 0x20);
     store(m, p, 0x8cbcb3ac);
     let mut status = 0;
-    // Entries are in the ROM's destruction order. Failure restores only
-    // the magic; resources already closed stay closed.
+
     for (at, op) in [
         (0xc0, Boundary::ReleaseCallback),
         (0xcc, Boundary::CloseVoice),
@@ -756,8 +728,6 @@ pub fn fn_1906cc(m: &mut [u8], p: u32, tag: u32, h: &mut impl Host) -> u32 {
     call(h, Boundary::ConvertError, &[status])
 }
 
-/// fn_1ff79c / EU fn_1ff958 / KR fn_1ffa04.
-/// Strict ROM behavior, including the three C corrections in 8368a40.
 pub fn fn_1ff79c(
     m: &mut [u8],
     p: u32,
@@ -837,8 +807,6 @@ pub fn fn_1ff79c(
     code
 }
 
-/// Caller-owned log record. All string and array offsets refer to the
-/// caller's memory; the timestamp is local, fixed-size storage.
 pub struct LogRecord {
     pub timestamp: [u8; 128],
     pub category: u32,
@@ -855,7 +823,6 @@ pub trait LogHost: Host {
     fn write(&mut self, file: u32, text: &[u8]) -> u32;
 }
 
-/// fn_1ce428 / EU fn_1ce5e4 / KR fn_1ce690.
 pub fn fn_1ce428(
     m: &[u8],
     component: u32,
@@ -904,7 +871,6 @@ pub fn fn_1ce428(
     rc
 }
 
-/// Text callback buffer. Pointers are offsets in caller-owned memory.
 pub struct TextBuffer {
     pub length: u32,
     pub text: u32,
@@ -921,7 +887,7 @@ pub trait TextNotify {
         argument: u32,
     );
 }
-/// fn_18fbb8 / EU fn_18fc68 / KR fn_18fca4.
+
 pub fn fn_18fbb8(
     m: &mut [u8],
     p: u32,
@@ -1007,11 +973,11 @@ pub enum SpeechOp {
     Close,
     Destroy,
 }
-/// Speech integration returns status followed by two output words.
+
 pub trait SpeechHost {
     fn speech(&mut self, op: SpeechOp, args: &[u32]) -> [u32; 3];
 }
-/// fn_192004 / EU fn_1920b4 / KR fn_1920f0.
+
 pub fn fn_192004(m: &mut [u8], p: u32, tag: u32, request: u32, h: &mut impl SpeechHost) -> u32 {
     h.speech(SpeechOp::Reset, &[]);
     if tag != 0x684f424a || p == 0 || word(m, p) != 0x734f424a {
@@ -1164,7 +1130,7 @@ fn get_list(
             if dst == 0 {
                 return 0x8000000a;
             }
-            // fn_190078 compares its full length against the narrowed capacity.
+
             if n > (n as u16) as u32 {
                 m[dst as usize] = 0;
             } else {
@@ -1268,7 +1234,7 @@ fn get_list(
     }
     h.list(ListOp::Convert, &[rc], &mut request)[0]
 }
-/// fn_194d88 / EU fn_194e38 / KR fn_194e74.
+
 pub fn fn_194d88(
     m: &mut [u8],
     p: u32,
@@ -1281,7 +1247,7 @@ pub fn fn_194d88(
 ) -> u32 {
     get_list(m, p, tag, voice, id, None, output, count, h)
 }
-/// fn_1950e8 / EU fn_195198 / KR fn_1951d4.
+
 pub fn fn_1950e8(
     m: &mut [u8],
     p: u32,
@@ -1296,7 +1262,6 @@ pub fn fn_1950e8(
     get_list(m, p, tag, voice, id, Some(filter), output, count, h)
 }
 
-/// fn_191aa8 / EU fn_191b58 / KR fn_191b94.
 pub fn fn_191aa8(m: &mut [u8], p: u32, tag: u32, request: u32, h: &mut impl SpeechHost) -> u32 {
     if tag != 0x684f424a || p == 0 || word(m, p) != 0x734f424a {
         return 0x80000008;
@@ -1345,19 +1310,7 @@ pub fn fn_191aa8(m: &mut [u8], p: u32, tag: u32, request: u32, h: &mut impl Spee
                             rc = reply[0];
                             if rc < 0x80000000 {
                                 let dst = reply[1] as usize;
-                                const TABLE: [u8; 128] = [
-                                    32, 32, 44, 159, 34, 32, 32, 32, 94, 32, 83, 60, 69, 32, 32,
-                                    32, 32, 96, 39, 34, 34, 32, 32, 32, 126, 32, 115, 62, 101, 32,
-                                    32, 89, 32, 173, 155, 156, 32, 157, 124, 21, 32, 32, 166, 174,
-                                    170, 45, 32, 32, 248, 241, 253, 32, 39, 230, 32, 250, 32, 32,
-                                    167, 175, 172, 171, 32, 168, 65, 65, 65, 65, 142, 143, 146,
-                                    128, 69, 144, 69, 69, 73, 73, 73, 73, 68, 165, 79, 79, 79, 79,
-                                    153, 120, 32, 85, 85, 85, 154, 89, 32, 225, 133, 160, 131, 97,
-                                    132, 134, 145, 135, 138, 130, 136, 137, 141, 161, 140, 139,
-                                    100, 164, 149, 162, 147, 111, 148, 246, 32, 151, 163, 150, 129,
-                                    121, 32, 152,
-                                ];
-                                // The ROM's do/while decrements a 16-bit counter.
+
                                 let remaining = if n as u16 == 0 {
                                     65536
                                 } else {
@@ -1368,7 +1321,7 @@ pub fn fn_191aa8(m: &mut [u8], p: u32, tag: u32, request: u32, h: &mut impl Spee
                                     m[dst + i] = if v < 128 {
                                         v
                                     } else {
-                                        TABLE[(v - 128) as usize]
+                                        m[0x8d2e80 + (v - 128) as usize]
                                     };
                                 }
                                 rc = h.speech(SpeechOp::Commit, &[stream[0], stream[1], n])[0];
@@ -1408,7 +1361,7 @@ pub trait DomainOpenHost: Host {
         self.open_domain(op, args)
     }
 }
-/// fn_1fd9f8 / EU fn_1fdbb4 / KR fn_1fdc60.
+
 pub fn fn_1fd9f8(
     m: &mut [u8],
     _a: u32,
@@ -1506,7 +1459,7 @@ fn clear_output(m: &mut [u8], count: u32, status: u32, n: u32) {
     store(m, status + 4, 0);
     store(m, status + 12, 0);
 }
-/// fn_192928 / EU fn_1929d8 / KR fn_192a14.
+
 pub fn fn_192928(
     m: &mut [u8],
     p: u32,
@@ -1685,7 +1638,7 @@ fn zbytes(m: &[u8], p: u32) -> &[u8] {
     let n = m[start..].iter().position(|&v| v == 0).unwrap();
     &m[start..start + n]
 }
-/// fn_192330 / EU fn_1923e0 / KR fn_19241c.
+
 pub fn fn_192330(
     m: &mut [u8],
     p: u32,
@@ -1788,7 +1741,7 @@ pub fn fn_192330(
         h.starting(ReleaseType, &[parameters, char_type], &[]);
         rc
     })();
-    // The inactive fast return bypasses all restoration and conversion.
+
     if rc == 0x80000880
         && request != 0
         && word(m, request + 8) != 0
@@ -1830,8 +1783,7 @@ pub enum PromptOp {
     Slot,
     Expand,
 }
-/// External domain services. Addresses are offsets into caller-owned memory.
-/// Local prompt descriptors remain in the fixed nine-word buffer.
+
 pub trait PromptHost {
     fn prompt(
         &mut self,
@@ -1857,8 +1809,7 @@ fn normal_name(m: &[u8], p: u32) -> bool {
         .enumerate()
         .all(|(i, &b)| half(m, p + 2 * i as u32) == b as u16)
 }
-/// fn_200390 / EU fn_20054c / KR fn_2005f8.
-/// Apply explicit prompt insertions, then traverse default domains in reverse.
+
 pub fn fn_200390(
     m: &mut [u8],
     manager: u32,
@@ -1998,8 +1949,7 @@ pub fn fn_200390(
     }
     rc
 }
-/// fn_1fef0c / EU fn_1ff0c8 / KR fn_1ff174.
-/// Split normalized text at domain boundaries and write completed prompt nodes.
+
 pub fn fn_1fef0c(
     m: &mut [u8],
     manager: u32,
@@ -2033,7 +1983,7 @@ pub fn fn_1fef0c(
     let heap = word(m, ctx + 4);
     h.prompt(Clear, m, &[word(m, manager + 44)], &mut descriptor);
     let mut i = 0u16;
-    // The ROM compares against the unsigned count-minus-one.
+
     while (i as u32) < (half(m, count) as u32).wrapping_sub(1) {
         let e = word(m, entries) + i as u32 * 24;
         if word(m, e + 12) > word(m, e + 36) {
@@ -2236,12 +2186,11 @@ pub enum WorkerOp {
     CloseEngine,
     Convert,
 }
-/// Worker construction services. Output words use the caller's address space.
+
 pub trait WorkerHost {
     fn worker(&mut self, op: WorkerOp, mem: &mut [u8], args: &[u32]) -> [u32; 3];
 }
-/// fn_190984 / EU fn_190a34 / KR fn_190a70.
-/// Construct a worker; clean up each successfully acquired resource on failure.
+
 pub fn fn_190984(m: &mut [u8], request: u32, out: u32, h: &mut impl WorkerHost) -> u32 {
     use WorkerOp::*;
     if request == 0 || out == 0 {
@@ -2478,9 +2427,7 @@ fn contains_bytes(m: &[u8], p: u32, needle: &[u8]) -> bool {
     let bytes = &m[p as usize..(p + byte_length(m, p)) as usize];
     bytes.windows(needle.len()).any(|v| v == needle)
 }
-/// fn_1ffae8 / EU fn_1ffca4 / KR fn_1ffd50.
-/// Load an APDB resource, retain it in the domain map, and unwind failures.
-/// The floating-point broker argument is carried as bits, including sNaNs.
+
 pub fn fn_1ffae8(
     m: &mut [u8],
     p: u32,

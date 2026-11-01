@@ -1,14 +1,9 @@
-//! Live ports for the ISTOKEN rule subtree reached from the 1e4b7c number/date
-//! validation (seg1 r5): `0x2b8504` (stub) → `0x2b7fdc` (ISTOKEN) → `0x2b7d80`
-//! (section search over the lex vtable) + `0x2b79b4` (dictionary word scan),
-//! with the buffer helpers `0x2e6008`, `0x24d068`, `0x24cf10`, `0x24d204`,
-//! `0x24d2c8`, the canonical-word `0x1ed6c4` (+ `0x1ed520`), and the pure
-//! leaves. All 1:1 from `src/fn_*.c`; locals live in Rust locals, guest
-//! temporaries go through the live guest heap. No statics, no unsafe.
+
+
 use crate::boot::Memory;
 use crate::component_live_b::Host;
+use crate::rom_region::addr;
 
-/// Unsigned byte strlen.
 fn s_len(m: &Memory<'_>, s: u32) -> u32 {
     let mut n = 0u32;
     loop {
@@ -20,7 +15,6 @@ fn s_len(m: &Memory<'_>, s: u32) -> u32 {
     n
 }
 
-/// fn_195cd0. strcpy, returns dst.
 fn s_cpy(m: &mut Memory<'_>, dst: u32, src: u32) -> u32 {
     let mut i = 0u32;
     loop {
@@ -34,7 +28,6 @@ fn s_cpy(m: &mut Memory<'_>, dst: u32, src: u32) -> u32 {
     dst
 }
 
-/// fn_195dac. Append at most n bytes of src at the end of the dst string.
 fn s_nappend(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> u32 {
     let mut d = dst;
     while m.byte(d) != 0 {
@@ -54,9 +47,6 @@ fn s_nappend(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> u32 {
     dst
 }
 
-/// fn_195ae8. memcpy of n bytes, returns dst. For every realistic n
-/// (n - 1 <= 0x7fffffff, and n == 0 copies nothing) this moves exactly the
-/// n bytes; the C's giant-n wrap path is unreached on live inputs.
 fn s_copy(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> u32 {
     let mut i = 0u32;
     while i < n {
@@ -66,7 +56,6 @@ fn s_copy(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> u32 {
     dst
 }
 
-/// fn_195df8. memcmp over n bytes.
 fn s_cmp(m: &Memory<'_>, a: u32, b: u32, n: u32) -> i32 {
     if n == 0 {
         return 0;
@@ -87,7 +76,6 @@ fn s_cmp(m: &Memory<'_>, a: u32, b: u32, n: u32) -> i32 {
     m.byte(a.wrapping_add(i)) as i32 - m.byte(b.wrapping_add(i)) as i32
 }
 
-/// fn_1e3eec. Error code for n.
 fn e_code(n: u32) -> u32 {
     n | 0x89602000
 }
@@ -99,7 +87,6 @@ fn h_log(h: &mut impl Host, m: &mut Memory<'_>, log: u32, id: u32, code: u32) ->
     h.call_m(0x173dc0, &[log, id, code, 0], m)
 }
 
-/// fn_2e6008. Range selector: idx 0 reads base, else the indexed entry.
 pub fn fn_2e6008_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -145,7 +132,6 @@ fn grow_24d068(
     0
 }
 
-/// fn_24d068. Append s to buf (8-byte buf: data, cap u16, len u16).
 pub fn fn_24d068_m(
     m: &mut Memory<'_>,
     o: u32,
@@ -193,7 +179,6 @@ fn grow_24cf10(
     0
 }
 
-/// fn_24cf10. Grow d to f8 when f4 > f8; clear when non-null.
 pub fn fn_24cf10_m(m: &mut Memory<'_>, s: u32, d: u32, h: &mut impl Host) -> u32 {
     if m.half(d.wrapping_add(4)) > m.half(d.wrapping_add(8)) {
         let r = grow_24cf10(h, m, s, d, m.half(d.wrapping_add(8)));
@@ -227,8 +212,6 @@ fn grow_24d204(
     0
 }
 
-/// fn_24d204. Append src[start..end] to buf (12-byte buf here: data, cap,
-/// len, max).
 pub fn fn_24d204_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -275,7 +258,6 @@ fn grow_24d2c8(
     0
 }
 
-/// fn_24d2c8. Append s plus NUL to buf (8-byte buf: data, cap u16, len u16).
 pub fn fn_24d2c8_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -302,7 +284,6 @@ pub fn fn_24d2c8_m(
     0
 }
 
-/// fn_2b79b4. Dictionary word scan over separator-split fields.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2b79b4_m(
     m: &mut Memory<'_>,
@@ -432,7 +413,6 @@ pub fn fn_2b79b4_m(
     result
 }
 
-/// fn_195d58. strcmp over NUL-terminated bytes.
 fn s_strcmp(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     let mut i = 0u32;
     loop {
@@ -448,7 +428,6 @@ fn s_strcmp(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     }
 }
 
-/// fn_1960a8. strstr: first occurrence of s2 in s1, or 0.
 fn s_str(m: &Memory<'_>, s1: u32, s2: u32) -> u32 {
     if m.byte(s2) == 0 {
         return s1;
@@ -469,10 +448,6 @@ fn s_str(m: &Memory<'_>, s1: u32, s2: u32) -> u32 {
     0
 }
 
-/// Route the lex vtable f48 slot (0x1ec7cc) through the certified lane-b3
-/// port (total == 1 is the plain lookup). The ARM keeps the 260-byte
-/// scratch on its stack (no 1963b8 in 1ec7cc); mirror with a
-/// saved/restored FRAME slice so the heap matches the ARM exactly.
 fn route_1ec7cc(
     m: &mut Memory<'_>,
     h: &mut crate::component_live_b2::TokenHost<'_>,
@@ -500,8 +475,6 @@ fn route_1ec7cc(
     rc
 }
 
-/// fn_2b7d80. Section search over the lex vtable: f48 lists candidates
-/// (ptr/cnt/flag out), then each candidate runs fn_2b79b4 until term sets.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2b7d80_m(
     m: &mut Memory<'_>,
@@ -522,9 +495,7 @@ pub fn fn_2b7d80_m(
     let text = m.word(p.wrapping_add(0xe4));
     let args = m.word(p.wrapping_add(0x68));
     let domain = m.word(args.wrapping_add(0x10));
-    // Guest out-params for the vtable call (ptr, cnt, flag). The ARM keeps
-    // them on its stack (no 1963b8 in 2b7d80); mirror with a saved/restored
-    // FRAME slice so the heap matches the ARM exactly.
+
     let fb = 0x1070u32;
     let mut sv = [0u32; 3];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -532,9 +503,7 @@ pub fn fn_2b7d80_m(
     }
     let outs = fb;
     m.put_byte(term, 0);
-    // The section slots are bound directly (same heap): routing them back
-    // through dispatch would lose the heap (TokenHost.heap is the owner,
-    // not an allocator).
+
     let mut rc = route_1ec7cc(
         m, h, handle, tag, a2, text, outs, outs.wrapping_add(4),
         outs.wrapping_add(8), a8,
@@ -592,7 +561,6 @@ pub fn fn_2b7d80_m(
     rc
 }
 
-/// fn_195e38. Bounded strcpy: copy src into dst, zero-pad to n.
 fn s_copyn(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> u32 {
     let mut d = dst;
     let mut s = src;
@@ -630,7 +598,6 @@ fn s_copyn(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> u32 {
     dst
 }
 
-/// fn_195d30. strchr: first occurrence of c in s, or 0.
 fn s_chr(m: &Memory<'_>, s: u32, c: u32) -> u32 {
     let c = (c & 0xff) as u8;
     let mut p = s;
@@ -648,7 +615,6 @@ fn s_chr(m: &Memory<'_>, s: u32, c: u32) -> u32 {
     }
 }
 
-/// fn_240b28. CP437 tolower (ASCII A-Z plus accented Latin).
 fn s_tolower(c: u32) -> u32 {
     if c.wrapping_sub(0x41) <= 0x19 {
         return (c + 0x20) & 0xff;
@@ -666,7 +632,6 @@ fn s_tolower(c: u32) -> u32 {
     }
 }
 
-/// fn_195b38. memmove, returns dst.
 fn s_move(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> u32 {
     if dst > src && src.wrapping_add(n) > dst {
         let mut s = src.wrapping_add(n);
@@ -692,7 +657,6 @@ fn s_move(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> u32 {
     dst
 }
 
-/// fn_1ed520. Replacement + case pass over text (capacity-checked).
 pub fn fn_1ed520_m(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -726,7 +690,7 @@ pub fn fn_1ed520_m(
                 let extra = s_len(m, rep);
                 let total = end.wrapping_add(extra);
                 if total as u16 > capacity as u16 {
-                    h.call_m(0x173dc0, &[m.word(owner), 0x8f8f44u32, 0xa029, 0], m);
+                    h.call_m(0x173dc0, &[m.word(owner), addr(h.rom(), 0x8f8f44), 0xa029, 0], m);
                     return 0x89802007;
                 }
                 s_move(m, text.wrapping_add(i).wrapping_add(extra), text.wrapping_add(i).wrapping_add(1), end.wrapping_sub(i));
@@ -744,8 +708,6 @@ pub fn fn_1ed520_m(
     0
 }
 
-/// fn_1ed6c4. fe_dctlkp canonical word: validate, maybe cached-refresh,
-/// then the mode pass (0 = replacement table, else trim + case).
 pub fn fn_1ed6c4_m(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -760,9 +722,9 @@ pub fn fn_1ed6c4_m(
     if result >= 0x80000000 {
         return 0x89802008;
     }
-    h.call_m(0x1738e8, &[logger, 0x8f8f44, 4, 0, 0], m);
+    h.call_m(0x1738e8, &[logger, addr(h.rom(), 0x8f8f44), 4, 0, 0], m);
     if text == 0 {
-        h.call_m(0x173dc0, &[logger, 0x8f8f44, 0xa029, 0], m);
+        h.call_m(0x173dc0, &[logger, addr(h.rom(), 0x8f8f44), 0xa029, 0], m);
         return 0x89802007;
     }
     if s_len(m, text) == 0 {
@@ -817,12 +779,10 @@ pub fn fn_1ed6c4_m(
         let sl = s_len(m, text.wrapping_add(start as u32));
         s_move(m, text, text.wrapping_add(start as u32), sl.wrapping_add(1));
     }
-    h.call_m(0x1738e8, &[logger, 0x8f8f44, 4, 0, 1], m);
+    h.call_m(0x1738e8, &[logger, addr(h.rom(), 0x8f8f44), 4, 0, 1], m);
     result
 }
 
-/// fn_2b7fdc. ISTOKEN rule: range-select, dictionary search over two
-/// sections, table add on a term hit, TRUE/FALSE appended to output.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2b7fdc_m(
     m: &mut Memory<'_>,
@@ -837,10 +797,7 @@ pub fn fn_2b7fdc_m(
     let args = m.word(p.wrapping_add(0x68));
     let trace = m.byte(p.wrapping_add(0xc6));
     let mut flag = 0u32;
-    // Range + term/anchor live in Rust locals (the C frame). The ARM keeps
-    // term, scratch and the 2e6008 pair on its own stack (no 1963b8 in
-    // 2b7fdc); mirror them with a saved/restored FRAME slice so the heap
-    // matches the ARM exactly.
+
     let fb = 0x1060u32;
     let mut sv = [0u32; 3];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -882,13 +839,12 @@ fn fn_2b7fdc_inner(
     let _ = out;
     let mut range_w = [0u32; 1];
     let _ = range_w;
-    // 2e6008 writes (start s16, end s16) into the caller FRAME pair
-    // (rpair), like the ARM stack slot.
+
     let mut r = fn_2e6008_m(m, p, rpair, h);
     range[0] = m.half(rpair) as u16;
     range[1] = m.half(rpair.wrapping_add(2)) as u16;
     if r == 0 {
-        r = fn_24d068_m(m, p, output, 0x2b82f8, h);
+        r = fn_24d068_m(m, p, output, addr(h.rom(), 0x2b82f8), h);
         if r >= 0x80000000 {
             return r;
         }
@@ -896,7 +852,7 @@ fn fn_2b7fdc_inner(
         if trace == 1 {
             h.call_m(0x1738e8, &[log, log_id, 5, 0, 2], m);
         }
-        r = fn_24d068_m(m, p, output, 0x2b8310, h);
+        r = fn_24d068_m(m, p, output, addr(h.rom(), 0x2b8310), h);
         if r >= 0x80000000 {
             return r;
         }
@@ -923,9 +879,7 @@ fn fn_2b7fdc_inner(
             h.call_m(0x1738e8, &[log, log_id, 5, 0, 3], m);
         }
         m.put_half(p.wrapping_add(0xd2), 0);
-        // ROM 2b7fdc+0x1d0..0x1e0: NUL the +0xcc buffer as well as its
-        // length (the dictionary scan appends into it next). Without the
-        // NUL, appends accumulate past the length and corrupt the heap.
+
         let ccbuf = m.word(p.wrapping_add(0xcc));
         if ccbuf != 0 {
             m.put_byte(ccbuf, 0);
@@ -937,7 +891,7 @@ fn fn_2b7fdc_inner(
         let domain = m.word(args.wrapping_add(16));
         let key_f1 = m.byte(p.wrapping_add(0xf1));
         let key_f0 = m.byte(p.wrapping_add(0xf0));
-        rc = fn_2b7d80_m(m, p, 0x9b2593, 1, 0, 0, 2, term, 1, z, h);
+        rc = fn_2b7d80_m(m, p, addr(h.rom(), 0x9b2593), 1, 0, 0, 2, term, 1, z, h);
         if rc >= 0x80000000 {
             return check_2b7fdc(m, p, output, term, flag, table, index, h, rc);
         }
@@ -947,7 +901,7 @@ fn fn_2b7fdc_inner(
         let d8data = m.word(buf_d8);
         let e4data = m.word(buf_e4);
         s_cpy(m, e4data, d8data);
-        rc = fn_2b7d80_m(m, p, 0x9b258c, 2, 1, 1, 3, term, key_f1 as u32, z, h);
+        rc = fn_2b7d80_m(m, p, addr(h.rom(), 0x9b258c), 2, 1, 1, 3, term, key_f1 as u32, z, h);
         if rc >= 0x80000000 {
             return check_2b7fdc(m, p, output, term, flag, table, index, h, rc);
         }
@@ -957,7 +911,7 @@ fn fn_2b7fdc_inner(
             let d8data = m.word(buf_d8);
             let e4data = m.word(buf_e4);
             s_cpy(m, e4data, d8data);
-            rc = fn_2b7d80_m(m, p, 0x9b258f, 2, 0, 0, 3, term, key_f0 as u32, z, h);
+            rc = fn_2b7d80_m(m, p, addr(h.rom(), 0x9b258f), 2, 0, 0, 3, term, key_f0 as u32, z, h);
         }
         return check_2b7fdc(m, p, output, term, flag, table, index, h, rc);
     }
@@ -968,7 +922,6 @@ fn fn_2b7fdc_inner(
     r
 }
 
-/// Tail of fn_2b7fdc after the section searches (check_r).
 #[allow(clippy::too_many_arguments)]
 fn check_2b7fdc(
     m: &mut Memory<'_>,
@@ -986,17 +939,14 @@ fn check_2b7fdc(
     }
     let r;
     if m.byte(term) == 0 {
-        r = fn_24d068_m(m, p, output, 0x2b82f8, h);
+        r = fn_24d068_m(m, p, output, addr(h.rom(), 0x2b82f8), h);
         if r >= 0x80000000 {
             return r;
         }
     } else if m.byte(term) == 1 {
         if *flag == 1 {
             *flag = 0;
-            // 1:1 table update (src/fn_2b7fdc.c): entries[count] = {index,
-            // bufAC.len}, then 24d2c8, then count++ on success. The table
-            // may live on the guest stack (as on ARM), leaving the
-            // leftovers a later fn_2b6afc Match reuses.
+
             let count = m.half(table.wrapping_add(40)) as u32;
             m.put_half(table.wrapping_add(count.wrapping_mul(4)), index as u16);
             m.put_half(
@@ -1013,24 +963,24 @@ fn check_2b7fdc(
                 return rc2;
             }
             if *flag == 1 {
-                r = fn_24d068_m(m, p, output, 0x2b8310, h);
+                r = fn_24d068_m(m, p, output, addr(h.rom(), 0x2b8310), h);
                 if r >= 0x80000000 {
                     return r;
                 }
             } else {
-                r = fn_24d068_m(m, p, output, 0x2b82f8, h);
+                r = fn_24d068_m(m, p, output, addr(h.rom(), 0x2b82f8), h);
                 if r >= 0x80000000 {
                     return r;
                 }
             }
         } else {
-            r = fn_24d068_m(m, p, output, 0x2b8310, h);
+            r = fn_24d068_m(m, p, output, addr(h.rom(), 0x2b8310), h);
             if r >= 0x80000000 {
                 return r;
             }
         }
     } else {
-        r = fn_24d068_m(m, p, output, 0x2b82f8, h);
+        r = fn_24d068_m(m, p, output, addr(h.rom(), 0x2b82f8), h);
         if r >= 0x80000000 {
             return r;
         }
@@ -1038,7 +988,6 @@ fn check_2b7fdc(
     r
 }
 
-/// fn_2b8504. Stub: tail-calls fn_2b7fdc with z = 0.
 pub fn fn_2b8504_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1048,7 +997,6 @@ pub fn fn_2b8504_m(
     fn_2b7fdc_m(m, p, flag, 0, h)
 }
 
-/// fn_2e5ec4. Split str on spaces into a/b (two words exactly); 1/0.
 pub fn fn_2e5ec4_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1094,27 +1042,24 @@ pub fn fn_2e5ec4_m(
     1
 }
 
-/// fn_2b73d0. _AND_ rule combinator: split, compare both halves to TRUE,
-/// append TRUE/FALSE to the output list. Pool strings: TRUE at 0x2b750c,
-/// FALSE at 0x2b7514 (verified against the ROM pool).
 pub fn fn_2b73d0_m(
     m: &mut Memory<'_>,
     p: u32,
     out: u32,
     h: &mut impl Host,
 ) -> u32 {
-    fn_2b73d0_8868_m(m, p, out, h, false, 0x2b750c, 0x2b7514)
+    let rom = h.rom();
+    fn_2b73d0_8868_m(m, p, out, h, false, addr(rom, 0x2b750c), addr(rom, 0x2b7514))
 }
 
-/// fn_2b8868. _OR_ rule combinator: same shape with OR logic. Pool
-/// strings: TRUE at 0x2b89a8, FALSE at 0x2b89b0 (verified).
 pub fn fn_2b8868_m(
     m: &mut Memory<'_>,
     p: u32,
     out: u32,
     h: &mut impl Host,
 ) -> u32 {
-    fn_2b73d0_8868_m(m, p, out, h, true, 0x2b89a8, 0x2b89b0)
+    let rom = h.rom();
+    fn_2b73d0_8868_m(m, p, out, h, true, addr(rom, 0x2b89a8), addr(rom, 0x2b89b0))
 }
 
 fn fn_2b73d0_8868_m(
@@ -1135,9 +1080,7 @@ fn fn_2b73d0_8868_m(
         h.call_m(0x1738e8, &[log, log_id, 5, 0, 0], m);
     }
     m.put_byte(out, 0);
-    // The ARM keeps the two split words on its stack (no 1963b8 in 2b73d0
-    // or 2b8868); mirror with a saved/restored FRAME slice so the heap
-    // matches the ARM exactly.
+
     let fb = 0x1a00u32;
     let mut sv = [0u32; 16];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -1160,7 +1103,7 @@ fn fn_2b73d0_8868_m(
         m.put_byte(out, c);
         r = c as u32;
     }
-    // vals is used as the Buf* directly (its first word is the data).
+
     let vals = m.word(args.wrapping_add(4));
     if m.byte(out) == 1 {
         r = fn_24d068_m(m, p, vals, s_true, h);
@@ -1182,9 +1125,6 @@ fn fn_2b73d0_8868_m(
     r
 }
 
-/// fn_2b5c18. _STRING_TTS check: append args->arg0 to the arg1 buffer.
-/// 1:1 from src/fn_2b5c18.c (offsets +0x48/+0x64/+0xc6 verified against
-/// the ROM disassembly; formats 0x2b5cd0/0x2b5ce8 from its pool).
 pub fn fn_2b5c18_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1198,7 +1138,7 @@ pub fn fn_2b5c18_m(
     let log = m.word(ctx.wrapping_add(16));
     m.put_byte(out, 0);
     if trace == 1 {
-        h.call_m(0x1738e8, &[log, logobj, 5, 0, 0x2b5cd0, m.word(args)], m);
+        h.call_m(0x1738e8, &[log, logobj, 5, 0, addr(h.rom(), 0x2b5cd0), m.word(args)], m);
     }
     let r = fn_24d068_m(m, p, m.word(args.wrapping_add(4)), m.word(args), h);
     if r >= 0x80000000 {
@@ -1207,7 +1147,7 @@ pub fn fn_2b5c18_m(
     if trace == 1 {
         h.call_m(
             0x1738e8,
-            &[log, logobj, 5, 0, 0x2b5ce8, m.word(m.word(args.wrapping_add(4)))],
+            &[log, logobj, 5, 0, addr(h.rom(), 0x2b5ce8), m.word(m.word(args.wrapping_add(4)))],
             m,
         );
     }
@@ -1215,14 +1155,11 @@ pub fn fn_2b5c18_m(
     r
 }
 
-/// fn_24ce90. Clear the two marker halves at +0xbc/+0xc4.
 pub fn fn_24ce90_m(m: &mut Memory<'_>, p: u32) {
     m.put_half(p.wrapping_add(0xbc), 0);
     m.put_half(p.wrapping_add(0xc4), 0);
 }
 
-/// fn_24e948. Sorted-list lookup by key; out-params receive guest
-/// addresses of the matching key/value words. Returns 0.
 pub fn fn_24e948_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1254,12 +1191,10 @@ pub fn fn_24e948_m(
     0
 }
 
-/// fn_24ee58. Error code for flags (1e3eec).
 fn fn_24ee58_m(flags: u32) -> u32 {
     e_code(flags)
 }
 
-/// fn_2511ac. Table entry lookup by the guest (f2, f4) index triple.
 pub fn fn_2511ac_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1279,12 +1214,12 @@ pub fn fn_2511ac_m(
     }
     let idx2 = m.half(idx.wrapping_add(2)) as u32;
     let idx4 = m.half(idx.wrapping_add(4)) as u32;
-    // ROM: A = list->f4; G = A[idx2]; t = G->f4 (three dereferences).
+
     let arr = m.word(list.wrapping_add(4));
     let g = m.word(arr.wrapping_add(idx2.wrapping_mul(4)));
     let t = m.word(g.wrapping_add(4));
     let e = m.word(t.wrapping_add(0x18)).wrapping_add(idx4.wrapping_mul(24));
-    // ROM: out = e->f2 + t->fc (+0xc), out_ptr = e->fc (+0xc) or 0.
+
     m.put_word(out, m.half(e.wrapping_add(2)) as u32 + m.word(t.wrapping_add(0x0c)));
     m.put_half(out_len, m.half(e.wrapping_add(0x12)));
     let f12 = m.half(e.wrapping_add(0x12));
@@ -1292,8 +1227,6 @@ pub fn fn_2511ac_m(
     0
 }
 
-/// fn_2b4968. DoExpansions driver: scan text for ranges, look up each
-/// expansion, apply it via 2b4260, insert the token, delete subsumed tokens.
 pub fn fn_2b4968_m(
     m: &mut Memory<'_>,
     owner: u32,
@@ -1312,12 +1245,10 @@ pub fn fn_2b4968_m(
         return e_code(7);
     }
     if debug == 1 {
-        let r = h.call_m(0x24ac00, &[owner, 0x2b4c98, 0], m);
+        let r = h.call_m(0x24ac00, &[owner, addr(h.rom(), 0x2b4c98), 0], m);
         let _ = r;
     }
-    // Guest out-words for the range/token lookup and the 2511ac triple.
-    // ARM keeps these 6 words on its stack (no 1963b8 in 2b4968); mirror
-    // that with a saved/restored FRAME slice so the heap matches the ARM.
+
     let fb_out = 0x1900u32;
     let mut sv_out = [0u32; 6];
     for (i, v) in sv_out.iter_mut().enumerate() {
@@ -1403,7 +1334,7 @@ pub fn fn_2b4968_m(
             result = e_code(0x10a);
             break;
         }
-        // positions[*] = 9999; clear expanded/alignment; set state.
+
         let npos = m.half(owner.wrapping_add(0xc4)) as u32;
         let poss = m.word(owner.wrapping_add(0xb8));
         for k in 0..npos {
@@ -1531,8 +1462,7 @@ pub fn fn_2b4968_m(
             }
         }
         if m.half(alnb.wrapping_add(6)) as u32 != alen {
-            // NOTE: alen was captured before the trim; the C compares the
-            // live length. Re-read to match exactly.
+
         }
         if m.half(alnb.wrapping_add(6)) != m.half(expb.wrapping_add(6)) {
             h.call_m(0x173dc0, &[log, log_tag, 0x5dfb, 0], m);
@@ -1579,8 +1509,7 @@ pub fn fn_2b4968_m(
         }
         h.call_m(0x1738e8, &[log, log_tag, 5, 0, 15], m);
         m.put_half(created, 0);
-        // 7th arg is the loop range (start/end become the new token's
-        // fields 1/2): ROM passes [sp+0x18], the same word 24b8d0 takes.
+
         result = h.call_m(
             0x24b540,
             &[owner, m.word(iname), m.word(expb), i as u32, m.word(afterp) as u32, created, range],
@@ -1592,7 +1521,7 @@ pub fn fn_2b4968_m(
         }
         h.call_m(0x1738e8, &[log, log_tag, 5, 0, 16], m);
         if debug == 1 {
-            let r2 = h.call_m(0x24ac00, &[owner, 0x2b5644, 0], m);
+            let r2 = h.call_m(0x24ac00, &[owner, addr(h.rom(), 0x2b5644), 0], m);
             let _ = r2;
         }
         result = h.call_m(0x24b8d0, &[owner, range], m);
@@ -1601,7 +1530,7 @@ pub fn fn_2b4968_m(
             break;
         }
         if debug == 1 {
-            let r2 = h.call_m(0x24ac00, &[owner, 0x2b56c4, 0], m);
+            let r2 = h.call_m(0x24ac00, &[owner, addr(h.rom(), 0x2b56c4), 0], m);
             let _ = r2;
         }
         cursor = m.half(range.wrapping_add(2));
@@ -1613,7 +1542,6 @@ pub fn fn_2b4968_m(
     result
 }
 
-/// fn_195bec. memset, returns dst.
 fn s_set(m: &mut Memory<'_>, dst: u32, val: u32, n: u32) -> u32 {
     let mut d = dst;
     let mut k = n;
@@ -1630,7 +1558,6 @@ fn s_set(m: &mut Memory<'_>, dst: u32, val: u32, n: u32) -> u32 {
     dst
 }
 
-/// fn_24cea0. Allocate d->f8 bytes; clear on success.
 pub fn fn_24cea0_m(
     m: &mut Memory<'_>,
     s: u32,
@@ -1653,12 +1580,9 @@ pub fn fn_24cea0_m(
     e_code(10)
 }
 
-/// fn_24d030. Release buf block if live; zero length/aux. Buf layout per
-/// the ROM (src/fn_24d030.c): buf@+0, len@+4, aux@+6; heap at ctx+4.
-/// o is the context (heap at o+4); b is the 12-byte string shell.
 pub fn fn_24d030_m(m: &mut Memory<'_>, o: u32, b: u32, h: &mut impl Host) {
     let heap = m.word(o.wrapping_add(4));
-    // ROM checks len at b+4, not b+2.
+
     if m.half(b.wrapping_add(4)) != 0 && m.word(b) != 0 {
         h.call_m(0x196428, &[heap, m.word(b)], m);
         m.put_word(b, 0);
@@ -1667,7 +1591,6 @@ pub fn fn_24d030_m(m: &mut Memory<'_>, o: u32, b: u32, h: &mut impl Host) {
     m.put_half(b.wrapping_add(6), 0);
 }
 
-/// fn_24d13c. Append src string onto dst (grow via heap).
 pub fn fn_24d13c_m(
     m: &mut Memory<'_>,
     o: u32,
@@ -1704,7 +1627,6 @@ pub fn fn_24d13c_m(
     0
 }
 
-/// fn_24d8c8. Single item lookup through fn_1966ac.
 pub fn fn_24d8c8_m(
     m: &mut Memory<'_>,
     this: u32,
@@ -1720,7 +1642,6 @@ pub fn fn_24d8c8_m(
     0
 }
 
-/// fn_24a5d4. Token index get/set through the text vtable.
 pub fn fn_24a5d4_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1728,8 +1649,7 @@ pub fn fn_24a5d4_m(
     val: u32,
     h: &mut impl Host,
 ) -> u32 {
-    // ARM stack temporaries: the FRAME slice, saved and restored, so the
-    // heap traffic matches the ARM exactly.
+
     let fb = 0x1000u32;
     let sv0 = m.word(fb);
     let sv1 = m.word(fb.wrapping_add(4));
@@ -1742,8 +1662,7 @@ pub fn fn_24a5d4_m(
     let handle1 = m.word(p.wrapping_add(0x14));
     let set = m.word(vt.wrapping_add(0x54));
     let get = m.word(vt.wrapping_add(0x5c));
-    // Field 1 is the token index (ROM: mov r3, #1); the store passes
-    // the count 1 like every other +0x54-family call (rule_io).
+
     let mut r = h.call_m(get, &[handle0, handle1, id, 1, s1], m);
     if r < 0x80000000 && m.half(s1) == 1 {
         r = h.call_m(set, &[handle0, handle1, id, 1, 1, val, s2], m);
@@ -1764,7 +1683,6 @@ pub fn fn_24a5d4_m(
     r
 }
 
-/// fn_24a6bc. Token position get/set through the text vtable.
 pub fn fn_24a6bc_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1772,8 +1690,7 @@ pub fn fn_24a6bc_m(
     val: u32,
     h: &mut impl Host,
 ) -> u32 {
-    // ARM stack temporaries: the FRAME slice, saved and restored, so the
-    // heap traffic matches the ARM exactly.
+
     let fb = 0x1000u32;
     let sv0 = m.word(fb);
     let sv1 = m.word(fb.wrapping_add(4));
@@ -1788,7 +1705,7 @@ pub fn fn_24a6bc_m(
     let get = m.word(vt.wrapping_add(0x5c));
     let base = m.word(p);
     let tag = m.word(p.wrapping_add(0x48));
-    // Field 2 is the token position (ROM: mov r3, #2).
+
     let mut r = h.call_m(get, &[handle0, handle1, id, 2, s1], m);
     if r < 0x80000000 && m.half(s1) == 1 {
         r = h.call_m(set, &[handle0, handle1, id, 2, 1, val, s2], m);
@@ -1807,7 +1724,6 @@ pub fn fn_24a6bc_m(
     r
 }
 
-/// fn_24a7a4. Token type query through the text vtable.
 pub fn fn_24a7a4_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1815,8 +1731,7 @@ pub fn fn_24a7a4_m(
     b: u32,
     h: &mut impl Host,
 ) -> u32 {
-    // ARM stack temporaries: the FRAME slice, saved and restored, so the
-    // heap traffic matches the ARM exactly.
+
     let fb = 0x1000u32;
     let sv0 = m.word(fb);
     let sv1 = m.word(fb.wrapping_add(4));
@@ -1834,7 +1749,7 @@ pub fn fn_24a7a4_m(
     let mut r = 0u32;
     let ok = h.call_m(query, &[handle0, handle1, a, 0, s1], m);
     if ok < 0x80000000 && m.half(s1) == 1 {
-        // Field 0 is the token kind; count 1 rides the stack like the ARM.
+
         r = h.call_m(get, &[handle0, handle1, a, 0, 1, b, s2], m);
         if m.half(s2) != 1 {
             h.call_m(0x173dc0, &[m.word(env.wrapping_add(16)), w48, 0x5de0, 0], m);
@@ -1846,9 +1761,6 @@ pub fn fn_24a7a4_m(
     r
 }
 
-/// fn_24cdac. Allocate the two expansion text buffers (+0xc0, +0xb8) sized
-/// (half(p+0x62)+1)*2, 1:1 from the ROM (src/fn_24cdac.c; ldrh [r4,#98]).
-/// On failure the first buffer stays allocated while the ROM logs 0x5df0.
 pub fn fn_24cdac_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1883,9 +1795,6 @@ pub fn fn_24cdac_m(
     e_code(10)
 }
 
-/// fn_24cb74. Allocate the +0x78 record (calloc 1x16); tag 3 on success.
-/// 1:1 from src/fn_24cb74.c (ROM-verified seg1 r8): heap at ctx+4, log at
-/// ctx+16, id at p+0x48.
 pub fn fn_24cb74_m(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     let ctx = m.word(p);
     let heap = m.word(ctx.wrapping_add(4));
@@ -1909,8 +1818,6 @@ pub fn fn_24cb74_m(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     0
 }
 
-/// fn_24cbd4. Release the +0x78 buffer and clear its count words.
-/// 1:1 from src/fn_24cbd4.c (ROM-verified seg1 r8).
 pub fn fn_24cbd4_m(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     let heap = m.word(m.word(p).wrapping_add(4));
     let b = m.word(p.wrapping_add(0x78));
@@ -1923,9 +1830,6 @@ pub fn fn_24cbd4_m(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     0
 }
 
-/// fn_24cc08. Grow the +0x78 slot array to n and clear the used count.
-/// 1:1 from src/fn_24cc08.c (ROM-verified seg1 r8): realloc through
-/// 0x1963e0 with (k+1)*4; log 0x5df0 on failure.
 pub fn fn_24cc08_m(m: &mut Memory<'_>, p: u32, n: u32, h: &mut impl Host) -> u32 {
     if n != 0 {
         let k = if n > 3 {
@@ -1961,7 +1865,6 @@ pub fn fn_24cc08_m(m: &mut Memory<'_>, p: u32, n: u32, h: &mut impl Host) -> u32
     0
 }
 
-/// fn_24ce40. Release the two expansion text buffers and clear the slots.
 pub fn fn_24ce40_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -1983,16 +1886,6 @@ pub fn fn_24ce40_m(
     0
 }
 
-// ===== seg1 r7: the 2b4968 DoExpansions subtree =====
-// All 1:1 from src/fn_*.c, checked against the ROM disassembly. Struct
-// shells the ARM keeps on its stack live in one guest heap block per call
-// (freed at every exit, so the allocator order is preserved); the vtable
-// calls go through the host. Expansion strings are 12 bytes on the ARM
-// (buf@0, cap@4, len@6), not the 10 of src/fn_2b4968.c: expb is owner+0x88
-// and alnb is owner+0x94, positions is owner+0xb8, boundaries owner+0xc0,
-// count owner+0xc4, debug owner+0xc6.
-
-/// fn_24cfa0. Ensure buf capacity exceeds n; clear on success.
 pub fn fn_24cfa0_m(
     m: &mut Memory<'_>,
     s: u32,
@@ -2003,9 +1896,7 @@ pub fn fn_24cfa0_m(
     let ctx = m.word(s);
     let heap = m.word(ctx.wrapping_add(4));
     if (m.half(d.wrapping_add(4)) as u32) <= n as u32 {
-        // seg6 r22: 1:1 with src/fn_24cfa0.c grow_buffer, which calls
-        // fn_1963e0 (realloc), not fn_1963b8 (calloc). The old buffer rides
-        // a1; a zero old block allocates, like heap_realloc_m old==0.
+
         let b = h.call_m(0x1963e0, &[heap, m.word(d), n as u32 + 1], m);
         if b == 0 || b >= 0x80000000 {
             let log = m.word(ctx.wrapping_add(16));
@@ -2021,8 +1912,6 @@ pub fn fn_24cfa0_m(
     0
 }
 
-/// fn_24b290. Find the token node for [position, index].
-/// TextMethods: get slot +0x34, next slot +0x3c (verified on ROM).
 pub fn fn_24b290_m(
     m: &mut Memory<'_>,
     text: u32,
@@ -2040,13 +1929,13 @@ pub fn fn_24b290_m(
     let h1 = m.word(text.wrapping_add(0x14));
     let get = m.word(vt.wrapping_add(0x34));
     let next = m.word(vt.wrapping_add(0x3c));
-    // ARM stack temporaries in the FRAME slice (saved/restored).
+
     let fb = 0x1010u32;
     let mut sv = [0u32; 4];
     for (i, v) in sv.iter_mut().enumerate() {
         *v = m.word(fb.wrapping_add(i as u32 * 4));
     }
-    // root, node, nodeIndex, nodePosition, type.
+
     let t = fb;
     let root = t;
     let node = t.wrapping_add(2);
@@ -2161,8 +2050,6 @@ pub fn fn_24b290_m(
     rc
 }
 
-/// fn_24b540. Save an expansion into the token store.
-/// EngineMethods: first +0x34, find +0x24, lookup +0x28, set +0x50.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_24b540_m(
     m: &mut Memory<'_>,
@@ -2185,7 +2072,7 @@ pub fn fn_24b540_m(
     let find = m.word(mt.wrapping_add(0x24));
     let lookup = m.word(mt.wrapping_add(0x28));
     let set = m.word(mt.wrapping_add(0x50));
-    // ARM stack temporaries in the FRAME slice (saved/restored).
+
     let fb = 0x1030u32;
     let mut sv = [0u32; 4];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -2209,7 +2096,7 @@ pub fn fn_24b540_m(
     };
     if rc < 0x80000000 {
         let tid = m.half(token) as u32;
-        // kind 6, then the two value halves, then name+text, entries, extra.
+
         let kb = fb.wrapping_add(8);
         m.put_byte(kb, 6);
         {
@@ -2250,8 +2137,7 @@ pub fn fn_24b540_m(
                 }
             }
             if rc < 0x80000000 {
-                // entries (rule store blob at p+0xb8, count at p+0xc4)
-                // and the extra layer (p+0x94, enabled at p+0x9a).
+
                 let ec = m.half(p.wrapping_add(0xc4)) as u32;
                 if ec > 1 {
                     let ent = m.word(p.wrapping_add(0xb8));
@@ -2283,8 +2169,6 @@ pub fn fn_24b540_m(
     rc
 }
 
-/// fn_24b8d0. Delete tokens subsumed by [start, end).
-/// TokenMethods: find +0x34, next +0x3c, remove +0x60.
 pub fn fn_24b8d0_m(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -2304,7 +2188,7 @@ pub fn fn_24b8d0_m(
     let find = m.word(mt.wrapping_add(0x34));
     let next = m.word(mt.wrapping_add(0x3c));
     let remove = m.word(mt.wrapping_add(0x60));
-    // ARM stack temporaries in the FRAME slice (saved/restored).
+
     let fb = 0x1050u32;
     let mut sv = [0u32; 4];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -2381,9 +2265,6 @@ pub fn fn_24b8d0_m(
     rc
 }
 
-/// fn_2e4e80. Run the depes layer function and merge its output maps.
-/// DepesInterface slots: setInput +0x24, setMarkers +0x30, run +0x2c,
-/// getMarkers +0x34, getOutput +0x28 (verified on ROM).
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2e4e80_m(
     m: &mut Memory<'_>,
@@ -2400,9 +2281,7 @@ pub fn fn_2e4e80_m(
     let tag = m.word(this.wrapping_add(0x48));
     let debug = m.byte(this.wrapping_add(0xc6));
     m.put_byte(done, 0);
-    // Frame for the interface out-words (the ARM stack): text, textLen,
-    // alignment, alignmentLen, markers, markerCount. Saved/restored.
-    // Frame slice clear of the 2b4260 depth slices (0x1100 + depth*96).
+
     let fb = 0x1500u32;
     let mut sv = [0u32; 8];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -2418,7 +2297,7 @@ pub fn fn_2e4e80_m(
     let input = m.word(this.wrapping_add(0x64));
     let in_text = m.word(input);
     let in_out = m.word(input.wrapping_add(4));
-    // DepesInput: text@0, output@4, reserved[2]@8, offset@16.
+
     let in_off = m.half(input.wrapping_add(16));
     let iface = m.word(this.wrapping_add(0x24));
     let hh0 = m.word(this.wrapping_add(0x28));
@@ -2429,7 +2308,7 @@ pub fn fn_2e4e80_m(
     let get_markers = m.word(iface.wrapping_add(0x34));
     let get_output = m.word(iface.wrapping_add(0x28));
     let mut rc;
-    // Real NULL/""/empty gate on the input text.
+
     let is_null = null_or_empty(m, in_text);
     if is_null {
         rc = fn_24d068_m(m, this, in_out, 0, h);
@@ -2444,14 +2323,14 @@ pub fn fn_2e4e80_m(
             h.call_m(0x1738e8, &[log, tag, 5, 0], m);
         }
         let length = s_len(m, in_text);
-        // setInput takes the length twice on the ROM.
+
         rc = h.call_m(set_input, &[hh0, hh1, 0, in_text, length, length], m);
         if rc >= 0x80000000 {
             h.call_m(0x173dc0, &[log, tag, 0x5dca, 0], m);
         } else {
             rc = fn_24cfa0_m(m, this, this.wrapping_add(0xa0), length as u16, h);
             if rc >= 0x80000000 {
-                // falls to finish
+
             } else {
                 let spaces = m.word(this.wrapping_add(0xa0));
                 let n = s_len(m, in_text);
@@ -2467,7 +2346,7 @@ pub fn fn_2e4e80_m(
                 if rc >= 0x80000000 {
                     h.call_m(0x173dc0, &[log, tag, 0x5dcb, 0], m);
                 } else {
-                    // functionName + 1 (skip the '_' prefix).
+
                     let fnp = m.byte(function);
                     let _ = fnp;
                     rc = h.call_m(run, &[hh0, hh1, function.wrapping_add(1)], m);
@@ -2606,13 +2485,11 @@ pub fn fn_2e4e80_m(
     rc
 }
 
-/// True when the guest string is null, "NULL" or empty.
 fn null_or_empty(m: &Memory<'_>, s: u32) -> bool {
     if s == 0 {
         return true;
     }
-    // Compare against the "NULL" pool word without naming an address: the
-    // ARM compares with fn_195d58(s, "NULL") and fn_195d58(s, "").
+
     if m.byte(s) == 0 {
         return true;
     }
@@ -2627,13 +2504,6 @@ fn null_or_empty(m: &Memory<'_>, s: u32) -> bool {
     false
 }
 
-/// fn_2b4260. Apply one expansion node: recurse into subexpansions, run
-/// the type callback or the depes layer function, append into text/alignment.
-/// Shells are 12 bytes; the frame lives in the FRAME slice (saved/restored).
-/// Heap alloc/free order mirrors the ROM exactly (matched traffic).
-/// `depth` selects the FRAME slice (0x1100 + depth*96): each nested
-/// invocation needs its own shells, the way the ARM uses a fresh stack
-/// frame per call. Dispatch passes 0; recursion passes depth + 1.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2b4260_m(
     m: &mut Memory<'_>,
@@ -2648,8 +2518,7 @@ pub fn fn_2b4260_m(
     let log = m.word(ctx.wrapping_add(16));
     let tag = m.word(owner.wrapping_add(0x48));
     h.call_m(0x1738e8, &[log, tag, 4, 0], m);
-    // Frame: child_text, child_alignment, function_alignment, expanded,
-    // expanded_alignment, output (12 bytes each), callback word, changed.
+
     let fb = 0x1100u32.wrapping_add(depth.wrapping_mul(96));
     let mut sv = [0u32; 20];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -2667,7 +2536,7 @@ pub fn fn_2b4260_m(
         s_set(m, b, 0, 12);
     }
     m.put_byte(changed, 0);
-    // Pre-loop allocs return directly on failure (no cleanup), like the ROM.
+
     let mut rc = fn_24cea0_m(m, owner, child_text, h);
     if rc >= 0x80000000 {
         for (i, v) in sv.iter().enumerate() {
@@ -2872,8 +2741,6 @@ pub fn fn_2b4260_m(
     rc
 }
 
-/// fn_2b570c. _MATCH rule callback: append the matched text or slice the
-/// input range, then map positions. 1:1 from src/fn_2b570c.c.
 pub fn fn_2b570c_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -3047,8 +2914,6 @@ pub fn fn_2b570c_m(
     result
 }
 
-/// fn_2190b4. Depes setMarkers: copy the markers buffer, zero the tail.
-/// Slots verified on ROM: buf +0x2c, total +0x32, limit +0x34 (s16).
 pub fn fn_2190b4_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -3063,25 +2928,23 @@ pub fn fn_2190b4_m(
     }
     let ctx = m.word(p);
     let log = m.word(ctx.wrapping_add(16));
-    h.call_m(0x1738e8, &[log, 0x8fa16c, 4, 0], m);
+    h.call_m(0x1738e8, &[log, addr(h.rom(), 0x8fa16c), 4, 0], m);
     if len > 10000 {
         len = 10000;
     }
     let limit = m.half(p.wrapping_add(0x34)) as i16 as i32;
     if dst == 0 || (len as i32) > limit {
-        h.call_m(0x173dc0, &[log, 0x8fa16c, 0xa411, 0], m);
+        h.call_m(0x173dc0, &[log, addr(h.rom(), 0x8fa16c), 0xa411, 0], m);
         return 0x89702007;
     }
     let buf = m.word(p.wrapping_add(0x2c));
     let total = m.half(p.wrapping_add(0x32)) as u32;
     s_copy(m, buf, dst, len);
     s_set(m, buf.wrapping_add(len), 0, total.wrapping_sub(len));
-    h.call_m(0x1738e8, &[log, 0x8fa16c, 4, 0], m);
+    h.call_m(0x1738e8, &[log, addr(h.rom(), 0x8fa16c), 4, 0], m);
     rc
 }
 
-/// fn_2192c0. Depes getMarkers: return the markers buffer and length.
-/// Slots verified on ROM: marker +0x2c, len +0x34.
 pub fn fn_2192c0_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -3096,13 +2959,13 @@ pub fn fn_2192c0_m(
     }
     let ctx = m.word(p);
     let log = m.word(ctx.wrapping_add(16));
-    h.call_m(0x1738e8, &[log, 0x8fa16c, 4, 0], m);
+    h.call_m(0x1738e8, &[log, addr(h.rom(), 0x8fa16c), 4, 0], m);
     if out == 0 {
-        h.call_m(0x173dc0, &[log, 0x8fa16c, 0xa411, 0], m);
+        h.call_m(0x173dc0, &[log, addr(h.rom(), 0x8fa16c), 0xa411, 0], m);
         return 0x89702007;
     }
     m.put_half(out_len, m.half(p.wrapping_add(0x34)));
     m.put_word(out, m.word(p.wrapping_add(0x2c)));
-    h.call_m(0x1738e8, &[log, 0x8fa16c, 4, 0], m);
+    h.call_m(0x1738e8, &[log, addr(h.rom(), 0x8fa16c), 4, 0], m);
     rc
 }

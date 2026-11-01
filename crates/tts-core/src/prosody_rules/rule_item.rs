@@ -1,6 +1,4 @@
-//! Prosody rule-interpreter instances and their engine host interface.
-//! Ports fn_2ab2cc, fn_2ab40c, fn_2ab5c4, fn_22af2c, fn_22b2f4, fn_22b3bc,
-//! fn_22b518, fn_2ab7b4 and the rule-set fetch path.
+
 
 use super::arena::Arena;
 use super::{
@@ -8,7 +6,6 @@ use super::{
     RuleScanHost, RuleSet, RuleSetHost, RuleStreamHost,
 };
 
-/// fn_19611c environment view for the rule interpreter.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RuleContext {
     pub heap: u32,
@@ -17,7 +14,6 @@ pub struct RuleContext {
     pub res: u32,
 }
 
-/// One rule-interpreter item (`Item` in fn_2aaa20.c, 0x2c bytes).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RuleItem {
     pub handle: [u32; 2],
@@ -33,7 +29,7 @@ pub struct RuleItem {
 }
 
 impl RuleItem {
-    /// Original field order for differential comparison.
+
     pub fn words(&self) -> [u32; 11] {
         [
             self.handle[0],
@@ -51,8 +47,6 @@ impl RuleItem {
     }
 }
 
-/// The 0x38-byte rule-set object shared by fn_22af2c, fn_22b2f4 and fn_22b3bc
-/// (`S` in fn_22ada0_merged.c).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RuleSetInstance {
     pub address: u32,
@@ -73,8 +67,7 @@ pub struct RuleSetInstance {
 }
 
 impl RuleSetInstance {
-    /// View used by `destroy_rule_set` (fn_22ae34) and `release_rule_streams`
-    /// (fn_22b238).
+
     pub fn view(&self) -> RuleSet {
         RuleSet {
             id: self.address,
@@ -97,7 +90,6 @@ impl RuleSetInstance {
     }
 }
 
-/// A rule-set list entry read back through fn_1970ac.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RuleListEntry {
     pub in_memory: u8,
@@ -109,7 +101,6 @@ pub struct RuleListEntry {
 pub const RULE_NAME: u32 = 1;
 pub const RULE_ALTERNATE: u32 = 2;
 
-/// Engine calls reached by the rule-interpreter ports.
 pub trait RuleInterpreterHost {
     fn resolve(&mut self, h0: u32, h1: u32) -> (u32, Option<RuleContext>);
     fn new_handle(&mut self) -> [u32; 2];
@@ -155,7 +146,6 @@ fn markup_enabled(text: &[u8]) -> bool {
     !text.is_empty() && (text.eq_ignore_ascii_case(b"true") || text == b"1")
 }
 
-/// fn_2ab2cc / EU fn_2ab488 / KR fn_2ab534.
 pub fn init_rule_item(
     h0: u32,
     h1: u32,
@@ -198,9 +188,6 @@ pub fn init_rule_item(
     status
 }
 
-/// fn_2ab40c / EU fn_2ab5c8 / KR fn_2ab674. Ported from the ARM body: the
-/// src/fn_2aaa20.c draft differs in the second lookup handle, the rule-removal
-/// loop and the return value (see RESULTS.md).
 pub fn release_rule_item(
     arena: &mut Arena<'_>,
     item: &mut RuleItem,
@@ -217,7 +204,7 @@ pub fn release_rule_item(
     if item.name == 0 {
         pending = 0x88602011;
     } else if host.resolve(item.handle[0], item.handle[1]).0 >= 0x80000000 {
-        // pending stays 0x88602007 and the buffers are left in place.
+
     } else {
         let mut count = (host.count_list(item.rules) & 0xffff) as u32;
         if count != 0 {
@@ -254,8 +241,6 @@ pub fn release_rule_item(
     pending
 }
 
-/// fn_2ab5c4 / EU fn_2ab780 / KR fn_2ab82c. The stream teardown returns the
-/// failing status directly; the src/fn_2aaa20.c draft returns 0x88602007.
 pub fn destroy_rule_item(
     arena: &mut Arena<'_>,
     item: &mut RuleItem,
@@ -291,7 +276,6 @@ fn destroy_instance(
     destroy_rule_set(Some(&view), host)
 }
 
-/// fn_22af2c / EU fn_22b0e8 / KR fn_22b194.
 #[allow(clippy::too_many_arguments)]
 pub fn open_rule_set(
     ha: u32,
@@ -390,7 +374,6 @@ fn fail(
     }
 }
 
-/// fn_22b2f4 / EU fn_22b4b0 / KR fn_22b55c.
 pub fn clear_rule_set(
     arena: &mut Arena<'_>,
     instance: &mut RuleSetInstance,
@@ -423,7 +406,6 @@ pub fn clear_rule_set(
     destroy_instance(instance, host)
 }
 
-/// fn_22b3bc / EU fn_22b578 / KR fn_22b624.
 pub fn start_rule_streams(
     instance: &mut RuleSetInstance,
     param2: u32,
@@ -487,9 +469,6 @@ pub fn start_rule_streams(
     rc
 }
 
-/// One rule-list entry as seen by `fn_22b518`: the shared item plus the
-/// restart mark at byte +0x16 (`f16`). The original stores the mark in the
-/// item's padding; the two views compare identically.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ProcessItem {
     pub base: RuleItem,
@@ -497,19 +476,12 @@ pub struct ProcessItem {
 }
 
 impl ProcessItem {
-    /// The +0x1c type tag byte: nonzero means a typed rule.
+
     pub fn is_typed(&self) -> bool {
         self.base.kind & 0xff != 0
     }
 }
 
-/// Engine calls reached by `fn_22b518`. Text contents live in the shared
-/// `Arena`; `cur`/`prev` are arena offsets (0 is null). The rule applier,
-/// text codec and stream chain are scripted host calls; their inner traces
-/// belong to their own tests. Only statuses, sizes and codes enter the
-/// trace, never raw arena offsets. List marks persist through `update_item`.
-/// Byte +0x15 is the in-memory flag, +0x16 the restart mark and +0x1c the
-/// type tag byte, matching the original item view.
 pub trait ProcessHost {
     fn validate(&mut self, object: u32, arg: u32) -> u32;
     fn resolve(&mut self, h0: u32, h1: u32) -> (u32, Option<RuleContext>);
@@ -551,12 +523,6 @@ pub trait ProcessHost {
     fn log(&mut self, code: u32);
 }
 
-/// fn_22b518 / EU fn_22b6d4 / KR fn_22b780.
-///
-/// Runs the untyped-private, typed and untyped rule passes over the input
-/// streams, writing the final text back through the stream chain. The two
-/// trailing handle arguments of the original are unused. Returns the stream
-/// status and sets `*out`.
 #[allow(clippy::too_many_arguments)]
 pub fn process_rules(
     arena: &mut Arena<'_>,
@@ -607,7 +573,7 @@ pub fn process_rules(
         host.log(4);
         host.log(5);
     }
-    // The decoded unit count is half the stream byte count.
+
     let units = size >> 1;
     let mut cur = host.alloc(arena, units * 4 + 1);
     if cur == 0 {
@@ -657,9 +623,7 @@ pub fn process_rules(
     if !listed {
         return finish_process(arena, instance, out, rc, cur, prev, 0, host);
     }
-    // The original re-reads the list count after every item (do-while);
-    // nothing in the pass mutates the list, but the call sequence is
-    // observable and the stage replay checks it.
+
     let mut k = 0u32;
     if host.count_list(instance.f18) > k {
         loop {
@@ -807,7 +771,6 @@ fn finish_process(
     rc
 }
 
-/// Fetcher session/engine/rules/provider view (`Fetcher` in fn_22be08.c).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RuleFetcher {
     pub session: [u32; 2],
@@ -817,12 +780,6 @@ pub struct RuleFetcher {
     pub provider_handle: [u32; 2],
 }
 
-/// Engine calls reached by `fn_2ab7b4` and `fn_22be08`: environment and
-/// list scans, broker/provider resolution, binary-chunk readers and the
-/// text/binary compilers (composed for real through `RuleScanHost` and
-/// `RuleInterpreterHost`). Data bytes are borrowed; chunk payloads are
-/// opaque host tokens. Overlapping `resolve`/`alloc`/`free`/`log` calls use
-/// the `RuleScanHost` spelling.
 pub trait CompileHost: RuleInterpreterHost + RuleScanHost {
     fn insert_binary(&mut self, list: u32, slot: u32) -> bool;
     fn open_reader(&mut self, h0: u32, h1: u32, name: &[u8], version: u32) -> (u32, u32);
@@ -839,11 +796,6 @@ pub trait CompileHost: RuleInterpreterHost + RuleScanHost {
     fn release_reader(&mut self, reader: u32) -> u32;
 }
 
-/// fn_2ab7b4 / EU fn_2ab970 / KR fn_2aba1c.
-///
-/// Compiles the rule text or binary `data` into the initialized `item`,
-/// running the header/data scanners for text and the chunk reader for
-/// binary blobs.
 #[allow(clippy::too_many_arguments)]
 pub fn compile_ruleset(
     arena: &mut Arena<'_>,
@@ -1050,8 +1002,7 @@ fn fail_compile(
     host: &mut impl CompileHost,
     result: u32,
 ) -> u32 {
-    // The shared `fin:` epilogue: log the outcome, releasing the item on
-    // failure like `fn_2ab40c`.
+
     <_ as RuleScanHost>::log(host, 1);
     if result >= 0x80000000 {
         release_rule_item(arena, item, host);
@@ -1059,7 +1010,6 @@ fn fail_compile(
     result
 }
 
-/// Fetch-level engine calls (`fn_22be08` source resolution).
 pub trait FetchHost: CompileHost {
     fn validate(&mut self, object: u32, arg: u32) -> u32;
     fn check_duplicate(&mut self, list: u32, name: &[u8]) -> u32;
@@ -1084,11 +1034,6 @@ pub trait FetchHost: CompileHost {
     fn insert_compiled(&mut self, list: u32, item: &RuleItem) -> bool;
 }
 
-/// fn_22be08 / EU fn_22bfc4 / KR fn_22c070.
-///
-/// Fetches a rule set by name or inline source, compiling it through the
-/// text or binary loaders into a fresh interpreter item. `source_data` and
-/// `source_alt` are caller scratch for broker/provider payloads.
 #[allow(clippy::too_many_arguments)]
 pub fn fetch_ruleset(
     arena: &mut Arena<'_>,
@@ -1142,7 +1087,7 @@ pub fn fetch_ruleset(
             }
         }
     }
-    // Resolve the source bytes: inline when provided, else broker/provider.
+
     let mut data: &[u8] = &[];
     let mut alternate: Option<&[u8]> = None;
     let mut broker_handle = 0u32;

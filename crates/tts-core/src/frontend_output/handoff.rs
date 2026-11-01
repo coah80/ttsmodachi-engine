@@ -1,8 +1,5 @@
-//! SYNTH_BET2 synthesis-handoff instances and their engine host interface.
-//! Ports fn_229a20, fn_229de4, fn_2296b0 and the fn_163a98 batch callback.
 
-/// fn_19611c environment view for the synthesis handoff (`Environment` in
-/// fn_228780.c).
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SynthEnvironment {
     pub heap: u32,
@@ -12,7 +9,6 @@ pub struct SynthEnvironment {
     pub resources: u32,
 }
 
-/// `Synth` in fn_228780.c, 0x70 bytes. Only the fields these entries touch.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Synth {
     pub address: u32,
@@ -44,7 +40,7 @@ pub struct Synth {
 }
 
 impl Synth {
-    /// Original field order for differential comparison.
+
     pub fn words(&self) -> [u32; 22] {
         [
             self.session[0],
@@ -77,10 +73,8 @@ impl Synth {
 
 pub const PARAM_BUFFER_SAMPLES: &[u8] = b"audiooutputbufsamples";
 
-/// Token standing for the resolved fn_19611c environment pointer.
 pub const ENV_TOKEN: u32 = 0x0e00_0200;
 
-/// Engine calls reached by the synthesis-handoff ports.
 pub trait SynthHost {
     fn validate(&mut self, object: u32, tag: u32, kind: u32, size: u32) -> u32;
     fn resolve_env(&mut self, session: [u32; 2]) -> (u32, Option<SynthEnvironment>);
@@ -138,7 +132,6 @@ fn write_decimal(buffer: &mut [u8], mut value: u32) {
     }
 }
 
-/// fn_229cc0 / EU fn_229e7c / KR fn_229f28, called from fn_229de4's error path.
 pub fn close_streams(synth: &mut Synth, tag: u32, host: &mut impl SynthHost) -> u32 {
     let result = host.validate(synth.address, tag, 0x4e7, 0x70);
     if result >= 0x80000000 {
@@ -167,7 +160,6 @@ pub fn close_streams(synth: &mut Synth, tag: u32, host: &mut impl SynthHost) -> 
     status
 }
 
-/// fn_229a20 / EU fn_229bdc / KR fn_229c88.
 pub fn close_synth(synth: &mut Synth, tag: u32, host: &mut impl SynthHost) -> u32 {
     let mut result = host.validate(synth.address, tag, 0x4e7, 0x70);
     if result >= 0x80000000 {
@@ -208,7 +200,6 @@ pub fn close_synth(synth: &mut Synth, tag: u32, host: &mut impl SynthHost) -> u3
     result
 }
 
-/// fn_229de4 / EU fn_229fa0 / KR fn_22a04c.
 pub fn open_streams(
     synth: &mut Synth,
     tag: u32,
@@ -287,10 +278,8 @@ fn finish(synth: &mut Synth, tag: u32, result: u32, host: &mut impl SynthHost) -
     result
 }
 
-/// Voice blob format version (`D_8fa5e8.version`).
 pub const VOICE_VERSION: u32 = 0x00030205;
 
-/// Voice equalizer selection written by `fn_228c94`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EqualizerView {
     pub data: u32,
@@ -298,8 +287,6 @@ pub struct EqualizerView {
     pub count: u32,
 }
 
-/// Engine calls reached by `fn_228c94`. String contents are borrowed into
-/// caller scratch; the voice/equalizer blobs are opaque host tokens.
 pub trait RebuildHost {
     fn get_int(&mut self, params: u32, name: &[u8], value: &mut i32) -> u32;
     fn get_string(&mut self, params: u32, name: &[u8], out: &mut [u8]) -> (u32, Option<usize>);
@@ -319,7 +306,6 @@ pub trait RebuildHost {
     fn set_synth_param(&mut self, synth: &mut Synth, name: &[u8], value: u32) -> u32;
 }
 
-/// Scalar inputs to the voice-engine constructor (`fn_2aa3e4`).
 pub struct EngineWorkshop<'a> {
     pub voice: u32,
     pub frame_size: i32,
@@ -336,12 +322,6 @@ fn cstr<'a>(bytes: &'a [u8], len: usize) -> &'a [u8] {
     &bytes[..len]
 }
 
-/// fn_228c94 / EU fn_228e50 / KR fn_228efc.
-///
-/// Rebuilds the synthesis voice from the parameter store: resolves the voice
-/// blob, tears down the previous engine/equalizer, configures the new engine
-/// and republishes volume/rate/pitch. `scratch` serves transient parameter
-/// strings; `vsynth` retains the init string for the engine constructor.
 #[allow(clippy::too_many_arguments)]
 pub fn rebuild_synth(
     synth: &mut Synth,
@@ -449,8 +429,7 @@ pub fn rebuild_synth(
         host.log_error(env.log, 0x659b);
         return finish_rebuild(result, voice, equalizer_data, host);
     }
-    // src casts the wrapped product to u32 BEFORE the divide: the
-    // quotient is unsigned even when the product wrapped negative.
+
     synth.frame_samples =
         (synth.sample_rate as u32).wrapping_mul(frame_size as u32) / 1000;
     if synth.frame_samples != 0 {
@@ -604,7 +583,6 @@ fn finish_rebuild(mut result: u32, voice: u32, equalizer: u32, host: &mut impl R
     result
 }
 
-/// One 24-byte synthesis marker (`Marker` in fn_228780.c).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SynthMarker {
     pub typ: u16,
@@ -630,8 +608,6 @@ impl SynthMarker {
     }
 }
 
-/// Caller-owned scratch for `fn_22a0a8`: the live speech frames, marker
-/// exchange buffers, synthesis audio span, coefficient row and voice tables.
 pub struct PumpBuffers<'a> {
     pub frames: &'a mut [u8],
     pub markers_in: &'a mut [u8],
@@ -644,22 +620,17 @@ pub struct PumpBuffers<'a> {
     pub gain_table: &'a [u16],
 }
 
-/// Engine calls reached by `fn_22a0a8`.
 pub trait PumpHost {
     fn validate(&mut self, object: u32, tag: u32) -> u32;
     fn available(&mut self, stream: [u32; 2]) -> (u32, u32, bool);
-    /// Reads the speech stream: fills `frames` with the `SpeechFrames`
-    /// struct and returns `(status, frames_ptr)` (the grant holds a
-    /// `SpeechFrames*`; `frames = *input` in `fn_22a0a8`).
+
     fn read_frames(&mut self, stream: [u32; 2], frames: &mut [u8]) -> (u32, u32);
     fn read_markers(&mut self, stream: [u32; 2], markers: &mut [u8]) -> (u32, u32);
     fn write_audio(&mut self, stream: [u32; 2], samples: u32) -> (u32, u32);
     fn write_markers(&mut self, stream: [u32; 2], bytes: u32) -> (u32, u32);
-    /// Publishes `samples` to the audio stream (`commit`; split from the
-    /// marker commit because the typed `[i16]` buffer has no safe byte
-    /// view in `no_std` core).
+
     fn commit_audio(&mut self, stream: [u32; 2], samples: &[i16]) -> u32;
-    /// Publishes `bytes` to the marker stream (`commit`).
+
     fn commit_markers(&mut self, stream: [u32; 2], bytes: &[u8]) -> u32;
     fn consume(&mut self, stream: [u32; 2], bytes: u32) -> u32;
     fn close(&mut self, stream: [u32; 2]) -> u32;
@@ -676,8 +647,7 @@ pub trait PumpHost {
         pitch_position: i32,
         energy_position: i32,
     ) -> (u16, u16, i32, i32);
-    /// Resolves `table[index]` into `out` (the coefficients table is an
-    /// ARM-side pointer the caller cannot dereference).
+
     fn read_coefficients(&mut self, table: u32, index: u32, out: &mut [i32]);
     fn synth_frame(
         &mut self,
@@ -689,7 +659,6 @@ pub trait PumpHost {
     ) -> (bool, usize);
 }
 
-/// Frame header/frame field accessors (`SpeechHeader`/`SpeechFrames`).
 fn frame_u32(frames: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(frames[offset..offset + 4].try_into().unwrap_or([0; 4]))
 }
@@ -702,12 +671,6 @@ fn frame_put_i32(frames: &mut [u8], offset: usize, value: i32) {
     frames[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
 }
 
-/// fn_22a0a8 / EU fn_22a264 / KR fn_22a310.
-///
-/// Pumps one synthesis batch: drains available speech frames through the
-/// engine into the audio stream and forwards stamped markers. Returns the
-/// stream status and the continuation `state` (0 drained, 1 complete,
-/// 2 more work).
 pub fn pump_synthesis(
     synth: &mut Synth,
     tag: u32,
@@ -879,8 +842,7 @@ pub fn pump_synthesis(
         );
         pitch_position = next_pp;
         energy_position = next_ep;
-        // `header->coefficients` is a table pointer; the host resolves
-        // `table[frame_index]` (two direct ARM reads, no call).
+
         let table = frame_u32(buffers.frames, 0x26c + 0x2c);
         host.read_coefficients(
             table,
@@ -939,7 +901,7 @@ pub fn pump_synthesis(
                 )
                 .is_err()
                 {
-                    // Valid voices carry a gain entry for every volume step.
+
                 }
                 samples += produced as i32;
             }
@@ -1017,7 +979,6 @@ fn forward_markers(input: &[u8], output: &mut [u8], bytes: u32, processed: u32) 
     }
 }
 
-/// fn_2296b0 / EU fn_22986c / KR fn_229918, opening a synthesis instance.
 pub fn open_synth(
     session: [u32; 2],
     out: Option<&mut [u32; 2]>,
@@ -1115,7 +1076,6 @@ fn fail(synth: &mut Synth, env: SynthEnvironment, result: u32, host: &mut impl S
     result
 }
 
-/// Tail fields the batch callback touches (`SpeechTail` in fn_163a98.c).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CallbackTail {
     pub data: u32,
@@ -1130,9 +1090,6 @@ pub struct CallbackTail {
     pub delay: u64,
 }
 
-/// Speech-object view for the batch callback (`Speech` in fn_163a98.c).
-/// `address` is the object base; PCM buffers, the lock body and the vtable
-/// stay caller-owned.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CallbackSpeech {
     pub address: u32,
@@ -1147,15 +1104,12 @@ pub struct CallbackSpeech {
     pub tail: CallbackTail,
 }
 
-/// A synthesis batch event: kind plus the result-pointer the engine lent.
-/// `field4` is carried by the caller and never read here.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CallbackEvent {
     pub kind: i32,
     pub result: u32,
 }
 
-/// Synthesis result content (`SynthesisResult` in fn_163a98.c, 20 bytes).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SynthResult {
     pub field0: u32,
@@ -1165,10 +1119,6 @@ pub struct SynthResult {
     pub metadata_buffer: u32,
 }
 
-/// Engine calls reached by `fn_163a98`. Sample counts are in samples, not
-/// bytes; `synthesize` fills at most the capacity of each span and returns
-/// the produced counts, which must fit those spans. `queue` receives the
-/// 64-byte event-queue snapshot `fn_183258` publishes.
 pub trait CallbackHost {
     fn notify(&mut self, speech: u32, event: i32, queue: &mut [u8]);
     fn reset(&mut self, engine: u32);
@@ -1189,21 +1139,13 @@ pub trait CallbackHost {
         second: &mut [i16],
     ) -> (u32, u32);
     fn publish(&mut self, samples: &[i16]);
-    /// Runs `fn_1a1b68`, which advances the sample offset through engine
-    /// state; returns the new offset.
+
     fn update(&mut self, speech: u32) -> u32;
     fn lock(&mut self, lock: u32);
     fn unlock(&mut self, lock: u32);
     fn ready(&mut self, speech: u32) -> bool;
 }
 
-/// fn_163a98 / EU fn_163b5c / KR fn_163a7c.
-///
-/// Handles one synthesis batch event: reset (1), finalization (2), result
-/// lending (8), payload rendering (16) and stop request (32). `tick` is the
-/// sleep-channel id the original reads from its data word; `first`/`second`
-/// are caller-owned sample workspaces holding at least 0x25800 samples each.
-/// Returns 0 on every path, including the stop-request exit.
 #[allow(clippy::too_many_arguments)]
 pub fn handle_callback(
     speech: &mut CallbackSpeech,

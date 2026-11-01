@@ -1,12 +1,8 @@
-//! Render-path helpers on caller-owned ARM-addressed memory.
-//!
-//! Read-only tables, including the tokenizer delimiter string, are supplied by
-//! the caller in the arena. Indirect callbacks use the existing host boundary.
+
+
 use crate::selection::arena::{Arena, Host};
 use crate::selection::arena_leaf;
 
-/// fn_242444 / EU fn_242600 / KR fn_2426ac.
-/// Copies a chunk string, decoding the reader's optional XOR encoding.
 pub fn read_chunk_string(
     arena: &mut Arena<'_>,
     reader: u32,
@@ -55,9 +51,6 @@ pub fn read_chunk_string(
     rc
 }
 
-/// fn_245064 / EU fn_245220 / KR fn_2452cc.
-/// Destructive tokenization. `delimiters` addresses the caller's copy of
-/// D_9148bc. An all-delimiter tail leaves the input cursor unchanged.
 pub fn next_token(arena: &mut Arena<'_>, cursor: u32, delimiters: u32) -> u32 {
     if cursor == 0 {
         return 0;
@@ -90,9 +83,6 @@ pub fn next_token(arena: &mut Arena<'_>, cursor: u32, delimiters: u32) -> u32 {
     start
 }
 
-/// fn_252948 / EU fn_252b04 / KR fn_252bb0.
-/// Forward predicate search. The callback may mutate the arena, so the output
-/// index and the inner stride/limit are re-read at the same points as the C.
 pub fn search_forward(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -123,8 +113,6 @@ pub fn search_forward(
     }
 }
 
-/// fn_2529d8 / EU fn_252b94 / KR fn_252c40.
-/// Backward predicate search, including the second predicate test at index 0.
 pub fn search_backward(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -153,10 +141,6 @@ pub fn search_backward(
     }
 }
 
-/// fn_24510c / EU fn_2452c8 / KR fn_245374.
-/// Appends a half-open range. Bind `heap` to the engine environment's
-/// allocator. Uses the crate's real Heap interface for allocation/reallocation;
-/// `base` is zero for EngineHeap's native offset convention.
 pub fn append_range(
     heap: &mut impl crate::heap::Heap,
     base: u32,
@@ -195,9 +179,7 @@ pub fn append_range(
             );
         }
     }
-    // ROM branches to the common fill even on allocation refusal. It writes
-    // through NULL, rather than returning early. Arena bounds trap that fault
-    // when the caller has not mapped address zero.
+
     let item = if failed {
         0
     } else {
@@ -217,25 +199,20 @@ pub fn append_range(
     }
 }
 
-/// Caller-owned logging boundary for the language identification helpers.
-/// The engine logger is outside this port. Implementations may modify memory,
-/// just as the original logger's configured output callback may do.
 pub enum LanguageText<'a> {
     Address(u32),
     Local(&'a [u8]),
 }
 
 pub trait LanguageLog {
-    /// `fn_1738e8`: one text message, followed by optional name/value records.
+
     fn message(&mut self, arena: &mut Arena<'_>, logger: u32, text: LanguageText<'_>);
-    /// `fn_1738e8`: "%s: %7lu" at level five.
+
     fn value(&mut self, arena: &mut Arena<'_>, logger: u32, name: u32, value: u32);
-    /// `fn_173dc0`: code 0xbb80, null format.
+
     fn allocation_error(&mut self, arena: &mut Arena<'_>, logger: u32);
 }
 
-/// fn_244b64 / EU fn_244d20 / KR fn_244dcc.
-/// Logs the supplied vector, or the values stored in the pair records.
 pub fn log_language_values(
     arena: &mut Arena<'_>,
     host: &mut impl LanguageLog,
@@ -262,9 +239,6 @@ pub fn log_language_values(
     }
 }
 
-/// fn_245a90 / EU fn_245c4c / KR fn_245cf8.
-/// Frees segment voices and both script models. Model pointers/counts are
-/// intentionally not cleared by the ROM, including after their release.
 pub fn release_language_models(heap: &mut impl crate::heap::Heap, base: u32, engine: u32) {
     let mut i = 0u16;
     loop {
@@ -309,9 +283,6 @@ pub fn release_language_models(heap: &mut impl crate::heap::Heap, base: u32, eng
     }
 }
 
-/// fn_2467dc / EU fn_246998 / KR fn_246a44.
-/// Appends a segment and initializes voices only in newly added capacity.
-/// Failed per-slot allocations leave preceding writes and allocations intact.
 pub fn append_language_segment(
     heap: &mut impl crate::heap::Heap,
     host: &mut impl LanguageLog,
@@ -388,9 +359,6 @@ pub fn append_language_segment(
     0
 }
 
-/// Indirect LID dictionary method at interface offset 28. The callback receives
-/// the promoted handle pair and a temporary NUL-terminated key. `value` is the
-/// returned address of a char pointer, not the string itself.
 pub trait LanguageLookup: LanguageLog {
     fn identify(
         &mut self,
@@ -403,9 +371,6 @@ pub trait LanguageLookup: LanguageLog {
     ) -> (u32, u32, u16, u8);
 }
 
-/// fn_244c5c / EU fn_244e18 / KR fn_244ec4.
-/// Accumulates trigram dictionary scores. The encoded input represents hex
-/// characters as four bytes; the sliding window advances one encoded character.
 pub fn score_language_trigrams(
     heap: &mut impl crate::heap::Heap,
     host: &mut impl LanguageLookup,
@@ -454,8 +419,7 @@ pub fn score_language_trigrams(
                 first_hex = hex;
             }
             let amount = if hex { 4 } else { 1 };
-            // The real bounded-append callee terminates even when fewer than
-            // amount bytes remain in the source string.
+
             let available = arena_leaf::string_length(&arena, source).wrapping_add(1);
             crate::pronunciation::append_fixed(
                 &mut key,
@@ -498,7 +462,7 @@ pub fn score_language_trigrams(
                     crate::resources::decimal(Some(arena.slice(token, length as usize + 1)));
             }
         }
-        // ROM handles the last element separately from its unrolled prefix.
+
         if count != 0 {
             for j in 0..count {
                 let at = out.wrapping_add(j as u32 * 4);
@@ -513,8 +477,7 @@ pub fn score_language_trigrams(
                 );
             }
         }
-        // The key is a Rust stack value. Log it through the dedicated callback
-        // instead of inventing an ARM address for it.
+
         log_language_values(
             &mut arena,
             host,
@@ -530,11 +493,6 @@ pub fn score_language_trigrams(
     0
 }
 
-/// fn_173dc0. `args` is an ARM va_list address after the four fixed
-/// arguments; `params` is disjoint caller-owned 20-byte stack storage.
-/// The actual ROM path is fn_173c70 -> fn_173638 -> boot_fmt::fn_10012c.
-/// Allocator service calls made by FormatHost must route through bridge.rs;
-/// only the engine's configured indirect output methods are platform calls.
 pub(crate) fn fn_173dc0(
     m: &mut crate::boot::Memory<'_>, host: &mut impl crate::boot_part_b::FormatHost,
     logger: u32, category: u32, code: u32, format: u32, args: u32, params: u32,
@@ -544,8 +502,6 @@ pub(crate) fn fn_173dc0(
     crate::boot_part_b::fn_173c70(m, logger, category, code, format, args, params, host)
 }
 
-/// Public ARM-addressed entry for the variadic error logger. See fn_173dc0's
-/// caller-owned argument and scratch-memory contract.
 pub fn error_log(
     m: &mut crate::boot::Memory<'_>, host: &mut impl crate::boot_part_b::FormatHost,
     logger: u32, category: u32, code: u32, format: u32, args: u32, params: u32,
@@ -577,10 +533,6 @@ impl WordState {
     }
 }
 
-/// fn_24447c / EU fn_244638 / KR fn_2446e4. Normalizes UTF-16 for language
-/// identification. `table` is the ROM's D_9148c0 u16 set mapped by the caller.
-/// `result` has room for its five counters and all marked word offsets.
-/// Like the ROM, n==0 still reads the preceding input unit at text-2.
 pub fn normalize_language_text(
     heap: &mut impl crate::heap::Heap, base: u32, text: u32, n: u32,
     result: u32, table: u32, table_b: u32,
@@ -680,9 +632,6 @@ fn copy_language_tokens(a:&mut Arena<'_>,s:u32,n:u16,items:u32,stride:u32) {
     }
 }
 
-/// fn_245208 / EU fn_2453c4 / KR fn_245470. Load the script/language lists
-/// and Unicode ranges from the caller's configured LID interface. `lidcfg`
-/// points to the caller-mapped static "lidcfg" string.
 pub fn initialize_script_database(heap:&mut impl crate::heap::Heap,h:&mut impl LanguageLookup,
     base:u32,p:u32,db:u32,kind:u16,lidcfg:u32)->u32 {
     let mut a=Arena::new(base,heap.arena());
@@ -732,9 +681,6 @@ pub fn initialize_script_database(heap:&mut impl crate::heap::Heap,h:&mut impl L
     0
 }
 
-/// fn_245a08 / EU fn_245bc4 / KR fn_245c70. Initialize the primary and
-/// alternate script models. A failed alternate is tolerated when primary
-/// languages already exist. The segment count itself is not reset here.
 pub fn initialize_language_models(heap:&mut impl crate::heap::Heap,h:&mut impl LanguageLookup,
     base:u32,p:u32,lidcfg:u32)->u32 {
     let mut a=Arena::new(base,heap.arena());a.set_u32(p+0x348,0);a.set_u16(p+0x344,0);
@@ -744,9 +690,6 @@ pub fn initialize_language_models(heap:&mut impl crate::heap::Heap,h:&mut impl L
     if rc>=0x80000000 && Arena::new(base,heap.arena()).u16(p+0x4a)==0 {rc} else {0}
 }
 
-/// Static ROM strings and disjoint caller-owned stack space for reader ports.
-/// Addresses stay absolute. Reader callees using normalization's slice API
-/// require Memory.base==0 and an absolute-index caller workspace.
 pub struct ReaderRuntime {
     pub category:u32,
     pub messages:[u32;16],
@@ -759,9 +702,9 @@ pub struct ReaderRuntime {
     pub offset_key:u32,
     pub scratch:u32,
 }
-/// Heap and indirect destructor methods operate on the caller's external heap
-/// state. Service calls route existing engine ports, never recorded outputs.
+
 pub trait ReaderHost: crate::boot_part_b::FormatHost + crate::normalization::NormalizationHost + crate::frontend::BlockHeap {
+    fn reader_call(&mut self,_m:&mut crate::boot::Memory<'_>,_f:u32,_args:&[u32])->Option<u32> {None}
     fn array_release_method(&mut self, context:u32, pointer:u32);
     fn array_destructor(&mut self, method:u32, element:u32, context:u32);
     fn array_destructor_m(&mut self,_memory:&mut [u8],method:u32,element:u32,context:u32) { self.array_destructor(method,element,context); }
@@ -792,8 +735,8 @@ fn reader_unmap(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,r:u32,rec:
     rc
 }
 
-/// fn_241e74. Release/remap a chunk window, including the attached-memory mode.
 pub fn map_reader_window(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,r:u32,pos:u32,len:u32,rec:u32,k:&ReaderRuntime)->u32 {
+    if let Some(rc)=h.reader_call(m,0x241E74,&[r,pos,len,rec]) {return rc;}
     assert_eq!(m.base,0);
     let max_slot=k.scratch+0x80;m.put_word(max_slot,len.max(32));
     let mut rc=0;
@@ -851,9 +794,9 @@ pub(crate) fn reader_release_array(m:&crate::boot::Memory<'_>,h:&mut impl Reader
         host.borrow_mut().array_destructor(method,element,context);
     })
 }
-/// fn_2421b0. Close the owner, name and array, releasing the reader only on
-/// a non-error owner close. Environment is captured before the reader release.
+
 pub fn close_reader(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,r:u32,k:&ReaderRuntime)->u32 {
+    if let Some(rc)=h.reader_call(m,0x2421B0,&[r]) {return rc;}
     assert_eq!(m.base,0);if r==0{return 0x8a202007;}
     let env=m.word(r+8);reader_info(m,r,k,4,2);
     let rc=crate::normalization::close_owner_pair(m.bytes,r+24,h);
@@ -864,8 +807,9 @@ pub fn close_reader(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,r:u32,
     crate::normalization::log_fanout(m.bytes,logger,k.category,4,0,k.messages[3]);
     rc
 }
-/// fn_2422ac. Pop the current chunk and advance to its alignment-rounded end.
+
 pub fn close_reader_chunk(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,r:u32,k:&ReaderRuntime)->u32 {
+    if let Some(rc)=h.reader_call(m,0x2422AC,&[r]) {return rc;}
     assert_eq!(m.base,0);if r==0{return 0x8a202007;}
     let slot=k.scratch+0x80;m.put_word(slot,0);
     let array=m.word(r+20);
@@ -884,9 +828,9 @@ pub fn close_reader_chunk(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,
     }
     reader_info(m,r,k,4,5);rc
 }
-/// fn_242590. Return a window pointer, remapping when the requested bytes
-/// fall outside the current range. Errors write a null output.
+
 pub fn reader_chunk_data(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,r:u32,len:u32,out:u32,k:&ReaderRuntime)->u32 {
+    if let Some(rc)=h.reader_call(m,0x242590,&[r,len,out]) {return rc;}
     assert_eq!(m.base,0);if r==0||len==0||out==0{return 0x8a202007;}
     if m.word(r+40)==0{return 0x8a202011;}
     reader_info(m,r,k,4,6);
@@ -918,18 +862,16 @@ fn reader_append(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,array:u32
     m.put_word(array,block.data);m.put_word(array+16,block.cap);m.put_word(array+20,block.count);
     if rc!=0&&callback!=0 {
         let destination=block.data.wrapping_add(block.count.wrapping_sub(1).wrapping_mul(block.elem_size as u32));
-        // append_element has already published the copied record. Run the
-        // caller's initializer with live memory, then apply its veto exactly
-        // as fn_196db0 does. It may inspect the updated table count.
+
         if shared.borrow_mut().array_initializer(m.bytes,callback,source,block.heap,destination)==0 {
             m.put_word(array+20,m.word(array+20).wrapping_sub(1));return 0;
         }
     }
     rc
 }
-/// fn_24277c. Read a chunk's name and length, validate its containment, and
-/// push its descriptor. Invalid names clear only name[0], not the whole buffer.
+
 pub fn open_reader_chunk(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,r:u32,name:u32,out_len:u32,out_data:u32,k:&ReaderRuntime)->u32 {
+    if let Some(rc)=h.reader_call(m,0x24277C,&[r,name,out_len,out_data]) {return rc;}
     assert_eq!(m.base,0);if r==0||out_len==0{return 0x8a202007;}
     reader_info(m,r,k,4,8);let slot=k.scratch+0x80;m.put_word(slot,0);
     let array=m.word(r+20);let last=crate::normalization::chunk_last(m.bytes,array,slot);let parent=m.word(slot);
@@ -976,8 +918,7 @@ pub fn open_reader_chunk(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,r
         if rc<0x80000000 {
             let element=k.scratch+0x40;for i in 0..16 {m.bytes[(element+i)as usize]=0;}
             let mut a=Arena::new(0,m.bytes);
-            // ROM sp+4 held the Begin-log reader argument before strcpy.
-            // Its upper bytes survive in the descriptor name padding.
+
             a.set_u32(element+4,r);arena_leaf::copy_string(&mut a,element,name);
             a.set_u32(element+8,a.u32(r+52));a.set_u32(element+12,a.u32(r+52).wrapping_add(a.u32(out_len)));
             if reader_append(m,h,m.word(r+20),element)!=0 {
@@ -988,7 +929,7 @@ pub fn open_reader_chunk(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,r
     if rc>=0x80000000 {m.bytes[name as usize]=0;m.put_word(out_len,0);if out_data!=0 {m.put_word(out_data,0);}}
     reader_info(m,r,k,4,10);rc
 }
-// Keep heap wrappers real, dispatching only their caller-provided methods.
+
 struct ReaderHeapCall { args: Option<(u32,u32)> }
 impl crate::frontend::HeapVtable for ReaderHeapCall {
     fn alloc_at(&mut self,obj:u32,size:u32)->u32 { self.args=Some((obj,size));0 }
@@ -1023,9 +964,9 @@ impl<H:ReaderHost> crate::reentrant2::HooksM for ReaderCloneHooks<'_,H> {
         }
     }
 }
-/// fn_242c9c. Find a named chunk, restoring a cloned descriptor table and
-/// the saved reader position on any unsuccessful search.
+
 pub fn find_reader_chunk(m:&mut crate::boot::Memory<'_>,h:&mut impl ReaderHost,r:u32,name:u32,mode:u32,out_len:u32,out_data:u32,k:&ReaderRuntime)->u32 {
+    if let Some(rc)=h.reader_call(m,0x242C9C,&[r,name,mode,out_len,out_data]) {return rc;}
     assert_eq!(m.base,0);if r==0||out_len==0{return 0x8a202007;}
     let count=crate::normalization::idx5(m.bytes,m.word(r+20));if count==0{return 0x8a202007;}
     reader_info(m,r,k,4,11);
@@ -1189,12 +1130,11 @@ fn identify_language_words<H:LanguageLookup+crate::boot_part_b::FormatHost>(
     }
     finish_language(heap,h,p,buffer,count,pairs,k);rc
 }
-/// fn_246950. Identify one script segment. Memory is absolute-indexed;
-/// counters include offset storage after res[4], and key is caller scratch.
+
 pub fn identify_language_segment<H:LanguageLookup+crate::boot_part_b::FormatHost>(heap:&mut impl crate::heap::Heap,h:&mut H,p:u32,text:u32,len:u32,key_a:u32,key_b:u32,kind:u16,count:u16,pairs:u32,res:u32,k:&mut LanguageRuntime<'_>)->u32{
     identify_language_words(heap,h,p,text,len,key_a,key_b,kind,count,pairs,res,k,false)
 }
-/// fn_245bf0. Identify the whole utterance using the selected language model.
+
 pub fn identify_language_text<H:LanguageLookup+crate::boot_part_b::FormatHost>(heap:&mut impl crate::heap::Heap,h:&mut H,p:u32,text:u32,len:u32,k:&mut LanguageRuntime<'_>)->u32{
     let mut a=Arena::new(0,heap.arena());let alt=a.u8(p+0x40)!=0;let db=p+if alt{0x60}else{0x48};let n=a.u16(db+2);let pairs=a.u32(p+0x340);
     for i in 0..n as u32{a.set_u32(pairs+i*8,a.u32(db+4)+i*26);a.set_u32(pairs+i*8+4,0);}
@@ -1205,8 +1145,7 @@ fn language_segment_slot(heap:&mut impl crate::heap::Heap,h:&mut impl LanguageLo
     let out=k.params+0x20;let rc=append_language_segment(heap,h,0,p,out);
     if rc>=0x80000000 {Err(rc)}else{Ok(Arena::new(0,heap.arena()).u32(out))}
 }
-/// fn_246274. Split text by Unicode script, preserving spaces at script
-/// boundaries, then identify each resulting segment using its script model.
+
 pub fn identify_script_segments<H:LanguageLookup+crate::boot_part_b::FormatHost>(
     heap:&mut impl crate::heap::Heap,h:&mut H,p:u32,text:u32,count:u32,k:&mut LanguageRuntime<'_>,
 )->u32{

@@ -1,28 +1,12 @@
-//! Japanese kana engine (Nintendo backend, `fn_19xx`/`fn_1a_xx`/`fn_6b_xx`).
-//!
-//! Caller-owned state: the engine is a borrowed 0x14000-byte block, voice
-//! tables are borrowed. No globals, no allocation, no unsafe.
-//!
-//! Stored guest pointers (ring words at 0x8584..0x8594, voice-context words)
-//! hold engine-relative offsets here (engine base = 0). Native/ARM hold
-//! absolute addresses; the test normalizes by subtracting the engine base.
+
 
 pub mod libc;
 pub mod sjis;
 pub mod sync;
 pub mod voice;
 
-/// Engine block size from `fn_19bc70` (`fn_301674(engine, 0x14000)`).
 pub const ENGINE_SIZE: usize = 0x14000;
 
-/// Former exclusion consts, removed in lane B round 3: every word is now
-/// reproduced bit-exactly, so state compare is a pure link rebase with no
-/// carve-outs. Mutex handles at 0xE6F8/0xE6FC are caller-lent entry-R1
-/// echoes ([`sync::GuestSync`]); the job object at 0xE6D8..0xE6E0 and the
-/// scheduler request struct at 0x13564..0x13578 plus `*r7` at 0x1357C are
-/// built by [`sync::job_submit`] from the submit arguments.
-
-/// Borrowed engine memory.
 pub struct Engine<'a> {
     pub mem: &'a mut [u8; ENGINE_SIZE],
 }
@@ -89,10 +73,6 @@ impl<'a> Engine<'a> {
     }
 }
 
-/// fn_19bc70: constructor. Zeroes the block, writes defaults, creates two
-/// mutexes (caller-lent entry-R1 echoes, 0 under the harness) and submits
-/// the deferred job object (stubbed-wait out-slot), then runs the param
-/// reset. `sync` carries the guest facts the engine cannot derive.
 pub fn construct(eng: &mut Engine, sync: sync::GuestSync) -> i32 {
     eng.mem.fill(0);
     eng.wr32(0x0000, 0x2AF8);
@@ -137,15 +117,13 @@ pub fn construct(eng: &mut Engine, sync: sync::GuestSync) -> i32 {
     eng.wr16(0xE758, 1024);
     eng.wr16(0xE75A, 10);
     eng.wr32(0xE6D4, 1);
-    // fn_6b1760 x2: the harness echoes entry R1 into the handle word
-    // (both call sites pass flags 0, so 0); the caller lends the echoes.
+
     eng.wr32(0xE6F8, sync.mutex_a);
     eng.wr32(0xE6FC, sync.mutex_b);
     eng.wr8(0xE760, 0);
     eng.wr8(0xAFE9, 0);
     reset_params(eng);
-    // fn_6b18b0(engine+0xE6D8, &D_6aebe8, 0, engine+0x13584, tmo 2/-1
-    // on dead stack): SyncObj words plus the scheduler request struct.
+
     sync::job_submit(
         &mut eng.mem[..],
         0xE6D8,
@@ -159,7 +137,6 @@ pub fn construct(eng: &mut Engine, sync: sync::GuestSync) -> i32 {
     0
 }
 
-/// fn_1a2c90: param-block reset at engine+0xE700.
 pub fn reset_params(eng: &mut Engine) {
     eng.wr8(0xE700, 0);
     eng.wr16(0xE702, 0x13C2);
@@ -181,25 +158,21 @@ pub fn reset_params(eng: &mut Engine) {
     eng.wr16(0xE72C, 0);
 }
 
-/// fn_19c2c8: reset entry, runs the param reset.
 pub fn reset(eng: &mut Engine) -> i32 {
     reset_params(eng);
     0
 }
 
-/// fn_19cd9c: clears the 0xDEE0 flag and the 0xAFFC block.
 pub fn clear_affc(eng: &mut Engine) {
     eng.wr32(0xDEE0, 0);
     eng.zero_range(0xAFFC, 0x2EE4);
 }
 
-/// fn_19cdc0: clears the 0xE6BC flag and the 0xDEE8 block.
 pub fn clear_dee8(eng: &mut Engine) {
     eng.wr32(0xE6BC, 0);
     eng.zero_range(0xDEE8, 0x7D2);
 }
 
-/// fn_19de90: clamp with s16 narrowing on the in-range path only.
 pub fn clamp_s16(v: i32, lo: i32, hi: i32) -> i32 {
     if v < lo {
         return lo;
@@ -210,27 +183,18 @@ pub fn clamp_s16(v: i32, lo: i32, hi: i32) -> i32 {
     (v as i16) as i32
 }
 
-/// fn_19e26c: s16 at engine+0x7FD8.
 pub fn peek_7fd8(eng: &Engine) -> i16 {
     eng.rds16(0x7FD8)
 }
 
-/// fn_1a4e1c: busy flag at 0xE6CB (lock/unlock elided single-threaded).
 pub fn flag_busy(eng: &Engine) -> u8 {
     eng.rd8(0xE6CB)
 }
 
-/// fn_1a4e50: done flag at 0xE6CC (lock/unlock elided single-threaded).
 pub fn flag_done(eng: &Engine) -> u8 {
     eng.rd8(0xE6CC)
 }
 
-/// fn_19e1e8: 16-step fixed-point ratio with s16 saturation.
-///
-/// Takes the full r1 register: ARM compares the unnarrowed word (no `sxth`
-/// on entry; narrowing happens only after negation at +0x2c). Real callers
-/// pass sign-extended s16, where narrowed and raw agree; fuzz passes garbage
-/// upper bits (ABI difference, Rust follows ARM).
 pub fn fixed_ratio(a: i32, r1: u32) -> i16 {
     let mut sign = 1i32;
     let mut x = a;
@@ -269,7 +233,6 @@ pub fn fixed_ratio(a: i32, r1: u32) -> i16 {
     }
 }
 
-/// fn_19dfd8: vowel-letter count over a NUL-terminated byte string.
 pub fn vowel_count(s: &[u8]) -> i16 {
     let mut n: i16 = 0;
     let mut i = 0usize;
@@ -321,7 +284,6 @@ fn strcmp_eq(a: &[u8], b: &[u8]) -> bool {
     }
 }
 
-/// fn_19cde4: phoneme-class lookup over 38 borrowed ROM strings.
 pub fn class_lookup(s: &[u8], table: [&[u8]; 38]) -> u8 {
     let mut i: i16 = 0;
     loop {
@@ -343,10 +305,6 @@ pub fn class_lookup(s: &[u8], table: [&[u8]; 38]) -> u8 {
     }
 }
 
-/// fn_19fea4: fill n bytes with `(u8)(s8)val`; returns end offset.
-///
-/// ARM returns `dst` unchanged for n <= 0 (ROM `ble` to return); the C
-/// `return dst + n` differs for negative n (defect filed).
 pub fn memfill(mem: &mut [u8], dst: usize, val: i32, n: i32) -> usize {
     if n <= 0 {
         return dst;
@@ -358,7 +316,6 @@ pub fn memfill(mem: &mut [u8], dst: usize, val: i32, n: i32) -> usize {
     dst.wrapping_add(n as usize)
 }
 
-/// fn_1a4e84 single-element step (also used for overlapping buffers).
 #[inline]
 pub fn sat_scale_one(v: i16, scale: i32) -> i16 {
     let mut x = (v as i32).wrapping_mul(scale) >> 12;
@@ -370,7 +327,6 @@ pub fn sat_scale_one(v: i16, scale: i32) -> i16 {
     x as i16
 }
 
-/// fn_1a4e84: saturating scale of s16 vectors over slices.
 pub fn sat_scale(dst: &mut [i16], src: &[i16], n: i32, scale: i32) {
     let mut k = n;
     let mut i = 0usize;
@@ -384,7 +340,6 @@ pub fn sat_scale(dst: &mut [i16], src: &[i16], n: i32, scale: i32) {
     }
 }
 
-/// fn_1a4e84 on engine buffers.
 pub fn sat_scale_engine(eng: &mut Engine, dst: usize, src: usize, n: i32, scale: i32) {
     let mut k = n;
     let mut i = 0usize;
@@ -402,7 +357,6 @@ pub fn sat_scale_engine(eng: &mut Engine, dst: usize, src: usize, n: i32, scale:
     }
 }
 
-/// fn_19df84: rate setup at base+0x200 with clamping divide.
 pub fn rate_setup(eng: &mut Engine, base: usize, n: i32) {
     let d = if n <= 0 { 1 } else { n };
     let q = 76800i32.wrapping_div(d);
@@ -417,23 +371,19 @@ pub fn rate_setup(eng: &mut Engine, base: usize, n: i32) {
     eng.zero_range(base, 0x200);
 }
 
-/// fn_19fedc: strsep-like tokenizer over a caller buffer.
-/// `ctx` is an offset into `buf`; `acc` holds the separator bytes.
-/// Returns the token offset into `buf`.
 pub fn tokenize(buf: &mut [u8], ctx: &mut usize, acc: &[u8]) -> Option<usize> {
     let mut pos = *ctx;
     if buf[pos] == 0 {
         return None;
     }
-    // Phase 1: skip leading acc bytes. ARM reloads the token base from *ctx
-    // after the skip (r5 reload at +0x4); the C keeps the entry pos (defect).
+
     let mut tok = pos;
     loop {
         let c = buf[pos];
         let mut a = 0usize;
         loop {
             if acc[a] == 0 {
-                // Phase 2: scan the token.
+
                 tok = pos;
                 if buf[pos] == 0 {
                     return None;
@@ -476,7 +426,6 @@ pub fn tokenize(buf: &mut [u8], ctx: &mut usize, acc: &[u8]) -> Option<usize> {
     }
 }
 
-/// fn_19deac delay-line state (528 bytes in C order).
 #[derive(Clone, Copy)]
 pub struct DeacState {
     pub table: [i16; 256],
@@ -521,7 +470,6 @@ impl DeacState {
     }
 }
 
-/// One fn_19deac sample step.
 pub fn deac_sample(state: &mut DeacState, x: i16) -> i16 {
     let mut k = state.n2;
     state.table[state.idx as usize] = x;
@@ -544,7 +492,6 @@ pub fn deac_sample(state: &mut DeacState, x: i16) -> i16 {
     v as i16
 }
 
-/// fn_19deac over slices.
 pub fn deac_run(state: &mut DeacState, input: &[i16], output: &mut [i16], n: i32) {
     let mut i = 0i32;
     while i < n {
@@ -553,7 +500,6 @@ pub fn deac_run(state: &mut DeacState, input: &[i16], output: &mut [i16], n: i32
     }
 }
 
-/// fn_19deac on engine buffers (state/in/out are engine offsets).
 pub fn deac_engine(eng: &mut Engine, state: usize, inp: usize, out: usize, n: i32) {
     let mut st = DeacState::load(&eng.mem[..], state);
     let mut i = 0i32;
@@ -571,7 +517,6 @@ pub fn deac_engine(eng: &mut Engine, state: usize, inp: usize, out: usize, n: i3
     st.store(&mut eng.mem[..], state);
 }
 
-/// fn_6aeb50: ring silence with wrap at the 0x8594 limit.
 pub fn ring_silence(eng: &mut Engine, count: u32, dst: u32) {
     let mut c = count as i32;
     let mut d = dst;
@@ -592,7 +537,6 @@ pub fn ring_silence(eng: &mut Engine, count: u32, dst: u32) {
     }
 }
 
-/// fn_19efb0: ring setup; pointer words hold engine-relative offsets.
 pub fn ring_init(eng: &mut Engine) {
     eng.wr32(0x8590, 0x81C4);
     eng.wr32(0x8594, 0x8584);
@@ -605,7 +549,6 @@ pub fn ring_init(eng: &mut Engine) {
     ring_silence(eng, 480, 0x81C4);
 }
 
-/// fn_1a2bf0: start-path state init.
 pub fn start_init(eng: &mut Engine) -> i32 {
     eng.wr16(0x41F2, 0);
     eng.wr16(0xE6C8, 0);
@@ -625,7 +568,6 @@ pub fn start_init(eng: &mut Engine) -> i32 {
     0
 }
 
-/// fn_1a2d28: shadow-copy of the 0xE700 params with conditional clears.
 pub fn shadow_copy(eng: &mut Engine) {
     let b0 = eng.rd8(0xE700);
     eng.wr8(0xE730, b0);
@@ -657,7 +599,6 @@ pub fn shadow_copy(eng: &mut Engine) {
     eng.wr16(0xE72C + 0x30, eng.rd16(0xE72C));
 }
 
-/// fn_1a2e38: quality setter into the selected param slot.
 pub fn quality_set(eng: &mut Engine, v: i32, sel: i32) {
     let mut x = v;
     if x < 80 {
@@ -690,12 +631,6 @@ fn mix_sat(a: i16, b: i16) -> i16 {
     }
 }
 
-/// fn_1a19c4: PCM ring mixer with s16 saturation and wrap.
-///
-/// Offset-pointer constraint: `(b as u32 & 0x7FFFFFFF) < 0x78000000`, so
-/// `w + (b << 1)` keeps its order against the limit in both offset and
-/// absolute space. Real calls use b < 480; only the fuzz window near 2^31
-/// is excluded.
 pub fn mix_pcm(eng: &mut Engine, a: i32, b: i32, pcm: &mut PcmLog) {
     let total = eng.rds16(0x7FE0) as i32;
     let orig_w = eng.rd32(0x8584);
@@ -786,7 +721,6 @@ fn table_store(eng: &mut Engine, idx: i32, v: i16) {
     eng.wr16(addr as usize, v as u16);
 }
 
-/// fn_19ffa0: fixed-point resample/filter loop over engine buffers.
 pub fn resample_filter(eng: &mut Engine, n: i32, x: usize, y: usize) {
     let coef = 0x4178749Fi32;
     let e74c = eng.rd32(0xE74C);
@@ -830,7 +764,6 @@ pub fn resample_filter(eng: &mut Engine, n: i32, x: usize, y: usize) {
     }
 }
 
-
 fn s16_at(mem: &[u8], base: usize, idx: i32) -> i16 {
     let o = (base as i64 + idx as i64 * 2) as usize;
     i16::from_le_bytes([mem[o], mem[o + 1]])
@@ -856,9 +789,6 @@ fn s8_at(mem: &[u8], base: usize, off: i64) -> i8 {
     mem[(base as i64 + off) as usize] as i8
 }
 
-/// fn_1a07e0 (cont, same TU as fn_1a0744): ramp writer. `row` is the s16
-/// index of the target row from `p`. Returns `q` for `idx <= 0`, else the
-/// ARM falloff R0 (`r6 - 1` at loop exit: 0 unless `idx ≡ 1 mod 0x10000`).
 fn interp_ramp(
     mem: &mut [u8],
     p: usize,
@@ -917,9 +847,6 @@ fn interp_ramp(
     }
 }
 
-/// fn_1a0780: clamp `a`/`b` into ±400, then run the ramp writer.
-/// `p` is the byte offset of the s16 table; caller keeps `idx` small and
-/// five guard rows addressable below `p + idx*5`.
 pub fn interp_clamp(mem: &mut [u8], p: usize, idx: i32, a: i32, b: i32) -> i32 {
     let mut a = a;
     let mut b = b;
@@ -936,7 +863,6 @@ pub fn interp_clamp(mem: &mut [u8], p: usize, idx: i32, a: i32, b: i32) -> i32 {
     interp_ramp(mem, p, a, max, b, idx, row)
 }
 
-/// fn_1a0744: normalize `a`/`b` against the table, then `fn_1a0780`.
 pub fn interp_setup(mem: &mut [u8], p: usize, idx: i32, a: i32, b: i32) -> i32 {
     let a = if a >= 0 {
         a.wrapping_sub(s16_at(mem, p, 0) as i32) as i16 as i32
@@ -952,10 +878,6 @@ pub fn interp_setup(mem: &mut [u8], p: usize, idx: i32, a: i32, b: i32) -> i32 {
     interp_clamp(mem, p, idx, a, b)
 }
 
-/// fn_1a1c44: block shuffle between 0x7D00/0x7F00 windows; returns `p`.
-/// Loop-A copies 0x7DF6+2k into 0x7FE0+2k (bound: s16 at 0x7FDC),
-/// loop-B the same with the bound at 0x7DF6. Caller keeps the bounds
-/// small: the ROM faults past the mapping for huge counts just the same.
 pub fn block_shuffle(mem: &mut [u8], p: usize) -> usize {
     let b1 = p + 0x7f00;
     let b2 = p + 0x7d00;
@@ -1028,10 +950,6 @@ pub fn block_shuffle(mem: &mut [u8], p: usize) -> usize {
     p
 }
 
-/// fn_19ca00: expose engine for render; `tid` is the borrowed thread word.
-/// When the busy flag was set and the owner differs, the ROM spins on the
-/// flag (nothing in the loop clears it), so that shape hangs on ARM too
-/// and the harness only fuzzes shapes that return.
 pub fn engine_expose(eng: &mut Engine, tid: u32) -> i32 {
     let mut changed = 0;
     if eng.mem[0xE6CB] == 1 {
@@ -1052,17 +970,11 @@ pub fn engine_expose(eng: &mut Engine, tid: u32) -> i32 {
     }
 }
 
-/// fn_19c9e0: voice detach guard (no observable effect under stubbed SVCs;
-/// verified by the row), flag the voice, expose its engine at +0xA0.
-/// The test resolves the engine pointer to `eng`.
 pub fn voice_expose(mem: &mut [u8], voice: usize, eng: &mut Engine, tid: u32) -> i32 {
     mem[voice + 0xB5] = 1;
     engine_expose(eng, tid)
 }
 
-/// fn_19caa8: post-render sync; `tid` is the borrowed thread word.
-/// Same spin-or-return shape as [`engine_expose`], then a zero-compare of
-/// the job object that re-arms the event and clears the owner words.
 pub fn render_sync(eng: &mut Engine, tid: u32) -> i32 {
     if flag_busy(eng) == 1 {
         let mut r5 = 0;
@@ -1089,10 +1001,6 @@ pub fn render_sync(eng: &mut Engine, tid: u32) -> i32 {
     0
 }
 
-// --- batch B: voice-render chain (ROM dots, filters, per-mora) ---
-
-/// fn_1933a4/fn_193408: N-tap smlawb dot over delay words `x` (u32 LE at
-/// `xo`) and s16 coeffs `h`: `acc += (x[i]*h[i]) >> 16` with u32 wrap.
 pub fn smlawb_dot(xb: &[u8], xo: usize, h: &[i16], taps: usize) -> i32 {
     let mut acc = 0u32;
     for i in 0..taps {
@@ -1104,8 +1012,6 @@ pub fn smlawb_dot(xb: &[u8], xo: usize, h: &[i16], taps: usize) -> i32 {
     acc as i32
 }
 
-/// fn_193330: 5-tap dot with `v` spliced at tap 2:
-/// taps are `(x0,h0) (x1,h1) (v,h2) (x2,h3) (x3,h4)`, u32 wrap.
 pub fn dot5(xb: &[u8], xo: usize, h: &[i16], v: i32) -> i32 {
     let mut acc = 0u32;
     for i in 0..5 {
@@ -1121,15 +1027,11 @@ pub fn dot5(xb: &[u8], xo: usize, h: &[i16], v: i32) -> i32 {
     acc as i32
 }
 
-/// fn_193384: `((a * (s16)b) >> 16) << 1` with u32 wrap. The ROM `smulwb`
-/// uses the low 16 bits of `b` signed, replicated by the `as i16`.
 pub fn smulwb2(a: i32, b: i32) -> i32 {
     let t = ((a as i64 * (b as i16 as i64)) >> 16) as i32;
     t.wrapping_shl(1)
 }
 
-/// fn_1a11b0: sine-table modulator. `table` is the borrowed 256-entry ROM
-/// table `D_8468d0`; `phase` is the caller's u32 (engine+0xAFB8).
 pub fn sine_mod(
     phase: &mut u32,
     n: i32,
@@ -1176,10 +1078,6 @@ pub fn sine_mod(
     }
 }
 
-/// fn_19edc0: lattice filter. `x` holds the coeff bytes (s16 at `x[2+2i]`,
-/// 14 bytes for order 6, 22 otherwise); `dl` the u32 delay line of
-/// `order` words. Returns the clip peak. Orders `< 1` with `n > 0` walk
-/// off on ARM, so the harness only fuzzes that shape with `n <= 0`.
 pub fn lattice_filter(
     n: i32,
     order: i32,
@@ -1256,10 +1154,6 @@ pub fn lattice_filter(
     peak
 }
 
-/// fn_19cbc8: per-mora unit synthesis over engine tables. `ino` is the
-/// engine offset of the s16 input; `out`/`ofo` the output bytes; `tab`
-/// the borrowed 5-entry ROM table `D_743608`. Table addresses wrap mod
-/// 2^32 exactly like the ARM; the fixture keeps them in-engine.
 pub fn per_mora(
     eng: &mut Engine,
     count: i32,
@@ -1317,8 +1211,6 @@ pub fn per_mora(
     }
 }
 
-/// fn_19ffa0 variant writing `y` to exterior bytes (the `fn_1a524c` call
-/// passes stack `tmp`); table logic identical to [`resample_filter`].
 pub fn resample_filter_to_mem(eng: &mut Engine, n: i32, x: usize, out: &mut [u8], ofo: usize) {
     let coef = 0x4178749Fi32;
     let e74c = eng.rd32(0xE74C);
@@ -1360,9 +1252,6 @@ pub fn resample_filter_to_mem(eng: &mut Engine, n: i32, x: usize, out: &mut [u8]
     }
 }
 
-/// The five identical copy blocks in `fn_1a524c`: `dst[0..r5] = src[0..r5]`
-/// through the even/odd pre-copy dance. Shapes with `r5 <= 0` and
-/// `(r5-1)>>1 != 0` spin ~2^32 times on ARM; the harness excludes them.
 fn copy_block(dst: &mut [u8], do_: usize, src: &[u8], r5: i32) {
     let mut pi = -1i32;
     let mut qi = -1i32;
@@ -1396,95 +1285,81 @@ fn copy_block(dst: &mut [u8], do_: usize, src: &[u8], r5: i32) {
     }
 }
 
-// --- batch B: voice render + ring advance ---
-
-/// Borrowed ROM tables shared by the voice-render chain. Slices borrow
-/// snapshot windows; offsets are documented per field.
 pub struct Tables<'a> {
-    /// `D_790ba8`, 16 bytes (lattice coeffs).
+    pub delimiters: &'a [u8],
+
     pub t790: &'a [u8],
-    /// `D_8468d0`, 256 s16 (sine table).
+
     pub t8468: &'a [i16],
-    /// `D_743608`, 5 s16 (per-mora taps).
+
     pub t7436: &'a [i16],
-    /// `D_82e2b2` window, `[0]` = entry -128 (pitch curve).
+
     pub t82e2: &'a [i16],
-    /// `D_82e0fc`, 91 s16 (duration curve).
+
     pub t82e0: &'a [i16],
-    /// `D_8460c0` window (nibble tables).
+
     pub t8460: &'a [u8],
-    /// Table at `*D_72273c` = `D_74249C` (expander).
+
     pub tw: &'a [u8],
-    /// `D_74391c`, 256 bytes (voicing flags).
+
     pub t7439: &'a [u8],
-    /// Window with `[0]` = `D_846200` (lattice drive tables).
+
     pub t846w: &'a [u8],
-    /// `D_743908`, 6 s16 (mixer brackets).
+
     pub t908: &'a [i16],
-    /// `D_7438FE`, 6 s16 (mixer values).
+
     pub t89e: &'a [i16],
-    /// `D_743912`, 5 s16 (mixer divisors).
+
     pub t912: &'a [i16],
-    /// Window around `D_7873a6` (phrase tables).
+
     pub t787: &'a [u8],
-    /// Offset of `t787[0]` from `D_7873a6` (may be negative).
+
     pub w787: i32,
-    /// 128 ROM bytes just before `D_74391c` (`mora_align` indexes `s88`).
+
     pub t7439pre: &'a [u8],
-    /// ROM word `D_743944` value (pad-slot fill).
+
     pub k743944: u32,
-    /// `D_743948` to end of code (note articulation bytes; the corpus
-    /// indexes up to ~130K, still mapped ROM, so no tighter bound).
+
     pub t743948: &'a [u8],
-    /// `D_74269c`, 144 bytes (phone class ids, all < 28 in ROM).
+
     pub t74269c: &'a [u8],
-    /// `D_74272c`, 144 bytes (phone group ids, all < 27 in ROM).
+
     pub t74272c: &'a [u8],
-    /// `D_7427bc`, 144 bytes (prosody ids, all <= 40 in ROM).
+
     pub t7427bc: &'a [u8],
-    /// `D_74284c` window, 2400 bytes read as LE u16 (7x154 + 92).
+
     pub t74284c: &'a [u8],
-    /// `D_7431ec` window, 216 bytes read as LE s16 (108 entries).
+
     pub t7431ec: &'a [u8],
-    /// `D_743380` window, 200 bytes read as LE s16 (100 entries).
+
     pub t743380: &'a [u8],
-    /// `D_7434be` window, 260 bytes read as LE s16 (130 entries).
+
     pub t7434be: &'a [u8],
-    /// `D_74362e`, 576 + 64 trailing bytes (144 kana-name entries;
-    /// trailing bytes keep `strcmp0` overruns bit-exact).
+
     pub t74362e: &'a [u8],
     pub t7435f4: &'a [u8],
-    /// `D_7868c4` kana table, `(k7873a4+1)*12` bytes (12B entries).
+
     pub t7868c4: &'a [u8],
-    /// ROM s16 `D_7873a4` (kana entry count; 232 in ROM).
+
     pub k7873a4: i16,
-    /// `D_743614` window, 16 bytes (three stride-4 2-char entries).
+
     pub t743614: &'a [u8],
-    /// `D_743620` window, 16 bytes (three stride-4 1-char entries).
+
     pub t743620: &'a [u8],
-    /// `D_74362c` string + NUL (8 bytes).
+
     pub t74362c: &'a [u8],
-    /// `D_722727`, 16 bytes (five stride-3 2-char entries + NULs).
+
     pub t722727: &'a [u8],
-    /// 38 phoneme-name strings (`D_722740` pointer table resolved).
+
     pub ph38: [&'a [u8]; 38],
-    /// `D_740bc4`, 53 tag entries of 120 bytes for `tag_parse`.
+
     pub tag53: &'a [u8],
-    /// `D_7227d8`, 8 bytes compared against the job object in `dispatch`.
+
     pub t7227d8: &'a [u8],
-    /// Full JP `code.bin` (base 0x100000). Mora-unit pointers in the
-    /// alignment array are engine offsets for small values but absolute
-    /// ROM addresses when they point at corpus-resident units (e.g.
-    /// 0x7703e4 on the `long` phrase's join15), so `mora_render`,
-    /// `mora_dsp` and `synth_vocoder` read unit bytes through
-    /// `unit_byte`/`unit_s16`, which select engine or ROM by address.
+
     pub code: &'a [u8],
 }
 
-/// One unit byte from engine memory or ROM: unit pointers below
-/// 0x14000 are engine-relative, 0x100000.. are absolute ROM addresses
-/// into `code` (base 0x100000). Anything else is out of model and
-/// panics loudly.
 #[inline]
 fn unit_byte(eng: &Engine, code: &[u8], uo: usize, off: usize) -> u8 {
     let a = uo.wrapping_add(off);
@@ -1495,7 +1370,6 @@ fn unit_byte(eng: &Engine, code: &[u8], uo: usize, off: usize) -> u8 {
     }
 }
 
-/// Little-endian s16 at a unit field via [`unit_byte`].
 #[inline]
 fn unit_s16(eng: &Engine, code: &[u8], uo: usize, off: usize) -> i16 {
     let lo = unit_byte(eng, code, uo, off) as u16;
@@ -1503,10 +1377,6 @@ fn unit_s16(eng: &Engine, code: &[u8], uo: usize, off: usize) -> i16 {
     (lo | (hi << 8)) as i16
 }
 
-/// Append-only PCM capture fed by `mix_pcm`, one s16 per mixed sample in
-/// write order (the stream the ARM reference drains from the ring and
-/// `mixer_pcm` logs natively). Rows pass a scratch log; the finish line
-/// sizes it for the longest phrase. Pushing past capacity panics loudly.
 pub struct PcmLog<'a> {
     pub buf: &'a mut [i16],
     pub len: usize,
@@ -1524,15 +1394,6 @@ impl<'a> PcmLog<'a> {
     }
 }
 
-/// Null-link rule for node code: links are mem offsets and null is 0.
-/// Structs never sit at offset 0 (the harness lays them out past a guard
-/// window, and composition views start before the first node), so plain
-/// `== 0` checks match the ARM exactly, byte for byte.
-
-
-/// fn_1a524c: engine voice render into ring `buf` (engine offset).
-/// `n` stays within the 480-word stack tmp (avg block needs `n <= 240`);
-/// the harness matches real shapes.
 pub fn voice_render(eng: &mut Engine, n: i32, buf: usize, tab: &Tables) -> i32 {
     let mut tmp = [0u8; 960];
     let r5 = n;
@@ -1565,8 +1426,7 @@ pub fn voice_render(eng: &mut Engine, n: i32, buf: usize, tab: &Tables) -> i32 {
         }
     }
     if eng.rd32(0xe6d4) == 1 {
-        // Dynamically dead for ring bufs with n <= 240 (the clip loop
-        // cannot reach 0xE6D4 without faulting first); kept faithful.
+
         let (lo, hi) = eng.mem.split_at_mut(0xafc0);
         lattice_filter(r5, 6, tab.t790, hi, 0, lo, buf, &mut tmp[..], 0);
         copy_block(lo, buf, &tmp, r5);
@@ -1632,11 +1492,7 @@ pub fn voice_render(eng: &mut Engine, n: i32, buf: usize, tab: &Tables) -> i32 {
         if fnp == 0 {
             return n2;
         }
-        // Voice-queue push (ROM 0x607B10): writes stay inside the voice
-        // struct page, engine untouched (vq probe: 0 engine diffs). The
-        // ROM splits on `bgt`: nbytes > 0 returns cookie + 88 after the
-        // queue copy; nbytes <= 0 tails to the unlock at 0x160204 (r0 0).
-        // The lock-bail (`beq 0x607ba8`) never fires in renders.
+
         let cookie = eng.rd32(0xafe0);
         let _ = fnp;
         if (n2 as i16) as i32 > 0 {
@@ -1647,8 +1503,6 @@ pub fn voice_render(eng: &mut Engine, n: i32, buf: usize, tab: &Tables) -> i32 {
     }
 }
 
-/// fn_1a51e0: ring wrap check; renders + silences when behind, then parks
-/// both positions on the slot. `n`/positions are offsets here.
 pub fn ring_wrap(eng: &mut Engine, tab: &Tables) {
     let w = eng.rd32(0x858C);
     let r = eng.rd32(0x8584);
@@ -1665,8 +1519,6 @@ pub fn ring_wrap(eng: &mut Engine, tab: &Tables) {
     }
 }
 
-/// fn_1a567c: ring advance by `n` samples with wrap/swap handling.
-/// Returns the (possibly rewound) read position; `(u32)n` for `n < 0`.
 pub fn ring_advance(eng: &mut Engine, n: i32, tab: &Tables) -> u32 {
     if n < 0 {
         return n as u32;
@@ -1682,9 +1534,7 @@ pub fn ring_advance(eng: &mut Engine, n: i32, tab: &Tables) -> u32 {
         ring_silence(eng, s as u32, 0x81C4);
         eng.wr32(0x858C, 0x83A4);
     } else if act == 0x83A4 {
-        // Goto lattice: cur < buf0 reaches `wrap` where &A (0x8584) is
-        // above cur, so no swap; buf0 <= cur < buf1 swaps; cur >= buf1
-        // swaps iff cur passes &A.
+
         if (0x81C4 <= cur && cur < 0x83A4) || cur > 0x8584 {
             let s = eng.rds16(0x859A) as i32;
             voice_render(eng, s, 0x83A4, tab);
@@ -1701,12 +1551,6 @@ pub fn ring_advance(eng: &mut Engine, n: i32, tab: &Tables) -> u32 {
     a
 }
 
-// --- batch B: classifier, envelope, energy norm, pitch ramp ---
-
-/// fn_6b21ac: classify the 1-2 bytes before cursor `p` against borrowed
-/// ROM string tables (`s1`: three 1-char entries at stride 4 from
-/// `D_743620`; `s2`: three 2-byte entries at stride 4 from `D_743614`).
-/// Returns 5/10/15 for code 0/1/2, 10 when nothing matches.
 pub fn num_class(mem: &[u8], p: usize, s1: &[u8], s2: &[u8]) -> u16 {
     let mut tmp = [0u8; 4];
     libc::strncpy0(&mut tmp, &mem[p.wrapping_sub(1)..], 1);
@@ -1734,8 +1578,6 @@ pub fn num_class(mem: &[u8], p: usize, s1: &[u8], s2: &[u8]) -> u16 {
     }
 }
 
-/// One envelope stage of `fn_1a4ed0`: odd head sample plus `half >> 1`
-/// pairs, each sample scaled by `(v * (e*k + acc)) >> 16`.
 fn env_stage(mem: &mut [u8], dst: usize, e: i32, acc: i32, half: i32) {
     let mut k = 0i32;
     let mut pb = dst.wrapping_sub(2);
@@ -1769,9 +1611,6 @@ fn env_stage(mem: &mut [u8], dst: usize, e: i32, acc: i32, half: i32) {
     }
 }
 
-/// fn_1a4ed0: envelope windowing over the 0x7FE0 window. `val > 0` runs
-/// stage A (guarded by `diff`/`half`), `val == 0` runs stages B then C,
-/// `val < 0` returns. Always returns 0.
 pub fn env_window(mem: &mut [u8], base: usize, val: i32) -> i32 {
     let t = s16_at(mem, base + 0x7fe0, 0) as i32;
     let diff = t.wrapping_sub(val) as i16 as i32;
@@ -1809,10 +1648,6 @@ pub fn env_window(mem: &mut [u8], base: usize, val: i32) -> i32 {
     0
 }
 
-/// fn_6b1998: energy-normalize `n` samples (`src` u16) into `dst` (s16)
-/// with an isqrt-ish gain, returning the gain. `factor` is the full R0
-/// (the ROM `smulbb` narrows it); the pair-summed energy equals the plain
-/// sum mod 2^32, ported as such.
 pub fn energy_norm(
     factor: i32,
     srcb: &[u8],
@@ -1956,9 +1791,6 @@ pub fn energy_norm(
     f as i32
 }
 
-/// fn_6b1fc4: pitch ramp of `n` s16 at engine `doff`, starting from the
-/// sample before it, split by the 0xE75C threshold into flat start,
-/// slope, and flat end runs.
 pub fn pitch_ramp(eng: &mut Engine, doff: usize, n: i32, endv: i32) {
     let mut startv = eng.rds16(doff.wrapping_sub(2)) as i32;
     let mut endv = endv;
@@ -1973,11 +1805,7 @@ pub fn pitch_ramp(eng: &mut Engine, doff: usize, n: i32, endv: i32) {
         tval = 1;
     }
     if tval != 0 {
-        // Target-true split: the flat/slope/flat division applies only when
-        // n exceeds tval; otherwise the whole note is one slope run with
-        // the n-based step (ARM `cmp n,tval` selects; tval comes from E75C,
-        // nonzero only via id-16 tuning). Counts stay nonnegative, so the
-        // write pointer only advances.
+
         let (r8, r9, nn) = if n > tval {
             let r8 = (n.wrapping_sub(tval)).wrapping_mul(4) / 10;
             let r9 = (n.wrapping_sub(tval)).wrapping_sub(r8);
@@ -2018,11 +1846,6 @@ pub fn pitch_ramp(eng: &mut Engine, doff: usize, n: i32, endv: i32) {
     }
 }
 
-// --- batch B: idiv + large mixer ---
-
-/// ROM fn_300dd4 (__aeabi_idiv): signed quotient and remainder.
-/// Divide-by-zero yields `(0, a)`; INT_MIN/-1 wraps to (INT_MIN, 0).
-/// Callers that only need `r0` use `.0`.
 pub fn idiv_full(a: u32, b: u32) -> (i32, i32) {
     let a = a as i32;
     let b = b as i32;
@@ -2035,8 +1858,6 @@ pub fn idiv_full(a: u32, b: u32) -> (i32, i32) {
     }
 }
 
-/// Piecewise-linear map shared by `mixer_6b`'s loop and tail: bracket
-/// `prod` in `t908[1..5]`, interpolating `t89e` over `t912`.
 fn pwlin(prod: i32, t908: &[i16], t89e: &[i16], t912: &[i16]) -> i32 {
     let mut prod = prod;
     let mut i = 1usize;
@@ -2061,8 +1882,6 @@ fn pwlin(prod: i32, t908: &[i16], t89e: &[i16], t912: &[i16]) -> i32 {
     }
 }
 
-/// fn_6b1bd0: large mixer over a node chain in the engine (`fp` head, `end`
-/// terminator, offsets) with engine head words. Always returns 0.
 pub fn mixer_6b(
     fp: usize,
     p1: i32,
@@ -2213,12 +2032,6 @@ fn u32_at(mem: &[u8], off: usize) -> u32 {
     u32::from_le_bytes([mem[off], mem[off + 1], mem[off + 2], mem[off + 3]])
 }
 
-// --- batch B: tag parser + phrase emitter ---
-
-/// fn_19ce6c: text tag parser, in place. Copies `text` through a 0x400
-/// frame buffer, expanding `<\name` tags via the borrowed ROM table
-/// (`tab`, 53 entries of 120 bytes at `D_740bc4`), then copies back.
-/// `text` needs a 64-zero margin past the NUL (tag scans overrun it).
 pub fn tag_parse(text: &mut [u8], toff: usize, tab: &[u8]) {
     let mut buf = [0u8; 0x400];
     let mut a = [0u8; 32];
@@ -2350,8 +2163,6 @@ pub fn tag_parse(text: &mut [u8], toff: usize, tab: &[u8]) {
     libc::strcpy0(&mut text[toff..], &buf);
 }
 
-/// s16 read across 1a15ac's `out[10]`/`stage[32]` frame pair (`out` sits
-/// at sp+32, `stage` at sp+52): indices past `out` read `stage` bytes.
 fn frame_s16(out: &[i16; 10], stage: &[u8; 32], oi: i32) -> i16 {
     if oi < 10 {
         out[oi as usize]
@@ -2361,9 +2172,6 @@ fn frame_s16(out: &[i16; 10], stage: &[u8; 32], oi: i32) -> i16 {
     }
 }
 
-
-/// emit_1a1814: node emitter. `p` walks engine nodes, `q`/`st` engineine, `tab`
-/// the ROM window with the selected table at `ti`. Always returns 0.
 fn emit_nodes(
     mut p: usize,
     eng: &mut Engine,
@@ -2458,8 +2266,6 @@ fn emit_nodes(
     0
 }
 
-/// fn_1a15ac: phrase emitter over 14-byte engine nodes `b..=c` into
-/// engine tables (`d` = engine). Always returns 0.
 pub fn phrase_emit(
     mode: i32,
     b: usize,
@@ -2530,9 +2336,7 @@ pub fn phrase_emit(
         + stage[2] as i32 * 8;
     let ti = (off - wlo) as usize;
     let vv = u16_at(tab, ti + 2) as i32;
-    // ARM (0x1a1728-0x1a1738) returns -1 both when the entry is missing
-    // (vv==0) and when its table pointer is null (r8==0); only a present
-    // entry continues to emit.
+
     if vv == 0 || 0x7873A6u32.wrapping_add(off as u32) == 0 {
         return -1;
     }
@@ -2560,11 +2364,6 @@ pub fn phrase_emit(
     0
 }
 
-// --- batch C: vocoder synth + mora render ---
-
-/// One lattice multiply step of `fn_19f8c0`, exactly as the asm: magnitude
-/// product of the s16 sample and the 32-bit state (16-bit halves with
-/// 0x8000 rounding), sign reapplied afterwards.
 fn lat_prod(v: i32, b: i32) -> i32 {
     let mut u7 = ((v as i16 as i32) << 16) as u32;
     let mut sgn = 1i32;
@@ -2588,10 +2387,6 @@ fn lat_prod(v: i32, b: i32) -> i32 {
     tot.wrapping_mul(sgn)
 }
 
-/// fn_19f8c0: lattice vocoder synth for one mora. `ioff` addresses the
-/// mora descriptor (engine offset); `ooff` the engine out word (0x7DF6).
-/// `c0raw` stays in 0..=10 (wider shapes smash the frame pairs on ARM);
-/// the harness matches real shapes.
 pub fn synth_vocoder(eng: &mut Engine, ioff: usize, ooff: usize, tab: &Tables) -> i32 {
     if unit_byte(eng, tab.code, ioff, 3) == 0 {
         eng.wr16(ooff, 0);
@@ -2775,9 +2570,6 @@ pub fn synth_vocoder(eng: &mut Engine, ioff: usize, ooff: usize, tab: &Tables) -
     v
 }
 
-/// fn_19e078: mora DSP chain (synth + pitch/duration shaping). `moff`
-/// addresses the mora descriptor (engine offset); shaping tables come
-/// from `tab`. Always returns 1.
 pub fn mora_dsp(eng: &mut Engine, moff: usize, pitch: i32, tab: &Tables) -> i32 {
     let synth = synth_vocoder(eng, moff, 0x7DF6, tab);
     eng.wr16(0x7F00 + 220, synth as i16 as u16);
@@ -2830,10 +2622,6 @@ pub fn mora_dsp(eng: &mut Engine, moff: usize, pitch: i32, tab: &Tables) -> i32 
     1
 }
 
-/// fn_1a1b14: render-all loop over `count` moras. The unit pointer
-/// array at `uoff`, the s16 note array at `noff`, and the mora
-/// descriptors all live in the engine; unit entries are engine offsets
-/// (the test converts guest absolutes).
 pub fn mora_render(
     eng: &mut Engine,
     uoff: usize,
@@ -2842,8 +2630,6 @@ pub fn mora_render(
     tab: &Tables,
     pcm: &mut PcmLog,
 ) {
-
-
 
     let mut i = 0i16;
     loop {
@@ -2887,10 +2673,6 @@ pub fn mora_render(
     }
 }
 
-// --- batch C: prosody walker ---
-
-/// strlen-scan helper for `prosody_walk`: `(length, last byte)` over a
-/// NUL-terminated run, length counted like the ROM `(s16` counter).
 fn scan_len(mem: &[u8], mut o: usize) -> (i32, i32) {
     if mem[o] == 0 {
         return (0, 0);
@@ -2908,21 +2690,18 @@ fn scan_len(mem: &[u8], mut o: usize) -> (i32, i32) {
     (s0 as i32, ch)
 }
 
-/// fn_1a00ac: prosody walker over node lists in the engine (offsets, null is
-/// 0; structs never sit at offset 0), then `mixer_6b` calls. `fp0` is
-/// the head link. Always returns 0.
 pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
     if fp0 == 0 {
         return 0;
     }
     let mut fp = fp0;
-    // Phase 1.
+
     loop {
         let c0 = eng.mem[fp as usize] as i8 as i32;
         let mut r7 = eng.rd32(fp as usize + 4);
         let mut sl = 0i32;
         if c0 > 0 {
-            // inner (also re-entered from l4a0):
+
             loop {
                 let r4 = eng.rd32(r7 as usize + 4);
                 let r6 = eng.rd32(r4 as usize + 24);
@@ -2961,7 +2740,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                         }
                     }
                 }
-                // inner_tail:
+
                 let t0 = eng.mem[r7 as usize] as i8 as i32;
                 let mut r8 = 0i32;
                 let mut r5 = 0i32;
@@ -2982,7 +2761,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                     }
                 }
                 let mut ip = eng.mem[r7 as usize + 1] as i8 as i32;
-                // f8dispatch + A-chain: decide redispatch r2v or jump.
+
                 enum Route {
                     Redisp(i32),
                     D274,
@@ -3004,14 +2783,14 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                     } else {
                         let t = s16_at(eng.mem, 0xE700 + 68, 0) as i32;
                         if t == 1 {
-                            // do_19c chain
+
                             if r8 == 2 {
-                                // do_1b4
+
                                 if ip == 0 {
                                     eng.mem[r7 as usize + 1] = 1;
                                     route = Route::Redisp(-1);
                                 } else if ip != 1 {
-                                    // do_24c
+
                                     if ip == 2 {
                                         route = Route::D274;
                                     } else if r8 > ip
@@ -3027,7 +2806,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                                     route = Route::Redisp(-1);
                                 }
                             } else if r8 < 2 || ip != 1 {
-                                // do_24c
+
                                 if ip == 2 {
                                     route = Route::D274;
                                 } else if r8 > ip && r8 != 2 && ((r8 as u32 & 0x80000001) == 1)
@@ -3037,9 +2816,9 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                                     route = Route::Redisp(1);
                                 }
                             } else {
-                                // do_1d4
+
                                 if eng.mem[r6 as usize + 5] == 76 {
-                                    // do_254 -> do_24c_mid
+
                                     if r8 > ip && r8 != 2 && ((r8 as u32 & 0x80000001) == 1) {
                                         route = Route::Redisp(-1);
                                     } else {
@@ -3081,7 +2860,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                         } else if t != 2 {
                             route = Route::Redisp(0);
                         } else {
-                            // do_308
+
                             if r8 <= 3 {
                                 eng.mem[r7 as usize + 1] = r8 as u8;
                             } else {
@@ -3110,7 +2889,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                         r2v = v;
                         let b0 = eng.mem[r7 as usize + 1];
                         if b0 == 1 {
-                            // do_334 -> out458
+
                             r9 -= r9 >> 2;
                             let mut t0 = r9 + 512;
                             t0 >>= 10;
@@ -3134,7 +2913,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                     }
                 }
                 if !to_out458 {
-                    // do_28c:
+
                     ip = eng.mem[r7 as usize + 1] as i8 as i32;
                     r0v = eng.rd32(r6 as usize + 16);
                     r3v = 3;
@@ -3151,7 +2930,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                             r1v = r8;
                         }
                     }
-                    // do_2c8:
+
                     if r0v == 0 {
                         to_out458 = true;
                     } else {
@@ -3159,8 +2938,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                         if b4 == 81 {
                             r3v -= 1;
                             r3v = r3v as i16 as i32;
-                            // ARM beqs from the b4==81 check straight to l3c8
-                            // (0x1a0474), skipping the do_3c4 advance below.
+
                         } else if r8 > 1 {
                             if r2v == 0 {
                                 let mut t4 = r9 + (r9 << 1);
@@ -3185,15 +2963,14 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                             }
                         }
                         if !to_out458 {
-                            // do_3c4 advance, skipped on the b4==81 path
-                            // (ARM beqs to l3c8 instead).
+
                             if b4 != 81 {
                                 r0v = eng.rd32(r0v as usize + 16);
                             }
-                            // l3c8:
+
                             if r3v <= r1v {
                                 ip = (r9 + 512) >> 10;
-                                // l3d8 loop:
+
                                 loop {
                                     let skip_l3f4 = r2v != 0
                                         && r3v != r1v
@@ -3203,7 +2980,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                                             s16_at(&eng.mem[..], r0v as usize + 12, 0) as i32 + ip;
                                         put_s16(&mut eng.mem[..], r0v as usize + 12, 0, t4 as i16);
                                     }
-                                    // do_400:
+
                                     let b4 = eng.mem[r0v as usize + 4];
                                     if b4 == 81 && r3v >= 2 {
                                         let t4 = eng.mem[r7 as usize + 1] as i8 as i32;
@@ -3212,7 +2989,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                                             r3v = r3v as i16 as i32;
                                         }
                                     }
-                                    // l42c:
+
                                     r3v += 1;
                                     r0v = eng.rd32(r0v as usize + 16);
                                     r3v = r3v as i16 as i32;
@@ -3221,7 +2998,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                                     }
                                 }
                             }
-                            // do_440:
+
                             if r0v == 0 {
                                 to_out458 = true;
                             } else {
@@ -3237,8 +3014,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                                 } else {
                                     let r7b8 = eng.rd32(r7 as usize + 8) as usize;
                                     let t1 = eng.rd16(r7b8 + 18) as i32;
-                                    // ARM skips the store unless all three hold
-                                    // (sliceJ-3: the C stores unconditionally).
+
                                     if t1 == 0 && r8 > 1 && r2v == 0 {
                                         r2v = (r9 + 0x800) >> 12;
                                         let t1 = s16_at(&eng.mem[..], r0v as usize + 12, 0) as i32;
@@ -3250,7 +3026,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                         }
                     }
                 }
-                // l4a0:
+
                 let t1 = eng.mem[fp as usize] as i8 as i32;
                 let t0 = sl + 1;
                 r7 = eng.rd32(r7 as usize + 12);
@@ -3260,13 +3036,13 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                 }
             }
         }
-        // fp_next:
+
         fp = eng.rd32(fp as usize + 8);
         if fp == 0 {
             break;
         }
     }
-    // Phase 2.
+
     let mut sp8 = fp0;
     let mut endp = 0;
     let mut e5 = 0i32;
@@ -3277,20 +3053,20 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
         }
         let mut r4b = sp8;
         let mut r1b = 0i32;
-        // l4ec:
+
         loop {
             let cc = eng.mem[r4b as usize] as i8 as i32;
             let mut fpc = 0i32;
             let sp4 = cc;
             let mut r9p = eng.rd32(r4b as usize + 4);
             if cc > 0 {
-                // l504:
+
                 loop {
                     let lr = eng.mem[r9p as usize] as i8 as i32;
                     let mut ipmap = eng.rd32(r9p as usize + 4);
                     sl = 0;
                     if lr > 0 {
-                        // l518:
+
                         loop {
                             let b3 = eng.mem[ipmap as usize + 4] as i8 as i32;
                             let mut dl = eng.rd32(ipmap as usize + 24);
@@ -3327,8 +3103,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                             let u5 = eng.rd16(ipmap as usize + 18) as i32;
                             r1b = r1b.wrapping_add(s0 + s3);
                             let mut jumped = false;
-                            // l5a4: reached when u5 != 0 (fall-through) or when
-                            // u5 == 0 with the link conditions (goto).
+
                             let mut do_l5a4 = u5 != 0;
                             if u5 == 0 {
                                 let t0 = eng.rd32(r4b as usize + 8);
@@ -3374,7 +3149,7 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                             }
                         }
                     }
-                    // l61c:
+
                     let nn = fpc + 1;
                     r9p = eng.rd32(r9p as usize + 12);
                     fpc = nn as i16 as i32;
@@ -3383,22 +3158,16 @@ pub fn prosody_walk(eng: &mut Engine, fp0: u32, tab: &Tables) -> i32 {
                     }
                 }
             }
-            // next_r4:
+
             r4b = eng.rd32(r4b as usize + 8);
             if r4b == 0 {
                 break 'outer2;
             }
-            r1b = 0;
         }
     }
     0
 }
 
-// --- batch C: list builder ---
-
-/// fn_1a50f8: phrase list builder over the node chain at engine `r0`
-/// (0 = empty), emitting cursor lists at `r1`/`r2`. Stored links are
-/// engine offsets (the test re-adds the base on pointer words).
 pub fn list_build(eng: &mut Engine, r0: u32, r1: usize, r2: usize) {
     eng.mem[r1] = 0;
     if r0 == 0 {
@@ -3453,10 +3222,6 @@ pub fn list_build(eng: &mut Engine, r0: u32, r1: usize, r2: usize) {
     eng.wr32(r2 + 8, 0);
 }
 
-// --- batch C: phrase driver ---
-
-/// fn_1a1298: phrase-range driver over 14-byte engine nodes at `p` in voice
-/// memory, dispatching `phrase_emit` per range with merge handling.
 pub fn phrase_drive(eng: &mut Engine, p: usize, tab: &Tables) {
     let mut cnt = 0i16;
     let mut cur = p;
@@ -3517,7 +3282,7 @@ pub fn phrase_drive(eng: &mut Engine, p: usize, tab: &Tables) {
             }
             let rc = phrase_emit(mode, aa, mark, eng, tab);
             if rc >= 0 {
-                // update
+
                 if state != -2 {
                     state = 0;
                 } else {
@@ -3530,7 +3295,7 @@ pub fn phrase_drive(eng: &mut Engine, p: usize, tab: &Tables) {
                 continue;
             }
         }
-        // merge:
+
         if state >= 0 {
             if eng.mem[anchor] == eng.mem[mark] && anchor + 14 == mark {
                 let mut s = s16_at(&eng.mem[..], mark + 2, 0) as i32 + s16_at(&eng.mem[..], anchor + 2, 0) as i32;
@@ -3552,7 +3317,7 @@ pub fn phrase_drive(eng: &mut Engine, p: usize, tab: &Tables) {
                         eng.mem[pm] = 15;
                     }
                     if phrase_emit(1, anchor, pm, eng, tab) < 0 {
-                        // ARM orig 0x1A153C passes -2 here, not -1.
+
                         phrase_emit(-2, anchor, anchor, eng, tab);
                     }
                     eng.mem[pm] = b;
@@ -3562,7 +3327,7 @@ pub fn phrase_drive(eng: &mut Engine, p: usize, tab: &Tables) {
                 state = 0;
             }
         }
-        // update:
+
         if state != -2 {
             state = 0;
         } else {
@@ -3574,27 +3339,11 @@ pub fn phrase_drive(eng: &mut Engine, p: usize, tab: &Tables) {
         }
     }
     if eng.mem[mark] != 7 {
-        // ARM orig 0x1A1598 passes -2 here, not -1.
+
         phrase_emit(-2, mark, mark, eng, tab);
     }
 }
 
-/// fn_19f01c: `#` command parser over the 0xE700 param block.
-/// Reached once per render with p1=1 and non-`#` romaji text, which
-/// returns 0 with no writes (ARM-verified: `ldrb/cmp #35/movne/bne`).
-/// The `#` switch body never fires on the corpus; translated from C.
-/// fn_19f01c: `#` command parser over the 0xE700 param block.
-///
-/// ARM-verified command map (snapshot runner): plain form SETs the slot,
-/// `+` form AD identical (`-` counts as `+`, `+-N` is `-N` via text[3..]);
-/// p1 selects the voice slot (p1==0) or its +0x30 shadow (p1==1).
-/// Letters: A E704/34 (0..400), B E702/32 warp (0xDAC..0xDAC*2),
-/// C enum (1/2 -> E710, other nonzero -> E714, 0 -> nothing),
-/// D/E mirror +/-100/5/5/10/10, F resets warp, G E71C/4C (0..100),
-/// I E70E/3E, J E70C/3C (0..100), M warp base, P E706/36,
-/// R E716/46 (0..1000, negatives keep), S E70A/3A (floor 20),
-/// T E72C/5C (plain only), V E708/38 (cap 360), X quality floor/computed,
-/// Z copies E70A/E70C to E73A/E73C, Q and anything else are no-ops.
 pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
     use crate::jp::libc::strtol10;
     if text[0] != b'#' {
@@ -3603,7 +3352,7 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
     let c1 = text[1] as i8;
     if c1 == b'M' as i8 {
         eng.wr16(0xE700 + 50, 0x1200);
-        // ARM orig returns -3 here (slot456=-3 path in token_units).
+
         return -3;
     }
     if c1 == b'r' as i8 {
@@ -3680,9 +3429,7 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
         }
         if c1 == b'X' as i8 {
             let v = strtol10(&text[2..]);
-            // ARM orig clamps to 80..130 and calls quality_set (0x1a2e38),
-            // then returns -3; the old hardcoded w1=810 mismatched its
-            // computed 818.
+
             let x = v.clamp(80, 130);
             quality_set(eng, x, p1);
             return -3;
@@ -3698,7 +3445,7 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
     if (v0 as u32) < 10 {
         match v0 {
             0 => {
-                // do_A
+
                 let v = strtol10(&text[2..]);
                 let r1 = if v < 0 { 0 } else if v > 400 { 400 } else { v as i16 };
                 if p1 == 0 {
@@ -3709,7 +3456,7 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
                 return -3;
             }
             1 => {
-                // do_B: warp current (p1==0) or base (p1==1).
+
                 let slot = if p1 == 0 { 0xE700 + 2 } else { 0xE700 + 50 };
                 if text[2] == b'+' {
                     let v = strtol10(&text[3..]);
@@ -3722,7 +3469,7 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
                 return -3;
             }
             2 => {
-                // do_C: phrase enum; 0 keeps, 1/2 select, else flag.
+
                 let v = strtol10(&text[2..]);
                 let (w10, w14) = if p1 == 0 {
                     (0xE700 + 16, 0xE700 + 20)
@@ -3739,7 +3486,7 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
                 return -3;
             }
             3 => {
-                // do_D
+
                 eng.wr16(0xE700 + 50, clamp_dac(eng.rds16(0xE700 + 50) as i32 - 100) as u16);
                 eng.wr16(0xE700 + 52, clamp_u(eng.rds16(0xE700 + 52) as i32 - 5) as u16);
                 eng.wr16(0xE700 + 54, clamp_u(eng.rds16(0xE700 + 54) as i32 - 5) as u16);
@@ -3748,7 +3495,7 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
                 return -3;
             }
             4 => {
-                // do_E
+
                 eng.wr16(0xE700 + 50, clamp_dac(eng.rds16(0xE700 + 50) as i32 + 100) as u16);
                 eng.wr16(0xE700 + 52, clamp_u(eng.rds16(0xE700 + 52) as i32 + 5) as u16);
                 eng.wr16(0xE700 + 54, clamp_u(eng.rds16(0xE700 + 54) as i32 + 5) as u16);
@@ -3757,13 +3504,13 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
                 return -3;
             }
             5 => {
-                // do_F: warp reset.
+
                 eng.wr16(0xE700 + 50, 0x13C2);
                 eng.wr8(0xE730, 0);
                 return -3;
             }
             6 => {
-                // do_G
+
                 let v = strtol10(&text[2..]);
                 let r1 = v.clamp(0, 100);
                 if p1 == 0 {
@@ -3774,7 +3521,7 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
                 return -3;
             }
             8 => {
-                // do_I
+
                 let v = strtol10(&text[2..]);
                 if p1 == 0 {
                     eng.wr16(0xE700 + 14, v as u16);
@@ -3784,7 +3531,7 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
                 return -3;
             }
             9 => {
-                // do_J
+
                 let v = strtol10(&text[2..]);
                 let r1 = v.clamp(0, 100);
                 if p1 == 0 {
@@ -3797,12 +3544,10 @@ pub fn tag_command(eng: &mut Engine, text: &[u8], p1: i32) -> i32 {
             _ => return -3,
         }
     }
-    // Anything unhandled (K, L, N, O, Q, non-letters like SJIS lead bytes):
-    // ARM falls through to its -3 return (slot456=-3 path in token_units).
+
     -3
 }
 
-/// Warp clamp shared by the `#B` setter: 0xDAC..0xDAC*2.
 #[inline]
 fn clamp_dac(v: i32) -> i16 {
     if v < 0xDAC {
@@ -3814,7 +3559,6 @@ fn clamp_dac(v: i32) -> i16 {
     }
 }
 
-/// 0..400 clamp shared by the `#D`/`#E` slot trims.
 #[inline]
 fn clamp_u(v: i32) -> i16 {
     if v < 0 {
@@ -3826,7 +3570,6 @@ fn clamp_u(v: i32) -> i16 {
     }
 }
 
-/// fn_19c2e8 case 1/default: voice preset lookup + `#` replay.
 fn preset_voice(eng: &mut Engine, tab: &[u8], val: i32) -> i32 {
     use crate::jp::libc::{strchr0, strcmp0};
     let preset: &[u8] = match val {
@@ -3881,10 +3624,6 @@ fn preset_voice(eng: &mut Engine, tab: &[u8], val: i32) -> i32 {
     }
 }
 
-/// fn_19c2e8: setParam. Reached ids: 3, 4, 6, 7, 8, 10, 11, 13, 14
-/// (range-check + store; 6 routes to `quality_set`). `tab` borrows the
-/// ROM preset table at D_715514. Ids 1/2 use presets; 0 and 17+ fail
-/// (ARM-verified: only ids 1..16 are valid).
 pub fn set_param(eng: &mut Engine, tab: &[u8], id: i32, val: i32) -> i32 {
     use crate::jp::libc::{strchr0, strcmp0};
     if flag_busy(eng) != 0 {
@@ -4064,9 +3803,6 @@ pub fn set_param(eng: &mut Engine, tab: &[u8], id: i32, val: i32) -> i32 {
     }
 }
 
-/// fn_19bb58: getParam. Ids 3..16 read the param fields back (s16 reads
-/// sign-extend; id 12 rebuilds the enum: nonzero E714 means 3, else the
-/// E710 word); every other id yields INT_MIN.
 pub fn get_param(eng: &Engine, id: i32) -> i32 {
     match id {
         3 => eng.rds16(0xE70A) as i32,
@@ -4093,14 +3829,11 @@ pub fn get_param(eng: &Engine, id: i32) -> i32 {
     }
 }
 
-/// 32-bit wrapping address add for guest pointers held as offsets.
 #[inline]
 fn aadd(a: usize, d: i32) -> usize {
     (a as u32).wrapping_add(d as u32) as usize
 }
 
-/// Odd + paired stride slot fill: `n` slots of `w124 + i*10` stored at
-/// `w128 + (i<<2)` (`mora_align` shared tail; `w128` not advanced).
 fn fill_stride(eng: &mut Engine, n: i32, w124: usize, w128: usize) {
     let mut f2 = n & 1;
     let mut f3 = 0;
@@ -4125,8 +3858,6 @@ fn fill_stride(eng: &mut Engine, n: i32, w124: usize, w128: usize) {
     }
 }
 
-/// Odd + paired const slot fill: `n` slots of `v` at advancing `w128`.
-/// Returns the advanced `w128`.
 fn fill_const(eng: &mut Engine, n: i32, v: u32, mut w128: usize) -> usize {
     if (n & 1) != 0 {
         eng.wr32(w128, v);
@@ -4148,11 +3879,6 @@ fn fill_const(eng: &mut Engine, n: i32, v: u32, mut w128: usize) -> usize {
     w128
 }
 
-/// fn_19d1f0: mora alignment pass. `a0`/`a1` bound the 14-byte mora
-/// list, `a2`/`a3` the frame/slot tables being built (all engine
-/// offsets; slots store engine-relative offsets). Returns the s16
-/// frame total. The row harness keeps `a1 - a0` realistic so the
-/// `s60` loop and slot walks stay in-engine, as on ARM.
 pub fn mora_align(
     eng: &mut Engine,
     tab: &Tables,
@@ -4264,10 +3990,10 @@ pub fn mora_align(
     let w70 = 44800usize;
     let _ = lr;
     loop {
-        // mora:
+
         r7 = eng.rds16(r4 + 2) as i32;
         if r7 < 0 {
-            // next:
+
             r5 = (r5 + 1) as i16 as i32;
             r4 += 14;
             if r5 < s60 {
@@ -4284,7 +4010,7 @@ pub fn mora_align(
                 r7 = (eng.rd16(r4 + 2) as i32 + r7) as i16 as i32;
             }
         }
-        // spcheck:
+
         if eng.rds8(sp50 + 202) as i32 == 0 {
             let s88b = if s88 >= 0 {
                 t7439[s88 as usize] as i32
@@ -4292,7 +4018,7 @@ pub fn mora_align(
                 tpre[(s88 + 128) as usize] as i32
             };
             if (s88b & 0x56) == 0x40 {
-                // pdiff/pjoin:
+
                 let p26 = eng.rd8(r4 + 26) as i32;
                 let p27 = eng.rd8(r4 + 27) as i32;
                 let mut r0v: i32;
@@ -4310,9 +4036,9 @@ pub fn mora_align(
                     }
                 }
                 if s72 <= s44 {
-                    // c340 side:
+
                     if r5 == 0 {
-                        // c384:
+
                         if s60 > 1 {
                             eng.wr8(sp4c, 1);
                             if (t7439[eng.rd8(r4 + 14) as usize] as i32 & 0x40) != 0 {
@@ -4325,25 +4051,25 @@ pub fn mora_align(
                             }
                         }
                     } else if r5 < 0 {
-                        // emit
+
                     } else if r5 <= 1 || s56 == 0 {
-                        // c3cc:
+
                         if (t7439[eng.rd8(r4) as usize] as i32 & 0x40) != 0 {
                             eng.wr8(sp4c, 0);
                             r7 = eng.rd8(r4 + 13) as i32 - eng.rd8(r4 + 12) as i32 + 1;
                             s56 = r7;
                         } else {
-                            // c400:
+
                             r7 = (s44 - s48) as i16 as i32;
                             eng.wr8(sp4c, r0v as u8);
                         }
                     } else {
-                        // c340 tail:
+
                         r7 = (s44 - s56 - s48) as i16 as i32;
                         eng.wr8(sp4c, 255);
                     }
                 } else if r5 == 0 {
-                    // c2b8:
+
                     if s60 > 1 {
                         eng.wr8(sp4c, 1);
                         let dd = eng.rd8(r4 + 13) as i32 - eng.rd8(r4 + 12) as i32;
@@ -4359,9 +4085,9 @@ pub fn mora_align(
                         }
                     }
                 } else if r5 < 0 {
-                    // emit
+
                 } else if r5 <= 1 || s56 == 0 {
-                    // c31c:
+
                     eng.wr8(sp4c, 0);
                     let t = eng.rd16(r4.wrapping_sub(12)) as i32 + r7;
                     r0v = t - s48;
@@ -4373,7 +4099,7 @@ pub fn mora_align(
                 }
             }
         }
-        // emit:
+
         let emit_r2v: i32 = 'emit: {
             let dd = eng.rd8(r4 + 13) as i32 - eng.rd8(r4 + 12) as i32;
             let mut s68 = r7;
@@ -4381,10 +4107,10 @@ pub fn mora_align(
             let mut w128 = s128;
             ip = dd + 1;
             if ip < 1 {
-                break 'emit 0; // c4cc -> c20
+                break 'emit 0;
             }
             lr = 1;
-            // flag bytes from voicing table:
+
             let f0 = t7439[eng.rd8(r4) as usize] as i32;
             eng.wr8(w5c, ((lr as u32) & !((f0 as i8 as i32 as u32) >> 4)) as u8);
             eng.wr8(w60a, (f0 & 4) as u8);
@@ -4401,22 +4127,22 @@ pub fn mora_align(
                 r3v = s68;
             }
             if r3v <= 0 {
-                break 'emit 0; // -> c20
+                break 'emit 0;
             }
             eng.wr16(w54 + 244, (acc16 + r3v) as i16 as u16);
-            let mut e1 = s68; // r1v
+            let mut e1 = s68;
             if e1 == ip {
                 fill_stride(eng, e1, w124, w128);
-                break 'emit s68; // c1c
+                break 'emit s68;
             }
-            // c538:
+
             let r9b = w70;
             let c231 = eng.rds8(r9b + 231) as i32;
             if c231 == 0
                 && eng.rd8(r9b + 228) == 0
                 && eng.rd8(r9b + 229) == 0
             {
-                // c824: scan frames for a zero +2 byte:
+
                 let (e2, e7);
                 let mut e3 = 0;
                 let found = loop {
@@ -4436,7 +4162,7 @@ pub fn mora_align(
                         e7 = 0;
                     }
                     Some(f3) => {
-                        // c858:
+
                         let mut e3 = f3;
                         let e2v = f3;
                         let mut e7v;
@@ -4449,7 +4175,7 @@ pub fn mora_align(
                         }
                         el += e2v;
                         let direct = if el > e3 {
-                            // c8a0:
+
                             loop {
                                 let at = aadd(w124, (e3 << 1) + (e3 << 3));
                                 e7v = eng.rds8(at + 2) as i32;
@@ -4466,7 +4192,7 @@ pub fn mora_align(
                             false
                         };
                         if !direct {
-                            // c8b0:
+
                             e3 = el as i16 as i32;
                             let e8v = ip - e2v;
                             if e8v > e3 {
@@ -4489,12 +4215,12 @@ pub fn mora_align(
                                 }
                             }
                         }
-                        // c8fc:
+
                         e2 = e2v;
                         e7 = (e3 - e2v) as i16 as i32;
                     }
                 }
-                // c904:
+
                 let e8 = (e1 - ip) as i16 as i32;
                 if e8 < 0 {
                     if e7 != 0 && e2 > 0 {
@@ -4503,26 +4229,26 @@ pub fn mora_align(
                         w128 = aadd(w128, e2 << 2);
                         w124 = aadd(w124, t3 << 1);
                     }
-                    // c978:
+
                     let n3 = -e8;
                     if n3 > 0 {
                         let t2 = n3 + (n3 << 2);
                         w124 = aadd(w124, t2 << 1);
                     }
-                    // cbc8:
+
                     if e1 > 0 {
                         fill_stride(eng, e1, w124, w128);
                     }
                     break 'emit s68;
                 }
                 if e8 == 0 {
-                    // cbc8:
+
                     if e1 > 0 {
                         fill_stride(eng, e1, w124, w128);
                     }
                     break 'emit s68;
                 }
-                // c994 (e8 > 0):
+
                 if eng.rd8(r9b + 230) == 0 && eng.rd8(r9b + 232) != 0 {
                     if e7 != 0 && e2 > 0 {
                         fill_stride(eng, e2, w124, w128);
@@ -4530,9 +4256,9 @@ pub fn mora_align(
                         w128 = aadd(w128, e2 << 2);
                         w124 = aadd(w124, t3 << 1);
                     }
-                    // ca20:
+
                     w128 = fill_const(eng, e8, k944, w128);
-                    // ca58:
+
                     e1 = (e1 - e8) as i16 as i32;
                     if e7 >= 6 {
                         let mut r2a = w124;
@@ -4561,13 +4287,13 @@ pub fn mora_align(
                             r3a += 1;
                         }
                     }
-                    // cbc8:
+
                     if e1 > 0 {
                         fill_stride(eng, e1, w124, w128);
                     }
                     break 'emit s68;
                 }
-                // cac8:
+
                 let mut c_r2 = 0;
                 if e7 > 0 {
                     let mut c_r3 = e7;
@@ -4587,11 +4313,11 @@ pub fn mora_align(
                     w124 = aadd(w124, t3 << 1);
                 }
                 if e7 != 0 {
-                    // cb10 (e7 != 0; e7<0 skips the fill above):
+
                     e1 = (e1 - c_r2) as i16 as i32;
                     ip = (ip - c_r2) as i16 as i32;
                 }
-                // cb20:
+
                 let c_r2 = (e1 - ip) as i16 as i32;
                 if c_r2 > ip {
                     e1 = c_r2 - ip;
@@ -4600,7 +4326,7 @@ pub fn mora_align(
                     }
                     e1 = (ip << 1) as i16 as i32;
                 }
-                // cb64:
+
                 let mut tlr = (e1 - ip) as i16 as i32;
                 if tlr > 0 {
                     let mut t8 = 0;
@@ -4625,20 +4351,20 @@ pub fn mora_align(
                     w128 = aadd(w128, s16t << 3);
                     w124 = aadd(w124, tt2 << 1);
                 }
-                // cbc0:
+
                 e1 = ((ip << 1) - e1) as i16 as i32;
-                // cbc8:
+
                 if e1 > 0 {
                     fill_stride(eng, e1, w124, w128);
                 }
                 break 'emit s68;
             }
-            // c55c:
+
             let e2 = (e1 - ip) as i16 as i32;
             let elr = eng.rds8(r9b + 233) as i32;
             if e2 < 0 {
                 if elr == 1 {
-                    // c584:
+
                     if c231 != 0 && eng.rds8(sp50 + 202) as i32 == -1 {
                         let n3 = -e2;
                         if n3 <= e1 {
@@ -4667,7 +4393,7 @@ pub fn mora_align(
                         }
                     }
                 } else if elr == -1 {
-                    // c5f0:
+
                     if c231 != 0 && eng.rds8(sp50 + 202) as i32 == -1 {
                         let n3 = -e2;
                         if n3 <= e1 {
@@ -4703,7 +4429,7 @@ pub fn mora_align(
                         }
                     }
                 }
-                // c670:
+
                 let mut g2 = 0;
                 let mut g3 = 1;
                 loop {
@@ -4727,19 +4453,19 @@ pub fn mora_align(
                 }
                 break 'emit s68;
             }
-            // c6b4 (e2 >= 0):
+
             if elr == 1 && c231 != 0 {
-                // c6c8:
+
                 if e2 > 0 {
                     w128 = fill_const(eng, e2, w124 as u32, w128);
                 }
-                // c6f8:
+
                 if ip > 0 {
                     if (ip & 1) == 1 {
                         eng.wr32(w128, w124 as u32);
                         w128 += 4;
                         if ip > 1 {
-                            // stride slots 1..ip at w128-4 base:
+
                             let wb = aadd(w128, -4);
                             let mut c1 = 1;
                             let mut c2 = 1;
@@ -4764,7 +4490,7 @@ pub fn mora_align(
                 break 'emit s68;
             }
             if elr == -1 && c231 != 0 {
-                // c750:
+
                 if (ip & 1) == 1 {
                     eng.wr32(w128, w124 as u32);
                     w128 += 4;
@@ -4786,7 +4512,7 @@ pub fn mora_align(
                             }
                         }
                     }
-                    // c7a4:
+
                     let t1 = ip + (ip << 2);
                     let mut last = aadd(w124, t1 << 1);
                     w128 = aadd(w128, (ip - 1) << 2);
@@ -4796,7 +4522,7 @@ pub fn mora_align(
                     }
                     break 'emit s68;
                 }
-                // ip even: stride loop then c7a4:
+
                 {
                     let mut c1 = 0;
                     let mut c3 = 0;
@@ -4817,7 +4543,7 @@ pub fn mora_align(
                     }
                     let _ = c3;
                 }
-                // c7a4 (fallthrough, w128 unadvanced):
+
                 let t1 = ip + (ip << 2);
                 let mut last = aadd(w124, t1 << 1);
                 w128 = aadd(w128, ip << 2);
@@ -4827,7 +4553,7 @@ pub fn mora_align(
                 }
                 break 'emit s68;
             }
-            // c7e0:
+
             {
                 let mut h_lr = 1;
                 let mut h3 = e1;
@@ -4851,7 +4577,7 @@ pub fn mora_align(
             }
             break 'emit s68;
         };
-        // c20:
+
         eng.wr16(r4 + 2, emit_r2v as i16 as u16);
         s128 = aadd(s128, emit_r2v << 2);
         let dd2 = eng.rd8(r4 + 13) as i32 - eng.rd8(r4 + 12) as i32;
@@ -4869,12 +4595,6 @@ pub fn mora_align(
     s64v
 }
 
-/// fn_1a089c: phrase-level mora driver. Walks the 14-byte mora list at
-/// 0x2930, renders each run via `mora_align` + pitch ramps + `mora_render`.
-/// Row constraints (as on ARM): note index `u16(list+10)` + run length
-/// stays inside `t743948`; `mora_align`'s return `r6v` stays >= 0 with
-/// `r6v*2 + 0x41F4` and `r6v*4 + 0x55F8` in-engine (negative/overlong
-/// `r6v` reads engine-external heap on ARM, out of model here).
 pub fn phrase_driver(eng: &mut Engine, tab: &Tables, pcm: &mut PcmLog) {
     let t7439 = tab.t7439;
     let t948 = tab.t743948;
@@ -4917,8 +4637,7 @@ pub fn phrase_driver(eng: &mut Engine, tab: &Tables, pcm: &mut PcmLog) {
         if i > lim {
             return;
         }
-        // merge gate: render on discontinuity; skip (merge) on ==20,
-        // small span, or unvoiced; fall through to render otherwise.
+
         let mut render = true;
         if eng.rd16(pu + 10) == eng.rd16(pu - 4)
             && eng.rd8(pu - 1) as i32 + 1 == eng.rd8(pu + 12) as i32
@@ -4933,7 +4652,7 @@ pub fn phrase_driver(eng: &mut Engine, tab: &Tables, pcm: &mut PcmLog) {
         if !render {
             continue;
         }
-        // render:
+
         let pm14 = pu - 14;
         let cc = eng.rd8(pm14 + 13) as i32 - eng.rd8(prev + 12) as i32 + 1;
         let cnt = cc;
@@ -4975,7 +4694,7 @@ pub fn phrase_driver(eng: &mut Engine, tab: &Tables, pcm: &mut PcmLog) {
                 }
             }
         }
-        // abs pass:
+
         let q0 = pm14.wrapping_sub(prev);
         let mut c9 = (q0 / 14 + 1) as i32;
         let mut e2 = prev + 4;
@@ -5031,8 +4750,7 @@ pub fn phrase_driver(eng: &mut Engine, tab: &Tables, pcm: &mut PcmLog) {
         if did > 0 && eng.rd8(0xE6CA) == 0 {
             let h = (eng.rds16(prev + 2) as i32 + 1) / 2;
             pitch_ramp(eng, 0x41F4, h as i16 as i32, eng.rds16(prev + 4) as i32);
-            // ARM masks the unhalved (v+1) for the offset (0x1a0df8 bic)
-            // but uses (v+1)>>1 for the count (0x1a0df4 asr).
+
             let hraw = eng.rds16(prev + 2) as i32 + 1;
             let hraw = hraw + ((hraw < 0) as i32);
             pitch_ramp(
@@ -5046,12 +4764,12 @@ pub fn phrase_driver(eng: &mut Engine, tab: &Tables, pcm: &mut PcmLog) {
             let e4 = eng.rds16(pm14 + 4) as i32;
             let e18 = eng.rds16(pm14 + 18) as i32;
             if e4 == e18 {
-                // bypass:
+
                 bypass_pitch(eng, tab, prev, pm14, r6v);
             } else {
                 let mode = eng.rds8(0xE600 + 202) as i32;
                 if mode == -2 {
-                    // setpm:
+
                     if eng.rd16(0xE700 + 54) == 0 {
                         eng.wr16(pm14 + 4, eng.rd16(0x4100 + 242));
                     } else {
@@ -5080,20 +4798,20 @@ pub fn phrase_driver(eng: &mut Engine, tab: &Tables, pcm: &mut PcmLog) {
                         );
                         eng.wr16(0x4100 + 242, (v as i32 + old) as i16 as u16);
                     }
-                    // tail2:
+
                     tail2_pitch(eng, pm14, r6v);
                     did = 1;
                 } else if eng.rd8(pm14) == eng.rd8(pm14 + 14) {
-                    // mode != -1, bytes equal: skip to tail2
+
                     tail2_pitch(eng, pm14, r6v);
                     did = 1;
                 } else {
-                    // bypass:
+
                     bypass_pitch(eng, tab, prev, pm14, r6v);
                 }
             }
         }
-        // join:
+
         mora_render(eng, 0x55F8, 0x41F4, r6v, tab, pcm);
         if flag_done(eng) == 1 {
             return;
@@ -5106,7 +4824,6 @@ pub fn phrase_driver(eng: &mut Engine, tab: &Tables, pcm: &mut PcmLog) {
     }
 }
 
-/// fn_1a089c tail2 block: interpolated pitch ramp pair.
 fn tail2_pitch(eng: &mut Engine, pm14: usize, r6v: i32) {
     let e2 = eng.rds16(pm14 + 2) as i32;
     let e4b = eng.rds16(pm14 + 4) as i32;
@@ -5128,7 +4845,6 @@ fn tail2_pitch(eng: &mut Engine, pm14: usize, r6v: i32) {
     );
 }
 
-/// fn_1a089c bypass block: mode-dependent pitch base + ramp.
 fn bypass_pitch(eng: &mut Engine, tab: &Tables, prev: usize, pm14: usize, r6v: i32) {
     let t7439 = tab.t7439;
     let mode = eng.rds8(0xE600 + 202) as i32;
@@ -5138,8 +4854,7 @@ fn bypass_pitch(eng: &mut Engine, tab: &Tables, prev: usize, pm14: usize, r6v: i
             let old = eng.rds16(0x4100 + 242) as i32;
             let a0 = c200 + r6v;
             let e4 = eng.rds16(pm14 + 4) as i32;
-            // ARM muls full 32-bit here (0x1a1084 mul, no narrowing);
-            // only the divisor is sxth'd (0x1a1080).
+
             let v = fixed_ratio((e4 - old).wrapping_mul(c200), a0 as i16 as i32 as u32);
             eng.wr16(0x4100 + 242, (v as i32 + old) as i16 as u16);
         } else if (t7439[eng.rd8(prev) as usize] & 1) != 0 {
@@ -5167,13 +4882,6 @@ fn bypass_pitch(eng: &mut Engine, tab: &Tables, prev: usize, pm14: usize, r6v: i
     pitch_ramp(eng, 0x41F4, r6v, eng.rds16(pm14 + 4) as i32);
 }
 
-/// fn_1a2ebc: segment prosody/duration assignment. Walks the Seg list
-/// at `p0` (16-byte structs, engine offsets, null is 0), scores each
-/// mora's kana chain against the ROM phone tables, and writes f6/f8/f10.
-/// Row constraints (as on ARM/native): `mora->count` in 0..=96; every
-/// kana name matches a `D_74362e` entry (unmatched names leave C stack
-/// garbage in v8/v536/v664, nondeterministic and out of model); node
-/// links never null-deref mid-walk.
 pub fn seg_prosody(eng: &mut Engine, tab: &Tables, p0: usize) {
     use crate::jp::libc::strcmp0;
     if p0 == 0 {
@@ -5187,7 +4895,7 @@ pub fn seg_prosody(eng: &mut Engine, tab: &Tables, p0: usize) {
     let mut v664 = [0i8; 128];
     let mut arr = [None; 98];
     loop {
-        // accumulate vowel counts over p's moras, then q's while gated:
+
         let mut acc2 = 0i32;
         let mut mora = eng.rd32(p + 4) as usize;
         let mut cnt = 0i32;
@@ -5222,9 +4930,7 @@ pub fn seg_prosody(eng: &mut Engine, tab: &Tables, p0: usize) {
                         k = eng.rd32(k + 16) as usize;
                         j += 1;
                     }
-                    // C: arr[count+1] is the lookahead mora (next unit's
-                    // chain) or the D_7435f4 default; only its name is
-                    // ever read (the i-loop runs to count+1 for nxt).
+
                     let lookahead = {
                         let nx = eng.rd32(rmora + 28) as usize;
                         if nx != 0 && eng.rd32(nx + 24) != 0 {
@@ -5233,9 +4939,7 @@ pub fn seg_prosody(eng: &mut Engine, tab: &Tables, p0: usize) {
                             0
                         }
                     };
-                    // ARM orig 0x1a3060: r == p (first segment of the call),
-                    // not r == q; the old port ended phrases instead of
-                    // starting them on multi-segment input.
+
                     let f868 = r == p && i2 == 0;
                     let f872 = r == q && rcount - 1 == i2;
                     let mut state =
@@ -5249,8 +4953,7 @@ pub fn seg_prosody(eng: &mut Engine, tab: &Tables, p0: usize) {
                     let n2 = count + 2;
                     let mut i = 1i32;
                     while i < n2 {
-                        // i == count+1 reads the lookahead mora (C arr[count+1]);
-                        // koff 0 there means the D_7435f4 default name.
+
                         let tail = i == count + 1 && lookahead == 0;
                         let koff = if i == count + 1 && lookahead != 0 {
                             lookahead
@@ -5493,7 +5196,7 @@ pub fn seg_prosody(eng: &mut Engine, tab: &Tables, p0: usize) {
                         }
                         i += 1;
                     }
-                    // scale + f22 pass:
+
                     let scale = eng.rd16(0xE73A) as i32;
                     let f22 = eng.rds16(rmora + 22) as i32;
                     let mut i = 1i32;
@@ -5539,11 +5242,6 @@ pub fn seg_prosody(eng: &mut Engine, tab: &Tables, p0: usize) {
     }
 }
 
-/// fn_1a3a54: kana-to-unit converter. Scans Shift-JIS `text`, emits the
-/// unit string to `out` (`size` bytes at `out`), returns 0 on success
-/// or the `f536` text offset on overflow error (callers ignore it).
-/// `nbuf` is zero-init here; the C reads uninit stack there on the `#P`
-/// path, which never fires on the corpus (no `#` in tag output).
 pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i32) -> usize {
     use crate::jp::libc::{log_format, memcmp0, strcat0, strcmp0, strcpy0, strlen0, strchr0,
         strncat0, strncpy0, strtol10};
@@ -5573,7 +5271,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             eng.rds8($o) as i32
         };
     }
-    // emit helper: strcpy buf1->buf2, append D_74362c, size-check, strcat out.
+
     macro_rules! emit12 {
         () => {{
             strcpy0(&mut buf2, &buf1);
@@ -5596,13 +5294,13 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
         if rd8!(p) == 0 {
             break;
         }
-        // dispatch:
+
         let c0 = rds8!(p);
         if c0 == b'#' as i32 {
-            // hash:
+
             let c1 = rds8!(p + 1);
             if c1 == b'Q' as i32 {
-                // hashQ:
+
                 p += 2;
                 let mut e2 = 0i32;
                 let mut d = 0usize;
@@ -5615,7 +5313,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                             break;
                         }
                         if cc == b'#' as i32 {
-                            // qbyte with '#':
+
                             if e2 < 190 {
                                 e2 = (e2 + 1) as i16 as i32;
                                 p += 1;
@@ -5634,7 +5332,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                             d = 0;
                             e2 = 0;
                         } else {
-                            // qbyte:
+
                             if e2 < 190 {
                                 e2 = (e2 + 1) as i16 as i32;
                                 p += 1;
@@ -5652,7 +5350,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                 if fp < 0 {
                     return f536;
                 }
-                // emit2:
+
                 buf1[d] = 0;
                 if buf1[0] != 0 {
                     emit12!();
@@ -5661,7 +5359,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                 continue;
             }
             if c1 == b'p' as i32 {
-                // hashP:
+
                 let mut e2 = 0i32;
                 loop {
                     let h1 = (e2 + 1) as i16 as i32;
@@ -5684,12 +5382,12 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                 continue;
             }
             if c1 == b'q' as i32 {
-                // h_b90:
+
                 p += 2;
                 f536 = p;
                 continue;
             }
-            // plain hash: scan to delimiter:
+
             let mut e2 = 0i32;
             let mut d = 0usize;
             loop {
@@ -5700,7 +5398,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                     || memcmp0(&eng.mem[p..], b"\x81\x44", 2) == 0
                     || memcmp0(&eng.mem[p..], b"\x81\x51", 2) == 0
                 {
-                    // hadv2:
+
                     p += 2;
                     break;
                 }
@@ -5714,7 +5412,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                     || cc == b'.' as i32
                     || cc == b'_' as i32
                 {
-                    // hadv1:
+
                     p += 1;
                     break;
                 }
@@ -5726,12 +5424,12 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                     buf1[d] = cc as u8;
                     d += 1;
                 }
-                // hashcopy:
+
                 if rd8!(p) == 0 {
                     break;
                 }
             }
-            // hemit:
+
             buf1[d] = 0;
             if buf1[0] != 0 {
                 emit12!();
@@ -5740,7 +5438,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             continue;
         }
         if c0 == b'.' as i32 || memcmp0(&eng.mem[p..], b"\x81\x44", 2) == 0 {
-            // h_594:
+
             if buf0[0] != 0 {
                 let bl0 = strlen0(&buf0);
                 strcat0(&mut buf0, bl0, b".");
@@ -5766,12 +5464,12 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                 f540 = 0;
             }
             if rd8!(p) == b'.' {
-                // h_11e4:
+
                 p += 1;
                 f536 = p;
                 continue;
             }
-            // h_b90:
+
             p += 2;
             f536 = p;
             continue;
@@ -5781,7 +5479,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             || c0 == b'!' as i32
             || memcmp0(&eng.mem[p..], b"\x81\x49", 2) == 0
         {
-            // h_660:
+
             if buf0[0] == 0 {
                 if c0 == b'?' as i32 || c0 == b'!' as i32 {
                     p += 1;
@@ -5825,7 +5523,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                     break;
                 }
             }
-            // emit660:
+
             if f520 == 0 {
                 f520 = 1000;
             }
@@ -5847,7 +5545,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             continue;
         }
         if c0 == 10 || c0 == 13 {
-            // h_7f4:
+
             if buf0[0] == 0 {
                 p += 1;
                 f536 = p;
@@ -5877,8 +5575,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             f544 = 0;
             mode = 0;
             buf0[0] = 0;
-            // ARM orig 0x1a4378: f12 is 10 unconditionally here; the old
-            // conditional (0 when f124 == 0) starved the next line's f12.
+
             if f124 != 0 {
                 f120 = 10;
             } else {
@@ -5892,7 +5589,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             continue;
         }
         if c0 == b'|' as i32 || memcmp0(&eng.mem[p..], b"\x81\x62", 2) == 0 {
-            // h_950:
+
             if buf0[0] != 0 {
                 if mode == 0 && f12 == 10 {
                     f12 = num_class(&eng.mem[..], p, tab.t743620, tab.t743614) as i16 as i32;
@@ -5928,7 +5625,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             continue;
         }
         if c0 == b'/' as i32 || memcmp0(&eng.mem[p..], b"\x81\x5e", 2) == 0 {
-            // h_a3c:
+
             if buf0[0] != 0 {
                 if f124 != 0 {
                     if mode == 0 && f12 == 10 {
@@ -5973,7 +5670,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             continue;
         }
         if c0 == b'_' as i32 || memcmp0(&eng.mem[p..], b"\x81\x51", 2) == 0 {
-            // h_b98:
+
             if buf0[0] != 0 {
                 if f124 == 0 && mode == 0 && f12 == 10 {
                     f12 = num_class(&eng.mem[..], p, tab.t743620, tab.t743614) as i16 as i32;
@@ -6000,14 +5697,14 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             } else {
                 p += 2;
             }
-            // h_b98clamp:
+
             if f124 > 30000 {
                 f124 = 30000;
             }
             continue;
         }
         if c0 == b'\'' as i32 || memcmp0(&eng.mem[p..], b"\x81\x66", 2) == 0 {
-            // h_c74:
+
             mode = 0;
             buf2[0] = 0;
             if buf0[0] != 0 {
@@ -6066,7 +5763,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             continue;
         }
         if c0 == b'%' as i32 || memcmp0(&eng.mem[p..], b"\x81\x93", 2) == 0 {
-            // h_dd0:
+
             let h1 = strlen0(&buf0) as i16 as i32;
             if h1 >= 2 {
                 let dl = h1 as usize;
@@ -6083,14 +5780,13 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             }
             continue;
         }
-        // kana gate (kh1 = 0 with the ROM count, so the kana scan is
-        // dead and nokana always runs; kept general like the C):
+
         let kh2 = tab.k7873a4 as i32;
         let kh1 = if kh2 > 0 { kh2 & 1 } else { 0 };
         let mut e2 = kh1;
         let mut found = false;
         if kh1 > 0 {
-            // kana: scan 0..kh1, fall through to nokana on miss:
+
             let mut e = 0i32;
             while e < kh1 {
                 let kl = strlen0(&tab.t7868c4[(e * 12) as usize..]) as i32;
@@ -6103,7 +5799,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
             }
         }
         if !found {
-            // nokana: stepped scan from kh1:
+
             e2 = kh1;
             if kh1 < kh2 {
                 let mut e = e2;
@@ -6132,9 +5828,9 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                 }
             }
         }
-        // found:
+
         if e2 >= kh2 || e2 < 0 {
-            // ascii:
+
             let mut c = rds8!(p);
             p += 1;
             if ((c + 127) as u32) > 30 {
@@ -6183,13 +5879,13 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
         } else if f124 != 0 {
             f536 = p;
         }
-        // matchcont:
+
         if f548 == 0 {
             let h2len = strlen0(&buf0) as i32;
             let base = (e2 * 12) as usize;
             let h1 = strlen0(&tab.t7868c4[base + 8..]) as i32;
             if f544 + h1 >= 64 || f540 + h1 >= 256 {
-                // emit100:
+
                 fp = log_format(&mut eng.mem[out..], size, &buf0, mode, f12, f120, 100);
                 buf0[0] = 0;
                 if fp >= 0 {
@@ -6201,7 +5897,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                 if fp < 0 {
                     return f536;
                 }
-                // checklen with h2 = 0:
+
                 let h1 = strlen0(&tab.t7868c4[base + 8..]) as i32;
                 if h1 < 96 {
                     let n0 = tab.t7868c4[base + 8];
@@ -6213,7 +5909,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                     f548 = 1;
                 }
             } else {
-                // checklen:
+
                 if h2len + h1 >= 96 {
                     f548 = 1;
                 } else if h2len != 0 {
@@ -6227,7 +5923,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
                 }
             }
         }
-        // advance:
+
         let base = (e2 * 12) as usize;
         let h1 = strlen0(&tab.t7868c4[base..]) as i32;
         p += h1 as usize;
@@ -6235,7 +5931,7 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
         f544 = (f544 + strlen0(&tab.t7868c4[base..]) as i32) as i16 as i32;
         continue;
     }
-    // final:
+
     if buf0[0] == 0 {
         return 0;
     }
@@ -6259,8 +5955,6 @@ pub fn kana_map(eng: &mut Engine, tab: &Tables, text: usize, out: usize, size: i
     0
 }
 
-/// fn_19e1cc (unreached on corpus; only called when `Z == -1`, which
-/// faults on ARM): vowel count minus 2, floored at 0.
 fn e1cc_count(s: &[u8]) -> i32 {
     let v = (vowel_count(s) as i32 - 2) as i16 as i32;
     if v < 0 {
@@ -6270,10 +5964,6 @@ fn e1cc_count(s: &[u8]) -> i32 {
     }
 }
 
-/// fn_19ecf8 (unreached on corpus; `Z == -1` path): binary search over
-/// the word table at `ctx` (table u32 @8, count s16 @12; 8-byte entries:
-/// name u32 @0, val s8 @4) with I/U case folding. On match copies the
-/// entry name to `buf` and returns val, else -1.
 fn lookup_word(buf: &mut [u8], mem: &[u8], ctx: usize) -> i32 {
     use crate::jp::libc::strcpy0;
     let mut lo = 0i32;
@@ -6327,17 +6017,7 @@ fn lookup_word(buf: &mut [u8], mem: &[u8], ctx: usize) -> i32 {
     }
 }
 
-/// Static word table compiled into `fn_19e278` (decompiler-provided
-/// constants, LE bytes): "S", SJIS 0x4281, ".", "!", "?", SJIS 0x4181,
-/// SJIS 0x4381, ",", trailing word.
-const DTAB_19E278: [u8; 36] = [
-    0x53, 0x00, 0x00, 0x00, 0x81, 0x42, 0x00, 0x00, 0x2e, 0x00, 0x00, 0x00, 0x21, 0x00, 0x00,
-    0x00, 0x3f, 0x00, 0x00, 0x00, 0x81, 0x41, 0x00, 0x00, 0x81, 0x43, 0x00, 0x00, 0x2c, 0x00,
-    0x00, 0x00, 0x32, 0xe7, 0x00, 0x00,
-];
 
-/// fn_19e278 do_9c0: link the current kana node and start a fresh one.
-/// Increments the mora kana count at `r6+4` (wrapping u8).
 fn emit_kana(eng: &mut Engine, z: usize, r6: usize, r7: &mut usize, r4p: &mut usize) {
     let qv = eng.rd16(z + 0xE732);
     let old = *r7;
@@ -6356,7 +6036,6 @@ fn emit_kana(eng: &mut Engine, z: usize, r6: usize, r7: &mut usize, r4p: &mut us
     eng.wr8(r6 + 4, eng.rd8(r6 + 4).wrapping_add(1));
 }
 
-/// fn_19e278 do_a44/do_764: reset the current kana node in place.
 fn reset_kana(eng: &mut Engine, z: usize, r7: usize) {
     eng.wr8(r7, 0);
     eng.wr8(r7 + 5, 45);
@@ -6367,13 +6046,6 @@ fn reset_kana(eng: &mut Engine, z: usize, r7: usize) {
     eng.wr16(r7 + 12, eng.rd16(z + 0xE732));
 }
 
-/// fn_19e278: phrase tokenizer/unit-list builder. Reads `NUL`/CR/LF lines
-/// via the cursor at `Z+0xDEE4`, parses `word r7 r8 r4 r9…` fields, and
-/// appends 32-byte Mora units at `X+32` (names pooled from `Z+0x1960),
-/// chaining 20-byte kana nodes from `Y`. Returns the unit count.
-/// Row constraints: no empty input lines (the C reads `stok[-1]` for
-/// those); `spbuf` tokens contain no `#` (else C/ARM disagree on the
-/// `tag_command` return, a filed defect); node links never null-deref.
 pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize) -> i32 {
     use crate::jp::libc::{memcmp0, strcat0, strcmp0, strcpy0, strlen0, strtol10};
     let mut r6 = x + 32;
@@ -6385,9 +6057,7 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
     let mut slot404 = 0i32;
     let mut stok = [0u8; 192];
     let mut spbuf = [0u8; 192];
-    // Kana-chain head spill (ARM orig 0x19e8a4/0x19ea78): reloaded per
-    // line and advanced by this line's emit count * 20, so later lines
-    // append after earlier lines' nodes instead of overwriting them.
+
     let mut chain = y;
     eng.wr8(y, 0);
     eng.wr8(y + 5, 45);
@@ -6399,7 +6069,7 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
     eng.wr16(x + 18, 0);
     eng.wr32(x + 28, (x + 32) as u32);
     loop {
-        // copy loop c8: one line into stok (strip CR/LF, cap 191):
+
         let mut fedc_ctx = 0usize;
         {
             let ipchain = z + 0xDEE4;
@@ -6438,8 +6108,7 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
                 break;
             }
         }
-        // strip one trailing control byte (panics on empty lines, like the
-        // C reads stok[-1] there — out of model, never on corpus):
+
         let mut len = strlen0(&stok) as i32;
         len = len as i16 as i32;
         let last = stok[(len - 1) as usize] as i8 as i32;
@@ -6448,7 +6117,7 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
         }
         eng.wr16(r6 + 20, 0);
         eng.wr16(r6 + 14, 0);
-        // Tokens are optional (C defaults); short lines still parse.
+
         spbuf[0] = 0;
         let mut r7 = 0i32;
         let mut r8 = 10i32;
@@ -6475,7 +6144,7 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
         if let Some(o) = tokenize(&mut stok, &mut fedc_ctx, b" \0") {
             eng.wr16(r6 + 20, strtol10(&stok[o..]) as u16);
         }
-        // filter: drop leading/repeated Q and control bytes:
+
         let mut fi = 0i32;
         let mut flen = 0i32;
         loop {
@@ -6506,7 +6175,7 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
         if len > 96 {
             spbuf[96] = 0;
         }
-        // per-unit DSP params from the numeric fields:
+
         eng.wr8(r6 + 5, r7 as u8);
         eng.wr8(r6 + 6, r7 as u8);
         let q2 = r8.wrapping_mul(655);
@@ -6532,7 +6201,7 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
         eng.wr16(r6 + 22, eng.rd16(z + 0xE738));
         eng.wr8(r6 + 7, 0);
         if z as u32 == 0xFFFF_FFFFu32 {
-            // dead on ARM (Z is the engine; Z == -1 would fault):
+
             let e8r = lookup_word(&mut spbuf, &eng.mem[..], z) as i8 as i32;
             eng.wr8(r6 + 6, e8r as u8);
             if e8r == -1 {
@@ -6544,14 +6213,12 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
         if tag_command(eng, &spbuf, 1) != 0 {
             slot456 = -3;
         } else {
-            // lr table lookup: dash-mark substring hits in spbuf. ARM
-            // resets r8 per table entry (mov at 0x19e674); the re-search
-            // after a mark keeps the advanced r8 (branch to 0x19e67c).
+
             let mut lk9 = 0i32;
             loop {
                 let mut r8 = 0i32;
                 let t7 = (lk9 * 3) as usize;
-                // strstr-prefix search for lrtab[t7..] from r8:
+
                 let tlen = strlen0(&tab.t722727[t7..]);
                 loop {
                     let mut pp = r8;
@@ -6579,22 +6246,22 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
                     break;
                 }
             }
-            // delimiter chain:
-            if strcmp0(&spbuf, &DTAB_19E278[0..]) == 0 {
+
+            if strcmp0(&spbuf, &tab.delimiters[0..]) == 0 {
                 slot456 = -1;
-            } else if strcmp0(&spbuf, &DTAB_19E278[4..]) == 0 {
+            } else if strcmp0(&spbuf, &tab.delimiters[4..]) == 0 {
                 slot456 = -1;
-            } else if strcmp0(&spbuf, &DTAB_19E278[8..]) == 0 {
+            } else if strcmp0(&spbuf, &tab.delimiters[8..]) == 0 {
                 slot456 = -1;
-            } else if strcmp0(&spbuf, &DTAB_19E278[12..]) == 0 {
+            } else if strcmp0(&spbuf, &tab.delimiters[12..]) == 0 {
                 slot456 = -1;
-            } else if strcmp0(&spbuf, &DTAB_19E278[16..]) == 0 {
+            } else if strcmp0(&spbuf, &tab.delimiters[16..]) == 0 {
                 slot456 = -1;
-            } else if strcmp0(&spbuf, &DTAB_19E278[20..]) == 0 {
+            } else if strcmp0(&spbuf, &tab.delimiters[20..]) == 0 {
                 slot456 = -2;
-            } else if strcmp0(&spbuf, &DTAB_19E278[24..]) == 0 {
+            } else if strcmp0(&spbuf, &tab.delimiters[24..]) == 0 {
                 slot456 = -2;
-            } else if strcmp0(&spbuf, &DTAB_19E278[28..]) == 0 {
+            } else if strcmp0(&spbuf, &tab.delimiters[28..]) == 0 {
                 slot456 = -2;
             } else {
                 strcpy0(&mut stok, &spbuf);
@@ -6609,7 +6276,7 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
                 }
             }
         }
-        // do_5cc: pool the name, then classify:
+
         let tlen = strlen0(&stok) as i32;
         if tlen + slot404 + 1 > 448 {
             stok[(448 - slot404 - 1) as usize] = 0;
@@ -6630,7 +6297,7 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
                 let name0 = eng.rd32(r6) as usize;
                 let mut r8 = 0i32;
                 loop {
-                    // classifier:
+
                     if eng.rds8(r6 + 4) as i32 >= r9 {
                         eng.wr8(name0 + r8 as usize, 0);
                         break;
@@ -6641,55 +6308,52 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
                     if cc == 81 {
                         eng.wr8(r7 + 4, 81);
                     } else if cc == 69 || cc == 73 || cc == 79 || cc == 65 {
-                        // do_930:
+
                         ccm = if cc - 65 <= 25 { cc + 32 } else { cc };
                         eng.wr8(r7 + 5, 85);
                         advanced = true;
                     } else if cc == 78 || cc == 45 || cc == 97 || cc == 101 || cc == 105
                         || cc == 111 || cc == 117
                     {
-                        // do_948:
+
                         advanced = true;
                     } else if cc == 85 {
-                        // do_930:
+
                         ccm = if cc - 65 <= 25 { cc + 32 } else { cc };
                         eng.wr8(r7 + 5, 85);
                         advanced = true;
                     } else if cc == 126 {
-                        // do_754 directly
+
                     } else if cc == 33 {
-                        // do_914:
+
                         let mut t0 = eng.rds8(r6 + 7) as i32;
                         if 3u32 > (((t0 & 0x70) >> 4) as u32) {
                             t0 += 16;
                             eng.wr8(r6 + 7, t0 as u8);
                         }
                     } else if cc == 63 {
-                        // do_8f8:
+
                         let mut t0 = eng.rds8(r6 + 7) as i32;
                         if ((t0 as u32) & 7) < 3 {
                             t0 += 1;
                             eng.wr8(r6 + 7, t0 as u8);
                         }
                     } else {
-                        // do_748:
+
                         if r4p.wrapping_sub(r7) < 2 {
                             eng.wr8(r4p, ccm as u8);
                             r4p += 1;
                         }
                     }
                     if advanced {
-                        // do_948 tail (do_a14 falls into do_950retry): ARM
-                        // skips the 76-write when r7 == z+16 (beq to the
-                        // do_754 tail) and otherwise writes it when the
-                        // node name is still empty.
+
                         let mut retry = ccm != 45;
                         if ccm == 45 && r7 != z + 16 && eng.rd8(r7) == 0 {
                             eng.wr8(r7 - 15, 76);
                             retry = true;
                         }
                         if retry {
-                            // do_950retry:
+
                             eng.wr8(r4p, ccm as u8);
                             eng.wr8(r4p + 1, 0);
                             if strcmp0(&eng.mem[r7..], b"-\0") == 0 {
@@ -6719,14 +6383,14 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
                             }
                         }
                     }
-                    // do_754:
+
                     r8 = (r8 + 1) as i16 as i32;
                     if r8 >= slen2 {
                         break;
                     }
                 }
             }
-            // do_764: rebuild the pooled name from the kana chain:
+
             eng.wr8(r7, 0);
             eng.wr8(r7 + 5, 45);
             eng.wr8(r7 + 4, 45);
@@ -6768,12 +6432,12 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
                 t0 = (t1b as i16 as i32) * (t0 as i16 as i32);
                 eng.wr8(r6 + 8, t0 as u8);
             }
-            // do_824:
+
             slot436 = (slot436 + 1) as i16 as i32;
             eng.wr32(r6 + 28, (r6 + 32) as u32);
             r6 += 32;
         }
-        // do_840:
+
         slot416 += slot400 as usize + 1;
         slot404 = slot400 + slot404 + 1;
         if slot456 == -1 {
@@ -6787,7 +6451,7 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
         }
         break;
     }
-    // bail8c8:
+
     if slot436 > 0 {
         let fv = eng.rds16(r6 - 14) as i32;
         if fv == 0 {
@@ -6798,26 +6462,13 @@ pub fn token_units(eng: &mut Engine, tab: &Tables, x: usize, y: usize, z: usize)
     slot436
 }
 
-/// fn_1a1d80: kana-synth task driver. Re-tokenizes the kana cursor
-/// (`token_units`), rebuilds the phrase lists (`list_build`, `seg_prosody`,
-/// `prosody_walk`), packs 14-byte phoneme records at 0x1B22 from the table
-/// chain at 0x1660, then drains each table through mode/post shaping and
-/// `phrase_drive`/`rate_setup`/`phrase_driver` until the done flag latches.
-/// Returns 0 after the AFD8 completion callback (ROM 0x607B10, voice-page
-/// only) and the 6b17b8/6b17ec unlock pair.
-/// Row constraints (as on ARM): 0xE6D0 == 0 (the config branch needs ROM
-/// file IO fn_100db6/fn_100b30, unreached and unported; e6d0 is
-/// construct-zeroed with no writer on the render path); node names
-/// non-empty with strlen <= 31 when node+6 != 0 (`buf[32]`); table count
-/// bytes >= 0; node/sl/t1/table links never null-deref mid-walk (the
-/// S-record reads node[4] post-walk like ARM, which faults on null).
 pub fn task_driver(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog) -> u32 {
     use crate::jp::libc::{strlen0, strncpy0};
     ring_init(eng);
     eng.wr32(0xDEE4, 0x85A2);
     let mut buf = [0u8; 32];
     'outer: loop {
-        // e6d0 == 1 config branch dead: see row constraints.
+
         if token_units(eng, tab, 0xA24, 16, 0) == 0 {
             break 'outer;
         }
@@ -6926,7 +6577,7 @@ pub fn task_driver(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog) -> u32 
                                 }
                             }
                         }
-                        // adv:
+
                         node = eng.rd32(node + 16) as usize;
                         n8 -= 1;
                     }
@@ -6951,7 +6602,7 @@ pub fn task_driver(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog) -> u32 
                 nph -= 1;
                 t1 = eng.rd32(t1 + 12) as usize;
             }
-            // phrase:
+
             eng.wr8(rp, 7);
             let nt = eng.rd32(table + 8) as usize;
             idx += count;
@@ -6960,7 +6611,7 @@ pub fn task_driver(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog) -> u32 
                 table = nt;
                 continue 'table;
             }
-            // render:
+
             let t0 = eng.rds8(table) as i32;
             let t1init = eng.rd32(table + 4) as usize;
             let desc =
@@ -7124,7 +6775,7 @@ pub fn task_driver(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog) -> u32 
                 }
                 _ => {}
             }
-            // post:
+
             if !skip_post {
                 eng.wr8(rp + 14, 7);
                 if !(idx <= 0 || sfl == 0 || idx >= 253) {
@@ -7212,7 +6863,7 @@ pub fn task_driver(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog) -> u32 
                     }
                 }
             }
-            // fin:
+
             eng.wr16(0x3E30, 0);
             idx = 0;
             phrase_drive(eng, 0x1B30, tab);
@@ -7224,18 +6875,16 @@ pub fn task_driver(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog) -> u32 
             }
             table = eng.rd32(table + 8) as usize;
         }
-        // stage:
+
         if flag_done(eng) == 1 {
             break 'outer;
         }
         ring_wrap(eng, tab);
         ring_init(eng);
     }
-    // cleanup:
+
     if eng.rd32(0xAFD8) != 0 {
-        // Completion signal via ROM 0x607B10: consumes the done flag and
-        // the AFE0 cookie inside the voice page only (vq probe: 0 engine
-        // diffs); the C discards its return.
+
         let _ = flag_done(eng);
         let _ = eng.rd32(0xAFE0);
     }
@@ -7246,12 +6895,6 @@ pub fn task_driver(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog) -> u32 
     0
 }
 
-
-/// fn_1a4cdc: render dispatch closure. Seals the record header, refreshes
-/// start state, parses tags and converts kana to units at 0x85A2, then
-/// either runs `task_driver` inline (0xE6CD != 0) or submits it as a
-/// deferred job (`job_submit`, stubbed wait). Returns the submit code.
-/// `sync` carries the guest facts the engine cannot derive.
 pub fn dispatch(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog, sync: sync::GuestSync) -> u32 {
     eng.wr32(0, 0x2AF8);
     eng.wr8(0x1B21, 0);
@@ -7274,11 +6917,9 @@ pub fn dispatch(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog, sync: sync
     }
     eng.wr32(0xE6D8, 0);
     eng.wr32(0xE6DC, 0);
-    // t.hi = -1, t.lo = E6E0: consumed by the submit path with no further
-    // engine effect under stubbed SVCs (see `job_submit`).
+
     let _ = eng.rd32(0xE6E0);
-    // fn_6b18b0(q, fn_1a1d80, p, p+0x13584, t): SyncObj words plus the
-    // scheduler request struct; arg is the guest engine pointer.
+
     sync::job_submit(
         &mut eng.mem[..],
         0xE6D8,
@@ -7291,9 +6932,6 @@ pub fn dispatch(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog, sync: sync
     )
 }
 
-/// Shared submit tail of `render_entry`: start init, text copy, trailing
-/// lead-byte trim, then `dispatch`. `sync` carries the guest facts the
-/// engine cannot derive (forwarded to `dispatch`).
 fn submit_text(eng: &mut Engine, text: &[u8]) {
     let _ = start_init(eng);
     libc::bzero0(&mut eng.mem[0xA9A2..], 0x400);
@@ -7306,14 +6944,6 @@ fn submit_text(eng: &mut Engine, text: &[u8]) {
     }
 }
 
-/// fn_19be8c: engine submit/start (Speak path). Validates mode/fmt, takes
-/// the E6FC lock, dispatches per mode, copies the Shift-JIS text to 0xA9A2
-/// and runs `dispatch`. `tid` is the borrowed thread word for the mode-0
-/// busy owner check; `text` needs the 0x400 window readable.
-/// Row constraints (as on ARM, single-threaded): modes 0/1 enter with
-/// 0xE6CB == 0 (a set busy flag spins on another thread's render, which
-/// cannot complete here); the C's final `else` (mode > 2) is dead via the
-/// early return, as is its address-test `pada0` variant.
 pub fn render_entry(
     eng: &mut Engine,
     tab: &Tables<'_>,
@@ -7326,7 +6956,7 @@ pub fn render_entry(
     pcm: &mut PcmLog,
     sync: sync::GuestSync,
 ) -> i32 {
-    // weak_19be8c: empty weak stub (no-op).
+
     if mode >= 3 {
         return -1;
     }
@@ -7389,7 +7019,7 @@ pub fn render_entry(
                 }
             }
         }
-        // common:
+
         sync::mutex_lock(eng, 0);
         eng.wr8(0xE6CB, 1);
         eng.wr8(0xE6CC, 0);
@@ -7402,7 +7032,7 @@ pub fn render_entry(
         sync::mutex_unlock_at(eng.mem, 0xE6FC);
         return 0;
     }
-    // Dead: mode > 2 returned early.
+
     sync::mutex_unlock_at(eng.mem, 0xE6FC);
     0
 }

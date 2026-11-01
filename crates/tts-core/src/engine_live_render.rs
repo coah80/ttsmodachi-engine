@@ -1,21 +1,9 @@
-//! Live (arena-threaded) forms of the render chain, from the backend progress
-//! call 2645b4 to the pcm sink.
-//!
-//! The render ports in `render_part_*` take their allocator and their method
-//! calls through `frontend::heap_alloc`, `frontend::heap_release`,
-//! `frontend::heap_realloc` and `frontend::call_method`. Those read a shared
-//! `&[u8]` arena and hand the host a callback with no arena, so a live host
-//! cannot reenter the arena inside those callbacks: the blanket
-//! `impl<T: HeapVtable + ?Sized> HeapVtableM for T` drops the arena for every
-//! host that also satisfies `render_part_c::Host`.
-//!
-//! These forms dispatch the same engine entries with the caller's arena. The
-//! guest heap's own method table is read from the arena inside the callback,
-//! and the method is called with the arena, exactly as `boot_part_e::Heap`
-//! does for the boot heap. The original ports are left unchanged.
+
+
 use crate::boot::Memory;
 use crate::frontend;
 use crate::normalization;
+use crate::rom_region::{addr, Rom};
 use crate::render_part_c;
 use crate::render_part_c2::{ContextHost, ParserEnvironment, ParserRuntime, ResourceHost, SegmentCallbackHost, SegmentEnvironment};
 
@@ -32,19 +20,11 @@ fn half(m: &Memory<'_>, p: u32) -> u16 {
     u16::from_le_bytes(m.bytes[at..at + 2].try_into().unwrap())
 }
 
-/// The guest heap's four methods, dispatched with the caller's arena.
-///
-/// The heap handle is the one `frontend::heap_alloc_m` was given; the method
-/// table is read from the arena at dispatch time, so the heap's own vtable
-/// is the one the ARM would call.
 pub struct LiveHeap<'a, H> {
     pub heap: u32,
     pub host: &'a mut H,
 }
 
-/// The live parser allocator: the guest heap's methods with the caller's
-/// arena, plus the counted form the fetch port uses. The heap is fixed per
-/// parse; the object check fails loud on a second heap.
 impl<H: crate::render_part_c::Host> crate::render_part_c2::ParserAllocatorM for LiveHeap<'_, H> {
     fn calloc_m(&mut self, object: u32, count: u32, size: u32, memory: &mut [u8]) -> u32 {
         assert_eq!(object, crate::frontend::mem_word(memory, self.heap + 4), "live heap object changed heaps");
@@ -58,13 +38,10 @@ impl<H: crate::render_part_c::Host> crate::render_part_c2::ParserAllocatorM for 
     }
 }
 
-/// The live allocator over a host.
 pub fn live_heap<'a, H: crate::render_part_c::Host>(heap: u32, host: &'a mut H) -> LiveHeap<'a, H> {
     LiveHeap { heap, host }
 }
 
-/// What a host callback saw: the entry, its arguments and a byte of the
-/// arena, so a gate can prove the arena reached the callback.
 #[derive(Clone, Copy)]
 pub struct CallRecord {
     pub entry: u32,
@@ -75,9 +52,7 @@ pub struct CallRecord {
 
 impl<H: crate::render_part_c::Host> crate::frontend::HeapVtableM for LiveHeap<'_, H> {
     fn alloc_at_m(&mut self, object: u32, size: u32, mem: &mut [u8]) -> u32 {
-        // Every memory-passing call derives its object from the heap it
-        // names; a foreign object means a second heap this binding does
-        // not serve.
+
         assert_eq!(object, crate::frontend::mem_word(mem, self.heap + 4), "live heap object changed heaps");
         let method = crate::frontend::mem_word(mem, crate::frontend::mem_word(mem, self.heap));
         crate::render_part_c::Host::call(
@@ -111,11 +86,6 @@ impl<H: crate::render_part_c::Host> crate::frontend::HeapVtableM for LiveHeap<'_
     }
 }
 
-/// fn_1963b8 over the method table, with the caller's arena.
-///
-/// `frontend::call_method` reads the method table through a shared arena and
-/// calls the host with no arena; this form reads the same table and calls the
-/// same method with the arena the caller owns.
 pub fn call_method_m(
     mem: &mut [u8],
     heap: Option<u32>,
@@ -137,11 +107,6 @@ pub fn call_method_m(
     )
 }
 
-/// The live normalization host of render part c.
-///
-/// `normalization::NormalizationHost` already passes the arena to every
-/// callback; the render port's own adapter drops it again on the way to
-/// `frontend::heap_alloc`. This adapter keeps it.
 pub struct LiveNormal<'a, H> {
     pub environment: &'a crate::render_part_c::Environment,
     pub host: &'a mut H,
@@ -192,7 +157,6 @@ impl<H: crate::render_part_c::Host> crate::normalization::NormalizationHost for 
     }
 }
 
-/// The live normalization host of render part c2.
 pub struct LiveFetch<'a, H> {
     pub host: &'a mut H,
     pub env: &'a crate::render_part_c::Environment,
@@ -243,10 +207,6 @@ impl<H: crate::render_part_c::Host> crate::normalization::NormalizationHost for 
     }
 }
 
-/// The sequence destructor, fn_263a6c, at its true entry 0x263a64.
-///
-/// The delinked symbol starts eight bytes into the function, so the target
-/// address is 0x263a64 and the body is the one the C carries.
 pub fn fn_263a64(
     m: &mut Memory<'_>,
     o: u32,
@@ -292,9 +252,6 @@ pub fn fn_263a64(
     0
 }
 
-
-// ---- the helpers the copied render bodies use ---------------------------
-
 use crate::render_part_b::RenderArgument;
 
 fn byte(m: &mut Memory<'_>, p: u32, v: u8) {
@@ -318,8 +275,6 @@ fn add_word(m: &mut Memory<'_>, p: u32, v: u32) {
     m.put_word(p, m.word(p).wrapping_add(v));
 }
 
-/// The render log, over the live host. The gate and the fan-out are the ones
-/// `render_part_b` uses; the target callback receives the caller's arena.
 fn render_log(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -365,7 +320,6 @@ fn render_log(
     }
 }
 
-/// fn_196428 with the caller's arena.
 fn live_free(m: &mut Memory<'_>, heap: u32, p: u32, h: &mut impl crate::render_part_c::Host) {
     let mut v = LiveHeap {
         heap,
@@ -374,7 +328,6 @@ fn live_free(m: &mut Memory<'_>, heap: u32, p: u32, h: &mut impl crate::render_p
     crate::frontend::heap_release_m(m.bytes, nz(heap), nz(p), &mut v);
 }
 
-/// The lifecycle calls of `fn_2b92d8`, with the caller's arena.
 pub(crate) struct LiveLifecycleCalls<'a, H> {
     pub host: &'a mut H,
     pub scratch: u32,
@@ -417,68 +370,55 @@ impl<H: crate::render_part_b::LifecycleHost> crate::render_part_c::Host
     }
 }
 
-// ---- the live render environment ---------------------------------------
-
-/// The ROM constants of the render chain. Every address is a ROM address or
-/// a ROM record, read out of the captured image.
 pub mod rom {
-    /// D_914e4c: the three tags the active sequence clears.
+
     pub const CLEAR_ACTIVE: u32 = 0x914e4c;
-    /// D_9150a4: the six tags every sequence clears.
+
     pub const CLEAR_ALL: u32 = 0x9150a4;
-    /// D_914ee0: the marker name table.
+
     pub const MARKER_NAMES: u32 = 0x914ee0;
-    /// D_915062: the render log's category.
+
     pub const LOG_CATEGORY: u32 = 0x915062;
-    /// D_9151b0: the render log's marker format.
+
     pub const MARKER_LOG: u32 = 0x9151b0;
-    /// "readmode", the literal of fn_1756d0 and the key of fn_1758ac.
+
     pub const READ_MODE: u32 = 0x264bdc;
-    /// "ppresetlen", the literal of fn_175944 and the key of fn_1758ac.
+
     pub const RESET_LEN: u32 = 0x264c44;
-    /// "extraesctn", the literal of fn_175a1c in fn_2bfa90.
+
     pub const EXTRA_KEY: u32 = 0x2c0008;
-    /// D_9c5630: the parser's global record; the event record is at +0xc4.
+
     pub const PARSER_GLOBALS: u32 = 0x9c5630;
-    /// D_9c5650: the parser log's category.
+
     pub const PARSER_CATEGORY: u32 = 0x9c5650;
-    /// D_9c5830 and D_9c5888: the parser's two log formats.
+
     pub const PARSER_FORMATS: [u32; 2] = [0x9c5830, 0x9c5888];
-    /// The format strings of fn_2645b4, in the order the ARM loads them.
-    ///
-    /// Every address is the PC-relative literal the ARM's own code resolves:
-    /// `add rN, pc, #imm` at the call site, computed as `site + 8 + imm`, read
-    /// out of the captured image with capstone. The order is the order of
-    /// first appearance in the ARM, which is also the order of the C's
-    /// fn_2645b4. Twenty-eight call sites use twenty-four distinct strings:
-    /// "AFTER esc loop", "AFTER sparser_GetTextElement",
-    /// "BEFORE seq_loc_DoExtendedTOIWords", "BEFORE tolhp_RewritePhonTextInLhp"
-    /// and "AFTER tolhp_RewritePhonTextInLhp" are each used twice.
+
     pub const LABELS: [u32; 24] = [
-        0x264be4, // ""
-        0x264bec, // "text/plain;charset=utf-16"
-        0x264c08, // "[SEQ] pfReadDirectStart returns cTextInStream %u bytes"
-        0x264c50, // "[SEQ] SSFT_PARAMC_PP_RESETLEN len is %u bytes"
-        0x264c80, // "[SEQ] pfGetPosition is %u bytes - sync marker position"
-        0x264edc, // "AFTER seq_GetTextBlock"
-        0x264ef4, // "BEFORE escseqs_Process TAG_ESCSEQS_OUT_MARKER"
-        0x264f24, // "BEFORE escseqs_Process TAG_ESCSEQS_OUT_TEXT"
-        0x264f50, // "AFTER escseqs_Process TAG_ESCSEQS_OUT_MARKER"
-        0x264f80, // "AFTER escseqs_Process TAG_ESCSEQS_OUT_TEXT"
-        0x264fac, // "AFTER esc loop"
-        0x264fbc, // "AFTER esc loop (out marker)"
-        0x264fdc, // "AFTER sparser_ScanTextElement"
-        0x265350, // "BEFORE sparser_GetTextElement"
-        0x265378, // "AFTER sparser_GetTextElement"
-        0x265398, // "AFTER sparser_GetTextElement (out marker)"
-        0x2657a8, // "[SEQ](Txt) (text processed) (tag=%d) len=%d (w_char *) \"%s\""
-        0x2657e4, // "[SEQ] bImmediateVoiceSwitch - immediate return"
-        0x265814, // "[SEQ] bEndOnVoiceSwitch - continue processing"
-        0x265844, // "AFTER seq_loc_AlignMarkers"
-        0x265860, // "AFTER wparser_NormalizeWords"
-        0x265880, // "BEFORE seq_loc_DoExtendedTOIWords"
-        0x265a80, // "BEFORE tolhp_RewritePhonTextInLhp"
-        0x265aa4, // "AFTER tolhp_RewritePhonTextInLhp"
+        0x264be4,
+        0x264bec,
+        0x264c08,
+        0x264c50,
+        0x264c80,
+        0x264edc,
+        0x264ef4,
+        0x264f24,
+        0x264f50,
+        0x264f80,
+        0x264fac,
+        0x264fbc,
+        0x264fdc,
+        0x265350,
+        0x265378,
+        0x265398,
+        0x2657a8,
+        0x2657e4,
+        0x265814,
+        0x265844,
+        0x265860,
+        0x265880,
+        0x265a80,
+        0x265aa4,
     ];
 }
 
@@ -487,20 +427,14 @@ fn word(m: &Memory<'_>, p: u32) -> u32 {
     u32::from_le_bytes(m.bytes[at..at + 4].try_into().unwrap())
 }
 
-/// The engine's cached handle, the eight bytes at 0x8d7660.
 pub fn cached_pair(m: &Memory<'_>) -> [u8; 8] {
     core::array::from_fn(|i| m.byte(0x8d7660 + i as u32))
 }
 
-/// The word at the guest address.
 pub fn guest_word(m: &Memory<'_>, p: u32) -> u32 {
     word(m, p)
 }
 
-/// fn_2bfa90, live: the allocator keeps the caller's arena. Choose a parser mode, constrain marker batches and insert EOS.
-///
-/// The comparison receives the caller's bytes with every call: a comparison
-/// that captured the arena would freeze the arena for the whole call.
 pub fn fn_2bfa90_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -509,6 +443,7 @@ pub fn fn_2bfa90_m(
     mode: u32,
     e: &crate::render_part_c::Environment,
     data: &crate::render_part_c::ParserData<'_>,
+    rm: Rom,
     host: &mut (impl crate::render_part_c::BoundaryHost + crate::log_live::LogMethodsM),
     compare: &mut impl FnMut(&[u8], u32, u32) -> i32,
 ) -> u32 {
@@ -597,8 +532,7 @@ pub fn fn_2bfa90_m(
         if rc >= 0x80000000 {
             return rc;
         }
-        // After opening an iterator the ROM funnels every result through done,
-        // which releases it and returns zero, including failed callees.
+
         let _result = (|| {
             let mut boundary = 0;
             let mut scratch = 0;
@@ -743,10 +677,7 @@ pub fn fn_2bfa90_m(
                 )
             } else {
                 let mut name = 0;
-                // The ARM's fn_175a1c holds the params object's lock across
-                // the lookup (fn_176f2c/fn_176f5c on the lock word). The
-                // live form runs the real lock path through the dispatcher
-                // and hands the lookup the already-held lock.
+
                 let params = m.word(engine + 20);
                 let arc = if params == 0 {
                     0
@@ -818,17 +749,6 @@ pub struct SyncData {
     pub stack: u32,
 }
 
-/// fn_2c0014. Select parser-mode windows, emit segments and add chunk splits.
-/// stack is 160 disjoint caller-owned bytes, restored on return.
-///
-/// The live form carries the host and the parser environment directly: the
-/// shared `ParserRuntime` would have to own the host, and the host is the
-/// engine's dispatcher. The one path the shared runtime served here, the
-/// chunk split, is not taken by the request this binding serves.
-/// The sentence splitter for a sent segment: the ARM's split_input.
-/// Builds the parser runtime the shared segment_split port needs: the
-/// lock verdict is precomputed from the arena (see lock_verdict) and the
-/// comparator reads the immutable keys from the snapshot.
 fn segment_split_live<H>(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -842,6 +762,7 @@ fn segment_split_live<H>(
     env: &crate::render_part_c2::Environment<'_>,
     host: &mut H,
     snap: &[u8],
+    rom: Rom,
 ) -> u32
 where
     H: ResourceHost + SegmentCallbackHost + crate::render_part_b::ParameterHost,
@@ -853,10 +774,10 @@ where
         let props = m.word(owner + 20);
         lock_verdict(m, if props == 0 { 0 } else { m.word(props + 4) })
     };
-    let parameters = parameters_of(m);
-    let separators = separators_of(m);
+    let parameters = parameters_of(m, rom);
+    let separators = separators_of(m, rom);
     let mut inserted = [0u8; 40];
-    let at = parser_rom::DEFAULTS as usize + 0x8c;
+    let at = addr(rom, parser_rom::DEFAULTS) as usize + 0x8c;
     inserted.copy_from_slice(&m.bytes[at..at + 40]);
     let parser = crate::render_part_c2::ParserEnvironment {
         separators: &separators,
@@ -895,6 +816,7 @@ pub fn fn_2c0014<H>(
     env: &crate::render_part_c2::Environment<'_>,
     host: &mut H,
     snap: &[u8],
+    rom: Rom,
 ) -> u32
 where
     H: ResourceHost + SegmentCallbackHost + crate::render_part_b::ParameterHost,
@@ -1055,9 +977,8 @@ where
                 continue;
             }
             if sent {
-                // The ARM calls split_input when a send happened (C
-                // fn_2c0014: `if (flag78 == 1) rc = split_input(...)`).
-                let split_rc = segment_split_live(m, ctx, timeline, base, d4, it, index as u16, stack, seg, env, host, snap);
+
+                let split_rc = segment_split_live(m, ctx, timeline, base, d4, it, index as u16, stack, seg, env, host, snap, rom);
                 if split_rc >= 0x80000000 {
                     return split_rc;
                 }
@@ -1114,8 +1035,6 @@ where
     rc
 }
 
-/// Memory-passing allocator for sentence splitting. The allocator must not
-/// capture the arena. All callbacks receive the caller's current bytes last.
 pub trait ParserAllocatorM: frontend::HeapVtableM {
     fn calloc_m(&mut self, object: u32, count: u32, size: u32, memory: &mut [u8]) -> u32;
 }
@@ -1179,12 +1098,6 @@ fn fetch_parser_live(
     (rc, array)
 }
 
-/// The ARM's parameter lock around a live lookup: acquire through the
-/// dispatcher's lock path, run the lookup with the held lock, then release
-/// through the same path. This is the live form of the `fe_lock`/`Locked`
-/// pair the boot ports use around `lookup_param`: the ARM's fn_1756d0 and
-/// fn_175944 call fn_176f2c/fn_176f5c on the params object's lock word, and
-/// those entries call nothing when the inner dispatch slot is zero.
 fn live_lookup_lock(m: &mut Memory<'_>, owner: u32, release: bool, h: &mut impl LiveRenderHost) -> u32 {
     let mut selected = None;
     let rc = if release {
@@ -1200,8 +1113,6 @@ fn live_lookup_lock(m: &mut Memory<'_>, owner: u32, release: bool, h: &mut impl 
     }
 }
 
-/// The already-held parameter lock: the real acquire/release runs around
-/// the lookup through `live_lookup_lock`, so the lookup itself is a no-op.
 struct HeldLock;
 impl crate::frontend::StateLock for HeldLock {
     fn acquire(&mut self) -> u32 { 0 }
@@ -1277,8 +1188,7 @@ fn block_text(m:&mut Memory<'_>,o:u32,ctx:u32,sp:u32,tag:u32,label:usize,e:&crat
 fn block_mark(m:&mut Memory<'_>,o:u32,ctx:u32,sp:u32,tag:u32,label:usize,e:&crate::render_part_b::BlockEnvironment<'_>,h:&mut impl crate::render_part_b::BlockHost) {
     crate::render_part_b::fn_2634c0(m,m.byte(o+0x78) as i32,ctx,sp,tag,e.labels[label],0,0,0,e.log,h);
 }
-/// fn_2645b4. Pull, escape-process, parse, normalize and rewrite one block.
-/// scratch is 320 caller-owned guest bytes, including formatter locals.
+
 pub fn fn_2645b4_m(m:&mut Memory<'_>,o:u32,sp:u32,param3:u32,e:&crate::render_part_b::BlockEnvironment<'_>,scratch:u32,h:&mut impl LiveRenderHost)->u32 {
     let mut saved=[0;320];let at=m.offset(scratch);saved.copy_from_slice(&m.bytes[at..at+320]);
     let result=(|| {
@@ -1514,17 +1424,13 @@ pub fn fn_2645b4_m(m:&mut Memory<'_>,o:u32,sp:u32,param3:u32,e:&crate::render_pa
     m.bytes[at..at+320].copy_from_slice(&saved);result
 }
 
-// ---- the live render host ------------------------------------------------
-
-/// The engine's guest dispatcher, reached with the caller's arena.
-///
-/// The render chain calls the engine's own entries: the text stream's four
-/// methods, the guest heap's four methods and the engine's property table.
-/// The live host dispatches them through the engine's own dispatcher, so the
-/// guest sees the caller's arena and the guest's own code runs.
 pub trait LiveDispatch {
     fn dispatch(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32;
     fn thread_id(&mut self) -> u32;
+    fn rom(&self) -> crate::rom_region::Rom {
+        crate::rom_region::Rom::Us
+    }
+
 }
 
 impl<D: LiveDispatch + ?Sized> LiveDispatch for &mut D {
@@ -1534,201 +1440,144 @@ impl<D: LiveDispatch + ?Sized> LiveDispatch for &mut D {
     fn thread_id(&mut self) -> u32 {
         (**self).thread_id()
     }
+    fn rom(&self) -> crate::rom_region::Rom {
+        (**self).rom()
+    }
+
 }
 
-/// The live render host: the engine's dispatcher and the render chain's own
-/// constants. The constants are read out of the caller's arena.
 pub struct LiveRender<'s, D> {
     pub dispatch: D,
-    /// The arena image taken before the request ran. Property keys are
-    /// immutable, so the escape comparator reads them from here without
-    /// aliasing the live arena the ports mutate.
+
     pub snap: &'s [u8],
     pub engine: crate::render_part_c::Environment,
     pub log: crate::render_part_b::RenderEnvironment,
     pub marker: crate::render_part_b2::Environment,
     pub lifecycle: crate::render_part_b::LifecycleEnvironment,
-    /// The lock owners the render chain selected. The ports name the lock
-    /// token through `select_lock` before acquiring; the live acquire is a
-    /// no-op and `run_block` audits every selected owner afterwards, so a
-    /// set inner dispatch slot panics instead of diverging silently.
+
     pub lock_owners: [u32; 8],
     pub lock_used: [bool; 8],
     pub lock_count: u32,
     pub lock_current: u32,
     pub lock_current_set: bool,
     pub lock_untracked: bool,
-    /// Dispatch nesting, for the runaway guard in `call`.
+
     pub depth: u32,
 }
 
-/// The block function's host: the engine's dispatcher and the four parser
-/// ports the block function reaches.
 pub trait LiveRenderHost: crate::render_part_b::BlockHost {
-    /// fn_2c0f74, the parser.
+
     fn parse(&mut self, m: &mut Memory<'_>, args: &[u32]) -> u32;
-    /// fn_2bfa90, the parser-mode chooser.
+
     fn parser_mode(&mut self, m: &mut Memory<'_>, args: &[u32]) -> u32;
-    /// fn_2c4914, the escape-sequence processor.
+
     fn escape(&mut self, m: &mut Memory<'_>, args: &[u32]) -> u32;
-    /// fn_2c0014, the parser-mode window scan.
+
     fn segment(&mut self, m: &mut Memory<'_>, args: &[u32]) -> u32;
-    /// fn_2c322c, the pronunciation conversion.
+
     fn pronounce(&mut self, m: &mut Memory<'_>, args: &[u32]) -> u32;
 }
 
-/// The ROM constants of the parser chain. Every address is a ROM address or
-/// a ROM record, read out of the captured image.
 pub mod parser_rom {
-    /// D_9e0990: the separator set, tab, line feed, carriage return, space
-    /// and the 0xfeff marker. The engine copies it at run time; the live
-    /// ports take a copy so the arena stays writable.
+
     pub const SEPARATORS: u32 = 0x9e0990;
-    /// D_9c5aa6: the space set the escape scanner skips.
+
     pub const SPACES: u32 = 0x9c5aa6;
-    /// D_9c5a28: the parser defaults, the span template at +0 and the
-    /// following event at +0x8c.
+
     pub const DEFAULTS: u32 = 0x9c5a28;
-    /// D_9c59f4: the span defaults fn_2c3e78 splits on: six separator
-    /// units (tab, line feed, carriage return, space, 0xfeff, zero) then
-    /// the 40-byte template event. Distinct from the 0x9c5a28 parser
-    /// defaults (whose separators are "__NUAN").
+
     pub const SPAN_DEFAULTS: u32 = 0x9c59f4;
-    /// D_9c5a44: the four parameter defaults, a u16 type and a name each.
+
     pub const PARAMETERS: u32 = 0x9c5a44;
-    /// D_2be484: "maxinputlength", the segment length parameter.
+
     pub const MAX_LENGTH: u32 = 0x2be484;
-    /// "audio", the escape command the ARM's own code computes with
-    /// `add r1, pc, #0x3a8` at 0x2c4f88.
+
     pub const AUDIO: u32 = 0x2c5338;
-    /// "mrk", the escape command the ARM's own code computes with
-    /// `add r1, pc, #0x398` at 0x2c4fa0.
+
     pub const MARKER: u32 = 0x2c5340;
-    /// D_8dc30c: the character class table the integer parser uses.
+
     pub const NUMBER_TABLE: u32 = 0x8dc30c;
 }
 
-/// The ROM constants of the pronunciation chain. Every address is proven by
-/// the ARM's own literal loads in build/base/fn_2c3450.o (or fn_2eca2c.o
-/// for the registry name); the field offsets are proven by the loads'
-/// displacements. See rust/evidence/rust-wire-a-round15.progress.txt.
 pub mod pron_rom {
-    /// D_9c59c0: the 12-byte nts prefix (`strcpy` source at fn_2c3450.o:0x168).
+
     pub const NTS_PREFIX: u32 = 0x9c59c0;
-    /// D_9c59c5: the ipa prefix (`strcpy` source at fn_2c3450.o:0x1a8).
+
     pub const IPA_PREFIX: u32 = 0x9c59c5;
-    /// D_9c59c0+12: the language filter, 8 bytes = 4 u16 (`ldrd [r6,#12]`).
+
     pub const LANGUAGE_FILTER: u32 = 0x9c59cc;
-    /// D_9c59c0+36: the default language, 16 bytes = 8 u16
-    /// (`add r3,r1,#36` + `ldm` + 2x `ldr`).
+
     pub const DEFAULT_LANGUAGE: u32 = 0x9c59e4;
-    /// D_9c59d4: the stop filter, 8 bytes = 4 u16 (`ldm r0,{r1,r2}`).
+
     pub const STOP_FILTER: u32 = 0x9c59d4;
-    /// D_9c59da: the trim set, a NUL-terminated u16 string scanned by
-    /// fn_176514 (`u16chr`). Copied out to a NUL-terminated local.
+
     pub const TRIM: u32 = 0x9c59da;
-    /// D_2c31e8: the property name `fetch_param` looks up in `setLanguage`
-    /// (fn_2c3450.o:0x21c loads the literal for fn_1756d0).
+
     pub const LANGCODE_KEY: u32 = 0x2c31e8;
-    /// The dictionary registry name. fn_2ecaac passes "FE_DCTLKP" from a
-    /// literal at section+0x74 (fn_2eca2c.o:0x138 `sub r1,pc,#204`),
-    /// linked at 0x2ecaa0.
+
     pub const REGISTRY_NAME: u32 = 0x2ecaa0;
-    /// The UTF-8 decoder tables (same windows slice2b and engine.rs use).
+
     pub const DECODER_EXTRA: u32 = 0x8dc1f3;
     pub const DECODER_MASK: u32 = 0x8dc1e0;
     pub const DECODER_BASE: u32 = 0x8dc2f4;
 }
 
-/// The disjoint scratch the live render chain uses. Every one of these areas
-/// is restored before the call that uses it returns.
 pub mod scratch {
-    /// fn_2645b4's own 320 bytes, including the formatter's locals.
+
     pub const BLOCK: u32 = 0x6000;
-    /// fn_2bfa90's 1200 bytes.
+
     pub const PARSER: u32 = 0x6200;
-    /// fn_2c0014's 160 bytes.
+
     pub const SEGMENT: u32 = 0x6b00;
-    /// fn_2c4914's 256 bytes.
+
     pub const ESCAPE: u32 = 0x6c00;
-    /// The parser runtime's 64 bytes.
+
     pub const RUNTIME: u32 = 0x6d00;
-    /// fn_2be984's 1200 bytes. Zero in the fixture, save/restored by the port.
+
     pub const SENTENCE: u32 = 0x6d40;
-    /// The sentence PCRE's guest stack, 256 bytes. Restored by the port.
+
     pub const PCRE_STACK: u32 = 0x7200;
-    /// fn_2c322c's 64 bytes. Zero in the fixture, save/restored by the port.
+
     pub const PRONOUNCE: u32 = 0x7300;
-    /// fn_2c322c's dictionary-marshal words inside [`PRONOUNCE`]: the match
-    /// result, length and flag, the 9-byte match prefix and the open flag.
-    /// `fn_2c3450_m` saves and restores the whole 64 bytes, and conversion
-    /// uses +8/+12/+16/+24, so the marshal area is +32..+56.
+
     pub const PRONOUNCE_MATCH_RESULT: u32 = 0x7320;
     pub const PRONOUNCE_MATCH_LENGTH: u32 = 0x7324;
     pub const PRONOUNCE_MATCH_FLAG: u32 = 0x7326;
     pub const PRONOUNCE_MATCH_PREFIX: u32 = 0x7328;
     pub const PRONOUNCE_OPEN_FLAG: u32 = 0x7334;
-    /// `dictionary_new`'s temporary word, inside [`PRONOUNCE`]. The port
-    /// saves and restores it around the acquire, and `fn_2c3450_m` saves
-    /// and restores the whole area around the run.
+
     pub const PRONOUNCE_TEMP_WORD: u32 = 0x733c;
-    /// fn_26a3e4's 128 bytes: the position out-word, then the 64-byte
-    /// scratch `RenderWriterEnvironment.scratch` names (restored on return).
-    /// The byte-text branch that owns the scratch is not taken by the own
-    /// request, but the slot is still caller-owned and restored.
+
     pub const WRITER: u32 = 0x7400;
 }
 
-/// The ROM constants of the render writer (fn_26a3e4 -> fn_269ee4).
-///
-/// Content proof: scripts/wire_a_r17_labels.py + wire_a_r17_verify.py read
-/// code.bin. labels[0] (D_269198), labels[2] (D_269e60), padding (D_914e52),
-/// separators (D_9150b0) and markers.normal (D_915158) contents are verified
-/// in the image. labels[1] is the single in-image occurrence of
-/// "after seq_loc_HandleExtendedToi1()". The checked-in fn_269ee4.o is
-/// stale versus code.bin (pool offset +0x14), so the add-pc targets do not
-/// resolve from it; labels[3] ("at end()") occurs twice (0x269ea4 and
-/// D_26a3d8, whose content is "at end()\\0") and uses D_26a3d8. All four
-/// labels, before_write, log_record, content_type and empty_string are
-/// UNREAD on the taken write-text path: mode 0 returns from fn_263384 and
-/// fn_2634c0 before they touch a label, and the port's fanout_call ignores
-/// its record/content/data addresses. The READ literals are padding,
-/// separators and markers.normal, all verified above.
 pub mod writer_rom {
-    /// D_269198: the write-text log label.
+
     pub const LABEL_WRITE_TEXT: u32 = 0x269198;
-    /// The "after seq_loc_HandleExtendedToi1()" label (single occurrence).
+
     pub const LABEL_AFTER_EXTENDED: u32 = 0x26a344;
-    /// D_269e60: the marker-position log label.
+
     pub const LABEL_MARKER_POS: u32 = 0x269e60;
-    /// The "at end()" label. Ambiguous 0x269ea4/D_26a3d8 (identical
-    /// content); uses D_26a3d8. Unread on the taken branch.
+
     pub const LABEL_AT_END: u32 = 0x26a3d8;
-    /// D_264bec: "text/plain;charset=utf-1..." (unread by the port).
+
     pub const TEXT_CONTENT_TYPE: u32 = 0x264bec;
-    /// A ROM NUL byte (padding after the labels[1] string; unread by port).
+
     pub const EMPTY_STRING: u32 = 0x26a367;
-    /// D_914e52: the u16 padding string.
+
     pub const PADDING: u32 = 0x914e52;
-    /// D_9150b0: the u16 separator set.
+
     pub const SEPARATORS: u32 = 0x9150b0;
-    /// D_915158: the "normal" u16 string the extended pass matches.
+
     pub const NORMAL: u32 = 0x915158;
-    /// D_26a3d8: the pack-markers log label (unread, mode-gated).
+
     pub const BEFORE_WRITE: u32 = 0x26a3d8;
-    /// D_26a3e0: the marker record template (unread by the port).
+
     pub const LOG_RECORD: u32 = 0x26a3e0;
-    /// "application/x-realspeak-markers-pp;version=4.0" (unread by port).
+
     pub const CONTENT_TYPE: u32 = 0x14f85c;
 }
 
-/// The live state lock. The ARM's fn_176f2c/fn_176f5c read the lock word's
-/// inner dispatch slot and reach the guest only when it is set. The live
-/// binding precomputes the ARM's verdict from the arena, so the memory-free
-/// trait reports exactly what the entries would: `rc` is the entry status
-/// (0, or 0x81402007 when the lock word itself is null) and `entry` names
-/// the guest call the inner slot selects, which the trait cannot reach, so
-/// that case stays a loud blocker naming the exact entry and target.
 pub struct LiveLock {
     pub rc: u32,
     pub entry: u32,
@@ -1752,17 +1601,6 @@ impl crate::frontend::StateLock for LiveLock {
     }
 }
 
-/// Read the ARM's lock verdict for `owner` (the params object's lock word,
-/// `word(params + 4)`, the argument the ARM passes to fn_176f2c/fn_176f5c)
-/// out of the arena: the status the entry would report, plus the guest
-/// entry and target it would call when the inner dispatch slot is set.
-/// This mirrors `frontend::acquire_lock`/`release_lock` and the live
-/// 0x176f2c/0x176f5c arm of `engine_live::Host`, which reenters through
-/// the same table.
-/// Audit the lock owners a live render selected. The ARM's fn_176f2c
-/// and fn_176f5c reach the guest only when the owner's inner dispatch
-/// slot is set (see lock_verdict), so every used owner must read zero
-/// in both slots, or the live no-op diverged from the ARM.
 pub(crate) fn audit_locks(
     m: &Memory<'_>,
     owners: &[u32; 8],
@@ -1800,15 +1638,12 @@ fn lock_verdict(m: &Memory<'_>, owner: u32) -> LiveLock {
         }
         (0, entry, m.word(owner + 8))
     };
-    // Escape lookups pair one acquire with one release on the same owner,
-    // so the verdict carries both halves.
+
     let (rc, entry, target) = one(false);
     let (release_rc, release_entry, release_target) = one(true);
     LiveLock { rc, entry, target, release_rc, release_entry, release_target }
 }
 
-/// The live tree operations. The property tree is not written by the render
-/// chain this binding serves.
 pub struct LiveTreeOps;
 impl crate::frontend::TreeOps for LiveTreeOps {
     fn tree_cmp(&mut self, _a: u32, _b: u32) -> i32 {
@@ -1828,7 +1663,6 @@ impl crate::frontend::TreeOps for LiveTreeOps {
     }
 }
 
-/// The live before-change callback.
 pub struct LiveBefore;
 impl crate::frontend::BeforeChange for LiveBefore {
     fn before(&mut self, _c: u32, _k: u32, _d: u32, _a: &mut u8) -> u32 {
@@ -1836,7 +1670,6 @@ impl crate::frontend::BeforeChange for LiveBefore {
     }
 }
 
-/// The live element callback.
 pub struct LiveElement;
 impl crate::frontend::ElementCallback for LiveElement {
     fn call_element(&mut self, _a: u32, _q: u32, _r: u32) -> u32 {
@@ -1846,8 +1679,7 @@ impl crate::frontend::ElementCallback for LiveElement {
 
 impl<'s, D: LiveDispatch> crate::render_part_c::Host for LiveRender<'s, D> {
     fn call(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32 {
-        // caller-owned like Host's guard: engines share a process, and a
-        // caught panic drops this with the request
+
         let d = self.depth;
         if d > 40 {
             panic!("render dispatch loop at {entry:#x}");
@@ -1896,9 +1728,6 @@ impl<'s, D: LiveDispatch> crate::log_live::LogMethodsM for LiveRender<'s, D> {
     }
 }
 
-/// The arena-blind allocator. The live render chain reaches the allocator
-/// only through the memory-passing forms, so a call here means a path that
-/// the own request does not take has been entered.
 impl<'s, D: LiveDispatch> crate::frontend::HeapVtable for LiveRender<'s, D> {
     fn alloc_at(&mut self, _o: u32, _n: u32) -> u32 {
         panic!("the live render reached the arena-blind allocator");
@@ -1911,7 +1740,6 @@ impl<'s, D: LiveDispatch> crate::frontend::HeapVtable for LiveRender<'s, D> {
     }
 }
 
-/// The arena-blind method table. See `HeapVtable` above.
 impl<'s, D: LiveDispatch> crate::frontend::MethodTable for LiveRender<'s, D> {
     fn call_at(&mut self, _o: u32, _a: u32, _b: u32) -> u32 {
         panic!("the live render reached the arena-blind method table");
@@ -1950,9 +1778,7 @@ impl<'s, D: LiveDispatch> crate::render_part_b::ParameterHost for LiveRender<'s,
         panic!("the live render reached the arena-blind invoke {function:#x}");
     }
     fn compare_key(&mut self, memory: &[u8], a: u32, b: u32) -> i32 {
-        // 1:1 with src/fn_196980.c (the tree comparator the ARM lookup
-        // uses): null guards, then unsigned-char strcmp over guest memory
-        // (c3 r30: the second 1e5bbc call's lifecycle close reaches here).
+
         if a == 0 && b == 0 {
             return 0;
         }
@@ -1966,8 +1792,6 @@ impl<'s, D: LiveDispatch> crate::render_part_b::ParameterHost for LiveRender<'s,
     }
 }
 
-/// The live property tree. The render chain this binding serves does not
-/// write the tree.
 impl<'s, D: LiveDispatch> crate::frontend::TreeOps for LiveRender<'s, D> {
     fn tree_cmp(&mut self, _a: u32, _b: u32) -> i32 {
         panic!("the live render reached the property tree");
@@ -1986,8 +1810,6 @@ impl<'s, D: LiveDispatch> crate::frontend::TreeOps for LiveRender<'s, D> {
     }
 }
 
-/// The live sequence constants: the engine's cached handle and the default
-/// context, both read out of the arena.
 impl<'s, D: LiveDispatch> crate::render_part_b::SequenceHost for LiveRender<'s, D> {
     fn cached_pair(&self) -> [u8; 8] {
         self.engine.cached_handle
@@ -1997,10 +1819,8 @@ impl<'s, D: LiveDispatch> crate::render_part_b::SequenceHost for LiveRender<'s, 
     }
 }
 
-/// The live render part b2 host.
 impl<'s, D: LiveDispatch> crate::render_part_b2::Host for LiveRender<'s, D> {}
 
-/// The live writer host: the stream's own write entry with the caller's arena.
 impl<'s, D: LiveDispatch> crate::render_part_b2::WriterHost for LiveRender<'s, D> {
     fn write(
         &mut self,
@@ -2014,8 +1834,6 @@ impl<'s, D: LiveDispatch> crate::render_part_b2::WriterHost for LiveRender<'s, D
     }
 }
 
-/// The live sequence-writer host: the stream's own position entry, whose
-/// out-word lives in the caller-owned [`scratch::WRITER`] slot.
 impl<'s, D: LiveDispatch> crate::render_part_b2::SequenceWriterHost for LiveRender<'s, D> {
     fn position(&mut self, m: &mut Memory<'_>, entry: u32, handle: [u32; 2]) -> (u32, u32) {
         let rc = self.dispatch.dispatch(m, entry, &[handle[0], handle[1], scratch::WRITER]);
@@ -2023,8 +1841,6 @@ impl<'s, D: LiveDispatch> crate::render_part_b2::SequenceWriterHost for LiveRend
     }
 }
 
-/// The live writer stream host. The write-text path (fn_269ee4) never
-/// reaches the stream API; a call here names the exact entry as a blocker.
 impl<'s, D: LiveDispatch> crate::render_part_b2::StreamHost for LiveRender<'s, D> {
     fn stream_call(
         &mut self,
@@ -2046,7 +1862,6 @@ impl<'s, D: LiveDispatch> crate::render_part_b2::StreamHost for LiveRender<'s, D
     }
 }
 
-/// The live lifecycle host.
 impl<'s, D: LiveDispatch> crate::render_part_b::LifecycleHost for LiveRender<'s, D> {
     fn cleanup_environment(&self) -> crate::render_part_b2::CleanupEnvironment {
         crate::render_part_b2::CleanupEnvironment {
@@ -2061,9 +1876,6 @@ impl<'s, D: LiveDispatch> crate::render_part_b::LifecycleHost for LiveRender<'s,
     }
 }
 
-/// The render's log target. The ARM's fn_1738e8 gate suppresses every level
-/// five message of this chain when the logger's own level byte is below five,
-/// so the live render never reaches a target.
 impl<'s, D: LiveDispatch> crate::render_part_b::RenderLog for LiveRender<'s, D> {
     fn log_target(
         &mut self,
@@ -2086,12 +1898,9 @@ impl<'s, D: LiveDispatch> crate::render_part_b2::CleanupHost for LiveRender<'s, 
     }
 }
 
-/// The dictionary host. The render chain this binding serves does not open
-/// or close a dictionary.
 impl<'s, D: LiveDispatch> crate::render_part_d::DictionaryHost for LiveRender<'s, D> {
     fn heap_method(&mut self, m: &mut [u8], method: u32, object: u32, args: &[u32]) -> u32 {
-        // The dictionary heap methods are guest entries reached with the
-        // caller's arena, like the render heap methods.
+
         let mut full = [0u32; 8];
         full[0] = object;
         let n = 1 + args.len().min(7);
@@ -2099,8 +1908,7 @@ impl<'s, D: LiveDispatch> crate::render_part_d::DictionaryHost for LiveRender<'s
         self.dispatch.dispatch(&mut Memory { base: 0, bytes: m }, method, &full[..n])
     }
     fn lock_method(&mut self, m: &mut [u8], method: u32, target: u32) -> u32 {
-        // The dictionary lock resolves to fn_176f2c/fn_176f5c; the ARM's
-        // verdict for a clear inner slot is zero with no guest call.
+
         self.dispatch.dispatch(&mut Memory { base: 0, bytes: m }, method, &[target])
     }
     fn compare_key(&mut self, m: &[u8], _method: u32, key: u32, stored: u32) -> i32 {
@@ -2174,19 +1982,17 @@ impl<'s, D: LiveDispatch> crate::render_part_b::BlockHost for LiveRender<'s, D> 
     }
 }
 
-/// The separator set, copied out of the caller's arena.
-pub(crate) fn separators_of(m: &Memory<'_>) -> [u8; 16] {
+pub(crate) fn separators_of(m: &Memory<'_>, rom: Rom) -> [u8; 16] {
     let mut out = [0u8; 16];
-    let at = parser_rom::SEPARATORS as usize;
+    let at = addr(rom, parser_rom::SEPARATORS) as usize;
     out.copy_from_slice(&m.bytes[at..at + 16]);
     out
 }
 
-/// The four parameter defaults, copied out of the caller's arena.
-fn parameters_of(m: &Memory<'_>) -> [(u16, u32); 4] {
+fn parameters_of(m: &Memory<'_>, rom: Rom) -> [(u16, u32); 4] {
     let mut out = [(0u16, 0u32); 4];
     for (i, slot) in out.iter_mut().enumerate() {
-        let at = parser_rom::PARAMETERS as usize + i * 8;
+        let at = addr(rom, parser_rom::PARAMETERS) as usize + i * 8;
         slot.0 = u16::from_le_bytes([m.bytes[at], m.bytes[at + 1]]);
         slot.1 = u32::from_le_bytes(m.bytes[at + 4..at + 8].try_into().unwrap());
     }
@@ -2194,10 +2000,7 @@ fn parameters_of(m: &Memory<'_>) -> [(u16, u32); 4] {
 }
 
 impl<'s, D: LiveDispatch> LiveRender<'s, D> {
-    /// The parser, fn_2c0f74. Runs the live parser over the caller's arena:
-    /// the lock verdict is precomputed from the arena, the comparator reads
-    /// the snapshot keys and the heap methods dispatch with the arena.
-    /// The engine heap is fixed per parse; a foreign heap object panics.
+
     pub fn parse(&mut self, m: &mut Memory<'_>, args: &[u32]) -> u32 {
         let engine = crate::render_part_c::Environment {
             cached_handle: self.engine.cached_handle,
@@ -2208,9 +2011,7 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
             return 0x81102007;
         }
         let heap = m.word(context + 4);
-        // The parse lookups lock the engine params; pre-select the owner
-        // so the audit verifies every acquire it serves. The owner is
-        // stable for one parse (same engine, same params object).
+
         let props = m.word(context + 20);
         let owner = if props == 0 { 0 } else { m.word(props + 4) };
         if props != 0 {
@@ -2218,10 +2019,11 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
         }
         let lock = lock_verdict(m, owner);
         let snap = self.snap;
-        let parameters = parameters_of(m);
-        let separators = separators_of(m);
+        let rom = self.dispatch.rom();
+        let parameters = parameters_of(m, rom);
+        let separators = separators_of(m, rom);
         let mut inserted = [0u8; 40];
-        let at = parser_rom::DEFAULTS as usize + 0x8c;
+        let at = addr(rom, parser_rom::DEFAULTS) as usize + 0x8c;
         inserted.copy_from_slice(&m.bytes[at..at + 40]);
         let parser = crate::render_part_c2::ParserEnvironment {
             separators: &separators,
@@ -2238,7 +2040,7 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
             },
             max_markers_key: 0,
             langcode_key: 0,
-            parser_category: rom::PARSER_CATEGORY,
+            parser_category: addr(rom, rom::PARSER_CATEGORY),
             nts_prefix: b"",
             ipa_prefix: b"",
         };
@@ -2271,12 +2073,13 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
         };
         crate::render_part_c2::fn_2c0f74_m(m, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], &mut rt, &mut allocator)
     }
-    /// The parser-mode chooser, fn_2bfa90.
+
     pub fn parser_mode(&mut self, m: &mut Memory<'_>, args: &[u32]) -> u32 {
+        let rom = self.dispatch.rom();
         let mut eos = [0u8; 40];
-        let at = rom::PARSER_GLOBALS as usize + 0xc4;
+        let at = addr(rom, rom::PARSER_GLOBALS) as usize + 0xc4;
         eos.copy_from_slice(&m.bytes[at..at + 40]);
-        let separators = separators_of(m);
+        let separators = separators_of(m, rom);
         let engine = crate::render_part_c::Environment {
             cached_handle: self.engine.cached_handle,
             default_context: self.engine.default_context,
@@ -2284,9 +2087,9 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
         let data = crate::render_part_c::ParserData {
             eos: &eos,
             separators: &separators,
-            category: rom::PARSER_CATEGORY,
-            formats: [rom::PARSER_FORMATS[0], rom::PARSER_FORMATS[1], 0, 0, 0],
-            extra_key: rom::EXTRA_KEY,
+            category: addr(rom, rom::PARSER_CATEGORY),
+            formats: [addr(rom, rom::PARSER_FORMATS[0]), addr(rom, rom::PARSER_FORMATS[1]), 0, 0, 0],
+            extra_key: addr(rom, rom::EXTRA_KEY),
             scratch: scratch::PARSER,
         };
         let mut compare = |bytes: &[u8], x: u32, y: u32| crate::normalization::strcmp_at(bytes, x, y);
@@ -2298,61 +2101,59 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
             args[3],
             &engine,
             &data,
+            rom,
             self,
             &mut compare,
         )
     }
 
-    /// The escape-sequence processor, fn_2c4914.
     pub fn escape(&mut self, m: &mut Memory<'_>, args: &[u32]) -> u32 {
-        let parameters = parameters_of(m);
+        let rom = self.dispatch.rom();
+        let parameters = parameters_of(m, rom);
         let mut spaces = [0u8; 12];
-        let at = parser_rom::SPACES as usize;
+        let at = addr(rom, parser_rom::SPACES) as usize;
         spaces.copy_from_slice(&m.bytes[at..at + 12]);
         let mut following = [0u8; 40];
-        let at = parser_rom::DEFAULTS as usize + 0x8c;
+        let at = addr(rom, parser_rom::DEFAULTS) as usize + 0x8c;
         following.copy_from_slice(&m.bytes[at..at + 40]);
-        // Caller-owned PCRE work buffers for the escape regex commands.
-        // Singing markup reaches escape sequences the own request never
-        // takes; the match inputs and tables are ROM/snapshot-immutable,
-        // so no live-arena borrow is held. Sizes match the certified
-        // sentence-pattern arm (0x2be984).
+
         let snap_tables = self.snap;
+        let eu = |us: u32| crate::rom_region::addr(rom, us) as usize;
         let mut escapes = [0i16; 75];
         for (i, slot) in escapes.iter_mut().enumerate() {
-            let at = 0x9140e4 + i * 2;
+            let at = eu(0x9140e4) + i * 2;
             *slot = i16::from_le_bytes(snap_tables[at..at + 2].try_into().unwrap());
         }
         let mut utf8_limits = [0i32; 6];
         for (i, slot) in utf8_limits.iter_mut().enumerate() {
-            let at = 0x9147ac + i * 4;
+            let at = eu(0x9147ac) + i * 4;
             *slot = i32::from_le_bytes(snap_tables[at..at + 4].try_into().unwrap());
         }
         let mut utf8_first = [0i32; 6];
         for (i, slot) in utf8_first.iter_mut().enumerate() {
-            let at = 0x9147c4 + i * 4;
+            let at = eu(0x9147c4) + i * 4;
             *slot = i32::from_le_bytes(snap_tables[at..at + 4].try_into().unwrap());
         }
         let mut utf8_mask = [0u32; 6];
         for (i, slot) in utf8_mask.iter_mut().enumerate() {
-            let at = 0x9147dc + i * 4;
+            let at = eu(0x9147dc) + i * 4;
             *slot = u32::from_le_bytes(snap_tables[at..at + 4].try_into().unwrap());
         }
         let tables = crate::regex::PcreTables {
-            op_lengths: snap_tables[0x914092..0x914192].try_into().unwrap(),
-            ctypes: snap_tables[0x91426c..0x91436c].try_into().unwrap(),
-            default_tables: snap_tables[0x91436c..0x9147ac].try_into().unwrap(),
+            op_lengths: snap_tables[eu(0x914092)..eu(0x914092) + 0x100].try_into().unwrap(),
+            ctypes: snap_tables[eu(0x91426c)..eu(0x91426c) + 0x100].try_into().unwrap(),
+            default_tables: snap_tables[eu(0x91436c)..eu(0x91436c) + 0x440].try_into().unwrap(),
             escapes: &escapes,
             utf8_limits: &utf8_limits,
             utf8_first: &utf8_first,
-            utf8_cont: snap_tables[0x9147f4..0x914834].try_into().unwrap(),
+            utf8_cont: snap_tables[eu(0x9147f4)..eu(0x9147f4) + 0x40].try_into().unwrap(),
             utf8_mask: &utf8_mask,
-            rep_min: snap_tables[0x914044..0x91404a].try_into().unwrap(),
-            rep_max: snap_tables[0x91404a..0x914050].try_into().unwrap(),
+            rep_min: snap_tables[eu(0x914044)..eu(0x914044) + 6].try_into().unwrap(),
+            rep_max: snap_tables[eu(0x91404a)..eu(0x91404a) + 6].try_into().unwrap(),
             posix_lengths: &[],
             posix_names: &[],
             posix_maps: &[],
-            ctypes_overspill: &snap_tables[0x9147ac..0x9147ac + 4096],
+            ctypes_overspill: &snap_tables[eu(0x9147ac)..eu(0x9147ac) + 4096],
         };
         let mut program = [0u8; 2048];
         let mut subject = [0u8; 2048];
@@ -2378,14 +2179,14 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
             parameters,
             spaces: &spaces,
             following,
-            reset_name: parser_rom::DEFAULTS,
+            reset_name: addr(rom, parser_rom::DEFAULTS),
             fallback: 0,
-            audio: parser_rom::AUDIO,
-            marker: parser_rom::MARKER,
+            audio: addr(rom, parser_rom::AUDIO),
+            marker: addr(rom, parser_rom::MARKER),
         };
-        let separators = separators_of(m);
+        let separators = separators_of(m, rom);
         let mut inserted = [0u8; 40];
-        let at = parser_rom::DEFAULTS as usize + 0x8c;
+        let at = addr(rom, parser_rom::DEFAULTS) as usize + 0x8c;
         inserted.copy_from_slice(&m.bytes[at..at + 40]);
         let parser = crate::render_part_c2::ParserEnvironment {
             separators: &separators,
@@ -2402,16 +2203,11 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
             },
             max_markers_key: 0,
             langcode_key: 0,
-            parser_category: rom::PARSER_CATEGORY,
+            parser_category: addr(rom, rom::PARSER_CATEGORY),
             nts_prefix: b"",
             ipa_prefix: b"",
         };
-        // The escape lookups lock the parser params through fn_175a1c
-        // on word(context + 20). Replicate fn_2c4914's prologue to name
-        // the object, then precompute the ARM's lock verdict from the
-        // arena (see lock_verdict). fn_2c4914 returns before any lock use
-        // when the state or buffers are null, so the verdict is unused
-        // there; the heap stays unnamed on that path too.
+
         let (rrc, context) = if args[0] == 0 || args[1] == 0 {
             (0x80002007, 0)
         } else {
@@ -2426,18 +2222,12 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
         let mut ops = LiveTreeOps;
         let mut before = LiveBefore;
         let mut callback = LiveElement;
-        // The escape comparator reads the immutable property keys from the
-        // arena snapshot, so it holds no borrow of the live arena the
-        // ports mutate through `m`.
+
         let snap = self.snap;
         let mut compare = move |x: u32, y: u32| -> i32 {
             crate::normalization::strcmp_at(snap, x, y)
         };
-        // The escape heap traffic runs through the engine heap on the
-        // caller's arena via the shared dispatch cell, exactly like the
-        // pronunciation path's allocator. The cell borrow is released
-        // before any host call (heap methods run pure arena ops plus
-        // locks, never back into this host), so borrows cannot nest.
+
         let heap = if context == 0 { 0 } else { m.word(context + 4) };
         let cell = core::cell::RefCell::new(&mut self.dispatch);
         let mut host = ParseHost {
@@ -2464,24 +2254,24 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
         crate::render_part_c2::fn_2c4914_m(m, args[0], args[1], scratch::ESCAPE, &escape, &mut rt, &mut allocator)
     }
 
-    /// The parser-mode window scan, fn_2c0014.
     pub fn segment(&mut self, m: &mut Memory<'_>, args: &[u32]) -> u32 {
-        let separators = separators_of(m);
+        let rom = self.dispatch.rom();
+        let separators = separators_of(m, rom);
         let mut first = [0u8; 40];
-        let at = rom::PARSER_GLOBALS as usize + 0x74;
+        let at = addr(rom, rom::PARSER_GLOBALS) as usize + 0x74;
         first.copy_from_slice(&m.bytes[at..at + 40]);
         let mut split = [0u8; 40];
-        let at = rom::PARSER_GLOBALS as usize + 0x9c;
+        let at = addr(rom, rom::PARSER_GLOBALS) as usize + 0x9c;
         split.copy_from_slice(&m.bytes[at..at + 40]);
         let mut number_table = [0u16; 256];
         for (i, slot) in number_table.iter_mut().enumerate() {
-            *slot = m.half(parser_rom::NUMBER_TABLE + i as u32 * 2);
+            *slot = m.half(addr(rom, parser_rom::NUMBER_TABLE) + i as u32 * 2);
         }
         let seg = crate::render_part_c2::SegmentEnvironment {
             first,
             split,
             separators: &separators,
-            max_length_key: parser_rom::MAX_LENGTH,
+            max_length_key: addr(rom, parser_rom::MAX_LENGTH),
             number_table: &number_table,
         };
         let env = crate::render_part_c2::Environment {
@@ -2491,7 +2281,7 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
             },
             max_markers_key: 0,
             langcode_key: 0,
-            parser_category: rom::PARSER_CATEGORY,
+            parser_category: addr(rom, rom::PARSER_CATEGORY),
             nts_prefix: b"",
             ipa_prefix: b"",
         };
@@ -2507,14 +2297,10 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
             &env,
             self,
             snap,
+            rom,
         )
     }
-    /// The pronunciation conversion, fn_2c322c. The language filter, stop
-    /// filter, prefixes, default language, trim set and decoder tables are
-    /// copied out of the ROM image in the caller's arena; the dictionary
-    /// registry name is the ROM literal fn_2ecaac passes. The iterator and
-    /// conversion heap traffic runs through the guest heap on the arena via
-    /// the shared dispatch cell, exactly like the parser's allocator.
+
     pub fn pronounce(&mut self, m: &mut Memory<'_>, args: &[u32]) -> u32 {
         let engine = crate::render_part_c::Environment {
             cached_handle: self.engine.cached_handle,
@@ -2526,24 +2312,25 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
             return 0x81102007;
         }
         let heap = m.word(context + 4);
+        let rom = self.dispatch.rom();
         let mut nts = [0u8; 12];
-        nts.copy_from_slice(&m.bytes[pron_rom::NTS_PREFIX as usize..pron_rom::NTS_PREFIX as usize + 12]);
+        nts.copy_from_slice(&m.bytes[addr(rom, pron_rom::NTS_PREFIX) as usize..addr(rom, pron_rom::NTS_PREFIX) as usize + 12]);
         let mut ipa = [0u8; 12];
-        ipa.copy_from_slice(&m.bytes[pron_rom::IPA_PREFIX as usize..pron_rom::IPA_PREFIX as usize + 12]);
+        ipa.copy_from_slice(&m.bytes[addr(rom, pron_rom::IPA_PREFIX) as usize..addr(rom, pron_rom::IPA_PREFIX) as usize + 12]);
         let mut language_filter = [0u16; 4];
         for (i, slot) in language_filter.iter_mut().enumerate() {
-            let at = pron_rom::LANGUAGE_FILTER as usize + i * 2;
+            let at = addr(rom, pron_rom::LANGUAGE_FILTER) as usize + i * 2;
             *slot = u16::from_le_bytes([m.bytes[at], m.bytes[at + 1]]);
         }
         let mut stop_filter = [0u16; 4];
         for (i, slot) in stop_filter.iter_mut().enumerate() {
-            let at = pron_rom::STOP_FILTER as usize + i * 2;
+            let at = addr(rom, pron_rom::STOP_FILTER) as usize + i * 2;
             *slot = u16::from_le_bytes([m.bytes[at], m.bytes[at + 1]]);
         }
         let mut trim = [0u8; 130];
         let mut units = 0usize;
         loop {
-            let at = pron_rom::TRIM as usize + units * 2;
+            let at = addr(rom, pron_rom::TRIM) as usize + units * 2;
             let unit = u16::from_le_bytes([m.bytes[at], m.bytes[at + 1]]);
             if unit == 0 || units == 64 {
                 break;
@@ -2553,11 +2340,11 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
         }
         let trim_bytes = (units + 1) * 2;
         let mut extra = [0u8; 256];
-        extra.copy_from_slice(&m.bytes[pron_rom::DECODER_EXTRA as usize..pron_rom::DECODER_EXTRA as usize + 256]);
+        extra.copy_from_slice(&m.bytes[addr(rom, pron_rom::DECODER_EXTRA) as usize..addr(rom, pron_rom::DECODER_EXTRA) as usize + 256]);
         let mut mask = [0u8; 24];
-        mask.copy_from_slice(&m.bytes[pron_rom::DECODER_MASK as usize..pron_rom::DECODER_MASK as usize + 24]);
+        mask.copy_from_slice(&m.bytes[addr(rom, pron_rom::DECODER_MASK) as usize..addr(rom, pron_rom::DECODER_MASK) as usize + 24]);
         let mut base = [0u8; 24];
-        base.copy_from_slice(&m.bytes[pron_rom::DECODER_BASE as usize..pron_rom::DECODER_BASE as usize + 24]);
+        base.copy_from_slice(&m.bytes[addr(rom, pron_rom::DECODER_BASE) as usize..addr(rom, pron_rom::DECODER_BASE) as usize + 24]);
         let decoder = crate::normalization::DecoderTables {
             extra: &extra,
             mask: &mask,
@@ -2566,7 +2353,7 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
             base_base: 0,
         };
         let dictionary = crate::render_part_d::DictionaryEnvironment {
-            registry_name: pron_rom::REGISTRY_NAME,
+            registry_name: addr(rom, pron_rom::REGISTRY_NAME),
             temporary_word: scratch::PRONOUNCE_TEMP_WORD,
             cached_handle: self.engine.cached_handle,
             default_context: self.engine.default_context,
@@ -2574,14 +2361,14 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
         let env = crate::render_part_c2::Environment {
             engine,
             max_markers_key: 0,
-            langcode_key: pron_rom::LANGCODE_KEY,
-            parser_category: rom::PARSER_CATEGORY,
+            langcode_key: addr(rom, pron_rom::LANGCODE_KEY),
+            parser_category: addr(rom, rom::PARSER_CATEGORY),
             nts_prefix: &nts,
             ipa_prefix: &ipa,
         };
         let pronunciation = crate::render_part_c2::PronunciationEnvironment {
             dictionary: &dictionary,
-            default_language: pron_rom::DEFAULT_LANGUAGE,
+            default_language: addr(rom, pron_rom::DEFAULT_LANGUAGE),
             language_filter: &language_filter,
             stop_filter: &stop_filter,
             trim: &trim[..trim_bytes],
@@ -2611,11 +2398,6 @@ impl<'s, D: LiveDispatch> LiveRender<'s, D> {
     }
 }
 
-/// The parse host: field borrows of the live render for the parser port,
-/// which holds its host and its allocator as separate `&mut`s. The guest
-/// heap methods dispatch through the shared cell; the cell borrow is
-/// released before any host call (heap methods run pure arena ops plus
-/// locks, never back into this host), so borrows cannot nest.
 pub struct ParseHost<'a, 'x, D> {
     pub dispatch: &'a core::cell::RefCell<&'a mut D>,
     pub lock_owners: &'x mut [u32; 8],
@@ -2625,8 +2407,7 @@ pub struct ParseHost<'a, 'x, D> {
     pub lock_current_set: &'x mut bool,
     pub lock_untracked: &'x mut bool,
 }
-/// The parse allocator: the engine heap fixed per parse, dispatched
-/// through the shared cell. The object check fails loud on a second heap.
+
 pub struct ParseAlloc<'a, D> {
     pub heap: u32,
     pub dispatch: &'a core::cell::RefCell<&'a mut D>,
@@ -2697,10 +2478,7 @@ impl<D: LiveDispatch> crate::render_part_c2::ResourceHost for ParseHost<'_, '_, 
         self.dispatch.borrow_mut().dispatch(m, entry, args)
     }
 }
-/// The pronunciation path's dictionary calls, dispatched with the caller's
-/// arena through the shared cell. The open/match guest entries marshal
-/// their out-words through the [`scratch::PRONOUNCE`] area, which
-/// `fn_2c3450_m` saves and restores around the run.
+
 impl<D: LiveDispatch> crate::render_part_d::DictionaryHost for ParseHost<'_, '_, D> {
     fn heap_method(&mut self, m: &mut [u8], method: u32, object: u32, args: &[u32]) -> u32 {
         let mut full = [0u32; 8];
@@ -2888,12 +2666,6 @@ impl<'s, D: LiveDispatch> LiveRenderHost for LiveRender<'s, D> {
     }
 }
 
-/// Run the backend progress call, fn_2645b4, over the caller's arena.
-///
-/// The block environment is built from the arena: the label strings are the
-/// ROM literals the ARM's own code resolves, the clear tags are the ROM
-/// tables, the normalizer's defaults are the ROM record at D_9c5a28 and the
-/// separator set is copied out of D_9e0990.
 pub fn run_block<D: LiveDispatch>(
     dispatch: D,
     m: &mut Memory<'_>,
@@ -2903,9 +2675,10 @@ pub fn run_block<D: LiveDispatch>(
     snap: &[u8],
 ) -> u32 {
     assert!(!snap.is_empty(), "run_block needs the arena key snapshot");
+    let rom = dispatch.rom();
     let engine = crate::render_part_c::Environment {
-        cached_handle: core::array::from_fn(|i| m.byte(0x8d7660 + i as u32)),
-        default_context: 0x8d7640,
+        cached_handle: core::array::from_fn(|i| m.byte(crate::rom_region::addr(rom, 0x8d7660) + i as u32)),
+        default_context: crate::rom_region::addr(rom, 0x8d7640),
     };
     let log = || crate::render_part_b::RenderEnvironment {
         category: rom::LOG_CATEGORY,
@@ -2922,32 +2695,29 @@ pub fn run_block<D: LiveDispatch>(
         suffix: 0,
         boundary_tags: [0; 6],
         cached_handle: engine.cached_handle,
-        default_context: 0x8d7640,
+        default_context: crate::rom_region::addr(rom, 0x8d7640),
     };
     let lifecycle = || crate::render_part_b::LifecycleEnvironment {
         engine: crate::render_part_c::Environment {
             cached_handle: engine.cached_handle,
-            default_context: 0x8d7640,
+            default_context: crate::rom_region::addr(rom, 0x8d7640),
         },
-        // 1:1 with src/fn_2b92d8.c: the pair table D_9b25e8 and the
-        // key triple D_9b2608 are ROM tables the lifecycle close reads
-        // directly (c3 r30: the 0x0 placeholders made every non-Latin
-        // second 1e5bbc call stop with 0x8b702007 from 0x175a24/key==0).
-        parameter_pairs: 0x9b25e8,
-        parameter_triple: 0x9b2608,
+
+        parameter_pairs: addr(rom, 0x9b25e8),
+        parameter_triple: addr(rom, 0x9b2608),
     };
     let mut defaults = [0u8; 52];
-    let at = parser_rom::SPAN_DEFAULTS as usize;
+    let at = addr(rom, parser_rom::SPAN_DEFAULTS) as usize;
     defaults.copy_from_slice(&m.bytes[at..at + 52]);
     let mut labels = [0u32; 24];
     labels.copy_from_slice(&rom::LABELS);
     let mut clear_active = [0u16; 3];
     let mut clear_all = [0u16; 6];
     for (i, slot) in clear_active.iter_mut().enumerate() {
-        *slot = m.half(rom::CLEAR_ACTIVE + i as u32 * 2);
+        *slot = m.half(addr(rom, rom::CLEAR_ACTIVE) + i as u32 * 2);
     }
     for (i, slot) in clear_all.iter_mut().enumerate() {
-        *slot = m.half(rom::CLEAR_ALL + i as u32 * 2);
+        *slot = m.half(addr(rom, rom::CLEAR_ALL) + i as u32 * 2);
     }
     let log_v = log();
     let marker_v = marker();
@@ -2958,16 +2728,15 @@ pub fn run_block<D: LiveDispatch>(
         marker: &marker_v,
         clear_active,
         clear_all,
-        readmode: rom::READ_MODE,
-        resetlen: rom::RESET_LEN,
-        mode_key: rom::READ_MODE,
-        position_key: rom::RESET_LEN,
+        readmode: addr(rom, rom::READ_MODE),
+        resetlen: addr(rom, rom::RESET_LEN),
+        mode_key: addr(rom, rom::READ_MODE),
+        position_key: addr(rom, rom::RESET_LEN),
         labels,
         marker_log: rom::MARKER_LOG,
         normalizer_defaults: &defaults,
     };
-    // No lock slot is baked in: the ports name the lock token through
-    // `select_lock` before acquiring, and the owners are audited below.
+
     let mut host = LiveRender {
         dispatch,
         snap,
@@ -2987,20 +2756,11 @@ pub fn run_block<D: LiveDispatch>(
         depth: 0,
     };
     let rc = fn_2645b4_m(m, o, sp, param3, &block, scratch::BLOCK, &mut host);
-    // Audit the lock owners the render chain selected (see audit_locks).
+
     crate::engine_live_render::audit_locks(m, &host.lock_owners, &host.lock_used, host.lock_count, host.lock_untracked);
     rc
 }
 
-/// Run the render writer, fn_26a3e4, over the caller's arena.
-///
-/// The writer environment is built from the arena: the label strings are
-/// the ROM literals in [`writer_rom`], the extended set is D_914e52 /
-/// D_9150b0 / D_915158 and the 128-byte [`scratch::WRITER`] slot holds the
-/// position out-word plus the writer scratch. The byte-text branch
-/// (state+119 != 0) is not taken by the own request; its environment
-/// fields (latin, rewrite, labels, formats) are zero placeholders and the
-/// port panics naming fn_268cbc if it is ever reached.
 pub fn run_writer<D: LiveDispatch>(
     dispatch: D,
     m: &mut Memory<'_>,
@@ -3012,9 +2772,10 @@ pub fn run_writer<D: LiveDispatch>(
     snap: &[u8],
 ) -> u32 {
     assert!(!snap.is_empty(), "run_writer needs the arena key snapshot");
+    let rom = dispatch.rom();
     let engine = crate::render_part_c::Environment {
-        cached_handle: core::array::from_fn(|i| m.byte(0x8d7660 + i as u32)),
-        default_context: 0x8d7640,
+        cached_handle: core::array::from_fn(|i| m.byte(crate::rom_region::addr(rom, 0x8d7660) + i as u32)),
+        default_context: crate::rom_region::addr(rom, 0x8d7640),
     };
     let log = crate::render_part_b::RenderEnvironment {
         category: rom::LOG_CATEGORY,
@@ -3027,7 +2788,7 @@ pub fn run_writer<D: LiveDispatch>(
         special_tag_name: 0,
     };
     let markers = crate::render_part_b2::Environment {
-        normal: writer_rom::NORMAL,
+        normal: crate::rom_region::addr(rom, writer_rom::NORMAL),
         suffix: 0,
         boundary_tags: [0; 6],
         cached_handle: engine.cached_handle,
@@ -3035,8 +2796,8 @@ pub fn run_writer<D: LiveDispatch>(
     };
     let extended = crate::render_part_b2::ExtendedEnvironment {
         markers,
-        padding: writer_rom::PADDING,
-        separators: writer_rom::SEPARATORS,
+        padding: crate::rom_region::addr(rom, writer_rom::PADDING),
+        separators: crate::rom_region::addr(rom, writer_rom::SEPARATORS),
     };
     let writer = crate::render_part_b2::WriterEnvironment {
         before_write: writer_rom::BEFORE_WRITE,

@@ -1,40 +1,11 @@
-//! Arena-based translations of mid-level slice 4b functions.
-//!
-//! Every entry here sits in the call tree under the SELECT_BET2 Process entry
-//! (`fn_227d64` / EU `fn_227f20` / KR `fn_227fcc`) and calls only already-ported
-//! leaves or pool/table hosts, so the single table-driven harness in
-//! `scripts/slice4b_arena_mid.py` can drive each one as a table row. Addresses are
-//! arena addresses; every call that leaves this set goes through [`Host`].
-//!
-//! Conventions shared with the harness:
-//!
-//! * ROM-literal pointer arguments the original passes to host stubs (heap
-//!   names, log tags, format strings) differ per region, so the port passes
-//!   `0xFFFF_FFFF` for them and the generator normalizes recorded ROM-range
-//!   words to the same sentinel before comparing regions.
-//! * Functions whose callees write through a stack out-pointer take the scratch
-//!   word addresses as extra trailing stack arguments. The original ignores
-//!   those words; the port uses them as the callee's scratch.
+
 
 use super::arena::{Arena, Host};
 
 const POOL_ALLOC_ERROR: u32 = 0x84e0_200a;
-/// Sentinel the harness uses for a ROM-literal pointer argument.
+
 const ROM_SENTINEL: u32 = 0xffff_ffff;
 
-/// ARM-faithful `fn_29b1c4` for full-register mode values.
-///
-/// The original passes the mode as a full 32-bit register: `mul` uses all of
-/// `r1` for the low term while `smulbb` uses only its signed low halfword for
-/// the high term (`tools/asm.sh fn_29b1c4`: `mul r0, r6, r1` next to
-/// `smulbb r1, r5, r1`). The src/ C narrows to `s16` first, which differs when
-/// the low halfword is at least `0x8000` with zero upper bits: for mode
-/// `0x85e4` ARM multiplies the low term by 34276 while the C uses -31260.
-/// Round-1 fuzz pre-narrowed the mode (`scripts/slice4_arm.py` rewrites the
-/// argument to a signed halfword, whose upper bits are all ones), which makes
-/// both agree and masked this; it is an ARM-vs-C semantic difference handled
-/// here, and Rust follows ARM. The shared [`super::rounded_short_product`]
-/// keeps its narrowed contract for its own pre-narrowed callers.
 fn widened_product(value: i32, mode: u32, fractional_bits: u32) -> i32 {
     let low = (value as u16 as u32).wrapping_mul(mode);
     let high = (value >> 16).wrapping_mul((mode as u16 as i16) as i32);
@@ -44,11 +15,6 @@ fn widened_product(value: i32, mode: u32, fractional_bits: u32) -> i32 {
     ))
 }
 
-/// fn_2a4104 / EU fn_2a42c0 / KR fn_2a436c.
-///
-/// Allocates a row-pointer table plus its backing store through the private
-/// heap. The two `fn_2db1d0` allocations are host calls here; the row-pointer
-/// fan-out is the function's own memory walk.
 pub fn allocate_table(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -84,10 +50,6 @@ pub fn allocate_table(
     POOL_ALLOC_ERROR
 }
 
-/// fn_2a320c / EU fn_2a33c8 / KR fn_2a3474.
-///
-/// Releases the workspace through the private heap. The first argument is the
-/// unused context tag the original keeps for its call shape.
 pub fn release_workspace(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -97,9 +59,6 @@ pub fn release_workspace(
     host.call(arena, 0x2db4a0, &[heap]).0
 }
 
-/// fn_2a3414 / EU fn_2a35d0 / KR fn_2a367c.
-///
-/// Clears the nine selector words, then releases the two heap halves.
 pub fn release_selector(arena: &mut Arena<'_>, host: &mut impl Host, state: u32) -> u32 {
     for word in [16u32, 17, 18, 20, 21, 19, 14, 13, 15] {
         arena.set_u32(state.wrapping_add(word.wrapping_mul(4)), 0);
@@ -109,9 +68,6 @@ pub fn release_selector(arena: &mut Arena<'_>, host: &mut impl Host, state: u32)
     0
 }
 
-/// fn_2a3740 / EU fn_2a38fc / KR fn_2a39a8.
-///
-/// Clears the six trailing words, then releases the heap.
 pub fn release_filter(arena: &mut Arena<'_>, host: &mut impl Host, state: u32) -> u32 {
     let mut i = 0;
     while i < 6 {
@@ -122,10 +78,6 @@ pub fn release_filter(arena: &mut Arena<'_>, host: &mut impl Host, state: u32) -
     0
 }
 
-/// fn_2a3644 / EU fn_2a3800 / KR fn_2a38ac.
-///
-/// Conditionally releases the input half, clears both halves, then releases
-/// the whole workspace.
 pub fn reset_workspace(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -151,12 +103,6 @@ pub fn reset_workspace(
     0
 }
 
-/// fn_2a3214 / EU fn_2a33d0 / KR fn_2a347c.
-///
-/// Resets the temporary heap, sizes it for a `columns` by `rows` table, then
-/// optionally sizes the input heap for the stride tables. The two `fn_2a4104`
-/// table builds and the heap lifecycle calls are host calls here. The heap
-/// names are ROM literals, so the port passes the sentinel for them.
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_gain_tables(
     arena: &mut Arena<'_>,
@@ -243,12 +189,6 @@ pub fn prepare_gain_tables(
     status
 }
 
-/// fn_2a335c / EU fn_2a3518 / KR fn_2a35c4.
-///
-/// Borrows the source matrix shape into the input heap and builds its mean
-/// and variance tables. The two `fn_2a4104` builds and heap lifecycle are host
-/// calls here; the heap name is a ROM literal, so the port passes the
-/// sentinel for it.
 pub fn prepare_input_tables(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -316,11 +256,6 @@ pub fn prepare_input_tables(
     result
 }
 
-/// fn_2a3498 / EU fn_2a3654 / KR fn_2a3700.
-///
-/// Resets the filter heap, borrows the workspace streams when present, then
-/// allocates the data rows. The heap lifecycle and row allocations are host
-/// calls here; the row-pointer fan-out is the function's own walk.
 pub fn prepare_filter_rows(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -405,11 +340,6 @@ pub fn prepare_filter_rows(
     0
 }
 
-/// fn_2da518 / EU fn_2da6d4 / KR fn_2da780.
-///
-/// Scores every stream frame through the acoustic table and latches bit 1 of
-/// the flag byte from the first frame's cost. The table reads are host calls;
-/// their cost out-pointer is the trailing scratch stack word.
 #[allow(clippy::too_many_arguments)]
 pub fn select_voiced(
     arena: &mut Arena<'_>,
@@ -466,10 +396,6 @@ pub fn select_voiced(
     result
 }
 
-/// fn_2da5d8 / EU fn_2da794 / KR fn_2da840.
-///
-/// Scores every stream frame through the variance table and latches bit 2 of
-/// the flag byte from the first frame's cost.
 #[allow(clippy::too_many_arguments)]
 pub fn select_spectral(
     arena: &mut Arena<'_>,
@@ -526,11 +452,6 @@ pub fn select_spectral(
     result
 }
 
-/// fn_2da690 / EU fn_2da84c / KR fn_2da8f8.
-///
-/// Scores every band through the outer table and latches bit 2 of the output
-/// flags from the first band's cost. `directory` is the integer the original
-/// adds 300 to for the table address.
 #[allow(clippy::too_many_arguments)]
 pub fn select_band(
     arena: &mut Arena<'_>,
@@ -586,12 +507,6 @@ pub fn select_band(
     result
 }
 
-/// fn_2da300 / EU fn_2da4bc / KR fn_2da568.
-///
-/// Reads one duration row through the duration table, adjusts it, clamps it
-/// and rounds it into the coefficient vector. The duration reads and the row
-/// allocation are host calls; the fixed-point adjust uses the shared
-/// arithmetic. The two trailing scratch words take the callee's pair output.
 #[allow(clippy::too_many_arguments)]
 pub fn read_durations(
     arena: &mut Arena<'_>,
@@ -654,11 +569,6 @@ pub fn read_durations(
     status
 }
 
-/// fn_2da418 / EU fn_2da5d4 / KR fn_2da680.
-///
-/// Reads one mean/variance row through the acoustic table, adjusts the mean
-/// and latches bit 1 of the flags from the first frame's cost. The three
-/// trailing scratch words take the callee's triple output.
 #[allow(clippy::too_many_arguments)]
 pub fn read_frame_params(
     arena: &mut Arena<'_>,
@@ -722,11 +632,6 @@ pub fn read_frame_params(
     result
 }
 
-/// fn_2a2b34 / EU fn_2a2cf0 / KR fn_2a2d9c.
-///
-/// Runs the forward lattice pass over one stream: normalizes the shared state,
-/// factors it, then runs the band forward and backward-three stages. Every
-/// stage is a host call here.
 pub fn run_forward_stream(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -748,9 +653,6 @@ pub fn run_forward_stream(
     0
 }
 
-/// fn_2a2b88 / EU fn_2a2d44 / KR fn_2a2df0.
-///
-/// Runs the backward lattice pass over one stream. Every stage is a host call.
 pub fn run_backward_stream(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -772,10 +674,6 @@ pub fn run_backward_stream(
     0
 }
 
-/// fn_2a4864 / EU fn_2a4a20 / KR fn_2a4acc.
-///
-/// Restores the default voice configuration. Pure memory writes, no callees.
-/// Offsets follow the `VoiceCfg` layout in `src/fn_2a4864.c`.
 pub fn default_voice_config(arena: &mut Arena<'_>, config: u32) -> u32 {
     arena.set_u16(config, 0);
     arena.set_u16(config.wrapping_add(2), 0);
@@ -827,11 +725,6 @@ pub fn default_voice_config(arena: &mut Arena<'_>, config: u32) -> u32 {
     0
 }
 
-/// fn_2a9090 / EU fn_2a924c / KR fn_2a92f8.
-///
-/// Releases the frame's backing lookup through `fn_179208`, then clears the
-/// handle words. The lookup is a host call here; the pair travels as two
-/// register words exactly like the original's `u64` argument.
 pub fn release_frame_lookup(arena: &mut Arena<'_>, host: &mut impl Host, state: u32) -> u32 {
     let mut result = 0;
     if state != 0 && arena.u32(state.wrapping_add(12)) != 0 {
@@ -853,11 +746,6 @@ pub fn release_frame_lookup(arena: &mut Arena<'_>, host: &mut impl Host, state: 
     result
 }
 
-/// fn_243e2c / EU fn_243fe8 / KR fn_244094.
-///
-/// Copies one length-prefixed, optionally xor-masked entry into the caller
-/// buffer. Pure memory walk, no callees: the original's two `fn_195ae8` calls
-/// are two-byte and `length`-byte copies the port performs directly.
 pub fn read_voice_entry(
     arena: &mut Arena<'_>,
     reader: u32,
@@ -907,10 +795,6 @@ pub fn read_voice_entry(
     0
 }
 
-/// fn_243a94 / EU fn_243c50 / KR fn_243cfc.
-///
-/// Forwards the handle pair to the resource open helper. Pure forwarding
-/// through the host here.
 #[allow(clippy::too_many_arguments)]
 pub fn open_voice_resource(
     arena: &mut Arena<'_>,
@@ -941,16 +825,6 @@ pub fn open_voice_resource(
     .0
 }
 
-/// fn_2a47bc / EU fn_2a4978 / KR fn_2a4a24.
-///
-/// Releases one reference on the shared stream; the last release tears down
-/// the five filter items, both buffers and both heap halves. Offsets follow
-/// `src/fn_2a47bc.c`: the allocator pointer at `+0x18` holds the heap tag at
-/// `+4`, references at `+0x1c`, items at `+0x26c`, and buffers at `+0x42c`.
-/// The filter and selector teardowns run inline through [`release_filter`]
-/// and [`release_selector`] rather than through the host, so callers that
-/// reuse this function observe the same host calls as the original's nested
-/// execution.
 pub fn release_shared_stream(arena: &mut Arena<'_>, host: &mut impl Host, state: u32) -> u32 {
     if arena.u16(state.wrapping_add(0x1c)) != 0 {
         arena.set_u16(
@@ -986,11 +860,6 @@ pub fn release_shared_stream(arena: &mut Arena<'_>, host: &mut impl Host, state:
     0
 }
 
-/// fn_2a762c / EU fn_2a77e8 / KR fn_2a7894.
-///
-/// Tears down the selection workspace and logs completion for late stages.
-/// The filter releases and the diagnostic log are host calls here; the log
-/// tag and format are ROM literals, so the port passes the sentinel for them.
 pub fn finish_selection(
     arena: &mut Arena<'_>,
     host: &mut impl Host,

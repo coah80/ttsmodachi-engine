@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/tts-core", "crates/tts-worker"]
+members = ["crates/tts-core", "crates/tts-worker", "crates/tts-rom"]
 resolver = "2"
 
 [workspace.package]
@@ -7,5 +7,5 @@ edition = "2021"
 publish = false
 
 [profile.release]
-codegen-units = 1
-lto = "fat"
+codegen-units = 8
+lto = "thin"

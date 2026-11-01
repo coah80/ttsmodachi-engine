@@ -1,53 +1,54 @@
-//! Boot support in 0x170000..0x19ffff. Guest addresses refer to caller-owned memory.
-//! External engine services remain explicit call boundaries, not host pointers.
 use crate::boot::Memory;
 
-/// Calls an external engine service or a guest vtable method.
-/// Arguments and results are guest words. Services may mutate the caller's arena.
-/// The differential suite checks these boundaries independently with scripted replies;
-/// it does not establish an end-to-end cold boot.
 pub trait Host {
-    /// Unported archive services receive real memory and local outputs.
-    fn archive_service(&mut self,_:&mut Memory<'_>,f:u32,_:&[u32],_:&mut [u32;4])->u32 {panic!("unbound archive service {f:x}")}
-    fn archive_read(&mut self,_:&mut Memory<'_>,f:u32,_:u32,_:&mut [u8])->u32 {panic!("unbound archive read {f:x}")}
+    fn format_address_m(&mut self, _m: &Memory<'_>, format: &[u8]) -> Option<u32> {
+        self.format_address(format)
+    }
+    fn log_variadic(
+        &mut self,
+        _m: &mut Memory<'_>,
+        _entry: u32,
+        _a: [u32; 4],
+        _format: &[u8],
+        _varargs: &[u32],
+    ) -> bool {
+        false
+    }
+
+    fn archive_service(&mut self, _: &mut Memory<'_>, f: u32, _: &[u32], _: &mut [u32; 4]) -> u32 {
+        panic!("unbound archive service {f:x}")
+    }
+    fn archive_read(&mut self, _: &mut Memory<'_>, f: u32, _: u32, _: &mut [u8]) -> u32 {
+        panic!("unbound archive read {f:x}")
+    }
 
     fn call(&mut self, memory: &mut Memory<'_>, function: u32, args: &[u32]) -> u32;
     fn thread_id(&mut self) -> u32;
-    /// Optional composed dictionary teardown. None retains the call boundary.
-    fn release_dictionary(&mut self, _m:&mut Memory<'_>, _p:u32)->Option<u32> {None}
-    /// The ROM-region address of a format literal, when the host can supply
-    /// one. The ARM passes the literal's address to fn_173dc0 and fn_1738e8.
-    /// The recorded-reply ports pass the literal's hash instead and leave
-    /// this None.
-    fn format_address(&mut self, _format:&[u8])->Option<u32> {None}
-    /// Whether log calls carry the format's address and the real varargs.
-    /// Hosts that compare the heap byte for byte need the real values;
-    /// hosts that normalize log arguments (e.g. by hashing them for the
-    /// trace) leave this false and receive the literal hashes.
-    fn real_log_args(&mut self)->bool {false}
+
+    fn release_dictionary(&mut self, _m: &mut Memory<'_>, _p: u32) -> Option<u32> {
+        None
+    }
+
+    fn format_address(&mut self, _format: &[u8]) -> Option<u32> {
+        None
+    }
+
+    fn real_log_args(&mut self) -> bool {
+        false
+    }
 }
 
-/// The broker format literals the query path logs with, in a fixed order.
-/// A host supplies the ROM-region address of each literal in the same order
-/// through Host::format_address; the literals are the ones the ARM's
-/// fn_177e0c passes to fn_1738e8 and fn_173dc0.
-pub const BROKER_FORMATS:[&[u8];7]=[
-    b"%s%s%s%x",
-    b"%s%s",
-    b"brk_InterfaceQuery BrokerString=%s : Begin",
-    b"brk_InterfaceQuery : osspi_DynModOpen %s, %d",
-    b"brk_InterfaceQuery : osspi_DynModObjLoad %s",
-    b"brk_InterfaceQuery : BrokerString=%s: Module Not Found (%x)",
-    b"brk_InterfaceQuery BrokerString=%s : End",
+pub const BROKER_FORMATS: [u32; 7] = [
+    0x151bac, 0x14f410, 0x1781d8, 0x178268, 0x178468, 0x1784a8, 0x1784e4,
 ];
 fn call(m: &mut Memory<'_>, h: &mut impl Host, f: u32, a: &[u32]) -> u32 {
     h.call(m, f, a)
 }
-/// fn_17177c.
+
 pub fn fn_17177c(m: &mut Memory<'_>, h: &mut impl Host) {
     call(m, h, 0x184c58, &[0]);
 }
-/// fn_187498.
+
 pub fn fn_187498(m: &mut Memory<'_>, h: &mut impl Host) {
     call(m, h, 0x184c58, &[0]);
 }
@@ -75,15 +76,15 @@ fn block(
     m.put_word(m.word(out).wrapping_add(12), d);
     0
 }
-/// fn_172e20.
+
 pub fn fn_172e20(m: &mut Memory<'_>, a: [u32; 5], h: &mut impl Host) -> u32 {
     block(m, a[0], a[1], a[2], a[3], a[4], 0x80602000, h)
 }
-/// fn_176dac.
+
 pub fn fn_176dac(m: &mut Memory<'_>, a: [u32; 5], h: &mut impl Host) -> u32 {
     block(m, a[0], a[1], a[2], a[3], a[4], 0x81402000, h)
 }
-/// fn_172e84.
+
 pub fn fn_172e84(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x80602007;
@@ -91,7 +92,7 @@ pub fn fn_172e84(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     call(m, h, 0x196428, &[m.word(p), p]);
     0
 }
-/// fn_176e10.
+
 pub fn fn_176e10(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 || m.word(p) == 0 {
         return 0x81402007;
@@ -101,7 +102,7 @@ pub fn fn_176e10(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     m.put_word(p, 0);
     0
 }
-/// fn_174988. The caller supplies the regional address of D_8d75cc.
+
 pub fn fn_174988(m: &mut Memory<'_>, sel: u32, out: u32, table: u32) -> u32 {
     if sel <= 1 {
         m.put_word(out, table);
@@ -110,7 +111,7 @@ pub fn fn_174988(m: &mut Memory<'_>, sel: u32, out: u32, table: u32) -> u32 {
         0x84b02001
     }
 }
-/// fn_183aec.
+
 pub fn fn_183aec(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return 0;
@@ -118,7 +119,7 @@ pub fn fn_183aec(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     let method = m.word(m.word(p) + 48);
     call(m, h, method, &[p])
 }
-/// fn_1840fc. Exclusive acquisition is supplied by the platform service.
+
 pub fn fn_1840fc(m: &mut Memory<'_>, p: u32, h: &mut impl Host) {
     if h.thread_id() != m.word(p + 4) {
         call(m, h, 0x183edc, &[p]);
@@ -127,12 +128,12 @@ pub fn fn_1840fc(m: &mut Memory<'_>, p: u32, h: &mut impl Host) {
     }
     m.put_word(p + 8, m.word(p + 8).wrapping_add(1));
 }
-/// fn_1840e8.
+
 pub fn fn_1840e8(m: &mut Memory<'_>, h: &mut impl Host) {
     let p = call(m, h, 0x1858e4, &[]);
     fn_1840fc(m, p + 52, h);
 }
-/// fn_18423c.
+
 pub fn fn_18423c(m: &mut Memory<'_>, p: u32, h: &mut impl Host) {
     let n = m.word(p + 8).wrapping_sub(1);
     m.put_word(p + 8, n);
@@ -141,12 +142,12 @@ pub fn fn_18423c(m: &mut Memory<'_>, p: u32, h: &mut impl Host) {
         call(m, h, 0x165d00, &[p]);
     }
 }
-/// fn_185d40.
+
 pub fn fn_185d40(m: &mut Memory<'_>, h: &mut impl Host) {
     let p = call(m, h, 0x1858e4, &[]);
     fn_18423c(m, p + 52, h);
 }
-/// fn_188f9c.
+
 pub fn fn_188f9c(m: &mut Memory<'_>, t: u32, i: i32, out: u32) -> u32 {
     let entries = m.word(t + 4);
     if i >= 0 && (m.word(t + 12) as i32) > i {
@@ -160,7 +161,7 @@ pub fn fn_188f9c(m: &mut Memory<'_>, t: u32, i: i32, out: u32) -> u32 {
     }
     0
 }
-/// fn_189030.
+
 pub fn fn_189030(m: &Memory<'_>, p: u32) -> u32 {
     m.word(m.word(p)).wrapping_add(m.word(p + 4))
 }
@@ -179,19 +180,19 @@ fn method(m: &mut Memory<'_>, p: u32, a: u32, b: u32, slot: u32, h: &mut impl Ho
         call(m, h, f, &[obj, a, b])
     }
 }
-/// fn_196448.
+
 pub fn fn_196448(m: &mut Memory<'_>, p: u32, a: u32, b: u32, h: &mut impl Host) -> u32 {
     method(m, p, a, b, 16, h)
 }
-/// fn_196474.
+
 pub fn fn_196474(m: &mut Memory<'_>, p: u32, a: u32, h: &mut impl Host) -> u32 {
     method(m, p, a, 0, 20, h)
 }
-/// fn_1964a0.
+
 pub fn fn_1964a0(m: &mut Memory<'_>, p: u32, a: u32, b: u32, h: &mut impl Host) -> u32 {
     method(m, p, a, b, 24, h)
 }
-/// fn_19af64.
+
 pub fn fn_19af64(m: &Memory<'_>, p: u32) -> u32 {
     let n = m.word(p) >> 8;
     if n == 0 {
@@ -200,7 +201,7 @@ pub fn fn_19af64(m: &Memory<'_>, p: u32) -> u32 {
         n
     }
 }
-/// fn_198280.
+
 pub fn fn_198280(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p != 0 {
         call(m, h, 0x19665c, &[p]);
@@ -215,7 +216,7 @@ fn equal(m: &Memory<'_>, p: u32, s: &[u8]) -> bool {
     }
     true
 }
-/// fn_198358. Consume whitespace and XML comments, retaining partial progress on error.
+
 pub fn fn_198358(m: &mut Memory<'_>, ctx: u32) -> u32 {
     loop {
         let mut p = m.word(ctx + 8);
@@ -236,7 +237,7 @@ pub fn fn_198358(m: &mut Memory<'_>, ctx: u32) -> u32 {
         m.put_word(ctx + 8, q + 3);
     }
 }
-/// fn_198414. Decode the five XML entities in place.
+
 pub fn fn_198414(m: &mut Memory<'_>, s: u32) -> u32 {
     let mut p = s;
     while m.byte(p) != 0 && m.byte(p) != b'&' {
@@ -276,7 +277,7 @@ pub fn fn_198414(m: &mut Memory<'_>, s: u32) -> u32 {
     put_byte(m, w, 0);
     0
 }
-/// fn_18cc30.
+
 pub fn fn_18cc30(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     fn_1840fc(m, p + 100, h);
     let i = m.word(p + 32);
@@ -289,10 +290,8 @@ pub fn fn_18cc30(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     fn_18423c(m, p + 100, h);
     rc
 }
-/// fn_18cf04.
+
 pub fn fn_18cf04(m: &mut Memory<'_>, p: u32, out: u32, h: &mut impl PairHost) -> u32 {
-    // PairHost returns the temporary pair by value; no guest stack address
-    // is invented inside the caller's arena.
     let (rc, lo, hi) = h.pair(m, m.word(p) & !1);
     if rc & 0x80000000 == 0 {
         m.put_word(p + 12, lo);
@@ -305,11 +304,11 @@ pub fn fn_18cf04(m: &mut Memory<'_>, p: u32, out: u32, h: &mut impl PairHost) ->
     }
     rc
 }
-/// Pair-returning platform interface, avoiding an invented arena stack allocation.
+
 pub trait PairHost: Host {
     fn pair(&mut self, m: &mut Memory<'_>, interface: u32) -> (u32, u32, u32);
 }
-/// fn_19acf4.
+
 pub fn fn_19acf4(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     fn_1840fc(m, p + 32, h);
     let mut i = m.word(p + 8);
@@ -328,7 +327,7 @@ pub fn fn_19acf4(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
 fn half(m: &Memory<'_>, p: u32) -> u16 {
     u16::from_le_bytes([m.byte(p), m.byte(p + 1)])
 }
-/// fn_19ad68. Pattern matching remains the external wide-string service fn_1007d0.
+
 pub fn fn_19ad68(
     m: &mut Memory<'_>,
     slot: u32,
@@ -361,7 +360,7 @@ pub fn fn_19ad68(
     put_byte(m, slot + 0xe6, u8::from(rc != 0));
     put_byte(m, slot + 0xe7, 0);
 }
-/// fn_19ae08. Nintendo LZ10/LZ11, including extended size and overlapping matches.
+
 pub fn fn_19ae08(m: &mut Memory<'_>, src: u32, mut dst: u32) {
     let ext = m.byte(src) & 15 != 0;
     let mut left = m.word(src) >> 8;
@@ -421,7 +420,7 @@ pub fn fn_19ae08(m: &mut Memory<'_>, src: u32, mut dst: u32) {
         }
     }
 }
-/// fn_19dd30.
+
 pub fn fn_19dd30(m: &mut Memory<'_>, it: u32, out: u32) -> u32 {
     let t = m.word(it);
     let e = m.word(t + 4);
@@ -449,7 +448,7 @@ pub fn fn_19dd30(m: &mut Memory<'_>, it: u32, out: u32) -> u32 {
         return 1;
     }
 }
-/// fn_19ddd0. The path resolver is an external engine boundary.
+
 pub fn fn_19ddd0(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     let i = call(m, h, 0x19de08, &[p]);
     let e = m.word(p + 4);
@@ -460,7 +459,7 @@ pub fn fn_19ddd0(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
         0
     }
 }
-/// fn_183be4. Repeated reads advance a signed 64-bit file position.
+
 pub fn fn_183be4(
     m: &mut Memory<'_>,
     s: u32,
@@ -500,8 +499,7 @@ pub trait ReadHost: Host {
         len: u32,
     ) -> (u32, u32);
 }
-/// fn_1992f8. Signed quotient/remainder correction around the unsigned divider.
-/// The caller supplies the unsigned divider, including its divide-by-zero policy.
+
 pub fn fn_1992f8(n: i64, d: i64, divide: impl FnOnce(u64, u64) -> (u64, u64)) -> (u64, u64) {
     let (mut q, mut r) = divide(n.unsigned_abs(), d.unsigned_abs());
     if (n < 0) != (d < 0) {
@@ -518,7 +516,6 @@ fn put_byte(m: &mut Memory<'_>, p: u32, v: u8) {
     m.bytes[i] = v;
 }
 
-/// fn_17e06c. Apply a property to the main object and its optional child list.
 pub fn fn_17e06c(m: &mut Memory<'_>, a: u32, b: u32, h: &mut impl Host) -> u32 {
     let mut rc = call(m, h, 0x17dd30, &[a, m.word(b + 8)]);
     if m.word(b + 16) == 0 {
@@ -532,11 +529,11 @@ pub fn fn_17e06c(m: &mut Memory<'_>, a: u32, b: u32, h: &mut impl Host) -> u32 {
     }
     rc
 }
-/// Handle resolution returns its temporary context by value, not through a fake arena stack.
+
 pub trait ContextHost: Host {
     fn context(&mut self, m: &mut Memory<'_>, handle: [u32; 2]) -> (u32, u32);
 }
-/// fn_19854c. Validate the sequence handle and create a tagged, heap-owned entry.
+
 pub fn fn_19854c(
     m: &mut Memory<'_>,
     handle: [u32; 2],
@@ -563,8 +560,6 @@ pub fn fn_19854c(
     rc
 }
 
-/// Out-pointer services whose output is local to the current call. The host
-/// returns the status and the word written to the local, without guest-stack aliases.
 pub trait OutputHost: Host {
     fn output(&mut self, memory: &mut Memory<'_>, function: u32, args: &[u32]) -> (u32, u32);
 }
@@ -584,19 +579,16 @@ fn hash_guest(m: &Memory<'_>, mut p: u32) -> u32 {
     }
     hash
 }
-/// A ROM string literal's guest address for a log vararg. The ARM passes
-/// the literal's address (its code/data image holds the text); a host that
-/// can materialize the text supplies the address, otherwise the literal's
-/// hash travels as before. Only fn_1795f0's logs use this.
+
 fn lit(m: &mut Memory<'_>, h: &mut impl Host, real: bool, text: &[u8]) -> u32 {
     if real {
-        h.format_address(text).unwrap_or_else(|| hash_text(text))
+        h.format_address_m(m, text)
+            .unwrap_or_else(|| hash_text(text))
     } else {
         hash_text(text)
     }
 }
-/// A guest string's log vararg: the address itself when the host compares
-/// raw bytes, else the hash the recorded-reply convention used.
+
 fn guest(m: &Memory<'_>, real: bool, p: u32) -> u32 {
     if real {
         p
@@ -613,7 +605,12 @@ fn log_error(
     format: &[u8],
     args: &[u32],
 ) {
-    let literal = h.format_address(format).unwrap_or_else(|| hash_text(format));
+    if h.log_variadic(m, 0x173dc0, [logger, module, code, 0], format, args) {
+        return;
+    }
+    let literal = h
+        .format_address_m(m, format)
+        .unwrap_or_else(|| hash_text(format));
     call(m, h, 0x173dc0, &[logger, module, code, literal]);
     for chunk in args.chunks(6) {
         call(m, h, 0xffff0001, chunk);
@@ -627,13 +624,13 @@ fn log_info(
     format: &[u8],
     args: &[u32],
 ) {
-    let literal = h.format_address(format).unwrap_or_else(|| hash_text(format));
-    call(
-        m,
-        h,
-        0x1738e8,
-        &[logger, 0x8d7668, level, 0, literal],
-    );
+    if h.log_variadic(m, 0x1738e8, [logger, 0x8d7668, level, 0], format, args) {
+        return;
+    }
+    let literal = h
+        .format_address_m(m, format)
+        .unwrap_or_else(|| hash_text(format));
+    call(m, h, 0x1738e8, &[logger, 0x8d7668, level, 0, literal]);
     for chunk in args.chunks(6) {
         call(m, h, 0xffff0001, chunk);
     }
@@ -649,12 +646,11 @@ fn lock(m: &mut Memory<'_>, h: &mut impl Host, p: u32, slot: u32) -> u32 {
         call(m, h, f, &[m.word(p + 8)])
     }
 }
-/// fn_172d18. The six register words passed to SVC 0x22, including the
-/// two stack arguments transferred into r4/r5 by the ROM wrapper.
+
 pub fn fn_172d18(m: &mut Memory<'_>, args: [u32; 6], h: &mut impl Host) -> u32 {
     call(m, h, 0xffff0022, &args)
 }
-/// fn_174f9c. Remove the first callback whose complete three-word key matches.
+
 pub fn fn_174f9c(
     m: &mut Memory<'_>,
     p: u32,
@@ -742,7 +738,9 @@ fn release_config(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, p: u32) {
     call(m, h, 0x196428, &[heap, p]);
 }
 fn release_dictionary(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
-    if let Some(rc)=h.release_dictionary(m,p) {return rc;}
+    if let Some(rc) = h.release_dictionary(m, p) {
+        return rc;
+    }
     if p == 0 {
         return 0x89002007;
     }
@@ -750,7 +748,7 @@ fn release_dictionary(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     call(m, h, 0x196428, &[m.word(p + 20), p]);
     0
 }
-/// fn_177558. Release all broker-owned resources, retaining the first failure.
+
 pub fn fn_177558(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return 0;
@@ -778,7 +776,7 @@ pub fn fn_177558(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     call(m, h, 0x196428, &[m.word(context + 4), p]);
     status
 }
-/// fn_17ca94. Destroy a resource archive and all caller-owned entry allocations.
+
 pub fn fn_17ca94(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x8c102008;
@@ -828,7 +826,7 @@ fn upper(c: u8) -> u8 {
         c
     }
 }
-/// fn_17ab44. Normalize the archive member spelling and increment its 16-bit refcount.
+
 pub fn fn_17ab44(
     m: &mut Memory<'_>,
     logger: u32,
@@ -896,7 +894,7 @@ pub fn fn_17ab44(
     }
     0x8150600d
 }
-/// fn_17ef1c. Find the first advertised MIME prefix with an end or semicolon boundary.
+
 pub fn fn_17ef1c(m: &mut Memory<'_>, p: u32, name: u32, out: u32, h: &mut impl OutputHost) -> u32 {
     if p == 0 || name == 0 || m.byte(name) == 0 {
         return 0x81202007;
@@ -941,7 +939,7 @@ pub fn fn_17ef1c(m: &mut Memory<'_>, p: u32, name: u32, out: u32, h: &mut impl O
         0
     }
 }
-/// fn_180a44. Dispatch unload through TtsCompVt +0x24, not its load slot.
+
 pub fn fn_180a44(m: &mut Memory<'_>, p: u32, a: u32, b: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x81202007;
@@ -979,8 +977,6 @@ pub fn fn_180a44(m: &mut Memory<'_>, p: u32, a: u32, b: u32, h: &mut impl Host) 
     rc
 }
 
-/// fn_17dacc. The caller maps the regional builtin table and its strings into
-/// the arena. Callback and module words are preserved without interpretation.
 pub fn fn_17dacc(m: &mut Memory<'_>, key: u32, out: [u32; 3], table: u32) -> u32 {
     for p in out {
         m.put_word(p, 0);
@@ -1009,8 +1005,7 @@ pub fn fn_17dacc(m: &mut Memory<'_>, key: u32, out: [u32; 3], table: u32) -> u32
     }
     0
 }
-/// fn_17c8fc. Allocator entry words are regional guest code addresses supplied
-/// by the caller, not callable host pointers.
+
 pub fn fn_17c8fc(
     m: &mut Memory<'_>,
     owner: [u32; 2],
@@ -1060,8 +1055,7 @@ pub fn fn_17c8fc(
     m.put_word(out, object);
     0
 }
-/// fn_179374. Map a broker resource or delegate the stream-backed operation.
-/// A direct cached mapping does not acquire the broker lock.
+
 pub fn fn_179374(
     m: &mut Memory<'_>,
     broker: u32,
@@ -1152,13 +1146,10 @@ pub fn fn_179374(
     rc
 }
 
-/// A vtable load method writes a handle pair local to the current call.
 pub trait LoadHost: OutputHost {
     fn load(&mut self, memory: &mut Memory<'_>, method: u32, args: &[u32]) -> (u32, [u32; 2]);
 }
-/// fn_17f03c. Scratch is one caller-owned word reserved for local component
-/// lookup. It is restored before invoking load or logging. null_pair is the
-/// regional D_8d7660 value, mapped by the caller.
+
 pub fn fn_17f03c(
     m: &mut Memory<'_>,
     p: u32,
@@ -1226,8 +1217,7 @@ pub fn fn_17f03c(
         );
         return 0x81202007;
     }
-    // A null URI is the empty string in the ROM. The caller's host receives
-    // zero as the explicit empty-URI token rather than a host/static pointer.
+
     let (status, result) = h.load(
         m,
         method,
@@ -1271,8 +1261,7 @@ pub fn fn_17f03c(
     }
     rc
 }
-/// fn_180b24. Close registered objects in reverse collection order, then
-/// remove their registrations in a second reverse traversal.
+
 pub fn fn_180b24(
     m: &mut Memory<'_>,
     owner: [u32; 2],
@@ -1353,8 +1342,6 @@ pub fn fn_180b24(
     rc
 }
 
-/// fn_173fb4. Varargs, the 20-byte params area and SECURE literal are
-/// caller-mapped guest storage; formatting and broadcast execute the real ports.
 pub fn fn_173fb4(
     m: &mut Memory<'_>,
     logger: u32,
@@ -1369,7 +1356,7 @@ pub fn fn_173fb4(
         fn_173df4(m, logger, code, format, varargs, params, secure_name, h);
     }
 }
-/// fn_178510. Quiet-mode-zero interface query wrapper.
+
 pub fn fn_178510(
     m: &mut Memory<'_>,
     broker: u32,
@@ -1387,8 +1374,6 @@ pub fn fn_178510(
     )
 }
 
-/// Dictionary operations with stack-local result/record storage represented
-/// by values. Key bytes are explicit, not host pointers into guest code.
 pub trait PropertyHost: OutputHost {
     fn property(&mut self, memory: &mut Memory<'_>, dictionary: u32, key: &[u8]) -> (u32, u32);
     fn insert(
@@ -1412,8 +1397,7 @@ impl<H: Host> Host for ReleaseHost<'_, H> {
         self.0.thread_id()
     }
 }
-/// fn_177124. Add a decoded add-on, transferring the record through the
-/// dictionary boundary and releasing the resource on every owning path.
+
 pub fn fn_177124(
     m: &mut Memory<'_>,
     source: u32,
@@ -1472,12 +1456,11 @@ pub fn fn_177124(
         rc
     }
 }
-/// A decoded resource operation returns the two local out-pointer values.
+
 pub trait ResourceHost: PropertyHost {
     fn decode(&mut self, memory: &mut Memory<'_>, args: [u32; 4]) -> (u32, u32, u32);
 }
-/// fn_17d168. source_label points to caller-mapped "BINBROKER", the ROM's
-/// stack-local source label used only when add-on registration logs an error.
+
 pub fn fn_17d168(
     m: &mut Memory<'_>,
     context: u32,
@@ -1540,8 +1523,6 @@ pub fn fn_17d168(
     rc
 }
 
-/// Broker constructor services not yet present in Rust. Local out-parameters
-/// are returned by value, while the object fields remain guest addresses.
 pub trait ConstructorHost: ResourceHost + DirectoryHost {
     fn context_pair(&mut self, m: &mut Memory<'_>, owner: [u32; 2]) -> (u32, u32);
     fn construct_output(&mut self, m: &mut Memory<'_>, f: u32, args: &[u32], out: u32) -> u32;
@@ -1620,8 +1601,7 @@ fn copy_config(m: &mut Memory<'_>, h: &mut impl Host, config: u32, heap: u32) ->
     }
     p
 }
-/// fn_177624. module points at the regional D_8d7668 structure, and
-/// source_label is caller-mapped BINBROKER for the real fn_17d168 callee.
+
 pub fn fn_177624(
     m: &mut Memory<'_>,
     owner: [u32; 2],
@@ -1722,8 +1702,6 @@ pub fn fn_177624(
     rc
 }
 
-/// Interface-query services without a boot Rust implementation. The method
-/// call writes its output directly into the guest record, just as in ARM.
 pub trait QueryHost: PropertyHost {
     fn query_output(&mut self, m: &mut Memory<'_>, f: u32, args: &[u32]) -> (u32, u32);
     fn insert_record(&mut self, m: &mut Memory<'_>, db: u32, key: u32, record: [u32; 4]) -> u32;
@@ -1753,8 +1731,7 @@ fn query_error(
         ],
     );
 }
-/// fn_177e0c. scratch contains three guest words for fn_17dacc's output
-/// pointers. The caller maps the regional builtin table into its arena.
+
 pub fn fn_177e0c(
     m: &mut Memory<'_>,
     broker: u32,
@@ -1971,7 +1948,6 @@ pub fn fn_177e0c(
     rc
 }
 
-/// RVCT formatting with caller-owned guest arguments and explicit locale hooks.
 pub trait FormatHost: Host {
     fn rvct_vsnprintf(
         &mut self,
@@ -2004,7 +1980,7 @@ pub trait FormatHost: Host {
             &mut Locale(self),
         ) as i32
     }
-    /// Default ROM C locale, with platform-specific locale changes behind the host.
+
     fn format_encode(
         &mut self,
         unit: u16,
@@ -2038,8 +2014,7 @@ fn copy_bytes(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) {
 fn marker(m: &Memory<'_>, p: u32) -> bool {
     m.byte(p) == b'{' && m.byte(p + 1) == b'*' && m.byte(p + 2) == b'}'
 }
-/// fn_173638. FormatParts is five guest words; reserved word 1 is untouched.
-/// FormatHost defaults to the exact RVCT byte formatter.
+
 pub fn fn_173638(
     m: &mut Memory<'_>,
     heap: u32,
@@ -2172,7 +2147,7 @@ fn release_parameters(m: &mut Memory<'_>, heap: u32, params: u32, h: &mut impl H
         }
     }
 }
-/// fn_173c70. params is a disjoint, writable, caller-owned 20-byte stack area.
+
 pub fn fn_173c70(
     m: &mut Memory<'_>,
     engine: u32,
@@ -2220,8 +2195,7 @@ pub fn fn_173c70(
     release_parameters(m, m.word(engine), params, h);
     result
 }
-/// fn_173df4. secure_name points to caller-mapped SECURE, not a host string.
-/// params is disjoint caller-owned stack memory, as in fn_173c70.
+
 pub fn fn_173df4(
     m: &mut Memory<'_>,
     engine: u32,
@@ -2292,8 +2266,6 @@ pub fn fn_173df4(
     result
 }
 
-/// Filesystem operations return local out-parameters by value. join is the
-/// unported fn_17db60 service, not a host path-library substitute.
 pub trait DirectoryHost: Host {
     fn join(
         &mut self,
@@ -2321,8 +2293,7 @@ fn free_nonnull(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, p: u32) {
 fn dot_entry(m: &Memory<'_>, p: u32) -> bool {
     m.byte(p) == b'.' && (m.byte(p + 1) == 0 || (m.byte(p + 1) == b'.' && m.byte(p + 2) == 0))
 }
-/// fn_17dd30. star is the caller-mapped literal "*". Discovery fn_17e0bc
-/// remains an explicit unported dependency, while recursive calls are real.
+
 pub fn fn_17dd30(
     m: &mut Memory<'_>,
     context: u32,
@@ -2461,130 +2432,305 @@ pub fn fn_17dd30(
     }
 }
 
-/// Host filesystem, dictionary and parser operations used by discovery.
 pub trait DiscoveryHost: DirectoryHost + ResourceHost + crate::boot_part_b2::AttributeHost {
-    fn remove_property(&mut self,m:&mut Memory<'_>,object:u32,key:&[u8])->u32;
+    fn remove_property(&mut self, m: &mut Memory<'_>, object: u32, key: &[u8]) -> u32;
 }
 pub struct DiscoveryGlobals {
-    pub hdr_pattern:u32,
-    pub dat_pattern:u32,
-    pub one:u32,
-    pub surrogate_table:u32,
-    /// Disjoint, caller-owned output word for the fn_198294 local.
-    pub scratch:u32,
+    pub hdr_pattern: u32,
+    pub dat_pattern: u32,
+    pub one: u32,
+    pub surrogate_table: u32,
+
+    pub scratch: u32,
 }
-fn property_value(m:&mut Memory<'_>,h:&mut impl PropertyHost,db:u32,key:&[u8])->(u32,u32) {
-    let (rc,p)=h.property(m,db,key);
-    if failed(rc) {(0x81506014,0)} else {(0,if p==0 {0} else {m.word(p)})}
-}
-fn discover_component(m:&mut Memory<'_>,entry:u32,input:u32,_collection:bool,g:&DiscoveryGlobals,h:&mut impl DiscoveryHost)->u32 {
-    let mut key=&b"COMPONENT"[..];let (mut rc,mut component)=property_value(m,h,entry,key);let mut common=false;
+fn property_value(
+    m: &mut Memory<'_>,
+    h: &mut impl PropertyHost,
+    db: u32,
+    key: &[u8],
+) -> (u32, u32) {
+    let (rc, p) = h.property(m, db, key);
     if failed(rc) {
-        key=b"COMMONCOMPONENT";let r=property_value(m,h,entry,key);rc=r.0;component=r.1;
-        if failed(rc) {return rc;}common=true;
+        (0x81506014, 0)
+    } else {
+        (0, if p == 0 { 0 } else { m.word(p) })
     }
-    let (rc,hdrfile)=property_value(m,h,entry,b"HDRFILE");if failed(rc) {return rc;}
-    let (mut rc,path)=h.join(m,hdrfile,component,1,m.word(input+4));if failed(rc) {return rc;}
-    rc=crate::boot_part_b2::AttributeHost::attribute(h,m,entry,b"FULLPATHCOMPONENT",[path,0,0]);
-    if !failed(rc) || rc.wrapping_shl(19)==0x100000 {rc=h.remove_property(m,entry,key);}
-    call(m,h,0x196428,&[m.word(input+4),path]);if failed(rc) {return rc;}
+}
+fn discover_component(
+    m: &mut Memory<'_>,
+    entry: u32,
+    input: u32,
+    _collection: bool,
+    g: &DiscoveryGlobals,
+    h: &mut impl DiscoveryHost,
+) -> u32 {
+    let mut key = &b"COMPONENT"[..];
+    let (mut rc, mut component) = property_value(m, h, entry, key);
+    let mut common = false;
+    if failed(rc) {
+        key = b"COMMONCOMPONENT";
+        let r = property_value(m, h, entry, key);
+        rc = r.0;
+        component = r.1;
+        if failed(rc) {
+            return rc;
+        }
+        common = true;
+    }
+    let (rc, hdrfile) = property_value(m, h, entry, b"HDRFILE");
+    if failed(rc) {
+        return rc;
+    }
+    let (mut rc, path) = h.join(m, hdrfile, component, 1, m.word(input + 4));
+    if failed(rc) {
+        return rc;
+    }
+    rc = crate::boot_part_b2::AttributeHost::attribute(
+        h,
+        m,
+        entry,
+        b"FULLPATHCOMPONENT",
+        [path, 0, 0],
+    );
+    if !failed(rc) || rc.wrapping_shl(19) == 0x100000 {
+        rc = h.remove_property(m, entry, key);
+    }
+    call(m, h, 0x196428, &[m.word(input + 4), path]);
+    if failed(rc) {
+        return rc;
+    }
     if common {
-        rc=crate::boot_part_b2::AttributeHost::attribute(h,m,entry,b"COMMON",[g.one,0,0]);
-        if failed(rc) && rc.wrapping_shl(19)==0x100000 {rc=0;}
-    }rc
-}
-struct DiscoveryAttributes<'a,H>(&'a mut H);
-impl<H:DiscoveryHost> Host for DiscoveryAttributes<'_,H> {
-    fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {
-        if f==0x19665c {release_dictionary(m,self.0,a[0])} else {self.0.call(m,f,a)}
+        rc = crate::boot_part_b2::AttributeHost::attribute(h, m, entry, b"COMMON", [g.one, 0, 0]);
+        if failed(rc) && rc.wrapping_shl(19) == 0x100000 {
+            rc = 0;
+        }
     }
-    fn thread_id(&mut self)->u32 {self.0.thread_id()}
+    rc
 }
-impl<H:DiscoveryHost> crate::boot_part_b2::AttributeHost for DiscoveryAttributes<'_,H> {
-    fn create(&mut self,m:&mut Memory<'_>,ctx:u32,flag:u32,ticket:[u32;5],out:u32)->u32 {self.0.create(m,ctx,flag,ticket,out)}
-    fn attribute(&mut self,m:&mut Memory<'_>,object:u32,key:&[u8],value:[u32;3])->u32 {self.0.attribute(m,object,key,value)}
+struct DiscoveryAttributes<'a, H>(&'a mut H);
+impl<H: DiscoveryHost> Host for DiscoveryAttributes<'_, H> {
+    fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        if f == 0x19665c {
+            release_dictionary(m, self.0, a[0])
+        } else {
+            self.0.call(m, f, a)
+        }
+    }
+    fn thread_id(&mut self) -> u32 {
+        self.0.thread_id()
+    }
 }
-/// fn_17e0bc body. The live entry binds filesystem and real XML parsing.
-/// Header discovery and .dat surrogate registration. All stack
-/// outputs are local values except the explicit reusable scratch word.
-pub fn fn_17e0bc(m:&mut Memory<'_>,context:u32,directory:u32,g:&DiscoveryGlobals,h:&mut impl DiscoveryHost)->u32 {
-    let input=m.word(context+8);let heap=m.word(input+4);let source=m.word(input+28);
-    if directory==0 {return 0;}
+impl<H: DiscoveryHost> crate::boot_part_b2::AttributeHost for DiscoveryAttributes<'_, H> {
+    fn create(
+        &mut self,
+        m: &mut Memory<'_>,
+        ctx: u32,
+        flag: u32,
+        ticket: [u32; 5],
+        out: u32,
+    ) -> u32 {
+        self.0.create(m, ctx, flag, ticket, out)
+    }
+    fn attribute(&mut self, m: &mut Memory<'_>, object: u32, key: &[u8], value: [u32; 3]) -> u32 {
+        self.0.attribute(m, object, key, value)
+    }
+}
+
+pub fn fn_17e0bc(
+    m: &mut Memory<'_>,
+    context: u32,
+    directory: u32,
+    g: &DiscoveryGlobals,
+    h: &mut impl DiscoveryHost,
+) -> u32 {
+    let input = m.word(context + 8);
+    let heap = m.word(input + 4);
+    let source = m.word(input + 28);
+    if directory == 0 {
+        return 0;
+    }
     let mut rc;
-    for dat in [false,true] {
-        let (r,pattern)=h.join(m,directory,if dat {g.dat_pattern} else {g.hdr_pattern},0,heap);rc=r;
-        if failed(rc) {return rc;}
-        let (r,name,mut iterator)=h.first(m,source,heap,pattern,0);rc=r;let mut path=0;
+    for dat in [false, true] {
+        let (r, pattern) = h.join(
+            m,
+            directory,
+            if dat { g.dat_pattern } else { g.hdr_pattern },
+            0,
+            heap,
+        );
+        rc = r;
+        if failed(rc) {
+            return rc;
+        }
+        let (r, name, mut iterator) = h.first(m, source, heap, pattern, 0);
+        rc = r;
+        let mut path = 0;
         if !failed(rc) {
-            let (r,p)=h.join(m,directory,name,0,heap);rc=r;path=p;
-            if failed(rc) {if iterator!=0 {call(m,h,0x173510,&[iterator]);}iterator=0;}
-            call(m,h,0x196428,&[heap,name]);
-        } else if rc.wrapping_shl(19)==0xa00000 {rc=0;}
-        call(m,h,0x196428,&[heap,pattern]);
-        if failed(rc) {return rc;}
-        if iterator==0 {if dat {return rc;}continue;}
+            let (r, p) = h.join(m, directory, name, 0, heap);
+            rc = r;
+            path = p;
+            if failed(rc) {
+                if iterator != 0 {
+                    call(m, h, 0x173510, &[iterator]);
+                }
+                iterator = 0;
+            }
+            call(m, h, 0x196428, &[heap, name]);
+        } else if rc.wrapping_shl(19) == 0xa00000 {
+            rc = 0;
+        }
+        call(m, h, 0x196428, &[heap, pattern]);
+        if failed(rc) {
+            return rc;
+        }
+        if iterator == 0 {
+            if dat {
+                return rc;
+            }
+            continue;
+        }
         loop {
             if dat {
-                log_info(m,h,m.word(input+16),4,b"brkhlp_FindHdrFileAndAddItem szFullPathName=%s",&[hash_guest(m,path)]);
-                let mut slash=0;for i in 0..string_length(m,path) {if m.byte(path+i)==b'/' {slash=path+i;}}
-                if slash==0 {slash=path.wrapping_sub(1);}
-                let n=string_length(m,path).wrapping_sub(slash.wrapping_sub(path)).wrapping_sub(5);
-                let surrogate=call(m,h,0x196394,&[heap,n.wrapping_add(1)]);if surrogate==0 {return 0x8150600a;}
-                copy_bytes(m,surrogate,slash.wrapping_add(1),n);put_byte(m,surrogate+n,0);
-                log_info(m,h,m.word(input+16),4,b"brkhlp_FindHdrFileAndAddItem szSurrogateBrokerString=%s",&[hash_guest(m,surrogate)]);
-                let saved=m.word(g.scratch);
-                // The ROM's parser may have set this local on an earlier header.
-                // This branch starts with a null local, and fn_198294 writes it.
-                m.put_word(g.scratch,0);
-                rc=crate::boot_part_b2::fn_198294(m,heap,surrogate,path,g.scratch,g.surrogate_table,&mut DiscoveryAttributes(h));
-                let entry=m.word(g.scratch);m.put_word(g.scratch,saved);
-                if !failed(rc) {rc=fn_177124(m,path,entry,context,h);}
-                if !failed(rc) {log_info(m,h,m.word(input+16),4,b"brkhlp_FindHdrFileAndAddItem AddedNewSurrogateBrokerString=%s",&[hash_guest(m,surrogate)]);}
-                call(m,h,0x196428,&[heap,surrogate]);
+                log_info(
+                    m,
+                    h,
+                    m.word(input + 16),
+                    4,
+                    b"brkhlp_FindHdrFileAndAddItem szFullPathName=%s",
+                    &[hash_guest(m, path)],
+                );
+                let mut slash = 0;
+                for i in 0..string_length(m, path) {
+                    if m.byte(path + i) == b'/' {
+                        slash = path + i;
+                    }
+                }
+                if slash == 0 {
+                    slash = path.wrapping_sub(1);
+                }
+                let n = string_length(m, path)
+                    .wrapping_sub(slash.wrapping_sub(path))
+                    .wrapping_sub(5);
+                let surrogate = call(m, h, 0x196394, &[heap, n.wrapping_add(1)]);
+                if surrogate == 0 {
+                    return 0x8150600a;
+                }
+                copy_bytes(m, surrogate, slash.wrapping_add(1), n);
+                put_byte(m, surrogate + n, 0);
+                log_info(
+                    m,
+                    h,
+                    m.word(input + 16),
+                    4,
+                    b"brkhlp_FindHdrFileAndAddItem szSurrogateBrokerString=%s",
+                    &[hash_guest(m, surrogate)],
+                );
+                let saved = m.word(g.scratch);
+
+                m.put_word(g.scratch, 0);
+                rc = crate::boot_part_b2::fn_198294(
+                    m,
+                    heap,
+                    surrogate,
+                    path,
+                    g.scratch,
+                    g.surrogate_table,
+                    &mut DiscoveryAttributes(h),
+                );
+                let entry = m.word(g.scratch);
+                m.put_word(g.scratch, saved);
+                if !failed(rc) {
+                    rc = fn_177124(m, path, entry, context, h);
+                }
+                if !failed(rc) {
+                    log_info(
+                        m,
+                        h,
+                        m.word(input + 16),
+                        4,
+                        b"brkhlp_FindHdrFileAndAddItem AddedNewSurrogateBrokerString=%s",
+                        &[hash_guest(m, surrogate)],
+                    );
+                }
+                call(m, h, 0x196428, &[heap, surrogate]);
             } else {
-                let len=string_length(m,path);
-                if len>4 && equal(m,path+len-4,b".hdr") {
-                    let (r,resource,readers)=h.decode(m,[m.word(context),m.word(context+4),path,0]);rc=r;
+                let len = string_length(m, path);
+                if len > 4 && equal(m, path + len - 4, b".hdr") {
+                    let (r, resource, readers) =
+                        h.decode(m, [m.word(context), m.word(context + 4), path, 0]);
+                    rc = r;
                     if failed(rc) {
-                        log_error(m,h,m.word(input+16),0x8d7668,276,b"%s%s",&[hash_text(b"file"),hash_guest(m,path)]);
-                        if rc.wrapping_shl(19)!=0x500000 {rc=0;}
-                    } else if readers!=0 {
-                        let mut index=0;
-                        loop {
-                            let (found,p)=h.output(m,0x1970ac,&[readers,index]);if found==0 {break;}
-                            let entry=m.word(p);
-                            if !failed(rc) {
-                                rc=discover_component(m,entry,input,true,g,h);
-                                if rc==0x81506014 || !failed(rc) {rc=fn_177124(m,path,entry,context,h);}
-                                else {release_dictionary(m,h,entry);}
-                            } else {release_dictionary(m,h,entry);}
-                            index+=1;
+                        log_error(
+                            m,
+                            h,
+                            m.word(input + 16),
+                            0x8d7668,
+                            276,
+                            b"%s%s",
+                            &[hash_text(b"file"), hash_guest(m, path)],
+                        );
+                        if rc.wrapping_shl(19) != 0x500000 {
+                            rc = 0;
                         }
-                        call(m,h,0x196c7c,&[readers]);
+                    } else if readers != 0 {
+                        let mut index = 0;
+                        loop {
+                            let (found, p) = h.output(m, 0x1970ac, &[readers, index]);
+                            if found == 0 {
+                                break;
+                            }
+                            let entry = m.word(p);
+                            if !failed(rc) {
+                                rc = discover_component(m, entry, input, true, g, h);
+                                if rc == 0x81506014 || !failed(rc) {
+                                    rc = fn_177124(m, path, entry, context, h);
+                                } else {
+                                    release_dictionary(m, h, entry);
+                                }
+                            } else {
+                                release_dictionary(m, h, entry);
+                            }
+                            index += 1;
+                        }
+                        call(m, h, 0x196c7c, &[readers]);
                     } else {
-                        rc=discover_component(m,resource,input,false,g,h);
-                        if rc==0x81506014 || !failed(rc) {rc=fn_177124(m,path,resource,context,h);}
+                        rc = discover_component(m, resource, input, false, g, h);
+                        if rc == 0x81506014 || !failed(rc) {
+                            rc = fn_177124(m, path, resource, context, h);
+                        }
                     }
                 }
             }
-            call(m,h,0x196428,&[heap,path]);
-            if failed(rc) {call(m,h,0x173510,&[iterator]);return rc;}
-            let (r,name)=h.next(m,iterator);rc=r;
+            call(m, h, 0x196428, &[heap, path]);
             if failed(rc) {
-                if rc.wrapping_shl(19)==0xa00000 {rc=0;}
-                call(m,h,0x173510,&[iterator]);return rc;
+                call(m, h, 0x173510, &[iterator]);
+                return rc;
             }
-            let (r,p)=h.join(m,directory,name,0,heap);rc=r;path=p;
-            call(m,h,0x196428,&[heap,name]);
-            if failed(rc) {call(m,h,0x173510,&[iterator]);return rc;}
-            rc=0;
+            let (r, name) = h.next(m, iterator);
+            rc = r;
+            if failed(rc) {
+                if rc.wrapping_shl(19) == 0xa00000 {
+                    rc = 0;
+                }
+                call(m, h, 0x173510, &[iterator]);
+                return rc;
+            }
+            let (r, p) = h.join(m, directory, name, 0, heap);
+            rc = r;
+            path = p;
+            call(m, h, 0x196428, &[heap, name]);
+            if failed(rc) {
+                call(m, h, 0x173510, &[iterator]);
+                return rc;
+            }
+            rc = 0;
         }
-    }0
+    }
+    0
 }
 
 const BRIDGE_FAILURE: u32 = 0x81506001;
 
-/// Platform operations needed by the real constructor/heap bridge.
 pub trait ConstructorPlatform {
     fn thread_id(&mut self) -> u32;
     fn arbiter_address(&self) -> u32;
@@ -2592,8 +2738,12 @@ pub trait ConstructorPlatform {
 }
 struct ConstructorOs<'a, P>(&'a mut P);
 impl<P: ConstructorPlatform> crate::bridge::Platform for ConstructorOs<'_, P> {
-    fn thread_id(&mut self) -> u32 { self.0.thread_id() }
-    fn arbiter_address(&self) -> u32 { self.0.arbiter_address() }
+    fn thread_id(&mut self) -> u32 {
+        self.0.thread_id()
+    }
+    fn arbiter_address(&self) -> u32 {
+        self.0.arbiter_address()
+    }
     fn arbitrate(&mut self, m: &mut Memory<'_>, a: &[u32]) -> u32 {
         self.0.arbitrate(m, a)
     }
@@ -2607,18 +2757,24 @@ struct BridgedConstructor<'a, H, P> {
 impl<H, P: ConstructorPlatform> BridgedConstructor<'_, H, P> {
     fn service(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         let result = (|| {
-            let mut regions = [crate::engine::Region {base:m.base,bytes:&mut *m.bytes}];
+            let mut regions = [crate::engine::Region {
+                base: m.base,
+                bytes: &mut *m.bytes,
+            }];
             let mut memory = crate::engine::Memory::new(&mut regions)?;
             let mut os = ConstructorOs(&mut *self.platform);
             let mut flat = crate::bridge::Flat::new(&mut memory, self.workspace, &mut os, 0)?;
             let rc = match f {
                 0x176e40 => flat.fn_176e40(a.try_into().expect("three constructor words")),
                 0x1964e0 => flat.fn_1964e0(a.try_into().expect("eight map words")),
-                0x1963b8 => flat.fn_1963b8(a[0],a[1],a[2]),
-                0x196394 => flat.fn_196394(a[0],a[1]),
-                0x196428 => {flat.fn_196428(a[0],a[1]);0},
+                0x1963b8 => flat.fn_1963b8(a[0], a[1], a[2]),
+                0x196394 => flat.fn_196394(a[0], a[1]),
+                0x196428 => {
+                    flat.fn_196428(a[0], a[1]);
+                    0
+                }
                 0x19665c => flat.fn_19665c(a[0]),
-                _ => return Err(crate::engine::Error::UnsupportedStage {entry:f}),
+                _ => return Err(crate::engine::Error::UnsupportedStage { entry: f }),
             };
             flat.finish()?;
             Ok(rc)
@@ -2626,248 +2782,581 @@ impl<H, P: ConstructorPlatform> BridgedConstructor<'_, H, P> {
         match result {
             Ok(rc) => rc,
             Err(e) => {
-                if self.error.is_none() {self.error=Some(e);}
-                if matches!(f,0x1963b8|0x196394) {0} else {BRIDGE_FAILURE}
+                if self.error.is_none() {
+                    self.error = Some(e);
+                }
+                if matches!(f, 0x1963b8 | 0x196394) {
+                    0
+                } else {
+                    BRIDGE_FAILURE
+                }
             }
         }
     }
 }
-impl<H: ConstructorHost,P: ConstructorPlatform> Host for BridgedConstructor<'_,H,P> {
-    fn thread_id(&mut self)->u32 {self.platform.thread_id()}
-    fn release_dictionary(&mut self,m:&mut Memory<'_>,p:u32)->Option<u32> {
-        Some(self.service(m,0x19665c,&[p]))
+impl<H: ConstructorHost, P: ConstructorPlatform> Host for BridgedConstructor<'_, H, P> {
+    fn thread_id(&mut self) -> u32 {
+        self.platform.thread_id()
     }
-    fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {
-        if matches!(f,0x1963b8|0x196394|0x196428|0x176e40|0x1964e0|0x19665c) {
-            self.service(m,f,a)
-        } else {self.inner.call(m,f,a)}
+    fn release_dictionary(&mut self, m: &mut Memory<'_>, p: u32) -> Option<u32> {
+        Some(self.service(m, 0x19665c, &[p]))
     }
-}
-impl<H: ConstructorHost,P: ConstructorPlatform> OutputHost for BridgedConstructor<'_,H,P> {
-    fn output(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->(u32,u32) {
-        self.inner.output(m,f,a)
-    }
-}
-impl<H: ConstructorHost,P: ConstructorPlatform> PropertyHost for BridgedConstructor<'_,H,P> {
-    fn property(&mut self,m:&mut Memory<'_>,db:u32,key:&[u8])->(u32,u32) {
-        self.inner.property(m,db,key)
-    }
-    fn insert(&mut self,m:&mut Memory<'_>,db:u32,key:u32,e:[u32;3])->u32 {
-        self.inner.insert(m,db,key,e)
+    fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        if matches!(
+            f,
+            0x1963b8 | 0x196394 | 0x196428 | 0x176e40 | 0x1964e0 | 0x19665c
+        ) {
+            self.service(m, f, a)
+        } else {
+            self.inner.call(m, f, a)
+        }
     }
 }
-impl<H: ConstructorHost,P: ConstructorPlatform> ResourceHost for BridgedConstructor<'_,H,P> {
-    fn decode(&mut self,m:&mut Memory<'_>,a:[u32;4])->(u32,u32,u32) {
-        self.inner.decode(m,a)
+impl<H: ConstructorHost, P: ConstructorPlatform> OutputHost for BridgedConstructor<'_, H, P> {
+    fn output(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> (u32, u32) {
+        self.inner.output(m, f, a)
     }
 }
-impl<H: ConstructorHost,P: ConstructorPlatform> DirectoryHost for BridgedConstructor<'_,H,P> {
-    fn join(&mut self,m:&mut Memory<'_>,base:u32,name:u32,flag:u32,heap:u32)->(u32,u32) {
-        self.inner.join(m,base,name,flag,heap)
+impl<H: ConstructorHost, P: ConstructorPlatform> PropertyHost for BridgedConstructor<'_, H, P> {
+    fn property(&mut self, m: &mut Memory<'_>, db: u32, key: &[u8]) -> (u32, u32) {
+        self.inner.property(m, db, key)
     }
-    fn first(&mut self,m:&mut Memory<'_>,source:u32,heap:u32,pattern:u32,flags:u32)->(u32,u32,u32) {
-        self.inner.first(m,source,heap,pattern,flags)
-    }
-    fn next(&mut self,m:&mut Memory<'_>,iterator:u32)->(u32,u32) {
-        self.inner.next(m,iterator)
+    fn insert(&mut self, m: &mut Memory<'_>, db: u32, key: u32, e: [u32; 3]) -> u32 {
+        self.inner.insert(m, db, key, e)
     }
 }
-impl<H: ConstructorHost,P: ConstructorPlatform> ConstructorHost for BridgedConstructor<'_,H,P> {
-    fn context_pair(&mut self,m:&mut Memory<'_>,owner:[u32;2])->(u32,u32) {
-        self.inner.context_pair(m,owner)
+impl<H: ConstructorHost, P: ConstructorPlatform> ResourceHost for BridgedConstructor<'_, H, P> {
+    fn decode(&mut self, m: &mut Memory<'_>, a: [u32; 4]) -> (u32, u32, u32) {
+        self.inner.decode(m, a)
     }
-    fn construct_output(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32],out:u32)->u32 {
+}
+impl<H: ConstructorHost, P: ConstructorPlatform> DirectoryHost for BridgedConstructor<'_, H, P> {
+    fn join(
+        &mut self,
+        m: &mut Memory<'_>,
+        base: u32,
+        name: u32,
+        flag: u32,
+        heap: u32,
+    ) -> (u32, u32) {
+        self.inner.join(m, base, name, flag, heap)
+    }
+    fn first(
+        &mut self,
+        m: &mut Memory<'_>,
+        source: u32,
+        heap: u32,
+        pattern: u32,
+        flags: u32,
+    ) -> (u32, u32, u32) {
+        self.inner.first(m, source, heap, pattern, flags)
+    }
+    fn next(&mut self, m: &mut Memory<'_>, iterator: u32) -> (u32, u32) {
+        self.inner.next(m, iterator)
+    }
+}
+impl<H: ConstructorHost, P: ConstructorPlatform> ConstructorHost for BridgedConstructor<'_, H, P> {
+    fn context_pair(&mut self, m: &mut Memory<'_>, owner: [u32; 2]) -> (u32, u32) {
+        self.inner.context_pair(m, owner)
+    }
+    fn construct_output(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32], out: u32) -> u32 {
         match f {
-            0x176e40 => self.service(m,f,&[a[0],a[1],out]),
-            0x1964e0 => self.service(m,f,&[a[0],a[1],a[2],a[3],a[4],a[5],a[6],out]),
+            0x176e40 => self.service(m, f, &[a[0], a[1], out]),
+            0x1964e0 => self.service(m, f, &[a[0], a[1], a[2], a[3], a[4], a[5], a[6], out]),
             _ => {
-                self.error=Some(crate::engine::Error::UnsupportedStage{entry:f});
+                self.error = Some(crate::engine::Error::UnsupportedStage { entry: f });
                 BRIDGE_FAILURE
             }
         }
     }
 }
-/// fn_177624 with bridge-owned 176e40/1964e0 and guest allocator entries.
-/// The workspace is caller-owned and indexed by absolute guest addresses.
-/// Remaining callbacks still come from h; unsupported bridge methods return
-/// an explicit engine error, never a successful scripted constructor result.
+
 pub fn fn_177624_bridged(
-    m:&mut Memory<'_>,owner:[u32;2],config:u32,flags:u32,out:u32,
-    module:u32,source_label:u32,star:u32,h:&mut impl ConstructorHost,
-    platform:&mut impl ConstructorPlatform,workspace:&mut [u8],
-)->Result<u32,crate::engine::Error> {
-    let mut host=BridgedConstructor {inner:h,platform,workspace,error:None};
-    let rc=fn_177624(m,owner,config,flags,out,module,source_label,star,&mut host);
-    match host.error {Some(e)=>Err(e),None=>Ok(rc)}
+    m: &mut Memory<'_>,
+    owner: [u32; 2],
+    config: u32,
+    flags: u32,
+    out: u32,
+    module: u32,
+    source_label: u32,
+    star: u32,
+    h: &mut impl ConstructorHost,
+    platform: &mut impl ConstructorPlatform,
+    workspace: &mut [u8],
+) -> Result<u32, crate::engine::Error> {
+    let mut host = BridgedConstructor {
+        inner: h,
+        platform,
+        workspace,
+        error: None,
+    };
+    let rc = fn_177624(
+        m,
+        owner,
+        config,
+        flags,
+        out,
+        module,
+        source_label,
+        star,
+        &mut host,
+    );
+    match host.error {
+        Some(e) => Err(e),
+        None => Ok(rc),
+    }
 }
 
-/// Broker output boundaries. Out-pointers remain guest addresses.
 pub trait DataHost: QueryHost {
-    fn data_output(&mut self,m:&mut Memory<'_>,f:u32,args:&[u32],out:u32)->u32;
+    fn data_output(&mut self, m: &mut Memory<'_>, f: u32, args: &[u32], out: u32) -> u32;
 }
-/// Guest constants and a disjoint 24-byte caller-owned stack area.
+
 pub struct DataOpenGlobals {
-    pub module:u32,
-    pub allocators:[u32;4],
-    pub scratch:u32,
-    pub fullpath_key:u32,
-    pub add_item_format:u32,
-    pub broker_label:u32,
-    pub ctype_table:u32,
-    pub brokerstring_key:u32,
+    pub module: u32,
+    pub allocators: [u32; 4],
+    pub scratch: u32,
+    pub fullpath_key: u32,
+    pub add_item_format: u32,
+    pub broker_label: u32,
+    pub ctype_table: u32,
+    pub brokerstring_key: u32,
 }
-fn find_byte(m:&Memory<'_>,mut p:u32,b:u8)->u32 {
-    while m.byte(p)!=0 {if m.byte(p)==b {return p;}p+=1;}0
-}
-fn find_text(m:&Memory<'_>,mut p:u32,s:&[u8])->u32 {
-    while m.byte(p)!=0 {
-        let mut i=0;while i<s.len() && m.byte(p+i as u32)==s[i] {i+=1;}
-        if i==s.len() {return p;}p+=1;
-    }0
-}
-fn store_text(m:&mut Memory<'_>,p:u32,s:&[u8]) {for (i,b) in s.iter().chain(core::iter::once(&0)).enumerate() {put_byte(m,p+i as u32,*b);}}
-fn equal_strings(m:&Memory<'_>,mut a:u32,mut b:u32)->bool {
-    while m.byte(a)==m.byte(b) {if m.byte(a)==0 {return true;}a+=1;b+=1;}false
-}
-fn data_add_entry(m:&mut Memory<'_>,p:u32,handle:u32,name:u32,g:&DataOpenGlobals,h:&mut impl DataHost)->u32 {
-    if handle==0 {return 0x81506007;}
-    let ctx=m.word(p+4);let runtime=m.word(ctx+8);
-    // The ROM passes the add-item format's address (D_177278) and the
-    // broker string itself; hosts that normalize log arguments keep the
-    // recorded-reply hashes.
-    let real=h.real_log_args();
-    let fmt=if real {g.add_item_format} else {hash_guest(m,g.add_item_format)};
-    call(m,h,0x1738e8,&[m.word(runtime+16),g.module,4,0,fmt]);
-    call(m,h,0xffff0001,&[guest(m,real,name)]);
-    // The ROM passes &entry, the twelve byte record. Hosts that trace by
-    // value keep the recorded contents; hosts that bind the real insert
-    // pass the record itself out of the caller scratch.
-    let rec=if real {
-        let r=g.scratch+12;
-        m.put_word(r,handle);m.put_word(r+4,name);m.put_word(r+8,0);
-        [r,r+4,r+8]
-    } else {
-        [handle,name,0]
-    };
-    let mut rc=lock(m,h,m.word(ctx+28),8);
-    if !failed(rc) {
-        rc=h.insert(m,m.word(ctx+16),name,rec);
-        if failed(rc) {log_error(m,h,m.word(runtime+16),0x8d7668,0x121,b"%s%s",&[guest(m,real,g.broker_label),guest(m,real,name)]);}
+fn find_byte(m: &Memory<'_>, mut p: u32, b: u8) -> u32 {
+    while m.byte(p) != 0 {
+        if m.byte(p) == b {
+            return p;
+        }
+        p += 1;
     }
-    let status=lock(m,h,m.word(ctx+28),12);if failed(status)&&!failed(rc) {rc=status;}
-    // The ROM releases the table only if the insert left the record's
-    // handle word set; the database's own value creator clears it. Hosts
-    // that trace by value always release, as before.
-    if !real || m.word(rec[0])!=0 {release_dictionary(m,h,handle);}
+    0
+}
+fn find_text(m: &Memory<'_>, mut p: u32, s: &[u8]) -> u32 {
+    while m.byte(p) != 0 {
+        let mut i = 0;
+        while i < s.len() && m.byte(p + i as u32) == s[i] {
+            i += 1;
+        }
+        if i == s.len() {
+            return p;
+        }
+        p += 1;
+    }
+    0
+}
+fn store_text(m: &mut Memory<'_>, p: u32, s: &[u8]) {
+    for (i, b) in s.iter().chain(core::iter::once(&0)).enumerate() {
+        put_byte(m, p + i as u32, *b);
+    }
+}
+fn equal_strings(m: &Memory<'_>, mut a: u32, mut b: u32) -> bool {
+    while m.byte(a) == m.byte(b) {
+        if m.byte(a) == 0 {
+            return true;
+        }
+        a += 1;
+        b += 1;
+    }
+    false
+}
+fn data_add_entry(
+    m: &mut Memory<'_>,
+    p: u32,
+    handle: u32,
+    name: u32,
+    g: &DataOpenGlobals,
+    h: &mut impl DataHost,
+) -> u32 {
+    if handle == 0 {
+        return 0x81506007;
+    }
+    let ctx = m.word(p + 4);
+    let runtime = m.word(ctx + 8);
+
+    let real = h.real_log_args();
+    let fmt = if real {
+        g.add_item_format
+    } else {
+        hash_guest(m, g.add_item_format)
+    };
+    let source = crate::frontend::terminated(m.bytes, g.add_item_format);
+    let mut text = [0; 256];
+    let n = source.len();
+    assert!(n <= text.len());
+    text[..n].copy_from_slice(source);
+    if !h.log_variadic(
+        m,
+        0x1738e8,
+        [m.word(runtime + 16), g.module, 4, 0],
+        &text[..n],
+        &[name],
+    ) {
+        call(m, h, 0x1738e8, &[m.word(runtime + 16), g.module, 4, 0, fmt]);
+        call(m, h, 0xffff0001, &[guest(m, real, name)]);
+    }
+
+    let rec = if real {
+        let r = g.scratch + 12;
+        m.put_word(r, handle);
+        m.put_word(r + 4, name);
+        m.put_word(r + 8, 0);
+        [r, r + 4, r + 8]
+    } else {
+        [handle, name, 0]
+    };
+    let mut rc = lock(m, h, m.word(ctx + 28), 8);
+    if !failed(rc) {
+        rc = h.insert(m, m.word(ctx + 16), name, rec);
+        if failed(rc) {
+            log_error(
+                m,
+                h,
+                m.word(runtime + 16),
+                0x8d7668,
+                0x121,
+                b"%s%s",
+                &[guest(m, real, g.broker_label), guest(m, real, name)],
+            );
+        }
+    }
+    let status = lock(m, h, m.word(ctx + 28), 12);
+    if failed(status) && !failed(rc) {
+        rc = status;
+    }
+
+    if !real || m.word(rec[0]) != 0 {
+        release_dictionary(m, h, handle);
+    }
     rc
 }
-/// fn_1795f0 body. The live entry binds file and archive implementations.
-/// Archive/map bodies execute directly. Dictionary/query and logger boundaries
-/// remain caller-supplied; this is not an end-to-end cold-boot certificate.
-pub fn fn_1795f0(m:&mut Memory<'_>,broker:u32,mut name:u32,flags:u32,out:u32,g:&DataOpenGlobals,h:&mut impl DataHost)->u32 {
-    if broker==0 || name==0 || out==0 {return 0x81506007;}
-    let ctx=m.word(broker+4);let runtime=m.word(ctx+8);let heap=m.word(runtime+4);
-    m.put_word(out,0);
-    let real=h.real_log_args();
-    log_info(m,h,m.word(broker),4,b"brk_DataOpen : BrokerString=%s : Begin",&[guest(m,real,name)]);
-    let data=call(m,h,0x1963b8,&[heap,1,12]);
-    if data==0 {log_info(m,h,m.word(broker),4,b"brk_DataOpen : End %x",&[0x8150600a]);return 0x8150600a;}
-    let colon=find_byte(m,name,b':');let mut prefix=0;let mut lower=0;let mut path=0;let mut entry=0;
-    let mut unlock=colon!=0;
-    let mut rc='operation: {
-        if colon!=0 && colon!=name {
-            let rc=lock(m,h,m.word(ctx+12),8);
-            if failed(rc) {unlock=false;break 'operation rc;}
-            let length=colon-name;prefix=call(m,h,0x196394,&[heap,length+1]);
-            if prefix==0 {break 'operation 0x8150600a;}
-            copy_bytes(m,prefix,name,length);put_byte(m,prefix+length,0);name=prefix;
-        }
-        let (mut found,e)=h.query_output(m,0x1772b0,&[broker,name]);entry=e;
-        if !failed(found) {log_info(m,h,m.word(broker),3,b"brk_DataOpen : match on broker string %s",&[guest(m,real,name)]);}
-        else {
-            let clean=call(m,h,0x196394,&[heap,string_length(m,name)+4]);
-            if clean==0 {break 'operation 0x8150600a;}
-            let mut i=0;
-            while i<string_length(m,name) {
-                let c=m.byte(name+i);let c=if c.is_ascii_alphanumeric() {c} else if c==b'/' || c==b'_' {b'_'} else {b'-'};
-                put_byte(m,clean+i,c);i+=1;
-            }put_byte(m,clean+i,0);
-            if !equal_strings(m,name,clean) {let (r,e)=h.query_output(m,0x1772b0,&[broker,clean]);found=r;entry=e;}
-            let mut surrogate=!failed(found);
-            if failed(found) {
-                copy_bytes(m,clean,name,string_length(m,name)+1);
-                let suffix=find_text(m,clean,b"mpthreeml");
-                if suffix!=0 {store_text(m,suffix,b"mpthreevadml");let (r,e)=h.query_output(m,0x1772b0,&[broker,clean]);found=r;entry=e;surrogate=!failed(found);}
+
+pub fn fn_1795f0(
+    m: &mut Memory<'_>,
+    broker: u32,
+    mut name: u32,
+    flags: u32,
+    out: u32,
+    g: &DataOpenGlobals,
+    h: &mut impl DataHost,
+) -> u32 {
+    if broker == 0 || name == 0 || out == 0 {
+        return 0x81506007;
+    }
+    let ctx = m.word(broker + 4);
+    let runtime = m.word(ctx + 8);
+    let heap = m.word(runtime + 4);
+    m.put_word(out, 0);
+    let real = h.real_log_args();
+    log_info(
+        m,
+        h,
+        m.word(broker),
+        4,
+        b"brk_DataOpen : BrokerString=%s : Begin",
+        &[guest(m, real, name)],
+    );
+    let data = call(m, h, 0x1963b8, &[heap, 1, 12]);
+    if data == 0 {
+        log_info(
+            m,
+            h,
+            m.word(broker),
+            4,
+            b"brk_DataOpen : End %x",
+            &[0x8150600a],
+        );
+        return 0x8150600a;
+    }
+    let colon = find_byte(m, name, b':');
+    let mut prefix = 0;
+    let mut lower = 0;
+    let mut path = 0;
+    let mut entry = 0;
+    let mut unlock = colon != 0;
+    let mut rc = 'operation: {
+        if colon != 0 && colon != name {
+            let rc = lock(m, h, m.word(ctx + 12), 8);
+            if failed(rc) {
+                unlock = false;
+                break 'operation rc;
             }
-            if surrogate {log_info(m,h,m.word(broker),3,b"brk_DataOpen : match on Surrogate broker string %s",&[guest(m,real,clean)]);}
-            call(m,h,0x196428,&[heap,clean]);
+            let length = colon - name;
+            prefix = call(m, h, 0x196394, &[heap, length + 1]);
+            if prefix == 0 {
+                break 'operation 0x8150600a;
+            }
+            copy_bytes(m, prefix, name, length);
+            put_byte(m, prefix + length, 0);
+            name = prefix;
+        }
+        let (mut found, e) = h.query_output(m, 0x1772b0, &[broker, name]);
+        entry = e;
+        if !failed(found) {
+            log_info(
+                m,
+                h,
+                m.word(broker),
+                3,
+                b"brk_DataOpen : match on broker string %s",
+                &[guest(m, real, name)],
+            );
+        } else {
+            let clean = call(m, h, 0x196394, &[heap, string_length(m, name) + 4]);
+            if clean == 0 {
+                break 'operation 0x8150600a;
+            }
+            let mut i = 0;
+            while i < string_length(m, name) {
+                let c = m.byte(name + i);
+                let c = if c.is_ascii_alphanumeric() {
+                    c
+                } else if c == b'/' || c == b'_' {
+                    b'_'
+                } else {
+                    b'-'
+                };
+                put_byte(m, clean + i, c);
+                i += 1;
+            }
+            put_byte(m, clean + i, 0);
+            if !equal_strings(m, name, clean) {
+                let (r, e) = h.query_output(m, 0x1772b0, &[broker, clean]);
+                found = r;
+                entry = e;
+            }
+            let mut surrogate = !failed(found);
+            if failed(found) {
+                copy_bytes(m, clean, name, string_length(m, name) + 1);
+                let suffix = find_text(m, clean, b"mpthreeml");
+                if suffix != 0 {
+                    store_text(m, suffix, b"mpthreevadml");
+                    let (r, e) = h.query_output(m, 0x1772b0, &[broker, clean]);
+                    found = r;
+                    entry = e;
+                    surrogate = !failed(found);
+                }
+            }
+            if surrogate {
+                log_info(
+                    m,
+                    h,
+                    m.word(broker),
+                    3,
+                    b"brk_DataOpen : match on Surrogate broker string %s",
+                    &[guest(m, real, clean)],
+                );
+            }
+            call(m, h, 0x196428, &[heap, clean]);
         }
         if !failed(found) {
-            if m.word(entry+8)!=0 {break 'operation fn_17ab44(m,m.word(broker),entry,colon.wrapping_add(1),flags,data,h);}
-            let (status,property)=h.property(m,m.word(entry),b"FULLPATHCOMPONENT");
-            if !failed(status) && property!=0 {path=m.word(property);}
-        } else if colon!=0 {
-            let new_entry=call(m,h,0x1963b8,&[heap,1,string_length(m,name)+13]);
-            if new_entry==0 {break 'operation 0x8150600a;}
-            m.put_word(new_entry,new_entry+12);copy_bytes(m,new_entry+12,name,string_length(m,name)+1);
-            let a=[heap,1,m.word(g.module+108),m.word(g.module+112),m.word(g.module+116),m.word(g.module+120),m.word(g.module+124)];
-            let saved=m.word(g.scratch);let mut r=h.data_output(m,0x1964e0,&a,g.scratch);let table=m.word(g.scratch);m.put_word(g.scratch,saved);
-            if failed(r) {break 'operation r;}
-            // The new entry travels by address for hosts that bind the real
-        // insert, by recorded contents for hosts that trace by value.
-        let value=if real {[new_entry,new_entry+4,new_entry+8]} else {[m.word(new_entry),m.word(new_entry+4),m.word(new_entry+8)]};
-        r=h.insert(m,table,g.brokerstring_key,value);
-            if failed(r) {break 'operation r;}
-            r=data_add_entry(m,broker,table,m.word(new_entry),g,h);
-            if r&0x1fff!=2 && failed(r) {break 'operation r;}
-            let (r,e)=h.query_output(m,0x1772b0,&[broker,name]);entry=e;if failed(r) {break 'operation r;}
+            if m.word(entry + 8) != 0 {
+                break 'operation fn_17ab44(
+                    m,
+                    m.word(broker),
+                    entry,
+                    colon.wrapping_add(1),
+                    flags,
+                    data,
+                    h,
+                );
+            }
+            let (status, property) = h.property(m, m.word(entry), b"FULLPATHCOMPONENT");
+            if !failed(status) && property != 0 {
+                path = m.word(property);
+            }
+        } else if colon != 0 {
+            let new_entry = call(m, h, 0x1963b8, &[heap, 1, string_length(m, name) + 13]);
+            if new_entry == 0 {
+                break 'operation 0x8150600a;
+            }
+            m.put_word(new_entry, new_entry + 12);
+            copy_bytes(m, new_entry + 12, name, string_length(m, name) + 1);
+            let a = [
+                heap,
+                1,
+                m.word(g.module + 108),
+                m.word(g.module + 112),
+                m.word(g.module + 116),
+                m.word(g.module + 120),
+                m.word(g.module + 124),
+            ];
+            let saved = m.word(g.scratch);
+            let mut r = h.data_output(m, 0x1964e0, &a, g.scratch);
+            let table = m.word(g.scratch);
+            m.put_word(g.scratch, saved);
+            if failed(r) {
+                break 'operation r;
+            }
+
+            let value = if real {
+                [new_entry, new_entry + 4, new_entry + 8]
+            } else {
+                [
+                    m.word(new_entry),
+                    m.word(new_entry + 4),
+                    m.word(new_entry + 8),
+                ]
+            };
+            r = h.insert(m, table, g.brokerstring_key, value);
+            if failed(r) {
+                break 'operation r;
+            }
+            r = data_add_entry(m, broker, table, m.word(new_entry), g, h);
+            if r & 0x1fff != 2 && failed(r) {
+                break 'operation r;
+            }
+            let (r, e) = h.query_output(m, 0x1772b0, &[broker, name]);
+            entry = e;
+            if failed(r) {
+                break 'operation r;
+            }
         }
-        if path==0 {
-            lower=call(m,h,0x196394,&[heap,string_length(m,name)+1]);if lower==0 {break 'operation 0x8150600a;}
-            path=lower;let mut i=0;
-            loop {let c=m.byte(name+i);put_byte(m,lower+i,if m.half(g.ctype_table+(c as u32)*2)&1!=0 {c.wrapping_add(32)} else {c});i+=1;if i>string_length(m,name) {break;}}
+        if path == 0 {
+            lower = call(m, h, 0x196394, &[heap, string_length(m, name) + 1]);
+            if lower == 0 {
+                break 'operation 0x8150600a;
+            }
+            path = lower;
+            let mut i = 0;
+            loop {
+                let c = m.byte(name + i);
+                put_byte(
+                    m,
+                    lower + i,
+                    if m.half(g.ctype_table + (c as u32) * 2) & 1 != 0 {
+                        c.wrapping_add(32)
+                    } else {
+                        c
+                    },
+                );
+                i += 1;
+                if i > string_length(m, name) {
+                    break;
+                }
+            }
         }
-        let r=h.data_output(m,0x173000,&[m.word(runtime+28),heap,path],data);
+        let r = h.data_output(m, 0x173000, &[m.word(runtime + 28), heap, path], data);
         if failed(r) {
-            if flags&1!=0 {log_info(m,h,m.word(broker),3,b"brk_DataOpen : osspi_DataOpen failed: %s, %x",&[guest(m,real,path),r]);}
-            else if path!=name {let b=lit(m,h,real,b"BrokerString");let f=lit(m,h,real,b"file");let l=lit(m,h,real,b"lherror");log_error(m,h,m.word(broker),0x8d7668,0x113,b"%s%s%s%s%s%x",&[b,guest(m,real,name),f,guest(m,real,path),l,r]);}
-            else {let b=lit(m,h,real,b"BrokerString");let l=lit(m,h,real,b"lherror");log_error(m,h,m.word(broker),0x8d7668,0x113,b"%s%s%x",&[b,guest(m,real,name),l,r]);}
+            if flags & 1 != 0 {
+                log_info(
+                    m,
+                    h,
+                    m.word(broker),
+                    3,
+                    b"brk_DataOpen : osspi_DataOpen failed: %s, %x",
+                    &[guest(m, real, path), r],
+                );
+            } else if path != name {
+                let b = lit(m, h, real, b"BrokerString");
+                let f = lit(m, h, real, b"file");
+                let l = lit(m, h, real, b"lherror");
+                log_error(
+                    m,
+                    h,
+                    m.word(broker),
+                    0x8d7668,
+                    0x113,
+                    b"%s%s%s%s%s%x",
+                    &[b, guest(m, real, name), f, guest(m, real, path), l, r],
+                );
+            } else {
+                let b = lit(m, h, real, b"BrokerString");
+                let l = lit(m, h, real, b"lherror");
+                log_error(
+                    m,
+                    h,
+                    m.word(broker),
+                    0x8d7668,
+                    0x113,
+                    b"%s%s%x",
+                    &[b, guest(m, real, name), l, r],
+                );
+            }
             break 'operation r;
         }
-        log_info(m,h,m.word(broker),3,b"brk_DataOpen : osspi_DataOpen %s, %p",&[guest(m,real,path),m.word(data)]);
-        if colon==0 {unlock=false;break 'operation r;}
-        let mut r=fn_17c8fc(m,[m.word(ctx),m.word(ctx+4)],name,entry+8,g.allocators,h);
-        if failed(r) {break 'operation r;}
-        r=call(m,h,0x1735e0,&[m.word(data),m.word(entry+8)]);
-        if failed(r) {
-            if r&0x1fff!=1 {m.put_word(entry+8,0);break 'operation r;}
-            let saved=core::array::from_fn::<_,6,_>(|i|m.word(g.scratch+i as u32*4));
-            m.put_word(g.scratch,0);m.put_word(g.scratch+4,0);m.put_word(g.scratch+8,0);m.put_word(g.scratch+12,0);
-            r=fn_179374(m,broker,data,0,g.scratch+4,g.scratch,h);
-            if !failed(r) {
-                r=call(m,h,0x17cbb4,&[m.word(entry+8),g.module+128,g.scratch,g.scratch+12,1]);
-                let status=call(m,h,0x179208,&[broker,data,m.word(g.scratch)]);if failed(status)&&!failed(r) {r=status;}
-                let status=call(m,h,0x1730fc,&[m.word(data)]);m.put_word(data,0);if failed(status)&&!failed(r) {r=status;}
-            }
-            for (i,v) in saved.iter().enumerate() {m.put_word(g.scratch+i as u32*4,*v);}
-            if failed(r) {break 'operation r;}
+        log_info(
+            m,
+            h,
+            m.word(broker),
+            3,
+            b"brk_DataOpen : osspi_DataOpen %s, %p",
+            &[guest(m, real, path), m.word(data)],
+        );
+        if colon == 0 {
+            unlock = false;
+            break 'operation r;
         }
-        fn_17ab44(m,m.word(broker),entry,colon+1,flags,data,h)
+        let mut r = fn_17c8fc(
+            m,
+            [m.word(ctx), m.word(ctx + 4)],
+            name,
+            entry + 8,
+            g.allocators,
+            h,
+        );
+        if failed(r) {
+            break 'operation r;
+        }
+        r = call(m, h, 0x1735e0, &[m.word(data), m.word(entry + 8)]);
+        if failed(r) {
+            if r & 0x1fff != 1 {
+                m.put_word(entry + 8, 0);
+                break 'operation r;
+            }
+            let saved = core::array::from_fn::<_, 6, _>(|i| m.word(g.scratch + i as u32 * 4));
+            m.put_word(g.scratch, 0);
+            m.put_word(g.scratch + 4, 0);
+            m.put_word(g.scratch + 8, 0);
+            m.put_word(g.scratch + 12, 0);
+            r = fn_179374(m, broker, data, 0, g.scratch + 4, g.scratch, h);
+            if !failed(r) {
+                r = call(
+                    m,
+                    h,
+                    0x17cbb4,
+                    &[
+                        m.word(entry + 8),
+                        g.module + 128,
+                        g.scratch,
+                        g.scratch + 12,
+                        1,
+                    ],
+                );
+                let status = call(m, h, 0x179208, &[broker, data, m.word(g.scratch)]);
+                if failed(status) && !failed(r) {
+                    r = status;
+                }
+                let status = call(m, h, 0x1730fc, &[m.word(data)]);
+                m.put_word(data, 0);
+                if failed(status) && !failed(r) {
+                    r = status;
+                }
+            }
+            for (i, v) in saved.iter().enumerate() {
+                m.put_word(g.scratch + i as u32 * 4, *v);
+            }
+            if failed(r) {
+                break 'operation r;
+            }
+        }
+        fn_17ab44(m, m.word(broker), entry, colon + 1, flags, data, h)
     };
-    if unlock {let status=lock(m,h,m.word(ctx+12),12);if failed(status)&&!failed(rc) {rc=status;}}
-    if failed(rc) {call(m,h,0x196428,&[heap,data]);} else {m.put_word(out,data);}
-    free_nonnull(m,h,heap,prefix);free_nonnull(m,h,heap,lower);
-    log_info(m,h,m.word(broker),4,b"brk_DataOpen : End %x",&[rc]);rc
+    if unlock {
+        let status = lock(m, h, m.word(ctx + 12), 12);
+        if failed(status) && !failed(rc) {
+            rc = status;
+        }
+    }
+    if failed(rc) {
+        call(m, h, 0x196428, &[heap, data]);
+    } else {
+        m.put_word(out, data);
+    }
+    free_nonnull(m, h, heap, prefix);
+    free_nonnull(m, h, heap, lower);
+    log_info(m, h, m.word(broker), 4, b"brk_DataOpen : End %x", &[rc]);
+    rc
 }
 
-/// Live file-service composition for the two boot-part-b entry points.
-///
-/// The caller supplies a zero-based arena (the file ports use absolute guest
-/// indexing), a disjoint 24-byte scratch area, and the regional "rb" string.
-/// Scratch must not overlap DataOpenGlobals::scratch or DiscoveryGlobals::scratch,
-/// live input/output, or host allocations. Words are restored on error returns too.
-/// Nested host calls must use their own scratch. Unknown services are forwarded,
-/// not synthesized.
 pub struct LiveFileServices<'a, H> {
     pub inner: &'a mut H,
     pub scratch: u32,
@@ -2878,135 +3367,243 @@ pub struct LiveFileServices<'a, H> {
     pub unmap: Option<&'a crate::boot_part_e::UnmapEnvironment>,
 }
 impl<H: Host> crate::boot_part_d::Host for LiveFileServices<'_, H> {
-    fn call_m(&mut self, method:u32, args:&[u32], m:&mut Memory<'_>)->u32 {
-        Host::call(self,m,method,args)
+    fn call_m(&mut self, method: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
+        Host::call(self, m, method, args)
     }
-    fn params_call_m(&mut self,q:u32,params:&mut [u32;4],p:u32,out:&mut u32,flags:u32,m:&mut Memory<'_>)->u32 {
-        let s=self.scratch;
-        let saved=core::array::from_fn::<_,6,_>(|i|m.word(s+4*i as u32));
-        for (i,v) in params.iter().enumerate() {m.put_word(s+4*i as u32,*v);}
-        m.put_word(s+16,*out);
-        let e=self.archive.expect("live archive environment required");
-        let rc=crate::boot_part_e::fn_17cbb4(m,q,s,p,s+16,flags,e,self);
-        for (i,v) in params.iter_mut().enumerate() {*v=m.word(s+4*i as u32);}
-        *out=m.word(s+16);
-        for (i,v) in saved.iter().enumerate() {m.put_word(s+4*i as u32,*v);}
+    fn params_call_m(
+        &mut self,
+        q: u32,
+        params: &mut [u32; 4],
+        p: u32,
+        out: &mut u32,
+        flags: u32,
+        m: &mut Memory<'_>,
+    ) -> u32 {
+        let s = self.scratch;
+        let saved = core::array::from_fn::<_, 6, _>(|i| m.word(s + 4 * i as u32));
+        for (i, v) in params.iter().enumerate() {
+            m.put_word(s + 4 * i as u32, *v);
+        }
+        m.put_word(s + 16, *out);
+        let e = self.archive.expect("live archive environment required");
+        let rc = crate::boot_part_e::fn_17cbb4(m, q, s, p, s + 16, flags, e, self);
+        for (i, v) in params.iter_mut().enumerate() {
+            *v = m.word(s + 4 * i as u32);
+        }
+        *out = m.word(s + 16);
+        for (i, v) in saved.iter().enumerate() {
+            m.put_word(s + 4 * i as u32, *v);
+        }
         rc
     }
 }
 impl<H: Host> crate::boot_part_e::Host for LiveFileServices<'_, H> {
-    fn call(&mut self,m:&mut Memory<'_>,method:u32,a:&[u32])->u32 {
-        Host::call(self,m,method,a)
+    fn call(&mut self, m: &mut Memory<'_>, method: u32, a: &[u32]) -> u32 {
+        Host::call(self, m, method, a)
     }
 }
-impl<H:Host> crate::boot_part_e::ArchiveHost for LiveFileServices<'_,H> {
-    fn service(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32],out:&mut [u32;4])->u32 {self.inner.archive_service(m,f,a,out)}
-    fn read(&mut self,m:&mut Memory<'_>,f:u32,ctx:u32,out:&mut [u8])->u32 {self.inner.archive_read(m,f,ctx,out)}
+impl<H: Host> crate::boot_part_e::ArchiveHost for LiveFileServices<'_, H> {
+    fn service(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32], out: &mut [u32; 4]) -> u32 {
+        self.inner.archive_service(m, f, a, out)
+    }
+    fn read(&mut self, m: &mut Memory<'_>, f: u32, ctx: u32, out: &mut [u8]) -> u32 {
+        self.inner.archive_read(m, f, ctx, out)
+    }
 }
 impl<H: Host> LiveFileServices<'_, H> {
-    /// Execute the real 173000, including allocator and source vtable dispatch.
-    pub fn open(&mut self,m:&mut Memory<'_>,source:u32,heap:u32,path:u32,out:u32)->u32 {
-        crate::boot_part_d::fn_173000(m,source,heap,path,out,self.rb,self)
+    pub fn open(&mut self, m: &mut Memory<'_>, source: u32, heap: u32, path: u32, out: u32) -> u32 {
+        crate::boot_part_d::fn_173000(m, source, heap, path, out, self.rb, self)
     }
-    /// Guest-output form also permits direct strict differential replay.
-    pub fn join_into(&mut self,m:&mut Memory<'_>,out:u32,base:u32,name:u32,flag:u32,heap:u32)->u32 {
-        crate::boot_part_e::fn_17db60(m,out,base,name,flag,heap,self)
+
+    pub fn join_into(
+        &mut self,
+        m: &mut Memory<'_>,
+        out: u32,
+        base: u32,
+        name: u32,
+        flag: u32,
+        heap: u32,
+    ) -> u32 {
+        crate::boot_part_e::fn_17db60(m, out, base, name, flag, heap, self)
     }
-    pub fn first_into(&mut self,m:&mut Memory<'_>,source:u32,heap:u32,pattern:u32,flags:u32,name:u32,it:u32)->u32 {
-        crate::boot_part_d::fn_17340c(m,source,heap,pattern,flags,name,it,self)
+    pub fn first_into(
+        &mut self,
+        m: &mut Memory<'_>,
+        source: u32,
+        heap: u32,
+        pattern: u32,
+        flags: u32,
+        name: u32,
+        it: u32,
+    ) -> u32 {
+        crate::boot_part_d::fn_17340c(m, source, heap, pattern, flags, name, it, self)
     }
-    pub fn next_into(&mut self,m:&mut Memory<'_>,it:u32,name:u32)->u32 {
-        crate::boot_part_d::fn_1734e8(m,it,name,self)
+    pub fn next_into(&mut self, m: &mut Memory<'_>, it: u32, name: u32) -> u32 {
+        crate::boot_part_d::fn_1734e8(m, it, name, self)
     }
 }
 impl<H: Host> Host for LiveFileServices<'_, H> {
-    fn thread_id(&mut self)->u32 {self.inner.thread_id()}
-    fn release_dictionary(&mut self,m:&mut Memory<'_>,p:u32)->Option<u32> {self.inner.release_dictionary(m,p)}
-    fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {
+    fn thread_id(&mut self) -> u32 {
+        self.inner.thread_id()
+    }
+    fn release_dictionary(&mut self, m: &mut Memory<'_>, p: u32) -> Option<u32> {
+        self.inner.release_dictionary(m, p)
+    }
+    fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         match f {
-            0x196394 => crate::boot_part_e::alloc(m,a[0],a[1],self),
-            0x1963b8 => crate::boot_part_e::calloc(m,a[0],a[1],a[2],self),
-            0x1963e0 => crate::boot_part_e::fn_1963e0(m,a[0],a[1],a[2],self),
-            0x196428 => {crate::boot_part_e::release(m,a[0],a[1],self);0},
-            0x173510 => crate::boot_part_d::fn_173510(m,a[0],self),
-            0x1730fc => crate::boot_part_d::fn_1730fc(m,a[0],self),
+            0x196394 => crate::boot_part_e::alloc(m, a[0], a[1], self),
+            0x1963b8 => crate::boot_part_e::calloc(m, a[0], a[1], a[2], self),
+            0x1963e0 => crate::boot_part_e::fn_1963e0(m, a[0], a[1], a[2], self),
+            0x196428 => {
+                crate::boot_part_e::release(m, a[0], a[1], self);
+                0
+            }
+            0x173510 => crate::boot_part_d::fn_173510(m, a[0], self),
+            0x1730fc => crate::boot_part_d::fn_1730fc(m, a[0], self),
             0x17cbb4 => {
-                let e=self.archive.expect("live archive environment required");
-                crate::boot_part_e::fn_17cbb4(m,a[0],a[1],a[2],a[3],a[4],e,self)
-            },
+                let e = self.archive.expect("live archive environment required");
+                crate::boot_part_e::fn_17cbb4(m, a[0], a[1], a[2], a[3], a[4], e, self)
+            }
             0x179208 => {
-                let e=self.unmap.expect("live unmap environment required");
-                crate::boot_part_e::fn_179208(m,a[0],a[1],a[2],e,self)
-            },
-            0x1b20a4 => crate::normalization::quad_copy(m.bytes,a[0]-m.base,a[1]-m.base,a[2]),
-            0x1735e0 => crate::boot_part_d::fn_1735e0(m,a[0],a[1],self.archive_params,self),
-            _ => self.inner.call(m,f,a),
+                let e = self.unmap.expect("live unmap environment required");
+                crate::boot_part_e::fn_179208(m, a[0], a[1], a[2], e, self)
+            }
+            0x1b20a4 => {
+                crate::normalization::quad_copy(m.bytes, a[0] - m.base, a[1] - m.base, a[2])
+            }
+            0x1735e0 => crate::boot_part_d::fn_1735e0(m, a[0], a[1], self.archive_params, self),
+            _ => self.inner.call(m, f, a),
         }
     }
 }
 impl<H: OutputHost> OutputHost for LiveFileServices<'_, H> {
-    fn output(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->(u32,u32) {self.inner.output(m,f,a)}
+    fn output(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> (u32, u32) {
+        self.inner.output(m, f, a)
+    }
 }
 impl<H: PropertyHost> PropertyHost for LiveFileServices<'_, H> {
-    fn property(&mut self,m:&mut Memory<'_>,p:u32,key:&[u8])->(u32,u32) {self.inner.property(m,p,key)}
-    fn insert(&mut self,m:&mut Memory<'_>,p:u32,key:u32,v:[u32;3])->u32 {self.inner.insert(m,p,key,v)}
+    fn property(&mut self, m: &mut Memory<'_>, p: u32, key: &[u8]) -> (u32, u32) {
+        self.inner.property(m, p, key)
+    }
+    fn insert(&mut self, m: &mut Memory<'_>, p: u32, key: u32, v: [u32; 3]) -> u32 {
+        self.inner.insert(m, p, key, v)
+    }
 }
 impl<H: ResourceHost> ResourceHost for LiveFileServices<'_, H> {
-    fn decode(&mut self,m:&mut Memory<'_>,a:[u32;4])->(u32,u32,u32) {
-        let Some(g)=self.parser else {return self.inner.decode(m,a);};
-        let saved=[m.word(g.outputs),m.word(g.outputs+4)];
-        m.put_word(g.outputs,0);m.put_word(g.outputs+4,0);
-        let rc=crate::boot_part_b2::fn_197c78(m,[a[0],a[1],a[2],a[3],g.outputs,g.outputs+4],g.table,g.scratch,self);
-        let out=(rc,m.word(g.outputs),m.word(g.outputs+4));
-        m.put_word(g.outputs,saved[0]);m.put_word(g.outputs+4,saved[1]);out
+    fn decode(&mut self, m: &mut Memory<'_>, a: [u32; 4]) -> (u32, u32, u32) {
+        let Some(g) = self.parser else {
+            return self.inner.decode(m, a);
+        };
+        let saved = [m.word(g.outputs), m.word(g.outputs + 4)];
+        m.put_word(g.outputs, 0);
+        m.put_word(g.outputs + 4, 0);
+        let rc = crate::boot_part_b2::fn_197c78(
+            m,
+            [a[0], a[1], a[2], a[3], g.outputs, g.outputs + 4],
+            g.table,
+            g.scratch,
+            self,
+        );
+        let out = (rc, m.word(g.outputs), m.word(g.outputs + 4));
+        m.put_word(g.outputs, saved[0]);
+        m.put_word(g.outputs + 4, saved[1]);
+        out
     }
 }
 impl<H: Host> DirectoryHost for LiveFileServices<'_, H> {
-    fn join(&mut self,m:&mut Memory<'_>,base:u32,name:u32,flag:u32,heap:u32)->(u32,u32) {
-        let s=self.scratch;let saved=m.word(s);m.put_word(s,0);
-        let rc=self.join_into(m,s,base,name,flag,heap);let out=m.word(s);m.put_word(s,saved);(rc,out)
+    fn join(
+        &mut self,
+        m: &mut Memory<'_>,
+        base: u32,
+        name: u32,
+        flag: u32,
+        heap: u32,
+    ) -> (u32, u32) {
+        let s = self.scratch;
+        let saved = m.word(s);
+        m.put_word(s, 0);
+        let rc = self.join_into(m, s, base, name, flag, heap);
+        let out = m.word(s);
+        m.put_word(s, saved);
+        (rc, out)
     }
-    fn first(&mut self,m:&mut Memory<'_>,source:u32,heap:u32,pattern:u32,flags:u32)->(u32,u32,u32) {
-        let s=self.scratch;let saved=[m.word(s),m.word(s+4)];m.put_word(s,0);m.put_word(s+4,0);
-        let rc=self.first_into(m,source,heap,pattern,flags,s,s+4);
-        let out=(rc,m.word(s),m.word(s+4));m.put_word(s,saved[0]);m.put_word(s+4,saved[1]);out
+    fn first(
+        &mut self,
+        m: &mut Memory<'_>,
+        source: u32,
+        heap: u32,
+        pattern: u32,
+        flags: u32,
+    ) -> (u32, u32, u32) {
+        let s = self.scratch;
+        let saved = [m.word(s), m.word(s + 4)];
+        m.put_word(s, 0);
+        m.put_word(s + 4, 0);
+        let rc = self.first_into(m, source, heap, pattern, flags, s, s + 4);
+        let out = (rc, m.word(s), m.word(s + 4));
+        m.put_word(s, saved[0]);
+        m.put_word(s + 4, saved[1]);
+        out
     }
-    fn next(&mut self,m:&mut Memory<'_>,it:u32)->(u32,u32) {
-        let s=self.scratch;let saved=m.word(s);m.put_word(s,0);
-        let rc=self.next_into(m,it,s);let out=m.word(s);m.put_word(s,saved);(rc,out)
+    fn next(&mut self, m: &mut Memory<'_>, it: u32) -> (u32, u32) {
+        let s = self.scratch;
+        let saved = m.word(s);
+        m.put_word(s, 0);
+        let rc = self.next_into(m, it, s);
+        let out = m.word(s);
+        m.put_word(s, saved);
+        (rc, out)
     }
 }
-impl<H: crate::boot_part_b2::AttributeHost + Host> crate::boot_part_b2::AttributeHost for LiveFileServices<'_, H> {
-    fn create(&mut self,m:&mut Memory<'_>,ctx:u32,flag:u32,ticket:[u32;5],out:u32)->u32 {
-        self.inner.create(m,ctx,flag,ticket,out)
+impl<H: crate::boot_part_b2::AttributeHost + Host> crate::boot_part_b2::AttributeHost
+    for LiveFileServices<'_, H>
+{
+    fn create(
+        &mut self,
+        m: &mut Memory<'_>,
+        ctx: u32,
+        flag: u32,
+        ticket: [u32; 5],
+        out: u32,
+    ) -> u32 {
+        self.inner.create(m, ctx, flag, ticket, out)
     }
-    fn attribute(&mut self,m:&mut Memory<'_>,object:u32,key:&[u8],value:[u32;3])->u32 {
-        self.inner.attribute(m,object,key,value)
+    fn attribute(&mut self, m: &mut Memory<'_>, object: u32, key: &[u8], value: [u32; 3]) -> u32 {
+        self.inner.attribute(m, object, key, value)
     }
 }
 impl<H: DiscoveryHost> DiscoveryHost for LiveFileServices<'_, H> {
-    fn remove_property(&mut self,m:&mut Memory<'_>,object:u32,key:&[u8])->u32 {self.inner.remove_property(m,object,key)}
+    fn remove_property(&mut self, m: &mut Memory<'_>, object: u32, key: &[u8]) -> u32 {
+        self.inner.remove_property(m, object, key)
+    }
 }
 impl<H: QueryHost> QueryHost for LiveFileServices<'_, H> {
-    fn query_output(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->(u32,u32) {self.inner.query_output(m,f,a)}
-    fn insert_record(&mut self,m:&mut Memory<'_>,db:u32,key:u32,record:[u32;4])->u32 {self.inner.insert_record(m,db,key,record)}
-    fn open_pair(&mut self,m:&mut Memory<'_>,f:u32,owner:[u32;2],out:u32)->u32 {self.inner.open_pair(m,f,owner,out)}
+    fn query_output(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> (u32, u32) {
+        self.inner.query_output(m, f, a)
+    }
+    fn insert_record(&mut self, m: &mut Memory<'_>, db: u32, key: u32, record: [u32; 4]) -> u32 {
+        self.inner.insert_record(m, db, key, record)
+    }
+    fn open_pair(&mut self, m: &mut Memory<'_>, f: u32, owner: [u32; 2], out: u32) -> u32 {
+        self.inner.open_pair(m, f, owner, out)
+    }
 }
 impl<H: DataHost> DataHost for LiveFileServices<'_, H> {
-    fn data_output(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32],out:u32)->u32 {
+    fn data_output(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32], out: u32) -> u32 {
         match f {
-            0x173000 => self.open(m,a[0],a[1],a[2],out),
-            _ => self.inner.data_output(m,f,a,out),
+            0x173000 => self.open(m, a[0], a[1], a[2], out),
+            _ => self.inner.data_output(m, f, a, out),
         }
     }
 }
 
-/// Caller-owned parser locals, disjoint from file and discovery scratch and allocations.
-/// `scratch` needs 64 bytes plus 12 bytes per nested XML element.
 #[derive(Clone, Copy)]
-pub struct LiveParserGlobals { pub table:u32, pub scratch:u32, pub outputs:u32 }
-/// Composition configuration. This is separate from the original entry's
-/// constants so existing isolated callers keep their unchanged API.
+pub struct LiveParserGlobals {
+    pub table: u32,
+    pub scratch: u32,
+    pub outputs: u32,
+}
+
 #[derive(Clone, Copy)]
 pub struct LiveFileGlobals<'a> {
     pub scratch: u32,
@@ -3016,23 +3613,49 @@ pub struct LiveFileGlobals<'a> {
     pub archive: Option<&'a crate::boot_part_e::ArchiveEnvironment>,
     pub unmap: Option<&'a crate::boot_part_e::UnmapEnvironment>,
 }
-/// 1795f0 with live allocator, source-open/close and archive-attach wrappers.
-/// Dictionary/query/logger services remain explicit caller boundaries.
-/// Both 17cbb4 and 179208 bind directly to the certified boot-part-e ports.
+
 pub fn fn_1795f0_live(
-    m:&mut Memory<'_>,broker:u32,name:u32,flags:u32,out:u32,
-    globals:&DataOpenGlobals,files:&LiveFileGlobals,h:&mut impl DataHost,
-)->u32 {
-    let mut live=LiveFileServices {inner:h,scratch:files.scratch,rb:files.rb,archive_params:files.archive_params,parser:files.parser,archive:files.archive,unmap:files.unmap};
-    fn_1795f0(m,broker,name,flags,out,globals,&mut live)
+    m: &mut Memory<'_>,
+    broker: u32,
+    name: u32,
+    flags: u32,
+    out: u32,
+    globals: &DataOpenGlobals,
+    files: &LiveFileGlobals,
+    h: &mut impl DataHost,
+) -> u32 {
+    let mut live = LiveFileServices {
+        inner: h,
+        scratch: files.scratch,
+        rb: files.rb,
+        archive_params: files.archive_params,
+        parser: files.parser,
+        archive: files.archive,
+        unmap: files.unmap,
+    };
+    fn_1795f0(m, broker, name, flags, out, globals, &mut live)
 }
-/// 17e0bc with live path join and directory iterator wrappers.
-/// Executes the real boot-part-b2 decoder and recursive parser. No decoder stub is permitted.
+
 pub fn fn_17e0bc_live(
-    m:&mut Memory<'_>,context:u32,directory:u32,globals:&DiscoveryGlobals,
-    files:&LiveFileGlobals,h:&mut impl DiscoveryHost,
-)->u32 {
-    let mut live=LiveFileServices {inner:h,scratch:files.scratch,rb:files.rb,archive_params:files.archive_params,parser:files.parser,archive:files.archive,unmap:files.unmap};
-    assert!(files.parser.is_some(),"live discovery requires real parser configuration");
-    fn_17e0bc(m,context,directory,globals,&mut live)
+    m: &mut Memory<'_>,
+    context: u32,
+    directory: u32,
+    globals: &DiscoveryGlobals,
+    files: &LiveFileGlobals,
+    h: &mut impl DiscoveryHost,
+) -> u32 {
+    let mut live = LiveFileServices {
+        inner: h,
+        scratch: files.scratch,
+        rb: files.rb,
+        archive_params: files.archive_params,
+        parser: files.parser,
+        archive: files.archive,
+        unmap: files.unmap,
+    };
+    assert!(
+        files.parser.is_some(),
+        "live discovery requires real parser configuration"
+    );
+    fn_17e0bc(m, context, directory, globals, &mut live)
 }

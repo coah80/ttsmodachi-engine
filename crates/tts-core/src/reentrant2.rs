@@ -1,14 +1,11 @@
-//! Live guest-memory adapters, bridge-4.
-//! Dispatchers must bind named callees to their real Rust ports where present.
-//! Callback addresses are guest code addresses, never host function pointers.
+
+
 use crate::boot::{Calls, Memory};
 
-/// Memory-last callback dispatch. Existing boot dispatchers adapt unchanged.
 #[derive(Clone, Copy, Debug)]
 pub enum LiteralM { OwnerCategory, OwnerRelease, PcreCategory, PcreInitBegin, PcreInitEnd, PcreDeinitBegin, PcreDeinitEnd }
 pub trait HooksM {
-    /// Resolve region-specific ROM literals. Dispatchers must reject the
-    /// sentinel rather than reading it as a guest pointer.
+
     fn literal_m(&self, _literal: LiteralM) -> u32 { u32::MAX }
 
     fn call_m(&mut self, address: u32, args: &[u32], mem: &mut Memory<'_>) -> u32;
@@ -27,8 +24,6 @@ fn copy(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) {
     crate::normalization::memcpy_at(m.bytes, d, s, n);
 }
 
-/// fn_196b00, EU 196bb0, KR 196bec. Re-read the clone through out after
-/// every callback: callbacks may replace its count, stride, buffer or hooks.
 pub fn clone_table_m(m: &mut Memory<'_>, tbl: u32, out: u32, host: &mut impl HooksM) -> u32 {
     if tbl == 0 || out == 0 { return 0; }
     let clone = host.call_m(0x1963b8, &[m.word(tbl+28), 1, 32], m);
@@ -79,8 +74,6 @@ pub fn clone_table_m(m: &mut Memory<'_>, tbl: u32, out: u32, host: &mut impl Hoo
     result
 }
 
-/// fn_196c7c, EU 196d2c, KR 196d68. Destructors see live bytes; fields
-/// are re-read on each iteration, matching the C even when a callback edits them.
 pub fn destroy_array_m(m: &mut Memory<'_>, array: u32, host: &mut impl HooksM) -> u32 {
     if array == 0 { return 0; }
     if m.word(array) != 0 {
@@ -98,14 +91,11 @@ pub fn destroy_array_m(m: &mut Memory<'_>, array: u32, host: &mut impl HooksM) -
     1
 }
 
-/// Memory-passing fn_1963b8. Unlike the legacy MethodTable path this
-/// dispatches the concrete slot on the same arena that contains the heap.
 pub fn call_method_m(m: &mut Memory<'_>, heap: u32, count: u32, size: u32, host: &mut impl HooksM) -> u32 {
     if heap == 0 || count == 0 || size == 0 { return 0; }
     host.call_m(m.word(m.word(heap)+4), &[m.word(heap+4),count,size], m)
 }
 
-/// Reentrant lock interface. Legacy StateLock implementations remain usable.
 pub trait StateLockM {
     fn acquire_m(&mut self, mem: &mut [u8]) -> u32;
     fn release_m(&mut self, mem: &mut [u8]) -> u32;
@@ -115,7 +105,6 @@ impl<T: crate::frontend::StateLock + ?Sized> StateLockM for T {
     fn release_m(&mut self, _mem: &mut [u8]) -> u32 { self.release() }
 }
 
-/// Memory-passing frontend::find_node. Guest addresses are flat offsets.
 pub fn find_node_m(
     mem: &mut [u8],
     tree: u32,
@@ -141,7 +130,7 @@ pub fn find_node_m(
             break;
         }
     }
-    // C reads the flag after the comparator, which may reenter.
+
     if mem[tree.wrapping_add(40) as usize] == 0 {
         return Some(node);
     }
@@ -157,7 +146,6 @@ pub fn find_node_m(
     }
 }
 
-/// Memory-passing frontend::lookup_value. Guest addresses are flat offsets.
 pub fn lookup_value_m(
     mem: &mut [u8],
     base: Option<u32>,
@@ -190,7 +178,6 @@ pub fn lookup_value_m(
     }
 }
 
-/// Memory-passing frontend::lookup_param. Guest addresses are flat offsets.
 pub fn lookup_param_m(
     mem: &mut [u8],
     obj: Option<u32>,
@@ -249,7 +236,6 @@ pub fn lookup_param_m(
     result
 }
 
-/// Memory-passing frontend::get_param_uint. Guest addresses are flat offsets.
 pub fn get_param_uint_m(
     mem: &mut [u8],
     a: Option<u32>,
@@ -270,7 +256,6 @@ pub fn get_param_uint_m(
     err
 }
 
-/// Memory-passing frontend::get_param_int. Guest addresses are flat offsets.
 pub fn get_param_int_m(
     table: &[u16; 256],
     mem: &mut [u8],
@@ -292,7 +277,6 @@ pub fn get_param_int_m(
     err
 }
 
-/// Memory-passing frontend::fetch_param. Guest addresses are flat offsets.
 pub fn fetch_param_m(
     mem: &mut [u8],
     a: Option<u32>,
@@ -313,14 +297,13 @@ fn mem_store(mem: &mut [u8], p: u32, v: u32) {
 fn nz(p: u32) -> Option<u32> { if p == 0 { None } else { Some(p) } }
 use crate::frontend::{parse_uint,parse_int};
 
-/// Memory-passing change veto callback, with legacy adapter.
 pub trait BeforeChangeM {
     fn before_m(&mut self, method:u32, context:u32, key:u32, data:u32, allow:&mut u8, mem:&mut [u8])->u32;
 }
 impl<T: crate::frontend::BeforeChange + ?Sized> BeforeChangeM for T {
     fn before_m(&mut self,_method:u32,c:u32,k:u32,d:u32,a:&mut u8,_:&mut [u8])->u32 { self.before(c,k,d,a) }
 }
-/// Memory-passing notification callback, with legacy adapter.
+
 pub trait ElementCallbackM {
     fn call_element_m(&mut self,method:u32,a:u32,q:u32,r:u32,mem:&mut [u8])->u32;
 }
@@ -331,7 +314,6 @@ use crate::frontend::{HeapVtableM,TreeOpsM,heap_alloc_m,heap_release_m,heap_real
     ElementTable,element_at,word_at5,compare_bytes,render_unsigned,strlen_bytes};
 fn mem_half(mem:&[u8],p:u32)->u16 { u16::from_le_bytes(mem[p as usize..p as usize+2].try_into().unwrap()) }
 
-/// Memory-passing frontend::before_change. Flat arena offsets.
 pub fn before_change_m(
     mem: &mut [u8],
     params: u32,
@@ -377,7 +359,6 @@ pub fn before_change_m(
     rc
 }
 
-/// Memory-passing frontend::store_sized. Flat arena offsets.
 pub fn store_sized_m(
     mem: &mut [u8],
     slot_at: Option<u32>,
@@ -422,7 +403,6 @@ pub fn store_sized_m(
     0
 }
 
-/// Memory-passing frontend::run_element_callbacks. Flat arena offsets.
 pub fn run_element_callbacks_m(
     mem: &mut [u8],
     p: Option<u32>,
@@ -474,7 +454,6 @@ pub fn run_element_callbacks_m(
     0
 }
 
-/// Memory-passing frontend::update_attr. Flat arena offsets.
 pub fn update_attr_m(
     mem: &mut [u8],
     obj: u32,
@@ -576,7 +555,6 @@ pub fn update_attr_m(
     r
 }
 
-/// Memory-passing frontend::set_param. Flat arena offsets.
 pub fn set_param_m(
     mem: &mut [u8],
     params_at: Option<u32>,
@@ -709,7 +687,6 @@ pub fn set_param_m(
     result
 }
 
-/// Memory-passing frontend::set_param_uint. Flat arena offsets.
 pub fn set_param_uint_m(
     mem: &mut [u8],
     params_at: Option<u32>,
@@ -746,8 +723,6 @@ pub fn set_param_uint_m(
     )
 }
 
-/// fn_244324, EU 2444e0, KR 24458c. All broker and logger callbacks
-/// receive current memory. Bind 17331c and 1730fc to boot_part_d's real ports.
 pub fn close_owner_pair_m(m:&mut Memory<'_>,p:u32,h:&mut impl HooksM)->u32 {
     if m.byte(p+4)!=0 {
         for off in [8,12,16,20,24] { m.put_word(p+off,0); }
@@ -781,8 +756,7 @@ fn pcre_log(m:&mut Memory<'_>,p:u32,which:LiteralM,status:Option<u32>,h:&mut imp
     let args=[logger,h.literal_m(LiteralM::PcreCategory),4,0,h.literal_m(which),status.unwrap_or(0)];
     h.call_m(0x1738e8,&args[..if status.is_some(){6}else{5}],m);
 }
-/// Guest-memory counterpart of regex::pcre_deinit. Fields and array entries
-/// are published before each free callback; no detached FrameStore is used.
+
 pub fn pcre_deinit_m(m:&mut Memory<'_>,p:u32,key:u32,h:&mut impl HooksM)->u32 {
     let status=h.call_m(0x176f94,&[p,key,0xdd57,24],m);
     if status>=0x80000000 {return status;}
@@ -811,8 +785,7 @@ fn free_pcre_entry(m:&mut Memory<'_>,p:u32,i:u32,h:&mut impl HooksM) {
     h.call_m(0x196428,&[m.word(m.word(p)+4),m.word(slot(m))],m);
     let slot=slot(m);m.put_word(slot,0);
 }
-/// fn_2401a0, EU 24035c, KR 240408. The block array, headers and frame
-/// data live in guest memory throughout allocator reentry, unlike FrameStore.
+
 pub fn pcre_init_m(m:&mut Memory<'_>,p:u32,key:u32,capacity:i32,width:i32,h:&mut impl HooksM)->u32 {
     let mut result=h.call_m(0x176f94,&[p,key,0xdd57,24],m);
     if result>=0x80000000 {return result;}
@@ -845,7 +818,7 @@ pub fn pcre_init_m(m:&mut Memory<'_>,p:u32,key:u32,capacity:i32,width:i32,h:&mut
         h.call_m(0x173dc0,&[m.word(owner+16),h.literal_m(LiteralM::PcreCategory),1000,0],m);
         result=0x8a50200a;pcre_deinit_m(m,p,key,h);
     }
-    // The owner is captured before callbacks, exactly as fn_2401a0's local.
+
     h.call_m(0x1738e8,&[m.word(owner+16),h.literal_m(LiteralM::PcreCategory),4,0,h.literal_m(LiteralM::PcreInitEnd),result],m);
     result
 }

@@ -1,17 +1,14 @@
-//! RVCT byte formatter. Guest pointers refer to caller-owned `boot::Memory`.
-//! No host varargs, libc, allocation, or Rust formatting are used.
+
+
 use crate::boot::Memory;
 
-/// Source of promoted arguments. `wide` consumes an eight-byte, eight-aligned
-/// ARM argument; ordinary arguments consume four bytes. The source owns its cursor.
 pub(crate) trait Arguments {
     fn word(&mut self, memory: &Memory<'_>) -> u32;
     fn wide(&mut self, memory: &Memory<'_>) -> u64;
-    /// Pointer reads a word before any ll/j alignment, but consumes a wide slot.
+
     fn pointer(&mut self, memory: &Memory<'_>, wide: bool) -> u32;
 }
 
-/// ARM AAPCS argument cursor, including alignment holes before doubles and ll/j.
 pub struct VaList {
     pub address: u32,
 }
@@ -37,9 +34,8 @@ impl Arguments for VaList {
     }
 }
 
-/// Locale and runtime rounding are platform state, not host libc calls.
 pub(crate) trait Host {
-    /// Convert one UTF-16 code unit as RVCT wcrtomb does. None means EILSEQ.
+
     fn encode(&mut self, unit: u16, output: &mut [u8; 8], state: &mut [u8; 8]) -> Option<usize>;
     fn decimal_point(&mut self) -> u8 {
         b'.'
@@ -304,8 +300,6 @@ fn text(
     out.pad(m, f, pad, false);
 }
 
-/// Exact finite binary64 value represented in decimal, before RVCT's 17 digit cap.
-/// Digits are little endian; `scale` is the number after the decimal point.
 pub(crate) struct Decimal {
     digits: [u8; 1100],
     len: usize,
@@ -365,8 +359,7 @@ impl Decimal {
         }
     }
 }
-// RVCT uses a 64-bit significand, not exact rational decimal rounding.
-// Keeping each intermediate rounding is observable at decimal half-way cases.
+
 #[derive(Clone, Copy)]
 struct Extended {
     sig: u64,
@@ -412,7 +405,7 @@ impl Extended {
         }
     }
     fn exact_power10(n: usize, mode: i32) -> Self {
-        // Generate the RVCT power table mathematically; no ROM table is embedded.
+
         let mut limbs = [0u64; 24];
         limbs[0] = 1;
         let mut len = 1;
@@ -505,8 +498,7 @@ impl Extended {
             }
         }
     }
-    /// Scale and round directly to an integer. This deliberately does not round
-    /// once to normalized extended and then a second time to integer.
+
     fn scaled_integer(self, power: i32, mode: i32) -> Option<u64> {
         if self.sig == 0 {
             return Some(0);
@@ -533,8 +525,7 @@ impl Extended {
         } else {
             let shift = shift.unsigned_abs();
             if denominator.leading_zeros() < shift {
-                // Numerator is at most 128 bits. A denominator beyond that range
-                // yields zero except upward rounding, or a nearest half threshold.
+
                 if mode > 0
                     || mode == 0
                         && shift > 0
@@ -688,7 +679,7 @@ fn floating(
         if p < 13 {
             let shift = 52 - 4 * p;
             let mask = (1u64 << shift) - 1;
-            // RVCT inspects only this shifted word, as in the Thumb runtime.
+
             let rem = if p < 5 {
                 ((bits >> 32) as u32).wrapping_shl((4 * p + 12) as u32)
             } else {
@@ -696,7 +687,7 @@ fn floating(
             };
             let half = 1u32 << 31;
             let odd = value & (1 << shift) != 0;
-            // fn_2ffde4 returns zero in this ROM: nearest/even.
+
             let up = rem > half || (rem == half && odd);
             value &= !mask;
             if up {
@@ -744,8 +735,7 @@ fn floating(
                 n -= 1;
             }
         }
-        // RVCT's sentinel consumes one precision position beyond the 13 nibbles,
-        // and also reserves one extra field position that is never emitted.
+
         let zeros = (p - 14).max(0);
         let mut tail = [0u8; 32];
         let mut tn = 0;
@@ -798,8 +788,7 @@ fn floating(
         p
     };
     if c == b'g' && f.flags & ALT == 0 {
-        // All digits outside the 17 retained positions are zero. Skip that
-        // potentially enormous zero suffix before inspecting the retained digits.
+
         let effective = if scientific { e + d.scale } else { d.scale };
         places = places.min(effective.max(0));
         while places > 0 {
@@ -992,9 +981,6 @@ fn format(
     }
 }
 
-/// fn_10012c, Thumb vsnprintf. Returns the wrapping would-have-written byte count.
-/// `dst`, NUL-terminated `fmt`, arguments, and %s/%n pointees are guest addresses.
-/// Capacity zero performs no destination access. A nonzero capacity always writes NUL.
 pub fn fn_10012c(
     m: &mut Memory<'_>,
     dst: u32,
@@ -1020,8 +1006,6 @@ pub fn fn_10012c(
     out.count
 }
 
-/// fn_100b50, Thumb sprintf. Same argument contract as fn_10012c; caller guarantees
-/// writable space for the complete result and its terminating NUL.
 pub fn fn_100b50(
     m: &mut Memory<'_>,
     dst: u32,

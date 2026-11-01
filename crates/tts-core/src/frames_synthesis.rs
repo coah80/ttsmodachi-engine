@@ -23,10 +23,6 @@ impl SynthesisState {
         pitch
     }
 
-    /// KR fn_1bd540 / US fn_1bd2f0 / EU fn_1bd3a0: resample grains and overlap-add.
-    /// All sample storage, queues, tracker state and EU scratch belong to the caller.
-    /// Buffer lengths are the C capacities. Input must include interpolation padding;
-    /// valid engine states require positive periods, resampling and output spacing.
     pub fn synthesize_korean(
         &mut self,
         buffers: &mut SynthesisBuffers<'_>,

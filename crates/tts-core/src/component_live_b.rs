@@ -1,41 +1,32 @@
-//! Live, caller-owned component memory. Guest pointers stay scalar across calls.
+
 use crate::{boot::Memory, frontend};
 use crate::rom_region::{Rom, addr, to_us};
 
-/// Reentrant calls. Only platform services may be supplied by a non-Rust host.
 pub trait Host {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32;
-    /// The ROM whose guest memory is live. US by default so US-only hosts
-    /// are unchanged; region-aware hosts (c4's TokenHost/DictEnv, the
-    /// call_m_with shim) carry Eu/Kr and every data literal follows it.
+
     fn rom(&self) -> Rom {
         Rom::Us
     }
 }
 
-/// Read a guest word. `None` when the address is outside the caller's arena.
-/// A live port must not panic on a hostile arena: every guest pointer read on
-/// a port path goes through these helpers and fails closed instead.
 fn guest_word(m: &Memory<'_>, p: u32) -> Option<u32> {
     let at = p.checked_sub(m.base)? as usize;
     let b = m.bytes.get(at..at.checked_add(4)?)?;
     Some(u32::from_le_bytes(b.try_into().ok()?))
 }
 
-/// Read a guest half word. `None` when the address is outside the arena.
 fn guest_half(m: &Memory<'_>, p: u32) -> Option<u16> {
     let at = p.checked_sub(m.base)? as usize;
     let b = m.bytes.get(at..at.checked_add(2)?)?;
     Some(u16::from_le_bytes(b.try_into().ok()?))
 }
 
-/// Read a guest byte. `None` when the address is outside the arena.
 fn guest_byte(m: &Memory<'_>, p: u32) -> Option<u8> {
     let at = p.checked_sub(m.base)? as usize;
     Some(*m.bytes.get(at)?)
 }
 
-/// True when `len` bytes at `p` are inside the caller's arena.
 fn guest_range(m: &Memory<'_>, p: u32, len: u32) -> bool {
     let at = match p.checked_sub(m.base) {
         Some(v) => v as usize,
@@ -47,11 +38,6 @@ fn guest_range(m: &Memory<'_>, p: u32, len: u32) -> bool {
     }
 }
 
-
-/// fn_2401a0. Direct guest-memory form of regex::pcre_init.
-/// No arena borrow survives a callback. Allocation sizes use guest wrapping arithmetic.
-/// A malformed object (an unreadable owner, heap or block pointer) fails closed
-/// with 0x8a50200a instead of reading outside the arena.
 pub fn pcre_init_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -140,14 +126,6 @@ pub fn pcre_init_m(
     status
 }
 
-/// fn_1e4a3c. PCRE startup with live heap and logging dispatch.
-///
-/// The caller supplies a `Host` that dispatches the guest calls (0x1738e8,
-/// 0x173dc0, 0x1963b8, 0x23ffd4). `LiveHost` needs a `scratch` that addresses
-/// 48 writable bytes inside the arena for the logger varargs; a scratch
-/// outside the arena is ignored and the logger call carries no varargs. An
-/// unreadable token pointer fails closed with 0x89602008: the port never
-/// reads outside the caller's arena.
 pub fn fn_1e4a3c_m(m: &mut Memory<'_>, p: u32, key: u32, h: &mut impl Host) -> u32 {
     if frontend::validate_handle(p != 0, key, 0xe58c, 8) >= 0x80000000 {
         return 0x89602008;
@@ -208,11 +186,6 @@ pub fn fn_1e4a3c_m(m: &mut Memory<'_>, p: u32, key: u32, h: &mut impl Host) -> u
     rc
 }
 
-/// fn_2c1e2c: apply the SET PARAM marker of each of the four kinds.
-/// 1:1 with src/fn_2c1e2c.c over the live arena: engine from handles,
-/// parser arrays 0x3f4/0x3fd, per-tag value scan with the tag-7 toggle,
-/// then set-int / set-string / clear per kind through the host. The
-/// D_9c5630 parameter table is ROM data read at its guest address.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn fn_2c1e2c_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handle: u32, scratch: u32) -> u32 {
     const TABLE: u32 = 0x9c5630;
@@ -230,20 +203,20 @@ pub(crate) fn fn_2c1e2c_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handl
         m.word(table.wrapping_add(20)),
         m.word(table.wrapping_add(28)),
     ];
-    // Engine from the handle pair (C: fn_19611c(ctx->handles, &engine)).
+
     let mut result = h.call_m(0x19611c, &[m.word(ctx), m.word(ctx.wrapping_add(4)), scratch], m);
     if result >= 0x80000000 {
         return 0x81102007;
     }
     let engine = m.word(scratch);
-    // First array (C: params valid only when this call succeeds).
+
     result = h.call_m(0x252f88, &[handle, 0x3f4, 1, scratch], m);
     let mut params = 0u32;
     if result < 0x80000000 {
         let array = m.word(scratch);
         params = m.word(array.wrapping_add(4));
     }
-    // Second array (C: hard error when this call fails).
+
     result = h.call_m(0x252f88, &[handle, 0x3fd, 1, scratch], m);
     if result >= 0x80000000 {
         return result;
@@ -254,14 +227,14 @@ pub(crate) fn fn_2c1e2c_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handl
     let props = m.word(engine.wrapping_add(24));
     let heap = m.word(engine.wrapping_add(4));
     let setting = m.word(ctx.wrapping_add(96));
-    // Caller-owned copy of the default parameter name (C: ParameterName tmpname).
+
     let mut defname = [0u16; 8];
     for i in 0..8 {
         defname[i] = m.half(table.wrapping_add(100 + i as u32 * 2));
     }
     let mut done = [false; 4];
     let mut k = 1u16;
-    // Marker field layout (C: ParserMarker, 40 bytes).
+
     while (k as u32) < count as u32 {
         let tag = m.half(base.wrapping_add(k as u32 * 40 + 10));
         let mut t = 0usize;
@@ -274,7 +247,7 @@ pub(crate) fn fn_2c1e2c_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handl
         }
         let mut value = m.word(base.wrapping_add(k as u32 * 40 + 28));
         if tag == 7 {
-            // Tag-7 toggle scan (C: seven block).
+
             let mut toggle = value == 0x2b;
             let mut j = k.wrapping_add(1);
             if (j as u32) < count as u32 {
@@ -302,8 +275,7 @@ pub(crate) fn fn_2c1e2c_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handl
                 value = 15;
             }
         } else {
-            // Forward scan with stride 1 then stride 2 (C: x = 1 & ~n;
-            // the stride-1 loop runs iff x == 1, covering only base[j]).
+
             let j0 = (k as u32).wrapping_add(1);
             if j0 < count as u32 {
                 let rest = (count as u32).wrapping_sub(k as u32);
@@ -330,7 +302,7 @@ pub(crate) fn fn_2c1e2c_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handl
                 }
             }
         }
-        // Dispatch on the tag (C: dispatch/is7/is31/is2136/set/clear).
+
         let mut clear = false;
         match tag {
             7 => clear = value == 15,
@@ -394,7 +366,7 @@ pub(crate) fn fn_2c1e2c_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handl
         done[t] = true;
         k = k.wrapping_add(1);
     }
-    // Clear every kind never set (C: final done[] sweep).
+
     let mut t = 0usize;
     while t < 4 {
         if !done[t] {
@@ -413,10 +385,6 @@ pub(crate) fn fn_2c1e2c_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handl
     result
 }
 
-/// fn_19672c inline (src/fn_19672c.c): erase the map entry for `key`.
-/// Mirrors engine_live::fn_19672c_m over this host's dispatcher: find via
-/// the map comparator, flag-walk, rb_erase, then release key, value and
-/// node through the map vtable and heap.
 fn fn_19672c_inline(m: &mut Memory<'_>, h: &mut impl Host, p: u32, key: u32) -> u32 {
     if p == 0 || key == 0 {
         return 0x89002007;
@@ -474,10 +442,6 @@ fn fn_19672c_inline(m: &mut Memory<'_>, h: &mut impl Host, p: u32, key: u32) -> 
     0
 }
 
-/// fn_175a24: clear the named parameter (src/fn_175a24.c).
-/// Lock, look up the value, refuse when callbacks are set, else push the
-/// cleared value through the update entry and remove the key. `scratch` is
-/// one writable guest word for the lookup out-param.
 pub(crate) fn fn_175a24_m(m: &mut Memory<'_>, h: &mut impl Host, props: u32, key: u32, scratch: u32) -> u32 {
     if props == 0 || key == 0 {
         return 0x8b702007;
@@ -523,23 +487,20 @@ pub struct LiveHost<'a> {
     pub platform: &'a mut dyn crate::engine::HeapPlatform,
     pub fault: Option<crate::engine::Error>,
     pub scratch: u32,
+    pub rom: Rom,
 }
 
 impl LiveHost<'_> {
-    /// Record an unbound or unusable guest call and return the failure
-    /// status. The live ports fail closed: they never panic on a caller
-    /// arena, a missing adapter or a malformed guest pointer.
+
     fn faulted(&mut self, f: u32) -> u32 {
         panic!("FAULTED {:#x}", f);
     }
-    /// True when `len` bytes at `addr` are writable inside the arena.
+
     fn scratch_ok(&self, m: &Memory<'_>, addr: u32, len: u32) -> bool {
         guest_range(m, addr, len)
     }
 }
-/// A [`LiveHost`] call carrying the live region explicitly. The [`Host`]
-/// impl routes through here with the entry-derived region; region-aware
-/// callers (component_live_c4) pass their own `rom` with regional entries.
+
 impl LiveHost<'_> {
     pub fn call_m_with(
         &mut self,
@@ -552,13 +513,11 @@ impl LiveHost<'_> {
     }
 
     fn dispatch(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>, rom: Rom) -> u32 {
-        // Regional entries name the same port the US dispatch serves. The
-        // caller's region disambiguates overlapping addresses.
+
         let f = to_us(rom, f);
-        // back with this token for its varargs (lane c3's MorphHost serves
-        // the same token with 0). It carries no state.
+
         if f == 0xffff0001 {
-            return 0;
+            return self.faulted(f);
         }
         if f == 0x15db2c {
             let at = addr(rom, 0x8d7bb8) + a[2] * 8;
@@ -583,17 +542,53 @@ impl LiveHost<'_> {
             let literals = speech_literals(m, rom);
             return crate::speech_part_2::fn_24c470(m, a[0], &literals, 0x5800, self);
         }
-        // fn_226ef8 (round 1, seg5): the shared-stream copy the write
-        // path runs through the stream's copy slot (state+32). The
-        // certified port ignores its first two args and retains at p.
+
         if f == 0x226ef8 {
             return crate::speech_part_2::fn_226ef8(m, a[0], a[1], a[2]);
+        }
+        if f == 0x179f30 {
+            let Some(args) = a.get(..3) else {
+                self.fault = Some(crate::engine::Error::MissingStreamAdapter { entry: f });
+                return 0x80002001;
+            };
+            return crate::component_live_b3::broker_179f30_live(
+                m,
+                args[0],
+                args[1],
+                args[2],
+                &mut WithRom { inner: self, rom },
+            );
+        }
+        if f == 0x179f3c || f == 0x179fec {
+            let Some(args) = a.get(..2) else {
+                self.fault = Some(crate::engine::Error::MissingStreamAdapter { entry: f });
+                return 0x80002001;
+            };
+            let mut inner = crate::component_live_c2::OpenHost {
+                query: crate::component_live_c2::QUERY_SCRATCH,
+                pending_release: None,
+            };
+            let rc = {
+                let mut close = crate::component_live_c2::CloseHost { inner: &mut inner };
+                crate::leftovers_1::fn_179f3c(
+                    m,
+                    args[0],
+                    args[1],
+                    &crate::component_live_c2::close_runtime(),
+                    &mut close,
+                )
+            };
+            if let Some(object) = inner.pending_release.take() {
+                let heap = m.word(m.word(m.word(args[0] + 4) + 8) + 4);
+                crate::boot_part_e::release(m, heap, object, &mut inner);
+            }
+            return rc;
         }
         if f == 0x15cdcc {
             let mut descs = [0u8; 1360];
             let anchor = addr(rom, 0x8d7ca0);
             descs.copy_from_slice(&m.bytes[anchor as usize..anchor as usize + 1360]);
-            // The original compares the descriptor anchor with D_8d7c98.
+
             let word_anchor = addr(rom, 0x8d7c98);
             return write_field_m(
                 m.bytes,
@@ -610,7 +605,7 @@ impl LiveHost<'_> {
             );
         }
         if f == 0x15bf74 {
-            
+
             let mut args = [0u32; 5];
             let n = a.len().min(5);
             args[..n].copy_from_slice(&a[..n]);
@@ -639,10 +634,7 @@ impl LiveHost<'_> {
             }
             return fn_30253c_m(m, a[0], a[1], a[2]);
         }
-        // EU/KR 206be4's archive read reaches the stream's extend callback
-        // through its regional twin (EU 0x172ec0 / KR 0x172e6c); the ROM
-        // returns 0 (src/fn_172e10.c), so the port answers 0 with no guest
-        // write. US never issues this call.
+
         if f == 0x172e10 {
             return 0;
         }
@@ -650,13 +642,11 @@ impl LiveHost<'_> {
             if a.len() < 2 {
                 return self.faulted(f);
             }
-            // The runtime returns the packed 64-bit value; the dispatcher
-            // carries the low word, the quotient.
+
             return fn_30209c_m(a[0] as i32, a[1] as i32) as u32;
         }
         if matches!(f, 0x26b2f8 | 0x26b37c | 0x26b444 | 0x26b530) {
-            // The morphology family of the fe_text unit. Lane c4 owns the
-            // ports; the flat view lets them run against the caller's arena.
+
             if a.is_empty() {
                 return self.faulted(f);
             }
@@ -688,9 +678,7 @@ impl LiveHost<'_> {
             };
         }
         if f == 0x15c1e4 || f == 0x15c2f0 {
-            // The new record pointer and the created id live in the
-            // caller's scratch. The target kept them on its stack, so the
-            // port restores the scratch and leaves no byte behind.
+
             let at = self.scratch.wrapping_add(0x300) as usize;
             if m.bytes.len() < at + 16 {
                 return self.faulted(f);
@@ -721,8 +709,7 @@ impl LiveHost<'_> {
             args[..n].copy_from_slice(&a[..n]);
             return fn_15da64_m(m, args, &mut WithRom { inner: &mut *self, rom });
         }
-        // The depes layer and module group of the fn_1e7908 capture. The
-        // lane c ports own the behaviour; the adapter keeps the arena.
+
         if f == 0x218f88 || f == 0x218ba4 {
             if a.len() < 5 {
                 return self.faulted(f);
@@ -753,8 +740,7 @@ impl LiveHost<'_> {
                 &mut adapter,
             );
         }
-        // fn_1ed1d0: fe_dctlkp_ConvertToCanonicalToken (lane us r23).
-        // The certified canonicalizer port runs here over the live arena.
+
         if f == 0x1ed1d0 {
             if a.len() < 4 {
                 return self.faulted(f);
@@ -769,7 +755,7 @@ impl LiveHost<'_> {
                 &mut adapter,
             );
         }
-        // fn_175a24: clear the named parameter (lane us r23).
+
         if f == 0x175a24 {
             if a.len() < 2 {
                 return self.faulted(f);
@@ -777,8 +763,7 @@ impl LiveHost<'_> {
             let sc = self.scratch;
             return fn_175a24_m(m, self, a[0], a[1], sc);
         }
-        // fn_2c1e2c: SET PARAM marker parser (lane us r23).
-        // The 1:1 port above runs here over the live arena.
+
         if f == 0x2c1e2c {
             if a.len() < 2 {
                 return self.faulted(f);
@@ -786,8 +771,7 @@ impl LiveHost<'_> {
             let sc = self.scratch;
             return fn_2c1e2c_m(m, self, a[0], a[1], sc);
         }
-        // The heap ports of the record allocator. The block headers they
-        // write are part of the persistent image.
+
         if f == 0x1850c0 {
             if a.len() < 4 || !guest_range(m, a[0], 64) {
                 return self.faulted(f);
@@ -814,9 +798,7 @@ impl LiveHost<'_> {
             };
             return v;
         }
-        // The remaining calls of the 1f98c8 and 1e7908 captures that reach
-        // an existing Rust port. Every guest range is checked first: the
-        // live ports fail closed instead of indexing outside the arena.
+
         if f == 0x195ae8 || f == 0x195b38 {
             if !guest_range(m, a[0], a[2]) || !guest_range(m, a[1], a[2]) {
                 return self.faulted(f);
@@ -868,8 +850,7 @@ impl LiveHost<'_> {
                 Some(v) => v,
                 None => return self.faulted(f),
             };
-            // Compare with the terminators attached: without them equal
-            // strings, prefixes and empty literals read past the slice.
+
             let left = match m.bytes.get(a[0] as usize..a[0] as usize + al.wrapping_add(1) as usize) {
                 Some(v) => v,
                 None => return self.faulted(f),
@@ -910,7 +891,7 @@ impl LiveHost<'_> {
             return crate::pronunciation::parse_int(text) as u32;
         }
         if f == 0x15b758 {
-            
+
             let mut adapter = DbAdapter(self);
             return crate::db_live::create_record_m(
                 &mut adapter,
@@ -930,9 +911,7 @@ impl LiveHost<'_> {
             return crate::frontend::validate_handle(a[0] != 0, a[1], a[2], a[3]);
         }
         if f == 0x195d90 {
-            // `guest_str_len` already reports the C length (the offset of
-            // the first NUL); slicing the terminator off and scanning the
-            // remainder for one panics on every input, so return it.
+
             return match guest_str_len(m, a[0]) {
                 Some(v) => v,
                 None => self.faulted(f),
@@ -940,6 +919,9 @@ impl LiveHost<'_> {
         }
         if f == 0x195dac {
             return crate::component_live_c::fn_195dac_m(m, a[0], a[1], a[2] as i32);
+        }
+        if f == 0x270b28 {
+            return u32::from(m.byte(a[0]) < m.byte(a[1]));
         }
         if f == 0x240b28 {
             return crate::component_live_c::fn_240b28(a[0]);
@@ -972,11 +954,19 @@ impl LiveHost<'_> {
             crate::boot_part_b2::fn_19b78c_guest(m, a[0], a[1]);
             return 0;
         }
+        if f == 0x26b7ec {
+            return crate::component_live_b3::fn_26b7ec_m(m, &mut WithRom { inner: self, rom }, a[0], a[1], a[2], a[3]);
+        }
+        if f == 0x26bb28 {
+            return crate::component_live_b3::fn_26bb28_m(m, &mut WithRom { inner: self, rom }, a[0], a[1]);
+        }
+        if f == 0x26bb44 {
+            return crate::component_live_b3::fn_26bb44_m(m, a[0]);
+        }
         if f == 0x26bb54 {
             return crate::component_live_c::fn_26bb54_m(m, a[0]) as u32;
         }
-        // The broker and stream range of the 1f98c8 capture. The lane c
-        // ports own these; the ABI is the shared broker range.
+
         if matches!(
             f,
             0x17a1a4
@@ -1035,7 +1025,7 @@ impl LiveHost<'_> {
                     return 0x80002001;
                 }
             };
-            // The child lookup reads the region's parent-type table.
+
             let mut calls = crate::engine_components::RegionalCalls { rom };
             return match crate::engine_components::InternalCalls::call(
                 &mut calls,
@@ -1095,7 +1085,7 @@ impl LiveHost<'_> {
             return crate::speech_part_1::parameter_call_m(m, f, a, 0x1800, self);
         }
         if f == 0x2643f8 {
-            
+
             let env = crate::speech_part_1::SequenceEnvironment {
                 cached_handle: core::array::from_fn(|i| {
                     m.byte(addr(rom, 0x8d7660) + i as u32)
@@ -1191,7 +1181,7 @@ impl LiveHost<'_> {
             return crate::boot_part_e::fn_1970ac(m, a[0], a[1], a[2]);
         }
         if f == 0x19611c {
-            
+
             let anchor = addr(rom, 0x8d7660);
             let mut pair = [0u8; 8];
             pair.copy_from_slice(&m.bytes[anchor as usize..anchor as usize + 8]);
@@ -1291,11 +1281,7 @@ impl LiveHost<'_> {
             }
             0x4a774c => return crate::speech_part_3::fn_4a774c(m, a[0], a[1], self),
             0x4a779c => return m.fn_4a779c(self, a[0], a[1]),
-            // fn_4a79b8: the heap realloc the stream growth path needs
-            // (round 27b, wire-a): the 22d6dc insertion pump grows its
-            // stream through here on the full run. Same shape as the
-            // heap arms above; the certified speech_part_3 port runs
-            // over this host.
+
             0x4a79b8 => {
                 if a.len() < 3 {
                     return self.faulted(f);
@@ -1318,21 +1304,17 @@ impl LiveHost<'_> {
                 m.fn_165d00(self, &g, a[0]);
                 return 0;
             }
-            0x172d18 => return self.platform.arbitrate(m, a),
+            0x172d18 => return { if a.get(2) == Some(&0) { 0 } else { self.platform.arbitrate(m, a) } },
             _ => {}
         }
-        // The varargs block lives in the caller's arena. A scratch outside
-        // the arena is unusable: the logger call then carries no varargs
-        // instead of writing outside the caller's memory.
+
         let scratch = self.scratch;
         let scratch_ok = self.scratch_ok(m, scratch, 48);
         let mut boot = crate::engine::SpeechBootHost {
             platform: self.platform,
             fault: self.fault,
         };
-        // Short log calls are zero-padded the way the live engine pads
-        // them: a caller whose format takes no varargs leaves the tail
-        // undefined in the ARM, so it is zero here.
+
         let rc = if f == 0x1738e8 {
             if !scratch_ok {
                 let mut args = [0u32; 6];
@@ -1363,8 +1345,7 @@ impl LiveHost<'_> {
         };
         self.fault = boot.fault;
         if self.fault.is_some() {
-            // An unbound guest dependency fails closed. The caller checks
-            // `fault` after the port returns; the port itself never panics.
+
             return 0x80002001;
         }
         rc
@@ -1373,17 +1354,15 @@ impl LiveHost<'_> {
 
 impl Host for LiveHost<'_> {
     fn call_m(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>) -> u32 {
-        // Regional entries name the same port: normalize, then run the US
-        // dispatch with the entry's region. Region-aware callers use
-        // `call_m_with` with their own `rom` instead.
-        let rom = Rom::from_entry(f);
+
+        let rom = match Rom::from_entry(f) {
+            Rom::Us => self.rom,
+            r => r,
+        };
         self.call_m_with(f, a, m, rom)
     }
 }
 
-/// A [`Host`] view of a [`LiveHost`] that reports the live region.
-/// `dispatch` passes this (not `self`) to the free ports so their data
-/// literals follow `rom` while nested dispatches keep working.
 struct WithRom<'x, 'a> {
     inner: &'x mut LiveHost<'a>,
     rom: Rom,
@@ -1402,8 +1381,7 @@ impl crate::boot::Calls for LiveHost<'_> {
         self.call_m(f, a, m)
     }
     fn call_wide(&mut self, _: &mut Memory<'_>, f: u32, _: &[u32]) -> u64 {
-        // No live port returns a 64-bit value. The fault is recorded and the
-        // caller sees zero instead of a panic.
+
         self.faulted(f);
         0
     }
@@ -1414,7 +1392,6 @@ impl crate::boot_part_e::Host for LiveHost<'_> {
     }
 }
 
-/// fn_23ffd4. Memory-passing failure cleanup, retaining callback write order.
 pub fn pcre_deinit_m(m: &mut Memory<'_>, p: u32, key: u32, h: &mut impl Host) -> u32 {
     let rc = frontend::validate_handle(p != 0, key, 0xdd57, 24);
     if rc >= 0x80000000 {
@@ -1432,7 +1409,7 @@ pub fn pcre_deinit_m(m: &mut Memory<'_>, p: u32, key: u32, h: &mut impl Host) ->
         Some(v) => v,
         None => return rc,
     };
-    // Source-backed logging stays live even during partial initialization.
+
     h.call_m(0x1738e8, &[log, addr(h.rom(), 0x914050), 4, 0, 0x240178], m);
     let blocks = m.word(p + 4);
     let count = m.half(p + 8);
@@ -1483,6 +1460,11 @@ pub fn pcre_deinit_m(m: &mut Memory<'_>, p: u32, key: u32, h: &mut impl Host) ->
 }
 
 impl crate::boot_part_b::Host for LiveHost<'_> {
+    fn real_log_args(&mut self)->bool { true }
+    fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool {
+        crate::log_live::variadic_m(m,entry,a,format,varargs,self.scratch + 0x300,|m,f,a|self.call_m(f,a,m))
+    }
+
     fn thread_id(&mut self) -> u32 {
         self.platform.thread_id()
     }
@@ -1507,9 +1489,9 @@ fn mem_store16(b: &mut [u8], p: u32, v: u16) {
     b[p as usize..p as usize + 2].copy_from_slice(&v.to_le_bytes());
 }
 pub trait PreprocessHooksM {
-    /// `fn_176f94`: validate the processor.
+
     fn check_m(&mut self, proc: u32, tag: u32, mem: &mut [u8]) -> u32;
-    /// Stream-table available call.
+
     fn available_m(
         &mut self,
         h0: u32,
@@ -1518,7 +1500,7 @@ pub trait PreprocessHooksM {
         ended: &mut u8,
         mem: &mut [u8],
     ) -> u32;
-    /// Stream-table transfer call.
+
     fn transfer_m(
         &mut self,
         oh0: u32,
@@ -1528,9 +1510,9 @@ pub trait PreprocessHooksM {
         count: &mut u32,
         mem: &mut [u8],
     ) -> u32;
-    /// Stream-table release call.
+
     fn release_m(&mut self, h0: u32, h1: u32, mem: &mut [u8]) -> u32;
-    /// Stream-table read call.
+
     fn read_stream_m(
         &mut self,
         h0: u32,
@@ -1539,15 +1521,15 @@ pub trait PreprocessHooksM {
         len: &mut u32,
         mem: &mut [u8],
     ) -> u32;
-    /// `fn_196394`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_text_m(&mut self, heap: u32, size: u32, mem: &mut [u8]) -> Option<u32>;
-    /// `fn_1963b8`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_events_m(&mut self, heap: u32, size: u32, mem: &mut [u8]) -> Option<u32>;
-    /// `fn_173dc0`: allocation-failure trace.
+
     fn log_no_memory_m(&mut self, log: u32, mem: &mut [u8]);
-    /// Position-table get call.
+
     fn get_position_m(&mut self, h0: u32, h1: u32, pos: &mut u32, mem: &mut [u8]) -> u32;
-    /// Transform-table transform call.
+
     fn transform_m(
         &mut self,
         h0: u32,
@@ -1557,13 +1539,13 @@ pub trait PreprocessHooksM {
         count: &mut u32,
         mem: &mut [u8],
     ) -> u32;
-    /// Stream-table write call.
+
     fn write_stream_m(&mut self, h0: u32, h1: u32, data: u32, len: u32, mem: &mut [u8]) -> u32;
-    /// Stream-table consume call.
+
     fn consume_m(&mut self, h0: u32, h1: u32, bytes: u32, mem: &mut [u8]) -> u32;
-    /// Position-table set call.
+
     fn set_position_m(&mut self, h0: u32, h1: u32, pos: u32, mem: &mut [u8]) -> u32;
-    /// `fn_196428`: free `ptr` back to `heap`.
+
     fn free_buf_m(&mut self, heap: u32, ptr: u32, mem: &mut [u8]);
 }
 pub fn preprocess_prompt_m<H: PreprocessHooksM>(
@@ -1746,7 +1728,6 @@ pub fn preprocess_prompt_m<H: PreprocessHooksM>(
     result
 }
 
-/// Prompt root adapter. scratch is 64 disjoint, restored caller-owned bytes.
 pub struct PreprocessAdapter<'a, H> {
     pub host: &'a mut H,
     pub processor: u32,
@@ -1826,7 +1807,7 @@ impl<H: Host> PreprocessHooksM for PreprocessAdapter<'_, H> {
         (p != 0).then_some(p)
     }
     fn log_no_memory_m(&mut self, log: u32, mem: &mut [u8]) {
-        
+
         self.invoke(mem, 0x173dc0, &[log, addr(self.host.rom(), 0x8f9424), 0xdea8, 0]);
     }
     fn get_position_m(&mut self, a: u32, b: u32, pos: &mut u32, mem: &mut [u8]) -> u32 {
@@ -1872,7 +1853,7 @@ impl<H: Host> PreprocessHooksM for PreprocessAdapter<'_, H> {
         self.invoke(mem, 0x196428, &[heap, p]);
     }
 }
-/// fn_1f48cc. Same body as frontend::preprocess_prompt; callbacks take the arena.
+
 pub fn fn_1f48cc_m(m: &mut Memory<'_>, args: [u32; 5], scratch: u32, h: &mut impl Host) -> u32 {
     assert_eq!(m.base, 0);
     let mut hooks = PreprocessAdapter {
@@ -1898,7 +1879,7 @@ pub trait DomainApiM {
     fn free_m(&mut self, heap: u32, text: u32, mem: &mut [u8]);
     fn slot_m(&mut self, list: u32, index: u32, item: &mut u32, mem: &mut [u8]) -> u32;
     fn build_m(&mut self, mem: &mut [u8], database: u32, args: u32, output: u32) -> u32;
-    /// Diagnostic-only fn_1738e8 and fn_173dc0 boundaries.
+
     fn trace_m(&mut self, log: u32, code: u32, name: u32, status: u32, mem: &mut [u8]);
 }
 pub trait DomainConsultationM: DomainApiM + VoiceNodeAllocatorM {
@@ -1915,7 +1896,7 @@ pub trait DomainConsultationM: DomainApiM + VoiceNodeAllocatorM {
         count: u32,
         head: u32,
     ) -> u32;
-    /// The original optional begin/end text and marker diagnostics.
+
     fn consultation_log_m(
         &mut self,
         mem: &mut [u8],
@@ -1943,7 +1924,7 @@ pub fn duplicate_voice_name_m(
     if dst == 0 {
         return 0x88e0200a;
     }
-    // strcpy reads the source after the allocation result is stored.
+
     let mut i = 0u32;
     loop {
         let byte = mem[source.wrapping_add(i) as usize];
@@ -2254,7 +2235,7 @@ pub fn consult_original_domains_m(
                 };
                 if n > mem_word(mem, manager + 52) {
                     api.pop_m(list, mem);
-                    // The C logs this successful pop before reading the next marker.
+
                     api.trace_m(log, 0, 0, 1, mem);
                 } else {
                     api.trace_m(log, 0xb7a5, 0, 0, mem);
@@ -2379,7 +2360,6 @@ fn nz(p: u32) -> Option<u32> {
 }
 use crate::frontend::move_bytes;
 
-/// Live domain hooks. A separate, restored scratch range holds guest ABI outs.
 pub struct DomainAdapter<'a, H> {
     pub io: PreprocessAdapter<'a, H>,
     pub trace_count: u32,
@@ -2468,9 +2448,7 @@ impl<H: Host> DomainApiM for DomainAdapter<'_, H> {
         panic!("DomainApi::build is not used by consult_original_domains")
     }
     fn trace_m(&mut self, log: u32, code: u32, name: u32, status: u32, mem: &mut [u8]) {
-        // The trace adapter only sees the raw arena bytes; live arenas are
-        // flat with base 0, anything else falls back to the US literal.
-        
+
         if code == 0xb7a0 {
             let fmt = literal(mem, b"%s%s%s%x");
             let domain = literal(mem, b"domain");
@@ -2487,7 +2465,7 @@ impl<H: Host> DomainApiM for DomainAdapter<'_, H> {
             self.io
                 .invoke(mem, 0x1738e8, &[log, addr(self.io.host.rom(), 0x8f95d4), 4, 0, fmt, name]);
         } else if status == 1 {
-            // This event does not advance the enclosing entry/exit trace pair.
+
             let fmt = literal(mem, b"    Disable last enabled domain");
             self.io.invoke(mem, 0x1738e8, &[log, addr(self.io.host.rom(), 0x8f95d4), 4, 0, fmt]);
         } else {
@@ -2551,7 +2529,7 @@ impl<H: Host> DomainConsultationM for DomainAdapter<'_, H> {
         status: Option<u32>,
     ) {
         if self.io.invoke(mem, 0x17497c, &[log]) != 0 {
-            // The logger retains the live text and marker addresses, not copied replies.
+
             let fmt = literal(mem, b"%s");
             let label = literal(mem, if status.is_some() { b"END" } else { b"BEG" });
             self.io.invoke(mem, 0x17486c, &[log, 0xd2, fmt, label, 0]);
@@ -2599,11 +2577,10 @@ pub fn fn_1fe600_m(m: &mut Memory<'_>, a: [u32; 5], scratch: u32, h: &mut impl H
     consult_original_domains_m(m.bytes, nz(a[0]), a[1], a[2], a[3], a[4], &mut api)
 }
 
-/// Method-table callback with a live arena, used by fn_196794.
 pub trait MethodTableM {
     fn call_at_m(&mut self, obj: u32, n: u32, size: u32, mem: &mut [u8]) -> u32;
 }
-/// frontend::alloc_handle_for_key with live allocator/comparator callbacks.
+
 pub fn alloc_handle_for_key_m(
     mem: &mut [u8],
     p: Option<u32>,
@@ -2683,7 +2660,7 @@ impl<H: Host> MethodTableM for IteratorMethod<'_, '_, H> {
             .cell
             .borrow_mut()
             .call_m(0x1963b8, &[self.heap, n, size], &mut m);
-        // ARM publishes the out pointer before initializing the iterator header.
+
         m.put_word(self.out, p);
         p
     }
@@ -2819,8 +2796,7 @@ pub fn compact_stream_buffer_m(
                 vt,
             );
             if newbuf != 0 && newbuf < 0x80000000 {
-                // A failed nested heap call is not a pointer (round
-                // 27b: same class as the write_stream_m store).
+
                 mem_store(mem, state + 60, newbuf);
                 mem_store(mem, state + 64, capacity.wrapping_sub(discarded));
             }
@@ -2921,10 +2897,7 @@ pub fn write_stream_m(
                     return 0x88f0200a;
                 }
                 if grown >= 0x80000000 {
-                    // A failed nested heap call is not a pointer:
-                    // propagate it instead of storing it as the stream
-                    // buffer (round 27b: a stored 0x80002001 later
-                    // tripped a split_at_mut in the buffered path).
+
                     return grown;
                 }
                 mem_store(mem, state + 60, grown);
@@ -3180,7 +3153,7 @@ impl crate::speech_part_6::Host for LiveHost<'_> {
         self.call_m(0x173dc0, &[logger, category, code, 0], m);
     }
 }
-/// Live root binding; scratch is the existing port's 136 restored bytes.
+
 pub fn fn_1e57d0_m<H: crate::speech_part_1::Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     a: [u32; 4],
@@ -3190,7 +3163,7 @@ pub fn fn_1e57d0_m<H: crate::speech_part_1::Host + crate::speech_part_6::Host>(
 ) -> u32 {
     crate::speech_part_1::fn_1e57d0(m, a[0], a[1], [a[2], a[3]], env, scratch, h)
 }
-/// Live root binding; scratch is the existing port's 132 restored bytes.
+
 pub fn fn_1d135c_m<H: crate::speech_part_1::Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     a: [u32; 4],
@@ -3200,7 +3173,7 @@ pub fn fn_1d135c_m<H: crate::speech_part_1::Host + crate::speech_part_6::Host>(
 ) -> u32 {
     crate::speech_part_1::fn_1d135c(m, a[0], a[1], [a[2], a[3]], env, scratch, h)
 }
-/// Live root binding; scratch is eight restored bytes. end_name is a mapped literal.
+
 pub fn fn_1e4b7c_m<H: crate::speech_part_1::Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     a: [u32; 5],
@@ -3222,7 +3195,7 @@ impl<H: Host> crate::engine_components::InternalCalls for ComponentCalls<'_, H> 
         Ok(self.0.call_m(f, a, &mut arena))
     }
 }
-/// Existing live component body over the same arena, without a copy or refill.
+
 pub fn fn_1e5bbc_m(
     m: &mut Memory<'_>,
     a: [u32; 5],
@@ -3245,7 +3218,6 @@ pub fn fn_1e5bbc_m(
     )
 }
 
-/// fn_26a42c. Read the backend input-format flag into a caller-owned byte.
 pub fn fn_26a42c(m: &mut Memory<'_>, p: u32, out: u32) -> u32 {
     if p == 0 {
         return 0x81102007;
@@ -3285,12 +3257,12 @@ impl<H: Host> crate::normalization::NormalizationHost for NormAdapter<'_, H> {
         (rc, ctx)
     }
 }
-/// Reentrant fn_2c47d0. Heap release executes on the current arena.
+
 pub fn reset_cursor_m(m: &mut Memory<'_>, p: u32, out: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x80002007;
     }
-    
+
     let env = crate::render_part_c::Environment {
         cached_handle: core::array::from_fn(|i| m.byte(addr(h.rom(), 0x8d7660) + i as u32)),
         default_context: addr(h.rom(), 0x8d7640),
@@ -3341,9 +3313,9 @@ pub fn reset_cursor_m(m: &mut Memory<'_>, p: u32, out: u32, h: &mut impl Host) -
     m.put_word(s, saved);
     rc
 }
-/// Reentrant fn_2c2338. Scratch is a restored four-byte getter output.
+
 pub fn reset_markers_m(m: &mut Memory<'_>, p: u32, value: u32, s: u32, h: &mut impl Host) -> u32 {
-    
+
     let env = crate::render_part_c::Environment {
         cached_handle: core::array::from_fn(|i| m.byte(addr(h.rom(), 0x8d7660) + i as u32)),
         default_context: addr(h.rom(), 0x8d7640),
@@ -3391,7 +3363,7 @@ impl<H: Host> crate::reentrant2::StateLockM for PropertyLockM<'_, '_, H> {
         self.cell.borrow_mut().call_m(0x176f5c, &[p], &mut m)
     }
 }
-/// Landed reentrant parameter lookup/getter with ABI output slots.
+
 pub fn get_property_m(m: &mut Memory<'_>, f: u32, a: &[u32], h: &mut impl Host) -> u32 {
     let cell = core::cell::RefCell::new(h);
     let obj = a[0];
@@ -3408,9 +3380,7 @@ pub fn get_property_m(m: &mut Memory<'_>, f: u32, a: &[u32], h: &mut impl Host) 
         return 0x8b702007;
     }
     let size_out = if f == 0x1756d0 { a[3] } else { 0 };
-    // fn_1756d0 publishes its ABI outputs before acquiring the lock and
-    // before unlocking. Keeping these in Rust locals would hide their writes
-    // from reentrant lock callbacks and overwrite the unlocker's mutations.
+
     m.put_word(a[2], 0);
     if size_out != 0 {
         m.put_word(size_out, 0);
@@ -3457,7 +3427,6 @@ pub fn get_property_m(m: &mut Memory<'_>, f: u32, a: &[u32], h: &mut impl Host) 
     result
 }
 
-/// Project a single live record into the certified read-only database ports.
 pub fn database_read_m(m: &mut Memory<'_>, f: u32, a: &[u32], h: &mut impl Host) -> u32 {
     use crate::linguistic::{Database, Field, FieldDatabase, Record};
     let p = a[0];
@@ -3594,11 +3563,11 @@ pub fn database_read_m(m: &mut Memory<'_>, f: u32, a: &[u32], h: &mut impl Host)
 }
 
 pub trait PromptTokenHooksM {
-    /// `fn_176f94`: validate the prompter.
+
     fn check(&mut self, p: u32, check: u32, f1: u32, f2: u32, mem: &mut [u8]) -> u32;
-    /// Token-table first call.
+
     fn first(&mut self, h0: u32, h1: u32, a: u32, b: u32, out: &mut u16, mem: &mut [u8]) -> u32;
-    /// Token-table getCount call.
+
     fn get_count(
         &mut self,
         h0: u32,
@@ -3608,7 +3577,7 @@ pub trait PromptTokenHooksM {
         attr: &mut u16,
         mem: &mut [u8],
     ) -> u32;
-    /// Token-table getPointer call; `ptr` is an arena offset.
+
     fn get_pointer(
         &mut self,
         h0: u32,
@@ -3619,7 +3588,7 @@ pub trait PromptTokenHooksM {
         len: &mut u16,
         mem: &mut [u8],
     ) -> u32;
-    /// Prompt-table process call; `None` is the null pointer.
+
     #[allow(clippy::too_many_arguments)]
     fn process(
         &mut self,
@@ -3637,7 +3606,7 @@ pub trait PromptTokenHooksM {
         delta: &mut i16,
         mem: &mut [u8],
     ) -> u32;
-    /// Token-table kind probe; shares the get script with `get_pause`.
+
     fn get_kind(
         &mut self,
         h0: u32,
@@ -3649,7 +3618,7 @@ pub trait PromptTokenHooksM {
         count: &mut u16,
         mem: &mut [u8],
     ) -> u32;
-    /// Token-table pause probe; shares the get script with `get_kind`.
+
     fn get_pause(
         &mut self,
         h0: u32,
@@ -3661,9 +3630,9 @@ pub trait PromptTokenHooksM {
         count: &mut u16,
         mem: &mut [u8],
     ) -> u32;
-    /// Token-table next call.
+
     fn next(&mut self, h0: u32, h1: u32, token: u16, out: &mut u16, mem: &mut [u8]) -> u32;
-    /// Token-table set call; `ptr` is an arena offset.
+
     #[allow(clippy::too_many_arguments)]
     fn set(
         &mut self,
@@ -3676,9 +3645,7 @@ pub trait PromptTokenHooksM {
         written: &mut u16,
         mem: &mut [u8],
     ) -> u32;
-    /// Token-table pause store; the C passes a stack slot, so the
-    /// value crosses the hook instead of a pointer. Shares the set
-    /// script with `set`.
+
     #[allow(clippy::too_many_arguments)]
     fn set_pause(
         &mut self,
@@ -3691,35 +3658,22 @@ pub trait PromptTokenHooksM {
         written: &mut u16,
         mem: &mut [u8],
     ) -> u32;
-    /// Position-table get call.
+
     fn get_position(&mut self, h0: u32, h1: u32, pos: &mut u32, mem: &mut [u8]) -> u32;
-    /// Position-table set call.
+
     fn set_position(&mut self, h0: u32, h1: u32, pos: u32, mem: &mut [u8]) -> u32;
-    /// `fn_196394`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_text(&mut self, heap: u32, size: u32, mem: &mut [u8]) -> Option<u32>;
-    /// `fn_1963b8`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_records(&mut self, heap: u32, size: u32, mem: &mut [u8]) -> Option<u32>;
-    /// `fn_196428`: free `ptr` back to `heap`.
+
     fn free_buf(&mut self, heap: u32, ptr: u32, mem: &mut [u8]);
-    /// `fn_173dc0`: allocation-failure trace.
+
     fn log_no_memory(&mut self, log: u32, code: u32, flag: u32, mem: &mut [u8]);
-    /// `fn_1738e8`: pause-store trace.
+
     fn log_pause(&mut self, log: u32, level: u32, flag: u32, mem: &mut [u8]);
 }
 
-/// fn_1f3ea0 / EU fn_1f405c / KR fn_1f4108.
-///
-/// Resolve the prompt text and its records,
-/// run the transform, walk the token chain
-/// storing a pause of 5 across phrase-kind
-/// boundaries, store a surviving result back,
-/// shift the first record and the stream
-/// position by the returned delta and release
-/// both buffers. A failing check reports
-/// 0x8ba02008 and an allocation failure
-/// 0x8ba0200a; a rejected root returns the
-/// root probe's status, and every other
-/// failure returns its raw status.
 pub fn prompt_token_m<H: PromptTokenHooksM>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -4141,16 +4095,16 @@ impl<H: Host> PromptTokenHooksM for PromptTokenAdapter<'_, H> {
         self.io.invoke(mem, 0x196428, &[heap, ptr]);
     }
     fn log_no_memory(&mut self, log: u32, code: u32, flag: u32, mem: &mut [u8]) {
-        
+
         self.io.invoke(mem, 0x173dc0, &[log, addr(self.io.host.rom(), 0x8f9334), code, flag]);
     }
     fn log_pause(&mut self, log: u32, level: u32, flag: u32, mem: &mut [u8]) {
-        
+
         self.io
             .invoke(mem, 0x1738e8, &[log, addr(self.io.host.rom(), 0x8f9334), level, flag, addr(self.io.host.rom(), 0x8f93b4)]);
     }
 }
-/// Live prompt root. Scratch is 64 disjoint restored bytes for ABI outputs.
+
 pub fn fn_1f3ea0_m(m: &mut Memory<'_>, a: [u32; 5], scratch: u32, h: &mut impl Host) -> u32 {
     prompt_token_m(
         &mut PromptTokenAdapter {
@@ -4322,7 +4276,7 @@ impl<H: Host> crate::frontend_part_b::PromptHost for PromptDomainAdapter<'_, H> 
         [rc, 0, 0]
     }
 }
-/// Reentrant fn_19703c: reread descriptor before invoking each destructor.
+
 pub fn destroy_items_m(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return 0;
@@ -4468,7 +4422,7 @@ pub fn write_field_m(
 struct DbAdapter<'a, H>(&'a mut H);
 impl<H: Host> crate::db_live::PoolHooksM for DbAdapter<'_, H> {
     fn log_pool_m(&mut self, p: u32, n: u32, m: &mut Memory<'_>) {
-        
+
         self.0.call_m(
             0x1738e8,
             &[
@@ -4560,7 +4514,7 @@ fn database_error(
     h: &mut impl Host,
 ) {
     let log = m.word(m.word(a[0]) + 16);
-    
+
     let fmt = addr(h.rom(), 0x8d7b56);
     if record == 0 {
         h.call_m(
@@ -4632,8 +4586,6 @@ fn database_error(
     }
 }
 
-/// The lane c host view of the live host. The lane c ports take their own
-/// host trait; this forwards the guest calls and the thread id.
 struct ComponentCHost<'a, 'b> {
     host: &'a mut LiveHost<'b>,
     rom: Rom,
@@ -4650,10 +4602,6 @@ impl crate::component_live_c::Host for ComponentCHost<'_, '_> {
     }
 }
 
-/// fn_17c7d0 (EU fn_17c930 / KR fn_17ca90). `D_8dc30c[c & 0xff] & 4`: the
-/// character class bit table. The table is ROM data at 0x8dc30c, so the
-/// caller passes it in: the native model places it in a fixed section, the
-/// ARM reads it from the ROM image and the regional ROMs move it.
 pub fn fn_17c7d0_m(table: &[u8], c: u32) -> u32 {
     let at = (c & 0xff) as usize * 2;
     match table.get(at..at + 2) {
@@ -4662,8 +4610,6 @@ pub fn fn_17c7d0_m(table: &[u8], c: u32) -> u32 {
     }
 }
 
-/// The length of a guest NUL terminated string, or `None` when it is not
-/// terminated inside the arena.
 fn guest_str_len(m: &Memory<'_>, p: u32) -> Option<u32> {
     let mut i = 0u32;
     loop {
@@ -4675,20 +4621,6 @@ fn guest_str_len(m: &Memory<'_>, p: u32) -> Option<u32> {
     }
 }
 
-/// fn_15bf74 (LD_createChildRecord). Creates a child record of `child_type`
-/// under the parent record `index` and links it into the parent's child list.
-///
-/// The ROM's `LingRecordNode` layout: id@0 u16, type@2 u8, parent@4,
-/// next@8, prev@12, children[0]@16, children[1]@20. The database layout:
-/// owner@0, count@32, records@48, dirty@52. `D_8d7b50[child_type]` is the
-/// parent type the child type expects.
-///
-/// `args` is the caller's block: object, tag, child type, parent index and
-/// the out pointer that receives the new record id. `scratch` is a writable
-/// word inside the arena that receives the new record pointer.
-/// `parent_types` is `D_8d7b50`, the ROM data that maps a child type to the
-/// parent type it expects; the caller passes it in because the regional
-/// ROMs move it.
 pub fn fn_15bf74_m(
     m: &mut Memory<'_>,
     args: [u32; 5],
@@ -4712,7 +4644,7 @@ pub fn fn_15bf74_m(
         Some(v) => v,
         None => return 0x89202008,
     };
-    
+
     let count = match guest_word(m, db.wrapping_add(32)) {
         Some(v) => v,
         None => return 0x89202008,
@@ -4796,8 +4728,7 @@ pub fn fn_15bf74_m(
     if !guest_range(m, node, 24) {
         return 0x89202008;
     }
-    // The ROM clears the first child slot and the previous link before the
-    // node is linked into the list (0x15c09c/0x15c0a0/0x15c0a4).
+
     m.put_word(node.wrapping_add(4), parent);
     m.put_word(node.wrapping_add(16), 0);
     m.put_word(node.wrapping_add(12), 0);
@@ -4872,15 +4803,6 @@ pub fn fn_15bf74_m(
     rc
 }
 
-// ===== fn_30209c / fn_30253c: the RVCT runtime helpers ====================
-
-/// fn_30209c. The hand written RVCT signed divide: the quotient is the low
-/// word of the result and the remainder the high word, the way the callers
-/// read the packed 64-bit value.
-///
-/// The ARM's zero-divisor path (build/target/fn_30209c.s, the tail at
-/// 0x3022b0) calls the divide-by-zero handler 0x1a2ea4 and then returns the
-/// dividend in the remainder word with a zero quotient.
 pub fn fn_30209c_m(dividend: i32, divisor: i32) -> u64 {
     let (quotient, remainder) = if divisor == 0 {
         (0, dividend)
@@ -4893,10 +4815,6 @@ pub fn fn_30209c_m(dividend: i32, divisor: i32) -> u64 {
     ((remainder as u32 as u64) << 32) | (quotient as u32 as u64)
 }
 
-/// fn_30253c. The hand written ARM libc memcpy front end: a forward byte
-/// copy that returns the end of the copy. Every store in the target
-/// (build/target/fn_30253c.s) uses the post-increment form, so the ARM
-/// leaves r0 at dst+n.
 pub fn fn_30253c_m(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> u32 {
     if !guest_range(m, src, n) || !guest_range(m, dst, n) {
         return 0;
@@ -4912,32 +4830,20 @@ pub fn fn_30253c_m(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> u32 {
     dst.wrapping_add(n)
 }
 
-// ===== fn_15c1e4 / fn_15c2f0 / fn_15d83c / fn_15da64: the LD_* record ops ==
-
-/// The record store header of fn_15c1e4: owner@0, count@32, records@48,
-/// dirty@52. The `LingRecordNode` layout is id@0 u16, type@2 u8, data@4,
-/// next@8, prev@12, children[0]@16, children[1]@20.
 fn rs_count(m: &Memory<'_>, db: u32) -> Option<u32> {
     guest_word(m, db.wrapping_add(32))
 }
 
-/// The record at `index` of the store, or `None` when the table is unreadable.
 fn rs_record(m: &Memory<'_>, db: u32, index: u32) -> Option<u32> {
     let table = guest_word(m, db.wrapping_add(48))?;
     guest_word(m, table.wrapping_add(index.wrapping_mul(4)))
 }
 
-/// The logger of the store's owner.
 fn rs_log(m: &Memory<'_>, db: u32) -> Option<u32> {
     let owner = guest_word(m, db)?;
     guest_word(m, owner.wrapping_add(16))
 }
 
-/// fn_15c1e4 (LD_createNext). Creates a record of the type of the record at
-/// `index` and links it directly after that record.
-///
-/// `args` is the caller's block: database, tag, index and the output word.
-/// `scratch` addresses four writable bytes for the new record pointer.
 pub fn fn_15c1e4_m(m: &mut Memory<'_>, args: [u32; 4], scratch: u32, h: &mut impl Host) -> u32 {
     let (db, tag, index, out) = (args[0], args[1], args[2], args[3]);
     if frontend::validate_handle(db != 0, tag, 0xb2c2, 0x38) >= 0x80000000 {
@@ -4947,7 +4853,7 @@ pub fn fn_15c1e4_m(m: &mut Memory<'_>, args: [u32; 4], scratch: u32, h: &mut imp
         Some(v) => v,
         None => return 0x89202008,
     };
-    
+
     let count = match rs_count(m, db) {
         Some(v) => v,
         None => return 0x89202008,
@@ -4998,8 +4904,7 @@ pub fn fn_15c1e4_m(m: &mut Memory<'_>, args: [u32; 4], scratch: u32, h: &mut imp
     if !guest_range(m, node, 24) || !guest_range(m, rec, 20) {
         return 0x89202008;
     }
-    // The ROM links the new node between the record and the record's next
-    // (0x15c25c..0x15c280): data, prev, next, then the next's prev.
+
     let data = match guest_word(m, rec.wrapping_add(4)) {
         Some(v) => v,
         None => return 0x89202008,
@@ -5031,11 +4936,6 @@ pub fn fn_15c1e4_m(m: &mut Memory<'_>, args: [u32; 4], scratch: u32, h: &mut imp
     rc
 }
 
-/// fn_15c2f0 (LD_createPrev). Creates the record that precedes the record at
-/// `index`: the record the store points at with its `ref2` word, or the
-/// child record its `ref` word names.
-///
-/// `args` is the caller's block: database, tag, index and the output word.
 pub fn fn_15c2f0_m(m: &mut Memory<'_>, args: [u32; 4], scratch: u32, h: &mut impl Host) -> u32 {
     let (db, tag, index, out) = (args[0], args[1], args[2], args[3]);
     if frontend::validate_handle(db != 0, tag, 0xb2c2, 0x38) >= 0x80000000 {
@@ -5045,7 +4945,7 @@ pub fn fn_15c2f0_m(m: &mut Memory<'_>, args: [u32; 4], scratch: u32, h: &mut imp
         Some(v) => v,
         None => return 0x89202008,
     };
-    
+
     let count = match rs_count(m, db) {
         Some(v) => v,
         None => return 0x89202008,
@@ -5139,14 +5039,12 @@ pub fn fn_15c2f0_m(m: &mut Memory<'_>, args: [u32; 4], scratch: u32, h: &mut imp
     rc
 }
 
-/// fn_15d83c. Removes the record at `index` and, when `index` is not the
-/// root, the records that follow it. The record's children go first.
 fn fn_15d83c_run(m: &mut Memory<'_>, db: u32, index: u32, root: u32, h: &mut impl Host) -> u32 {
     let log = match rs_log(m, db) {
         Some(v) => v,
         None => return 0x89202008,
     };
-    
+
     let count = match rs_count(m, db) {
         Some(v) => v,
         None => return 0x89202008,
@@ -5299,17 +5197,14 @@ fn fn_15d83c_run(m: &mut Memory<'_>, db: u32, index: u32, root: u32, h: &mut imp
     rc
 }
 
-/// The type byte of a record.
 fn kind_of(m: &Memory<'_>, rec: u32) -> u8 {
     guest_byte(m, rec.wrapping_add(2)).unwrap_or(0)
 }
 
-/// fn_15d83c: remove the record at `index` and the records after it.
 pub fn fn_15d83c_m(m: &mut Memory<'_>, args: [u32; 3], h: &mut impl Host) -> u32 {
     fn_15d83c_run(m, args[0], args[1], args[2], h)
 }
 
-/// fn_15da64: mark the store dirty and remove the record at `index`.
 pub fn fn_15da64_m(m: &mut Memory<'_>, args: [u32; 3], h: &mut impl Host) -> u32 {
     let (db, tag, index) = (args[0], args[1], args[2]);
     if frontend::validate_handle(db != 0, tag, 0xb2c2, 0x38) >= 0x80000000 {
@@ -5322,23 +5217,10 @@ pub fn fn_15da64_m(m: &mut Memory<'_>, args: [u32; 3], h: &mut impl Host) -> u32
     fn_15d83c_run(m, db, index, index, h)
 }
 
-// ===== fn_1ed954: the fe_dctlkp G2P convert entry ========================
-
-/// The `fn_1ed954` log format of the "Entering" trace.
 const G2P_ENTERING: u32 = 0x1eda60;
-/// The `fn_1ed954` log format of the "Leaving" trace.
+
 const G2P_LEAVING: u32 = 0x1eda90;
 
-/// fn_1ed954 (fe_dctlkp_G2PConvertToCanonicalWord).
-///
-/// The exact ARM call is `fn_1ed954(ctx, tag, text, buffer, capacity)`:
-/// r0 = the `fe_dctlkp` object, r1 = the handle tag (0xf37f), r2 = the
-/// request text, r3 = the text buffer the replacement pass rewrites and
-/// the fifth argument (the stack slot at sp+0x20) = the buffer capacity.
-///
-/// The object holds the character class at +0x64, the mode half word at
-/// +0x9c, the canonical name at +0x19e, the refresh flag at +0x29e and
-/// the two replacement tables at +0x2a0 and +0x90.
 pub fn fn_1ed954_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -5389,7 +5271,6 @@ pub fn fn_1ed954_m(
     rc
 }
 
-/// Whether two guest strings hold the same bytes.
 fn same_guest_string(m: &Memory<'_>, a: u32, b: u32) -> bool {
     let mut at = 0u32;
     loop {
@@ -5410,7 +5291,6 @@ fn same_guest_string(m: &Memory<'_>, a: u32, b: u32) -> bool {
     }
 }
 
-/// Copy a guest string, terminator included.
 fn copy_guest_string(m: &mut Memory<'_>, dst: u32, src: u32) {
     let mut at = 0u32;
     loop {
@@ -5429,11 +5309,6 @@ fn copy_guest_string(m: &mut Memory<'_>, dst: u32, src: u32) {
     }
 }
 
-// ===== fn_26c1c0: the fe_text morphology trie ============================
-
-/// The `TrieReader` of fn_26c1c0: the byte position at +0, the bit index at
-/// +4, the data page at +8, the tables at +12 and the two broker handles at
-/// +16 and +20.
 const TRIE_POS: u32 = 0x00;
 const TRIE_BIT: u32 = 0x04;
 const TRIE_DATA: u32 = 0x08;
@@ -5441,7 +5316,6 @@ const TRIE_TABLES: u32 = 0x0c;
 const TRIE_HANDLE0: u32 = 0x10;
 const TRIE_HANDLE1: u32 = 0x14;
 
-/// The `TrieTables` of fn_26c1c0.
 const TRIE_HEADER: u32 = 0x00;
 const TRIE_ALPHABET: u32 = 0x04;
 const TRIE_INITIAL_CHARS: u32 = 0x0c;
@@ -5455,7 +5329,6 @@ const TRIE_CHARS: u32 = 0x30;
 const TRIE_DELTAS: u32 = 0x34;
 const TRIE_DATA_OFFSET: u32 = 0x40;
 
-/// The `TrieHeader` of fn_26c1c0.
 const TRIE_FIRST_CHAR: u32 = 0x04;
 const TRIE_ALIGN_MASK: u32 = 0x0f;
 const TRIE_TERMINATOR: u32 = 0x10;
@@ -5469,23 +5342,8 @@ const TRIE_INITIAL_COUNT: u32 = 0x2e;
 const TRIE_PAGE_SIZE: u32 = 0x32;
 const TRIE_INITIAL_POS: u32 = 0x38;
 
-/// The status the trie port uses when the caller's arena is not readable.
 const TRIE_FAIL: i32 = -1;
 
-/// fn_26c1c0 (the fe_text morphology trie lookup).
-///
-/// The exact ARM call is `fn_26c1c0(reader, text, start, end, fold)`:
-/// r0 = the `TrieReader`, r1 = the text, r2 = the first index, r3 = the
-/// last index and the fifth argument (the stack slot) = the fold flag.
-///
-/// Lane b4 binds this from `fn_26bb6c` as
-/// `component_live_b::fn_26c1c0_m(m, h, state, text, first as i32,
-/// last as i32, fold)`, where `state` is its `DictionaryState`.
-///
-/// The reader walks the trie through the morphology family of the fe_text
-/// unit (0x26b2f8, 0x26b37c, 0x26b444 and 0x26b530, lane c4 owns those
-/// ports) and through the broker range (0x17a1a4 and 0x179208), so those
-/// six callees go through the host.
 pub fn fn_26c1c0_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -5605,7 +5463,6 @@ pub fn fn_26c1c0_m(
     }
 }
 
-/// One trie step. `None` when the walk misses.
 #[allow(clippy::too_many_arguments)]
 fn trie_step(
     m: &mut Memory<'_>,
@@ -5623,8 +5480,7 @@ fn trie_step(
     let page_size = guest_half(m, header.wrapping_add(TRIE_PAGE_SIZE)).unwrap_or(0);
     let handle0 = guest_word(m, reader.wrapping_add(TRIE_HANDLE0)).unwrap_or(0);
     let handle1 = guest_word(m, reader.wrapping_add(TRIE_HANDLE1)).unwrap_or(0);
-    // The data page comes from the broker: the page pointer lands in the
-    // reader's data word.
+
     let page_slot = reader.wrapping_add(TRIE_DATA);
     let rc = h.call_m(
         0x17a1a4,
@@ -5792,12 +5648,6 @@ fn trie_step(
     }
 }
 
-/// fn_26b2f8: walk the trie one bit at a time.
-///
-/// The target's reader holds the byte position at +0, the bit index at +4
-/// and the data page at +8 (build/target/fn_26b2f8.s: `ldr r4, [r3, #8]`).
-/// The tree is an array of two half word children; a node whose first
-/// child is 0xffff is a leaf.
 fn fn_26b2f8_m(m: &mut Memory<'_>, reader: u32, tree: u32, index: u32) -> Option<u32> {
     let mut position = guest_word(m, reader)?;
     let mut bit = guest_byte(m, reader.wrapping_add(4))?;
@@ -5810,8 +5660,7 @@ fn fn_26b2f8_m(m: &mut Memory<'_>, reader: u32, tree: u32, index: u32) -> Option
         }
         let second = guest_half(m, tree.wrapping_add(node.wrapping_mul(4)).wrapping_add(2))?;
         let current = guest_byte(m, data.wrapping_add(position))?;
-        // The target's shift masks the bit into the byte: a bit of eight or
-        // more never selects the first child.
+
         let mask = if bit < 8 { 1u8 << bit } else { 0 };
         node = if current & mask != 0 {
             u32::from(first)
@@ -5830,10 +5679,6 @@ fn fn_26b2f8_m(m: &mut Memory<'_>, reader: u32, tree: u32, index: u32) -> Option
     Some(node)
 }
 
-/// fn_26b37c: read the count value out of the count table.
-///
-/// The reader holds the tables at +12; the tables hold the header at +0,
-/// the trie at +36 and the counts at +56.
 fn fn_26b37c_m(m: &mut Memory<'_>, reader: u32) -> Option<u32> {
     let tables = guest_word(m, reader.wrapping_add(0x0c))?;
     let header = guest_word(m, tables)?;
@@ -5865,10 +5710,6 @@ fn fn_26b37c_m(m: &mut Memory<'_>, reader: u32) -> Option<u32> {
     }
 }
 
-/// fn_26b444: read the packed value out of the offset table.
-///
-/// The reader holds the tables at +12; the tables hold the header at +0,
-/// the trie at +40 and the packed values at +60.
 fn fn_26b444_m(m: &mut Memory<'_>, reader: u32) -> Option<u32> {
     let tables = guest_word(m, reader.wrapping_add(0x0c))?;
     let header = guest_word(m, tables)?;
@@ -5909,11 +5750,6 @@ fn fn_26b444_m(m: &mut Memory<'_>, reader: u32) -> Option<u32> {
     Some(value)
 }
 
-/// fn_26b530: read the value out of the byte stream.
-///
-/// The reader holds the byte position at +0, the bit index at +4, the data
-/// page at +8 and the tables at +12; the width and the output shift are
-/// the header's words at +12 and +14.
 fn fn_26b530_m(m: &mut Memory<'_>, reader: u32) -> Option<u32> {
     let position = guest_word(m, reader)?;
     let bit = guest_byte(m, reader.wrapping_add(4))? as u32;
@@ -5951,12 +5787,6 @@ fn fn_26b530_m(m: &mut Memory<'_>, reader: u32) -> Option<u32> {
     Some(value.wrapping_shl(out_shift))
 }
 
-/// The bit alignment the inline path applies.
-///
-/// The C aligns the reader's live bit (`reader->bit`, advanced by the
-/// 0x26b2f8/0x26b444/0x26b530/0x26b37c walks above), never the step-entry
-/// bit: src/fn_26c1c0.c:120-127,158-164; the ROM object reloads
-/// `[r4, #4]` each iteration (fn_26c1c0+0x5cc/+0x72c).
 fn align_bit(m: &mut Memory<'_>, reader: u32, mask: u8) -> u8 {
     let mut bit = guest_byte(m, reader.wrapping_add(TRIE_BIT)).unwrap_or(0);
     while bit & mask != 0 {
@@ -5971,9 +5801,6 @@ fn align_bit(m: &mut Memory<'_>, reader: u32, mask: u8) -> u8 {
     bit
 }
 
-// ===== fn_1e7908: the FE normout processor ==============================
-
-/// The process-object vtable slots of fn_1e7908.
 const NORM_DP_FIRST: u32 = 0x34;
 const NORM_DP_NEXT: u32 = 0x3c;
 const NORM_DP_SET: u32 = 0x50;
@@ -5988,12 +5815,10 @@ const NORM_OUT_SET_POS: u32 = 0x38;
 const NORM_OUT_GET_POS: u32 = 0x3c;
 const NORM_OUT_SET_LAYER_X: u32 = 0x40;
 
-/// One process word record: node, kind, start, end, nstart, nend.
 const NORM_RECORD_LEN: u32 = 12;
-/// One process marker: type, refPos, refLen, curPos, curLen.
+
 const NORM_MARKER_LEN: u32 = 24;
 
-/// The length of a guest string. `None` when it is not terminated in the arena.
 fn norm_strlen(m: &Memory<'_>, s: u32) -> Option<u32> {
     let mut i = 0u32;
     loop {
@@ -6005,7 +5830,6 @@ fn norm_strlen(m: &Memory<'_>, s: u32) -> Option<u32> {
     }
 }
 
-/// Write one guest byte. False when the address is outside the arena.
 fn norm_put_byte(m: &mut Memory<'_>, p: u32, v: u8) -> bool {
     if !guest_range(m, p, 1) {
         return false;
@@ -6015,7 +5839,6 @@ fn norm_put_byte(m: &mut Memory<'_>, p: u32, v: u8) -> bool {
     true
 }
 
-/// Write one guest half word. False when the address is outside the arena.
 fn norm_put_half(m: &mut Memory<'_>, p: u32, v: u16) -> bool {
     if !guest_range(m, p, 2) {
         return false;
@@ -6025,7 +5848,6 @@ fn norm_put_half(m: &mut Memory<'_>, p: u32, v: u16) -> bool {
     true
 }
 
-/// Write one guest word. False when the address is outside the arena.
 fn norm_put_word(m: &mut Memory<'_>, p: u32, v: u32) -> bool {
     if !guest_range(m, p, 4) {
         return false;
@@ -6035,7 +5857,6 @@ fn norm_put_word(m: &mut Memory<'_>, p: u32, v: u32) -> bool {
     true
 }
 
-/// fn_195dac: append at most `n` bytes of `src` to `dst` and terminate it.
 fn norm_append_n(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     let mut at = dst;
     loop {
@@ -6068,7 +5889,6 @@ fn norm_append_n(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     norm_put_byte(m, at, 0)
 }
 
-/// fn_195c90: append the whole `src` string to `dst`.
 fn norm_append(m: &mut Memory<'_>, dst: u32, src: u32) -> bool {
     match norm_strlen(m, src) {
         Some(len) => norm_append_n(m, dst, src, len),
@@ -6076,7 +5896,6 @@ fn norm_append(m: &mut Memory<'_>, dst: u32, src: u32) -> bool {
     }
 }
 
-/// fn_195b38: move `n` bytes inside the arena.
 fn norm_move(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     if !guest_range(m, dst, n) || !guest_range(m, src, n) {
         return false;
@@ -6087,7 +5906,6 @@ fn norm_move(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     true
 }
 
-/// fn_195d30: find `c` in the guest string `s`. Zero when it is absent.
 fn norm_find_byte(m: &Memory<'_>, s: u32, c: u32) -> u32 {
     let mut i = 0u32;
     loop {
@@ -6106,7 +5924,6 @@ fn norm_find_byte(m: &Memory<'_>, s: u32, c: u32) -> u32 {
     }
 }
 
-/// fn_195d58: compare two guest strings.
 fn norm_compare(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     let mut i = 0u32;
     loop {
@@ -6122,7 +5939,6 @@ fn norm_compare(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     }
 }
 
-/// fn_1960a8: find `needle` in the guest string `hay`. Zero when it is absent.
 fn norm_find_sub(m: &Memory<'_>, hay: u32, needle: u32) -> u32 {
     let nlen = match norm_strlen(m, needle) {
         Some(v) => v,
@@ -6144,7 +5960,6 @@ fn norm_find_sub(m: &Memory<'_>, hay: u32, needle: u32) -> u32 {
     }
 }
 
-/// Call one vtable slot of the guest process object.
 fn norm_vt(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -6158,12 +5973,6 @@ fn norm_vt(
     }
 }
 
-/// fn_1e7908: the FE normout processor.
-///
-/// The target walks the depes tree through the process vtable, builds the
-/// four output layers in the guest heap and writes the normalised text back
-/// through the output vtable. The port issues the same guest calls, in the
-/// target's order; the data stays in the guest arena.
 pub fn fn_1e7908_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -6186,8 +5995,6 @@ pub fn fn_1e7908_m(
     rc
 }
 
-/// The normout processor. The scratch block holds the target's frame
-/// temporaries; the caller owns it and the port restores it.
 fn fn_1e7908_run(
     m: &mut Memory<'_>,
     p: u32,
@@ -6290,20 +6097,18 @@ fn fn_1e7908_run(
     let mut l4 = 0u32;
     let mut l5 = 0u32;
 
-    // out->getPos(p->h, &pos, 0)
     let rc = norm_vt(m, h, out, NORM_OUT_GET_POS, &[ph0, ph1, s_pos, 0]);
     if rc >= 0x80000000 {
         return rc;
     }
     let mut pos = guest_word(m, s_pos).unwrap_or(0) as i32;
 
-    // dp->first(h, 1, 0, &root)
     let rc = norm_vt(m, h, dp, NORM_DP_FIRST, &[h0, h1, 1, 0, s_root]);
     if rc >= 0x80000000 {
         return rc;
     }
     let root = guest_half(m, s_root).unwrap_or(0) as u32;
-    // dp->getType(h, root, 0, &type)
+
     let rc = norm_vt(m, h, dp, NORM_DP_GET_TYPE, &[h0, h1, root, 0, s_type]);
     if rc >= 0x80000000 {
         return rc;
@@ -6311,7 +6116,7 @@ fn fn_1e7908_run(
     if guest_half(m, s_type).unwrap_or(0) != 1 {
         return rc;
     }
-    // dp->getPtr(h, root, 0, &orig, &origLen)
+
     let rc = norm_vt(m, h, dp, NORM_DP_GET_PTR, &[h0, h1, root, 0, s_orig, s_origlen]);
     if rc >= 0x80000000 {
         return rc;
@@ -6321,7 +6126,7 @@ fn fn_1e7908_run(
     if orig_len <= 1 {
         return rc;
     }
-    // dp->getPtr(h, root, 1, &markers, &cnt)
+
     let rc = norm_vt(m, h, dp, NORM_DP_GET_PTR, &[h0, h1, root, 1, s_markers, s_cnt]);
     if rc >= 0x80000000 {
         return rc;
@@ -6336,7 +6141,6 @@ fn fn_1e7908_run(
         mi += 1;
     }
 
-    // The counting pass: the total size of the four layers.
     let rc = norm_vt(m, h, dp, NORM_DP_FIRST, &[h0, h1, 2, root, s_node]);
     if rc >= 0x80000000 {
         return rc;
@@ -6395,7 +6199,6 @@ fn fn_1e7908_run(
         node = guest_half(m, s_node).unwrap_or(0) as u32;
     }
 
-    // recs = fn_1963b8(heap, 1, nRecs * 12 + 1)
     recs = h.call_m(0x1963b8, &[heap, 1, n_recs * NORM_RECORD_LEN + 1], m);
     if recs == 0 {
         return 0x8b80200a;
@@ -6438,7 +6241,6 @@ fn fn_1e7908_run(
     norm_put_word(m, p + 0x2c, l4);
     norm_put_word(m, p + 0x30, l5);
 
-    // The building pass: fill the record array and the four layers.
     first = true;
     let rc = norm_vt(m, h, dp, NORM_DP_FIRST, &[h0, h1, 2, root, s_node]);
     if rc >= 0x80000000 {
@@ -6697,7 +6499,6 @@ fn fn_1e7908_run(
         }
     }
 
-    // The four layers go out through the output vtable.
     let layers = [l1, l2, l3, l4];
     for (index, buffer) in layers.iter().enumerate() {
         let len = norm_strlen(m, *buffer).unwrap_or(0);
@@ -6743,7 +6544,7 @@ fn fn_1e7908_run(
     let o4 = guest_word(m, s_out4).unwrap_or(0);
     len = guest_half(m, s_len).unwrap_or(0) as u32;
     norm_put_byte(m, o4 + len, 0);
-    // The 0x16 markers of the fourth layer move into the first.
+
     let mut i = 0u32;
     while i < len {
         if guest_byte(m, o4 + i).unwrap_or(0) == 0x16 {
@@ -6751,7 +6552,7 @@ fn fn_1e7908_run(
         }
         i += 1;
     }
-    // The 0x7e fillers are dropped from the first layer.
+
     let mut k = 0u32;
     while k < len {
         if guest_byte(m, o1 + k).unwrap_or(0) == b'~' {
@@ -6772,7 +6573,6 @@ fn fn_1e7908_run(
     }
     norm_put_byte(m, o1 + len, 0);
 
-    // se = fn_1963b8(heap, 1, origLen + 1)
     se = h.call_m(0x1963b8, &[heap, 1, orig_len + 1], m);
     if se == 0 {
         return norm_cleanup(m, h, heap, p, recs, se, [l1, l2, l3, l4, l5], joined, 0x8b80200a);
@@ -6799,7 +6599,6 @@ fn fn_1e7908_run(
         return norm_cleanup(m, h, heap, p, recs, se, [l1, l2, l3, l4, l5], joined, rc);
     }
 
-    // The word comparison pass.
     let mut delta = 0i32;
     let mut i = 0u32;
     let mut jj = 0u32;
@@ -6946,7 +6745,6 @@ fn fn_1e7908_run(
         jj = nj;
     }
 
-    // The final pass over the tree.
     let rc = norm_vt(m, h, dp, NORM_DP_FIRST, &[h0, h1, 2, root, s_node]);
     if rc >= 0x80000000 {
         return norm_cleanup(m, h, heap, p, recs, se, [l1, l2, l3, l4, l5], joined, rc);
@@ -7085,14 +6883,14 @@ fn fn_1e7908_run(
             }
         }
     }
-    // dp->set(h, root, 0, len(se) + 1, se)
+
     let slen = norm_strlen(m, se).unwrap_or(0);
     norm_put_half(m, s_tmp, 0);
     let rc = norm_vt(m, h, dp, NORM_DP_SET, &[h0, h1, root, 0, slen + 1, se, s_tmp]);
     if rc >= 0x80000000 {
         return norm_cleanup(m, h, heap, p, recs, se, [l1, l2, l3, l4, l5], joined, rc);
     }
-    // The markers move with the text.
+
     while mi < n_markers {
         let cur_pos = guest_word(m, markers + mi * NORM_MARKER_LEN + 12).unwrap_or(0) as i32;
         norm_put_word(m, markers + mi * NORM_MARKER_LEN + 12, (cur_pos + delta) as u32);
@@ -7107,7 +6905,6 @@ fn fn_1e7908_run(
     norm_cleanup(m, h, heap, p, recs, se, [l1, l2, l3, l4, l5], joined, rc)
 }
 
-/// fn_1e7908's cleanup: release the guest buffers and clear the process slots.
 fn norm_cleanup(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -7137,11 +6934,6 @@ fn norm_cleanup(
     rc
 }
 
-/// fn_1ea35c: count the words of a guest string.
-///
-/// The separators (space, underscore and 0x16) are NULed in place. When a
-/// marker buffer is given, every 0x16 byte records the word index that
-/// follows it; the buffer grows by one 0x80 block when it is full.
 fn norm_words(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -7206,7 +6998,6 @@ fn norm_words(
     0
 }
 
-/// The next word of a guest string, as fn_1e7908's nextWord does.
 fn norm_next_word(m: &Memory<'_>, s: u32, len: u32, pos: &mut u32) -> Option<u32> {
     let mut end = *pos;
     while *pos < len {

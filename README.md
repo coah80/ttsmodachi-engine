@@ -1,82 +1,58 @@
 # ttsmodachi-engine
 
-the Tomodachi Life text to speech engine, rewritten in Rust. the audio comes out the same as the game's, byte for byte, and it runs without a 3DS or an emulator.
-
-only US English works for now, other languages come later.
+the tomodachi life text to speech engine, rewritten in rust. it reads your game dump directly and produces the same audio, byte for byte. only us english works for now.
 
 ## what is this?
 
 | folder | what it does | made in |
 |---|---|---|
-| `crates/tts-core` | the engine | Rust |
-| `crates/tts-worker` | HTTP server, `POST /render` returns a WAV | Rust |
-| `web` | page for typing text, picking a voice and hearing it | HTML, CSS, JS, Vite |
-| `tools` | makes the data files the engine needs | Python |
+| `crates/tts-core` | the engine | rust |
+| `crates/tts-rom` | reads the dump and boots the engine | rust |
+| `crates/tts-worker` | http server, `POST /render` returns a wav | rust |
+| `web` | page for typing text, picking a voice and hearing it | html, css, js, vite |
 
 ## legal
 
-this project isnt affiliated with Nintendo or Nuance. no game files are in this repo, and you need your own copy of the game to use it. dump it yourself, and dont share your dump or the `data` folder. the MIT license only covers what's written here, it gives you no rights to the game or its data.
+this project isnt affiliated with nintendo or nuance. no game files are included. use your own copy and dont share your dump. the mit license covers this code, not the game or its data.
 
 ## what you need
 
-- Linux, the server doesnt build on Windows or macOS
-- Git, Docker, Python 3, [Rust](https://rustup.rs), and Node 22
-- your own US copy of Tomodachi Life, updated to Rev 1
-- a 3DS with custom firmware, follow [3ds.hacks.guide](https://3ds.hacks.guide) if yours isnt modded
-
-setup uses [ttsmodachi](https://github.com/coah80/ttsmodachi) one time to get the patch and the emulator that make the data files. after that you only need this repo. a Rust setup tool will replace this part later.
+- linux
+- rust stable and node 22.12 or newer
+- your own decrypted us rev 1 dump of tomodachi life
 
 ## how to run it
 
 ### 1. dump the game
 
-1. Open your game in GodMode9 on the 3DS.
-   - **cartridge:** open the gamecart, then use `NCSD image options` -> `Decrypt & extract`.
-   - **eShop copy:** find the installed title and dump it decrypted.
-1. Copy the dump to your PC. `.cxi`, `.3ds`, `.cci`, `.app` and decrypted `.cia` all work.
+1. dump your own us rev 1 copy with godmode9's decrypt option.
+1. copy the `.cxi`, `.3ds`, `.cci` or `.cia` to your pc. keep it outside this repo.
+   - the extension alone doesnt tell you whether it is decrypted. the worker checks when it opens the file.
 
-### 2. patch it
+### 2. run it
 
-1. Run `git clone https://github.com/coah80/ttsmodachi` and go into that folder.
-1. Install [3dstool](https://github.com/dnasdw/3dstool) and [Magikoopa](https://github.com/RicBent/Magikoopa). For a `.cia` you also need [ctrtool](https://github.com/3DSGuy/Project_CTR/releases).
-1. Run `python3 tools/patch_rom.py --input /path/to/your/dump.cxi --region US`, with your own dump path.
-   - It pauses when the patch is ready to build.
-   - If it complains about encryption, dump again with a decrypt option.
-1. Open `.rom-patch-work/gamePatch/` in Magikoopa, then press `Make and Insert`.
-1. Go back to the tool and let it finish.
-   - You should now have `roms/US.cxi`.
-1. Run `docker build -t ttsmodachi-worker .` in the same folder.
-   - The first build compiles the emulator, so it takes 10 to 30 minutes.
-
-### 3. make the data files
-
-1. Clone this repo with `git clone https://github.com/coah80/ttsmodachi-engine`, then go into that folder.
-1. Run this with your own path to `roms`:
+1. open a terminal in this repo and run this with your dump's path:
 
    ```sh
-   docker run --rm \
-     -v /path/to/ttsmodachi/roms:/opt:ro \
-     -v "$PWD/data:/data" \
-     -v "$PWD/tools:/tools:ro" \
-     ttsmodachi-worker python /tools/capture_data.py /data
+   TTS_ROM="/path/to/your/dump.cxi" cargo run --release -p tts-worker
    ```
 
-   - It takes about a minute and ends with `done, data is in /data`.
-   - If it never gets ready or crashes, your dump probably isnt Rev 1.
+   - wait for `tts-worker listening on ...`. the first build takes a while.
+   - `encrypted dump` means you need to dump it again with decryption enabled.
+   - `wrong region` means you need the us release. `wrong revision or modified code` means it didnt match rev 1.
+   - `cannot read dump` means the path or file permissions need fixing.
+   - if the port is in use, add `-- --port 18097` to the command. use that same port for the page below.
 
-you only do this once. you can delete the ttsmodachi folder and the docker image after.
+### 3. open the page
 
-### 4. start it
+1. open another terminal in `web/`.
+1. run `npm ci`, then `npm run dev`.
+   - if you chose another worker port, run `RUST_WORKER_PORT=18097 npm run dev` instead.
+1. open the local link vite prints, type something and press `generate`.
+   - you should hear it and see a `download wav` link.
+   - if the request cannot connect, check that the worker is still running and both ports match.
 
-1. Run `cargo run --release -p tts-worker` in the repo root and leave it running.
-   - The first build takes a few minutes, then it prints `tts-worker listening on 127.0.0.1:18082`.
-   - If it says `Address already in use`, put `RUST_WORKER_PORT=<free port>` in front of this command and the `npm` one.
-   - If it says `No such file or directory`, you're not in the repo root or the data files didnt get made.
-1. Open a second terminal and go into `web/`.
-1. Run `npm install`.
-1. Run `npm run dev`, then open the link it prints.
-1. Type something and press `generate`.
-   - You should hear it, and a `download wav` link shows up.
+the default output gain is 125 percent. voice volume 200 gives the same 250 percent scaling used for the listening checks.
 
 ## calling it without the page
 
@@ -87,6 +63,8 @@ curl -X POST http://127.0.0.1:18082/render \
   -o hello.wav
 ```
 
+`--rom /path/to/your/dump.cxi` also works instead of `TTS_ROM`.
+
 ## license
 
-MIT
+mit

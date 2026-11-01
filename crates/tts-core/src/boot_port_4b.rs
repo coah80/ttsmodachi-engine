@@ -1,19 +1,18 @@
-//! Block-data load and teardown on caller-owned, zero-based guest memory.
+
 use crate::boot::Memory;
 use crate::boot_part_b::Host as CallHost;
-/// Foreign unit 2b5ee0 teardown is owned by boot-port-5. All callbacks receive memory.
+
 pub trait Host: crate::render_part_a::ReaderHost {}
 impl<T: crate::render_part_a::ReaderHost> Host for T {}
 pub struct Environment {
     pub reader: crate::render_part_a::ReaderRuntime,
-    /// HEAD, REMP, TDAT, DDAT; mapped NUL-terminated strings.
+
     pub tags: [u32; 4],
     pub node_tags: [u32; 12],
     pub sub_tag: u32,
     pub detach_messages: [u32; 2],
     pub close_messages: [u32; 2],
-    /// Disjoint 1024-byte caller-owned ABI-local storage. Restored on return.
-    /// reader.scratch and its 320-byte workspace must lie inside this range.
+
     pub scratch: u32,
 }
 struct Heap<'a, H>(&'a mut H);
@@ -90,7 +89,6 @@ fn restore(m: &mut Memory<'_>, e: &Environment, s: [u8; 1024]) {
     m.bytes[at..at + 1024].copy_from_slice(&s);
 }
 
-/// Close all slots and their record. The record pointer in Obj250 is not cleared by ROM.
 pub fn fn_250a3c(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, e: &Environment) -> u32 {
     let save = saved(m, e);
     let f0 = m.word(ctx);
@@ -125,7 +123,6 @@ pub fn fn_250a3c(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, e: &Environmen
     result
 }
 
-/// Teardown for each block slot. Reload graph edges after callbacks.
 pub fn fn_24f124(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -145,7 +142,7 @@ pub fn fn_24f124(
                 let row = m.word(a + 24) + i as u32 * 24;
                 for off in [8, 12] {
                     if m.word(row + off) != 0 {
-                        // STUB: boot-port-5 owns fn_2b6234 in its 2b5ee0 unit.
+
                         h.call(m, 0x2b6234, &[m.word(ctx), m.word(row + off), 1]);
                         release(m, h, ctx, m.word(row + off));
                         m.put_word(row + off, 0);
@@ -326,7 +323,7 @@ impl<H: Host> Loader<'_, '_, '_, H> {
         byte(self.m, p, v as u8);
     }
     fn field_alloc(&mut self, field: u32, n: u32) -> ReadResult<u32> {
-        // The pointer store must precede the OOM diagnostic, including on refusal.
+
         let p = alloc(self.m, self.h, self.ctx, n);
         self.m.put_word(field, p);
         if p == 0 {
@@ -338,7 +335,7 @@ impl<H: Host> Loader<'_, '_, '_, H> {
     }
     fn element_alloc(&mut self, array_field: u32, index: u16, n: u32) -> ReadResult<u32> {
         let p = alloc(self.m, self.h, self.ctx, n);
-        // ROM reloads the array base after the allocator callback returns.
+
         self.m
             .put_word(self.m.word(array_field) + index as u32 * 4, p);
         if p == 0 {
@@ -618,7 +615,7 @@ impl<H: Host> Loader<'_, '_, '_, H> {
         Ok(self.rc)
     }
 }
-/// Load a complete HEAD/REMP/TDAT/DDAT slot using the real chunk reader and lane-5 node parser.
+
 pub fn fn_24f570(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -656,7 +653,7 @@ pub fn fn_24f570(
     restore(l.m, e, save);
     rc
 }
-/// Detach an owned chunk, preserving the reader's attachment and owner-retain semantics.
+
 pub fn fn_243ad4(
     m: &mut Memory<'_>,
     h: &mut impl Host,

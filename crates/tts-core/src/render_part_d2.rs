@@ -1,15 +1,12 @@
-//! Render-path d2. All guest state belongs to the caller.
+
 use crate::{boot::Memory, normalization as n};
 
-/// Thread locale and its optional byte decoder are supplied by the platform.
-/// The decoder receives the live memory, not a captured arena.
 pub trait LocaleHost {
-    /// Regional D_c509a4 address used by the existing fn_302078 port.
+
     fn locale_global(&mut self, m: &mut Memory<'_>) -> u32;
     fn decode(&mut self, m: &mut Memory<'_>, method: u32, dst: u32, byte: u32, state: u32) -> u32;
 }
 
-/// fn_2ffae8. Locale-dependent single-byte to UTF-16 conversion.
 pub fn fn_2ffae8(m: &mut Memory<'_>, dst: u32, byte: u32, state: u32, h: &mut impl LocaleHost) -> u32 {
     let global = h.locale_global(m);
     let slot = crate::speech_part_3::fn_302078(m, global);
@@ -24,8 +21,6 @@ pub fn fn_2ffae8(m: &mut Memory<'_>, dst: u32, byte: u32, state: u32, h: &mut im
     1
 }
 
-/// Fetch resolution uses the existing normalization port. Heap release uses
-/// the real reentrant fn_196428 implementation, with only its vtable platform-owned.
 pub trait MarkerHost: n::NormalizationHost + crate::frontend::HeapVtableM {}
 impl<T: n::NormalizationHost + crate::frontend::HeapVtableM> MarkerHost for T {}
 
@@ -40,9 +35,6 @@ fn release(m: &mut Memory<'_>, ctx: u32, p: u32, h: &mut impl MarkerHost) {
 }
 fn marker(m: &Memory<'_>, rows: u32, i: u16) -> u32 { let _ = m; rows.wrapping_add(i as u32 * 40) }
 
-/// fn_2f0894. Collapse redundant marker pairs and compute their extents.
-/// The two nonzero guard arguments are checked by the original even though
-/// only the fetch object in argument four is used afterwards.
 pub fn fn_2f0894(m: &mut Memory<'_>, ctx: u32, guard1: u32, guard2: u32, object: u32, h: &mut impl MarkerHost) -> u32 {
     if guard1 == 0 || guard2 == 0 { return 0x81102007; }
     assert_eq!(m.base, 0, "normalization ports use absolute arena indexes");
@@ -160,15 +152,10 @@ pub fn fn_2f0894(m: &mut Memory<'_>, ctx: u32, guard1: u32, guard2: u32, object:
     0
 }
 
-
-/// Formatter callbacks use canonical US code handles. All conversion bodies
-/// run through the real speech_part_4 router and speech_part_6 runtime entries.
 pub trait FormatHost: crate::speech_part_4::Host + LocaleHost {
-    /// 32 private bytes, disjoint from live frames, arguments and callback data.
+
     fn conversion_scratch(&mut self, m: &mut Memory<'_>) -> u32;
 
-    /// A caller may supply other format readers. The standard wrapper readers
-    /// use canonical handles 2ffb34 and 2ffb70.
     fn read_format(&mut self, m: &mut Memory<'_>, method: u32, state: u32) -> u32 {
         match method {
             0x2ffb34 => crate::speech_part_4::fn_2ffb34(m, state),
@@ -211,9 +198,6 @@ fn output(m: &mut Memory<'_>, state: u32, c: u32, h: &mut impl FormatHost) {
     h.call(m, method, &[c, context]);
 }
 
-/// fn_301eac. The mutable 60-byte RVCT frame is caller-owned guest state.
-/// Arguments are an ARM va_list address. Format/output handles are canonical
-/// US identities, dispatched by FormatHost, not native function pointers.
 pub fn fn_301eac(m: &mut Memory<'_>, state: u32, mut args: u32, h: &mut impl FormatHost) -> u32 {
     m.put_word(state + 32, 0);
     loop {
@@ -296,18 +280,15 @@ fn wrapper(m: &mut Memory<'_>, fmt: u32, context: u32, args: u32, sink: u32, scr
     m.bytes[at..at + 60].copy_from_slice(&saved);
     result
 }
-/// fn_2ffb3e. scratch is a private 60-byte caller-owned work frame, disjoint
-/// from all arguments, strings and callback data. Its bytes are restored.
+
 pub fn fn_2ffb3e(m: &mut Memory<'_>, fmt: u32, context: u32, args: u32, sink: u32, scratch: u32, h: &mut impl FormatHost) -> u32 {
     wrapper(m, fmt, context, args, sink, scratch, false, h)
 }
-/// fn_2ffb7a. UTF-16-format counterpart of fn_2ffb3e, with the same scratch contract.
+
 pub fn fn_2ffb7a(m: &mut Memory<'_>, fmt: u32, context: u32, args: u32, sink: u32, scratch: u32, h: &mut impl FormatHost) -> u32 {
     wrapper(m, fmt, context, args, sink, scratch, true, h)
 }
 
-/// Data used by fn_2efd50. Constants and narrow names are immutable guest data.
-/// scratch is 512 disjoint caller-owned bytes, restored after the call.
 pub struct PipelineData<'a> {
     pub environment: &'a crate::render_part_c::Environment,
     pub dump: &'a crate::render_part_c::DumpData,
@@ -336,8 +317,7 @@ fn pipeline_find(m: &mut Memory<'_>, it: u32, ids: u32) -> Result<Option<u32>,u3
     pipeline_ok(rc)?;
     Ok(Some(pipeline_current(m, it)?))
 }
-/// Render pipeline, including name-derived spans, gap insertion and final sort.
-/// Native conversion and regex stages execute their leftovers Rust ports.
+
 pub fn fn_2efd50(m: &mut Memory<'_>, a: [u32;14], data: &PipelineData<'_>, h: &mut impl PipelineHost) -> u32 {
     assert_eq!(m.base,0);
     if a[6]==0 { return 0x81102007; }

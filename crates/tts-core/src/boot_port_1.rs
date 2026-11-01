@@ -1,7 +1,6 @@
-//! Boot-path ports for 11cc0c, lane 1.
+
 use crate::boot::Memory;
 
-/// Store the supplied value through the output pointer.
 pub fn fn_177028(m: &mut Memory<'_>, value: u32, _unused: u32, out: u32) -> u32 {
     m.put_word(out, value);
     0
@@ -26,20 +25,16 @@ pub fn fn_1b3210(m: &mut Memory<'_>, p: u32, _a: u32, _b: u32) -> u32 { m.word(p
 pub fn fn_1b4528(m: &mut Memory<'_>, p: u32, _a: u32, _b: u32) {let at=p.wrapping_add(4);m.put_word(at,m.word(at).wrapping_add(1));}
 fn half(m:&Memory<'_>,p:u32)->u32 {let at=m.offset(p);u16::from_le_bytes(m.bytes[at..at+2].try_into().unwrap()) as u32}
 
-/// The stream destructor's empty base has no state.
 pub fn fn_1ba3d0(m: &mut Memory<'_>, _object: u32) -> u32 { let _ = m; 0 }
 pub fn fn_1b44c8(m: &mut Memory<'_>) -> u32 { fn_1ba3d0(m, 0) }
-/// Return the regional interface table for supported versions.
+
 pub fn fn_1cf83c(m: &mut Memory<'_>, version:u32, out:u32, table:u32) -> u32 {
     if version<=1 {m.put_word(out,table);0} else {0x84f02001}
 }
 pub fn fn_1d4990(m: &mut Memory<'_>, version:u32, out:u32, table:u32) -> u32 {
     if version<=1 {m.put_word(out,table);0} else {0x8bd02001}
 }
-/// The ROM's fn_1b20dc (0x1b20dc): call the method of the object at p with
-/// (context, flag, arg) and write the error flag.  The flag is a byte of the
-/// caller's own memory in the ROM, so this form keeps it out of the guest
-/// arena; fn_1b20dc below keeps the guest address form.
+
 pub fn fn_1b20dc_flag(m: &mut Memory<'_>,p:u32,flag:u32,arg:u32,err:&mut u8,h:&mut impl crate::boot_part_f::Host)->u32 {
     if flag==0 {*err=9;return 0;}
     let rc=h.call(m,m.word(p.wrapping_add(4)),&[m.word(p.wrapping_add(16)),flag,arg]);
@@ -181,8 +176,7 @@ impl<H:crate::boot_part_f::Host> crate::boot::Calls for Calls<'_,H> {
 pub fn fn_1966ec(m:&mut Memory<'_>,base:u32,key:u32,out:u32,scratch:u32,h:&mut impl crate::boot_part_f::Host)->u32 {
     if base==0 || key==0 || out==0 {return 0x89002007;}
     let tree=base.wrapping_add(24);
-    // The boot bridge executes the existing first-hit fn_198760 port.
-    // Its duplicate-key continuation is completed here using the same live arena.
+
     let mut node=m.boot_parameter_call(&mut Calls(h),0x198760,&[tree,key],scratch).expect("bound tree search");
     if node==0 {return 0x89002014;}
     if m.byte(tree.wrapping_add(40))!=0 {
@@ -199,7 +193,6 @@ pub fn fn_1966ec(m:&mut Memory<'_>,base:u32,key:u32,out:u32,scratch:u32,h:&mut i
     m.put_word(out,m.word(node.wrapping_add(20)));0
 }
 
-/// Regional stream vtables and their seek entry, supplied by the caller.
 pub struct Streams {
     pub parameters: crate::boot_part_f::Environment,
     pub plain: u32,
@@ -250,7 +243,7 @@ impl<H:crate::boot_part_f::Host> crate::speech_part_1::Host for Speech<'_,H> {
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.0.call(m,f,a)}
     fn get(&mut self,_:&mut Memory<'_>,_:u32,_:u32,_:u32,_:u32)->(u32,u32,u32) {panic!("unexpected stream get")}
 }
-/// Temporary slots are disjoint from the stream and buffer. Workspace has at least max(length,4) bytes.
+
 pub fn fn_1b313c(m:&mut Memory<'_>,p:u32,buffer:u32,scratch:u32,workspace:&mut [u8],h:&mut impl crate::boot_part_e::ArchiveHost)->u32 {
     let saved=[m.word(scratch),m.word(scratch+4)];
     let rc=crate::boot_live::stream_read_m(m,h,p,buffer,m.word(p+40),scratch,scratch+4,scratch+5,workspace);
@@ -301,7 +294,6 @@ pub fn fn_1aa1f0(m:&mut Memory<'_>,a:[u32;5],scratch:u32,e:&Streams,h:&mut impl 
     m.put_word(a[3],stream.wrapping_add(12));m.put_word(a[4],values[1]);let at=m.offset(p+72);m.bytes[at]=1;rc
 }
 
-/// fn_176c58, using the existing integer conversion body.
 pub fn fn_176c58(m:&mut Memory<'_>,value:u32,buf:u32,base:u32)->u32 {
     assert_eq!(m.base,0);
     crate::normalization::udiv_itoa(m.bytes,value,buf,base)
@@ -314,7 +306,7 @@ pub fn fn_176f94(m:&mut Memory<'_>,a:u32,b:u32,c:u32,d:u32)->u32 {
     let _=m;
     crate::frontend::validate_handle(a!=0,b,c,d)
 }
-/// Platform clock callback. The temporary output is a real local, not guest state.
+
 pub trait ClockHost {
     fn clock(&mut self,m:&mut Memory<'_>,method:u32,ctx:u32,out:&mut u32)->u32;
 }
@@ -346,13 +338,12 @@ pub fn fn_176f5c(m:&mut Memory<'_>,p:u32,h:&mut impl crate::boot_part_f::Host)->
     } else {rc}
 }
 
-/// Resolve through the existing handle body. Globals are immutable regional data.
 pub fn fn_19611c(m:&mut Memory<'_>,handle:[u32;2],out:u32,pair:[u8;8],default:u32)->u32 {
     let [p,tag]=handle;
     let cached=[u32::from_le_bytes(pair[..4].try_into().unwrap()),u32::from_le_bytes(pair[4..].try_into().unwrap())];
     let valid=crate::frontend::validate_handle(p!=0,tag,0x1e61,32)==0;
     let p_word=if p==0 {None} else if handle!=cached && valid {
-        // The C output store precedes its tag read, including when they alias.
+
         m.put_word(out,p);
         Some(half(m,p) as u16)
     } else {Some(0)};
@@ -362,11 +353,10 @@ pub fn fn_19611c(m:&mut Memory<'_>,handle:[u32;2],out:u32,pair:[u8;8],default:u3
     rc
 }
 
-/// Flags-zero broker open, bound to the existing live wrapper.
 pub fn fn_179f30(m:&mut Memory<'_>,broker:u32,name:u32,out:u32,g:&crate::boot_part_b::DataOpenGlobals,h:&mut impl crate::boot_part_b::DataHost)->u32 {
     crate::leftovers_1::fn_179f30(m,broker,name,out,g,h)
 }
-/// Require the full requested map, including the real short-map unmap path.
+
 pub fn fn_17a1a4(m:&mut Memory<'_>,broker:u32,handle:u32,offset:u32,n:u32,out:u32,scratch:u32,e:&crate::boot_part_e::UnmapEnvironment,h:&mut impl crate::boot_part_b::Host)->u32 {
     crate::leftovers_1::fn_17a1a4(m,broker,handle,offset,n,out,scratch,e,h)
 }
@@ -382,7 +372,7 @@ impl<H:crate::speech_part_1::Host> crate::speech_part_1::Host for UIntCalls<'_,H
  }
  fn get(&mut self,m:&mut Memory<'_>,f:u32,p:u32,pos:u32,n:u32)->(u32,u32,u32) {self.0.get(m,f,p,pos,n)}
 }
-/// The original 36-byte automatic buffer is caller-owned scratch, restored.
+
 pub fn fn_1758ac(m:&mut Memory<'_>,p:u32,key:u32,value:u32,s:u32,h:&mut impl crate::speech_part_1::Host)->u32 {
  let at=m.offset(s);let mut saved=[0u8;36];saved.copy_from_slice(&m.bytes[at..at+36]);
  fn_176c58(m,value,s,10);
@@ -390,7 +380,7 @@ pub fn fn_1758ac(m:&mut Memory<'_>,p:u32,key:u32,value:u32,s:u32,h:&mut impl cra
  let rc=crate::speech_part_1::fn_175170(m,p,key,s,n,0,s.wrapping_add(40),&mut UIntCalls(h));
  m.bytes[at..at+36].copy_from_slice(&saved);rc
 }
-/// Variadic logger gate. va is the caller's ARM argument cursor.
+
 pub fn fn_17486c(m:&mut Memory<'_>,p:u32,b:u32,fmt:u32,va:u32,s:u32,h:&mut impl crate::boot_part_e::Host)->u32 {
  if p==0 || m.byte(p.wrapping_add(64))==0 {return 0;}
  let at=m.offset(s);let mut saved=[0u8;160];saved.copy_from_slice(&m.bytes[at..at+160]);
@@ -402,8 +392,7 @@ struct ContextCalls<'a,H>(&'a mut H);
 impl<H:crate::boot_part_b::Host> crate::boot_part_e::Host for ContextCalls<'_,H> {
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.0.call(m,f,a)}
 }
-/// Create the internet component with the real context resolver and allocator.
-/// scratch is 24 disjoint automatic bytes, restored even on allocation failure.
+
 pub fn fn_1cede4(m:&mut Memory<'_>,_unused:[u32;2],handle:[u32;2],out:u32,pair:[u8;8],default:u32,module:u32,s:u32,h:&mut impl crate::boot_part_b::FormatHost)->u32 {
  let at=m.offset(s);let mut saved=[0u8;24];saved.copy_from_slice(&m.bytes[at..at+24]);m.put_word(s,0);
  let rc=fn_19611c(m,handle,s,pair,default);
@@ -416,17 +405,13 @@ pub fn fn_1cede4(m:&mut Memory<'_>,_unused:[u32;2],handle:[u32;2],out:u32,pair:[
  m.bytes[at..at+24].copy_from_slice(&saved);result
 }
 
- 
-/// Constants stay caller-owned, including regional query keys and log strings.
-/// scratch reserves 1024 disjoint bytes and is restored after each public entry.
 pub struct Round3<'w> {
- /// Absolute-index bridge workspace, at least as long as the arena.
+
  pub workspace:core::cell::RefCell<&'w mut [u8]>,
  pub arbiter:u32,
- /// Broker, voice query, component, and synth-stream log categories.
+
  pub categories:[u32;4],
- /// Update begin/error/end, query begin/end, rescan, null, component error,
- /// reopen, open, null, matcher begin. Slots 6 and 10 are always null.
+
  pub scratch:u32, pub formats:[u32;12],
  pub component_error_labels:[u32;2],
  pub query_keys:[u32;9], pub pipeline:u32, pub priority:u32,
@@ -434,8 +419,7 @@ pub struct Round3<'w> {
  pub ctype:[u16;256], pub star:u32,
  pub discovery:crate::boot_part_b::DiscoveryGlobals,
  pub null_pair:[u8;8], pub default_context:u32,
- /// langcode, fedataprefix, fedatapackaging, fecfg, clc, CLM, LINGDB,
- /// SYNTHSTREAM, FE_DCTLKP, clm, phonmap, clc/, /, :, clm/, empty.
+
  pub names:[u32;16],
  pub open:crate::boot_part_b::DataOpenGlobals,
  pub unmap:crate::boot_part_e::UnmapEnvironment,
@@ -556,8 +540,7 @@ fn r3_lookup(m:&mut Memory<'_>,o:u32,name:u32,out:u32,h:&mut impl Round3Host)->u
  crate::render_part_c::fn_17b058_m(m,o,name,out,&mut RegistryCalls(h))
 }
 fn r3_release(m:&mut Memory<'_>,o:u32,name:u32,s:u32,h:&mut impl Round3Host)->u32 {
- // Existing reentrant adapter for frontend::release_ling_entry, including
- // the snapshot/remove/callback case that the script-only API cannot reborrow.
+
  crate::render_part_c::registry_release_m(m,o,name,s,&mut RegistryCalls(h))
 }
 fn r3_find(m:&mut Memory<'_>,map:u32,name:u32,h:&mut impl Round3Host)->(u32,u32) {

@@ -5,9 +5,6 @@ use crate::{
     voice::{VoiceQueue, VoiceState},
 };
 
-/// Native US allocation headers: 6144 i16 input samples, 155977 i32 output words,
-/// 2840 f32 window entries, 2841 i32 grain words, and 1024 f32 modulation entries.
-/// These bounds describe the captured 16000 Hz configuration, not arbitrary rates.
 pub const INPUT_CAPACITY: usize = 6144;
 pub const OUTPUT_CAPACITY: usize = 155977;
 pub const WINDOW_CAPACITY: usize = 2840;
@@ -72,10 +69,6 @@ impl SynthesisState {
         pitch
     }
 
-    /// fn_1bd2f0 / EU fn_1bd3a0 / KR fn_1bd540: resample grains and overlap-add.
-    /// All sample storage, queues, tracker state and EU scratch belong to the caller.
-    /// Buffer lengths are the C capacities. Input must include interpolation padding;
-    /// valid engine states require positive periods, resampling and output spacing.
     pub fn synthesize(
         &mut self,
         buffers: &mut SynthesisBuffers<'_>,

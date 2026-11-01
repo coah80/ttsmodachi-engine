@@ -1,14 +1,13 @@
-//! Render part c. Guest addresses, caller-owned storage and explicit host methods.
+
 use crate::{boot::Memory, frontend};
 
-/// Immutable globals used by the real engine-context resolver.
 pub struct Environment {
     pub cached_handle: [u8; 8],
     pub default_context: u32,
 }
-/// Only indirect methods and currently unported external calls cross this boundary.
+
 pub trait Host: frontend::HeapVtable + frontend::MethodTable {
-    /// Regional kernel category and six trace formats. Zero is allowed only for suppressed logs.
+
     fn kernel_literals(&self)->[u32;7] {[0;7]}
     fn call(&mut self, memory: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32;
     fn output(&mut self, memory: &mut Memory<'_>, entry: u32, args: &[u32]) -> (u32, u32);
@@ -29,7 +28,7 @@ pub(crate) fn resolve(m: &Memory<'_>, h: [u32; 2], e: &Environment) -> (u32, u32
         u32::from_le_bytes(e.cached_handle[..4].try_into().unwrap()),
         u32::from_le_bytes(e.cached_handle[4..].try_into().unwrap()),
     ];
-    // Neither a cached handle nor a rejected tag dereferences the pointer.
+
     let pointed_word = if h != cached && h[0] != 0 && h[1] == 0x1e61 {
         Some(half(m, h[0]))
     } else {
@@ -46,7 +45,7 @@ pub(crate) fn resolve(m: &Memory<'_>, h: [u32; 2], e: &Environment) -> (u32, u32
     (rc, out)
 }
 fn release(m: &Memory<'_>, heap: u32, p: u32, host: &mut impl Host) {
-    // heap_release reads an arena offset but passes the guest object token unchanged.
+
     frontend::heap_release(
         m.bytes,
         opt(m, heap),
@@ -62,15 +61,14 @@ fn clear_cursor_byte(m: &mut Memory<'_>, p: u32) -> u32 {
     if offset != 0 {
         return crate::normalization::byte_clear_4a(m.bytes, offset as u32);
     }
-    // The offset-based callee reserves 0 for null. Rebase its one writable
-    // byte through a stack view when a non-null guest object starts the arena.
+
     let mut view = [0u8; 76];
     view[75] = m.bytes[74];
     let rc = crate::normalization::byte_clear_4a(&mut view, 1);
     m.bytes[74] = view[75];
     rc
 }
-/// fn_2c4728 / EU 2c48e4 / KR 2c4990. Reset the cursor and mark it active.
+
 pub fn fn_2c4728(m: &mut Memory<'_>, p: u32, value: u32) -> u32 {
     if p == 0 {
         return 0x80002007;
@@ -82,7 +80,7 @@ pub fn fn_2c4728(m: &mut Memory<'_>, p: u32, value: u32) -> u32 {
     let q = m.word(p + 8);
     clear_cursor_byte(m, q)
 }
-/// fn_2c61a0 / EU 2c635c / KR 2c6408. Append caller-owned descriptors.
+
 pub fn fn_2c61a0(
     m: &mut Memory<'_>,
     p: u32,
@@ -135,7 +133,7 @@ pub fn fn_2c61a0(
     m.put_half(p + 16, (half(m, p + 16) as i32).wrapping_add(n) as u16);
     0
 }
-/// fn_2c62e8 / EU 2c64a4 / KR 2c6550. Destroy descriptor contents.
+
 pub fn fn_2c62e8(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x81102007;
@@ -157,7 +155,7 @@ pub fn fn_2c62e8(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
     m.put_half(p + 16, 0);
     0
 }
-/// fn_2c6370 / EU 2c652c / KR 2c65d8. Destroy contents, then the list.
+
 pub fn fn_2c6370(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x81102007;
@@ -174,7 +172,7 @@ pub fn fn_2c6370(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
     release(m, m.word(context + 4), p, host);
     0
 }
-/// fn_2c3e2c / EU 2c3fe8 / KR 2c4094. Release a validated handle.
+
 pub fn fn_2c3e2c(m: &mut Memory<'_>, p: u32, e: &Environment, host: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x81102007;
@@ -186,7 +184,7 @@ pub fn fn_2c3e2c(m: &mut Memory<'_>, p: u32, e: &Environment, host: &mut impl Ho
     release(m, m.word(c + 4), p, host);
     0
 }
-/// fn_2c464c / EU 2c4808 / KR 2c48b4. Allocate a cursor and initialize its payload.
+
 pub fn fn_2c464c(
     m: &mut Memory<'_>,
     handle: [u32; 2],
@@ -222,7 +220,7 @@ pub fn fn_2c464c(
     release(m, heap, p, host);
     rc
 }
-/// fn_2c47d0 / EU 2c498c / KR 2c4a38. Reset a cursor and dispose owned entries.
+
 pub fn fn_2c47d0(
     m: &mut Memory<'_>,
     p: u32,
@@ -269,8 +267,6 @@ pub fn fn_2c47d0(
     rc
 }
 
-/// fn_2b92d8 / EU 2b9494 / KR 2b9540. Remove the named configuration keys.
-/// tables points to four immutable pairs, triple to three immutable words.
 pub fn fn_2b92d8(
     m: &mut Memory<'_>,
     p: u32,
@@ -284,7 +280,7 @@ pub fn fn_2b92d8(
             return rc;
         }
     }
-    // The C copies the triple before calling any member.
+
     let t = [m.word(triple), m.word(triple + 4), m.word(triple + 8)];
     for key in t {
         let rc = host.call(m, 0x175a24, &[m.word(p + 20), key]);
@@ -294,7 +290,7 @@ pub fn fn_2b92d8(
     }
     0
 }
-/// fn_2c3008 / EU 2c31c4 / KR 2c3270. Dispose the two conversion tables.
+
 pub fn fn_2c3008(m: &mut Memory<'_>, p: u32, e: &Environment, host: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x81102007;
@@ -308,7 +304,7 @@ pub fn fn_2c3008(m: &mut Memory<'_>, p: u32, e: &Environment, host: &mut impl Ho
     release(m, m.word(c + 4), p, host);
     0
 }
-/// fn_2c3308 / EU 2c34c4 / KR 2c3570. Convert token strings or count output bytes.
+
 pub fn fn_2c3308(
     m: &mut Memory<'_>,
     p: u32,
@@ -369,8 +365,6 @@ pub fn fn_2c3308(
     0
 }
 
-/// fn_2b0c04. Select UTF-8 conversion; keep the xcoder's sticky status.
-/// Diagnostics carry the line/message identifier and live charset guest pointers.
 pub fn fn_2b0c04(
     m: &mut Memory<'_>,
     p: u32,
@@ -402,9 +396,6 @@ pub fn fn_2b0c04(
     error
 }
 
-/// fn_2b0d28. Convert engine bytes with the existing fn_17bb44 decoder.
-/// The seven arguments after the object are input, byte count, consumed cell,
-/// output, u16 capacity, written-byte cell, and optional positions.
 pub fn fn_2b0d28(
     m: &mut Memory<'_>,
     p: u32,
@@ -425,9 +416,7 @@ pub fn fn_2b0d28(
     let input = opt(m, a[0]).unwrap_or(0);
     let output = opt(m, a[3]).unwrap_or(0);
     let positions = opt(m, a[6]).unwrap_or(0);
-    // Use the existing fn_17bb44 loop directly. Its ordinary public wrapper
-    // reserves offset zero for optional counter cells; here both cells are
-    // required guest pointers and may validly start the arena.
+
     let (mut rc, consumed, written) =
         crate::normalization::decode_run(m.bytes, input, a[1], output, a[4], positions, tables);
     m.put_word(a[2], consumed);
@@ -448,8 +437,6 @@ pub fn fn_2b0d28(
     rc
 }
 
-/// fn_2b9708. Lookup the byte-valued marker name; 43 has a separate name.
-/// `table` is the 17-entry, eight-byte immutable ROM table, rebased by the caller.
 pub fn fn_2b9708(m: &mut Memory<'_>, key: u32, table: u32, special: u32) -> u32 {
     if key == 43 {
         return special;
@@ -463,7 +450,6 @@ pub fn fn_2b9708(m: &mut Memory<'_>, key: u32, table: u32, special: u32) -> u32 
     m.word(table + 4)
 }
 
-/// fn_2b9cb0. Release the three byte strings in every error record, then the array.
 pub fn fn_2b9cb0(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
     if half(m, p + 44) != 0 {
         if m.word(p + 48) != 0 {
@@ -474,7 +460,7 @@ pub fn fn_2b9cb0(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
                     let value = m.word(at);
                     if value != 0 {
                         release(m, m.word(m.word(p + 8) + 4), value, host);
-                        // Re-read the array pointer after the callback, as the ROM does.
+
                         m.put_word(m.word(p + 48) + i as u32 * 28 + off, 0);
                     }
                 }
@@ -488,7 +474,6 @@ pub fn fn_2b9cb0(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
     0
 }
 
-// fn_195ae8 copies wire halfwords into native stack temporaries in the ROM.
 fn payload_half(m: &Memory<'_>, address: u32) -> u16 {
     let mut local = [0u8; 2];
     let at = m.offset(address);
@@ -500,8 +485,6 @@ fn calloc_bytes(m: &mut Memory<'_>, heap: u32, size: u32, host: &mut impl Host) 
     frontend::call_method(m.bytes, opt(m, heap), 1, size, host)
 }
 
-/// fn_2b9da4. Decode the MERR payload: little-endian u16 fields, byte strings.
-/// The middle two callback arguments are unused. `data` starts with a record count.
 pub fn fn_2b9da4(
     m: &mut Memory<'_>,
     p: u32,
@@ -563,9 +546,6 @@ pub fn fn_2b9da4(
     0
 }
 
-// fn_258018's existing port takes arena offsets. Its read-only object window
-// is represented locally; indirect methods and heap release still operate on
-// the original guest memory and guest object token.
 fn destroy_callback(m: &mut Memory<'_>, object: u32, e: &Environment, host: &mut impl Host) -> u32 {
     use crate::render_part_a2::{destroy_object, ContextGlobals, ObjectHost};
     struct Bridge<'a, 'b, H> {
@@ -630,7 +610,6 @@ fn destroy_callback(m: &mut Memory<'_>, object: u32, e: &Environment, host: &mut
     destroy_object(&mut view, 16, &globals, &mut bridge)
 }
 
-/// fn_2ba2ac. Validate a parser handle, destroy its callback, free it.
 pub fn fn_2ba2ac(m: &mut Memory<'_>, p: u32, e: &Environment, host: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x81102007;
@@ -647,14 +626,13 @@ pub fn fn_2ba2ac(m: &mut Memory<'_>, p: u32, e: &Environment, host: &mut impl Ho
     0
 }
 
-/// fn_2ba6b4. Check the optional language handle and reset the external parser.
 pub fn fn_2ba6b4(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x81102007;
     }
     let lang = m.word(p + 64);
     if lang != 0 {
-        // fn_1757a8 only checks its first argument; its second is unused.
+
         let _ = frontend::check_handle(m.word(m.word(p + 8) + 20) != 0);
     }
     let rc = fn_2581ac(m, m.word(p + 12), host);
@@ -665,7 +643,6 @@ pub fn fn_2ba6b4(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
     }
 }
 
-/// fn_2bb4c8. Forward a non-null parser and request to the external dispatcher.
 pub fn fn_2bb4c8(m: &mut Memory<'_>, p: u32, request: u32, host: &mut impl Host) -> u32 {
     if p == 0 || request == 0 {
         return 0x81102007;
@@ -673,9 +650,6 @@ pub fn fn_2bb4c8(m: &mut Memory<'_>, p: u32, request: u32, host: &mut impl Host)
     host.call(m, 0x259aa8, &[m.word(p + 12), request])
 }
 
-// Adapt stack-local u16 indices to the existing arena-based separator ports.
-// Each view contains exactly one text unit and one index cell. This also
-// handles a non-null table at arena offset zero without inventing a null pointer.
 fn skip_index(
     m: &Memory<'_>,
     table: u32,
@@ -710,19 +684,13 @@ fn skip_index(
     index
 }
 
-// Existing normalization ports use absolute-index bridge memory. This adapter
-// routes their allocator methods through the same caller-owned vtable boundary
-// and resolves handles with the existing context resolver.
 struct NormalHost<'a, H> {
     environment: &'a Environment,
     host: &'a mut H,
 }
 impl<H: Host> crate::normalization::NormalizationHost for NormalHost<'_, H> {
     fn calloc(&mut self, arena: &mut [u8], heap: u32, n: u32, size: u32) -> Option<u32> {
-        // Sentence-match PCRE spill blocks live on the guest heap: route
-        // through the genuine memory-passing heap ports (0x1963b8), the way
-        // the live PCRE host in component_live_b2 does. The arena-blind
-        // vtable entries stay as loud blockers and are never called here.
+
         if heap == 0 || n == 0 || size == 0 {
             return None;
         }
@@ -786,9 +754,6 @@ pub(crate) fn iterator_count(m: &Memory<'_>, p: u32, out: &mut u16) -> u32 {
     crate::normalization::inner_field(Some(&m.bytes[m.offset(table)..]), Some(out))
 }
 
-/// fn_2bb4e4. Align word events to ASCII spaces, order them, and merge
-/// equal-position words. The shortened count is returned through out only;
-/// the underlying fetch-table count is deliberately unchanged.
 pub fn fn_2bb4e4(
     m: &mut Memory<'_>,
     object: u32,
@@ -958,9 +923,6 @@ pub fn fn_2bb4e4(
     result
 }
 
-/// fn_2bf6c4 / EU 2bf880 / KR 2bf92c. Release parser resources and storage.
-/// Registry operations use the real frontend release port. Its existing
-/// cross-TU script structure and snapshot callback are supplied by the caller.
 pub fn fn_2bf6c4(
     m: &mut Memory<'_>,
     p: u32,
@@ -1005,21 +967,18 @@ pub fn fn_2bf6c4(
     0
 }
 
-/// Regional names, entry identities and caller-owned registry state for 2bf760.
 pub struct ParserConstructorData<'a> {
-    /// EOSD, FE_DCTLKP, fecfg, ppabbrscanback.
+
     pub names: [u32; 4],
-    /// fn_2bf244 and fn_2bf168 entry identities.
+
     pub callbacks: [u32; 2],
     pub acquire: frontend::AcquireScripts,
     pub release: frontend::ReleaseScripts,
     pub classes: &'a [u16; 256],
-    /// Disjoint 32-byte stack workspace, restored on return.
+
     pub stack: u32,
 }
 
-/// fn_2bf760 / EU 2bf91c / KR 2bf9c8. Construct the abbreviation scanner.
-/// a = [a2,a3,a4,out,a7]. Uses absolute-index bridge memory.
 pub fn fn_2bf760(
     m: &mut Memory<'_>,
     h: [u32; 2],
@@ -1172,7 +1131,7 @@ pub fn fn_2bf760(
         m.put_word(out, p);
         return 0;
     }
-    // ROM returns directly on abbreviation-array allocation failure.
+
     if !allocation_failure {
         fn_2bf6c4(
             m,
@@ -1187,9 +1146,6 @@ pub fn fn_2bf760(
     rc
 }
 
-/// fn_2ba608 / EU 2ba7c4 / KR 2ba870. Activate a dictionary parser.
-/// langcode and category are caller-mapped immutable names. stack is a
-/// disjoint 20-byte logging workspace, restored before returning.
 pub fn fn_2ba608(
     m: &mut Memory<'_>,
     p: u32,
@@ -1257,21 +1213,15 @@ pub fn fn_2ba608(
     0x81102007
 }
 
-/// Immutable guest names and callback addresses for fn_2ba304.
-/// They are supplied by the regional ROM mapping, never allocated by the port.
 pub struct ConstructorData {
     pub parameter_names: [u32; 3],
     pub descriptor_names: [u32; 2],
     pub symbol_callbacks: [u32; 2],
     pub error_callbacks: [u32; 2],
-    /// Disjoint caller-owned 36-byte stack workspace, restored before returning.
+
     pub stack: u32,
 }
 
-/// fn_2ba304 / EU 2ba4c0 / KR 2ba56c. Construct a user-dictionary parser.
-/// Uses bridge-style absolute-index memory (base == 0). The comparator must
-/// implement the real parameter-tree key comparison over caller-owned names.
-/// a = [a2,a3,out,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14].
 pub fn fn_2ba304(
     m: &mut Memory<'_>,
     h: [u32; 2],
@@ -1378,13 +1328,11 @@ pub fn fn_2ba304(
         m.put_word(out, p);
         return 0;
     }
-    // This calls the existing destructor, including the real fn_258018 port.
+
     fn_2ba2ac(m, p, e, host);
     rc
 }
 
-/// fn_2581ac / EU 258368 / KR 258414. Reset the plugin and its lookup buffer.
-/// Plugin method arguments are integer bit patterns, not Rust floating point.
 pub fn fn_2581ac(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x81102007;
@@ -1409,8 +1357,6 @@ pub fn fn_2581ac(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
     rc
 }
 
-/// fn_2be754. Find the next sentence event not covered by a stop event.
-/// `separators` is the borrowed zero-terminated u16 ROM set D_9e0990.
 pub fn fn_2be754(
     m: &mut Memory<'_>,
     _unused: u32,
@@ -1476,15 +1422,14 @@ pub fn fn_2be754(
     0
 }
 
-/// Caller-owned ROM diagnostic tables and guest scratch, not logger scripts.
 pub struct DumpData {
     pub kinds: [(u16, u32); 40],
     pub symbols: [(u8, u32); 17],
     pub plus: u32,
     pub category: u32,
-    /// Empty, integer prefix, header format, record format, offsets format.
+
     pub strings: [u32; 5],
-    /// 128 bytes of temporary guest storage, disjoint from all live objects.
+
     pub stack: u32,
 }
 fn dump_log(
@@ -1500,7 +1445,7 @@ fn dump_log(
     }
     crate::log_live::fn_1738e8(m, logger, data.category, 5, 0, format, data.stack, host);
 }
-/// fn_2b9770. Dump text, region names and reference offsets using the live logger.
+
 pub fn fn_2b9770(
     m: &mut Memory<'_>,
     flag: u32,
@@ -1645,7 +1590,6 @@ pub fn fn_2b9770(
     rc
 }
 
-/// fn_2be178. Advance one text unit and synchronize the event cursor.
 pub fn fn_2be178(m: &mut Memory<'_>, _unused: u32, a: u32, b: u32, d: u32, e: u32) -> u32 {
     let limit = half(m, a + 8);
     let n = half(m, d);
@@ -1669,7 +1613,7 @@ pub fn fn_2be178(m: &mut Memory<'_>, _unused: u32, a: u32, b: u32, d: u32, e: u3
     }
     0
 }
-/// D_2bd850. Backward-scan predicate: previous event ends before this one starts.
+
 pub fn fn_2bd850(m: &mut Memory<'_>, current: u32, previous: u32) -> u32 {
     if current == 0 || previous == 0 {
         return 0;
@@ -1679,8 +1623,7 @@ pub fn fn_2bd850(m: &mut Memory<'_>, current: u32, previous: u32) -> u32 {
         Some(&m.bytes[m.offset(previous)..]),
     )
 }
-/// The same pure predicate for slice-based backward-scan callbacks. Each
-/// present slice must include the position and length fields through byte 28.
+
 pub fn fn_2bd850_slices(current: Option<&[u8]>, previous: Option<&[u8]>) -> u32 {
     let (Some(current), Some(previous)) = (current, previous) else {
         return 0;
@@ -1689,13 +1632,12 @@ pub fn fn_2bd850_slices(current: Option<&[u8]>, previous: Option<&[u8]>) -> u32 
     (word(previous, 20).wrapping_add(word(previous, 24)) <= word(current, 20)) as u32
 }
 
-/// ROM delimiter string and property parsing tables for boundary selectors.
 pub struct BoundaryData<'a> {
     pub separators: u32,
     pub max_length_key: u32,
     pub ctype: &'a [u16; 256],
     pub category: u32,
-    /// At least 24 disjoint bytes, restored before returning.
+
     pub scratch: u32,
 }
 pub trait BoundaryHost: Host + frontend::StateLock + crate::boot_part_b::FormatHost {}
@@ -1756,8 +1698,7 @@ fn boundary_error(
     );
     m.bytes[at..at + 20].copy_from_slice(&saved);
 }
-// fn_2e6224 and fn_2e6278 have no existing crate port. These direct helpers
-// call the real fn_176514 port instead of scripting its answers.
+
 fn boundary_forward(
     m: &mut Memory<'_>,
     text: u32,
@@ -1794,7 +1735,7 @@ fn boundary_backward(m: &mut Memory<'_>, text: u32, idx: u32, separators: u32) {
         m.put_half(idx, half(m, idx) - 1);
     }
 }
-/// fn_2be1fc. Select a text boundary without splitting an open phonetic region.
+
 pub fn fn_2be1fc(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -1887,7 +1828,7 @@ pub fn fn_2be1fc(
     m.put_half(out, k);
     0
 }
-/// fn_2be4a0. Select a newline boundary and adjust for phonetic and control events.
+
 pub fn fn_2be4a0(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -1984,8 +1925,6 @@ pub fn fn_2be4a0(
     0
 }
 
-/// Live indirect dispatch. Never retain the arena, clone it, or answer engine
-/// calls from recorded statuses. Unknown method addresses must fail explicitly.
 pub trait ParserMethodsM {
     fn method_m(&mut self, method: u32, args: &[u32], mem: &mut Memory<'_>) -> u32;
 }
@@ -1993,7 +1932,7 @@ pub struct ParserConstructorDataM<'a> {
     pub names: [u32; 4],
     pub callbacks: [u32; 2],
     pub classes: &'a [u16; 256],
-    /// 64 disjoint guest bytes. All temporary bytes are restored.
+
     pub stack: u32,
 }
 fn parser_alloc_m(
@@ -2019,7 +1958,7 @@ fn parser_free_m(m: &mut Memory<'_>, heap: u32, p: u32, host: &mut impl ParserMe
         host.method_m(m.word(m.word(heap) + 12), &[m.word(heap + 4), p], m);
     }
 }
-/// Memory-passing descriptor append, including live heap reentry.
+
 pub fn fn_2c61a0_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -2085,8 +2024,7 @@ fn registry_lock_m(
         host.method_m(slot, &[m.word(owner + 8)], m)
     }
 }
-// Reentrant equivalent of frontend::find_node. The method can rewrite node
-// links, so re-read each link after the callback rather than snapshotting it.
+
 pub(crate) fn registry_find_m(
     m: &mut Memory<'_>,
     map: u32,
@@ -2141,7 +2079,7 @@ fn registry_lookup_m(
         None => (0x89002014, 0),
     }
 }
-/// Live fn_17b058. Lock/comparison/unlock hooks all receive the current memory.
+
 pub fn fn_17b058_m(
     m: &mut Memory<'_>,
     o: u32,
@@ -2259,7 +2197,6 @@ pub fn fn_2bf6c4_m(
     0
 }
 
-/// fn_2bf760 with live, memory-passing heap, registry and dictionary methods.
 pub fn fn_2bf760_m(
     m: &mut Memory<'_>,
     h: [u32; 2],
@@ -2391,21 +2328,20 @@ pub fn fn_2bf760_m(
         m.put_word(out, p);
         return 0;
     }
-    // ROM returns directly on abbreviation-array allocation failure.
+
     if !allocation_failure {
         fn_2bf6c4_m(m, p, e, data.names[1], stack + 32, host);
     }
     rc
 }
 
-/// Parser literals and disjoint guest scratch. No recorded callee responses.
 pub struct ParserData<'a> {
     pub eos: &'a [u8; 40],
     pub separators: &'a [u8],
     pub category: u32,
     pub formats: [u32; 5],
     pub extra_key: u32,
-    /// At least 1200 restored bytes.
+
     pub scratch: u32,
 }
 pub(crate) fn set_iterator_index(m: &mut Memory<'_>, it: u32, index: i32) -> u32 {
@@ -2453,7 +2389,7 @@ pub(crate) fn parser_log(
         host,
     );
 }
-/// fn_2bfa90. Choose a parser mode, constrain marker batches and insert EOS.
+
 pub fn fn_2bfa90(
     m: &mut Memory<'_>,
     p: u32,
@@ -2550,8 +2486,7 @@ pub fn fn_2bfa90(
         if rc >= 0x80000000 {
             return rc;
         }
-        // After opening an iterator the ROM funnels every result through done,
-        // which releases it and returns zero, including failed callees.
+
         let _result = (|| {
             let mut boundary = 0;
             let mut scratch = 0;
@@ -2800,7 +2735,7 @@ fn sync_pos(m: &Memory<'_>, event: u32) -> u32 {
 fn sync_len(m: &Memory<'_>, event: u32) -> u32 {
     m.word(event + 16)
 }
-/// fn_2ba6f0. Reconcile output spans and phonetic markers with source events.
+
 pub fn fn_2ba6f0(
     m: &mut Memory<'_>,
     p: u32,
@@ -3077,7 +3012,7 @@ fn sync_level(m: &mut Memory<'_>, p: u32, host: &mut impl Host) -> u32 {
         max
     }
 }
-/// fn_2baf40. Preserve source events, normalize, then reconcile rendered spans.
+
 pub fn fn_2baf40(
     m: &mut Memory<'_>,
     p: u32,
@@ -3296,7 +3231,7 @@ fn exec_sentence_pattern(
 ) -> i32 {
     let object = pcre_word(m, ctx + 12);
     let key = pcre_word(m, ctx + 16);
-    // Invalid handles are rejected before dereferencing the frame store.
+
     if crate::frontend::validate_handle(object != 0, key, 0xdd57, 24) >= 0x80000000 {
         return -16;
     }
@@ -3444,7 +3379,6 @@ fn exec_sentence_pattern(
     rc
 }
 
-/// Extra literal addresses used by sentence-boundary matching.
 pub struct SentenceData<'a, 'b> {
     pub parser: &'a ParserData<'b>,
     pub labels: [u32; 2],
@@ -3476,7 +3410,7 @@ fn non_final_abbreviation(
     let s = pd.scratch;
     let index = s + 346;
     m.put_half(index, end.wrapping_sub(1) as u16);
-    // c3 r32: customSeparators lives at p+80 (ROM ldrb [r0,#0x50]), not p+84.
+
     if m.byte(p + 80) == 1 {
         crate::normalization::trim_trailing(
             m.bytes,
@@ -3621,9 +3555,7 @@ fn sentence_blocked(
     }
     phon || multi
 }
-/// fn_2be984. Match sentence patterns, reject blocked boundaries and insert spans.
-/// The regex match itself calls the existing real PCRE implementation through a
-/// guest-frame adapter; all frame/allocator writes return to this same arena.
+
 pub fn fn_2be984(
     m: &mut Memory<'_>,
     p: u32,
@@ -3802,12 +3734,12 @@ pub struct MarkerInsertData<'a> {
     pub phases: [u32; 3],
     pub format: u32,
     pub category: u32,
-    /// The ROM word at D_914b18+20, interpreted as a terminated u16 list.
+
     pub filter: u32,
-    /// 160 disjoint temporary bytes, restored before returning.
+
     pub stack: u32,
 }
-/// fn_256fdc. Emit the engine's compact marker-state transition string.
+
 pub fn fn_256fdc(m: &mut Memory<'_>, a: u32, b: u32, c: u32, capacity: u32) -> u32 {
     if c == 0 {
         return 0x81102007;
@@ -3906,7 +3838,7 @@ fn current_iterator_index(m: &Memory<'_>, it: u32, out: &mut u16) -> u32 {
         Some(out),
     )
 }
-/// fn_259aa8. Insert compact state transitions and shift subsequent marker offsets.
+
 pub fn fn_259aa8(
     m: &mut Memory<'_>,
     p: u32,

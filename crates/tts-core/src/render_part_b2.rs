@@ -1,11 +1,8 @@
-//! Marker render operations over caller-owned guest memory.
-//! Descriptors, record storage and heap objects must be disjoint, as in the engine.
-//! Fetch-based entries reserve arena offset zero for null. Sequence objects and
-//! allocation buffers must begin above the arena origin.
+
+
 use crate::{boot::Memory, fe_text, frontend, normalization};
 use normalization::NormalizationHost as _;
 
-/// Runtime constants copied by the caller from its region's read-only data.
 pub struct Environment {
     pub normal: u32,
     pub suffix: u32,
@@ -13,7 +10,7 @@ pub struct Environment {
     pub cached_handle: [u8; 8],
     pub default_context: u32,
 }
-/// Platform allocation methods. No engine callees are scripted here.
+
 pub trait Host: frontend::HeapVtable + frontend::MethodTable {}
 fn half(m: &Memory<'_>, p: u32) -> u16 {
     u16::from_le_bytes([m.byte(p), m.byte(p + 1)])
@@ -185,9 +182,7 @@ fn fetch(
         );
         return (rc, out);
     }
-    // The existing fetch port uses offsets for its descriptor links. Temporarily
-    // translate only those two links, preserving every unrelated arena byte.
-    // Heap methods cannot observe arena memory through HeapVtable.
+
     let lo = m.word(seq);
     let hi = m.word(seq + 4);
     let (status, _) = FetchHost {
@@ -272,7 +267,7 @@ fn tag_order(m: &mut Memory<'_>, records: u32, count: u16) {
         }
     }
 }
-/// fn_26a610. Stable position sort for a marker array beginning with its span record.
+
 pub fn fn_26a610(
     m: &mut Memory<'_>,
     seq: u32,
@@ -292,7 +287,7 @@ pub fn fn_26a610(
     sort(m, r, n);
     rc
 }
-/// fn_26a7b8. Normalize pause/tag markers and compact duplicate tags.
+
 pub fn fn_26a7b8(m: &mut Memory<'_>, r: u32, count: u32, _unused: u32, text: u32, e: &Environment) {
     tag_order(m, r, half(m, count));
     let mut last = e.normal;
@@ -367,8 +362,7 @@ pub fn fn_26a7b8(m: &mut Memory<'_>, r: u32, count: u32, _unused: u32, text: u32
     }
     m.put_half(count, out);
 }
-/// fn_268a14. Remove redundant markers, clip spans and insert a paired pause.
-/// The insertion branch resumes the scan after clearing the pending pause.
+
 pub fn fn_268a14(
     m: &mut Memory<'_>,
     seq: u32,
@@ -449,7 +443,7 @@ pub fn fn_268a14(
     }
     0
 }
-/// fn_26abd0. Insert spaces at text-normalization boundaries and split word spans.
+
 pub fn fn_26abd0(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -548,8 +542,7 @@ pub fn fn_26abd0(
                         let mut keep = false;
                         if found != 0 {
                             let tag = m.word(found + 28);
-                            // The original converts the tag into an unused local display buffer.
-                            // Call the existing conversion for its bounds/terminator semantics.
+
                             let mut units = [0u16; 256];
                             let mut k = 0;
                             loop {
@@ -624,7 +617,6 @@ pub fn fn_26abd0(
     rc
 }
 
-/// fn_266fc4. Convert parser byte references to output references and compact markers.
 pub fn fn_266fc4(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -891,7 +883,6 @@ pub fn fn_266fc4(
     }
 }
 
-/// Additional read-only strings for the extended-marker path.
 pub struct ExtendedEnvironment {
     pub markers: Environment,
     pub padding: u32,
@@ -950,7 +941,7 @@ fn count_span(m: &Memory<'_>, text: u32, n: u16, e: &ExtendedEnvironment) -> (u1
     }
     (count, first, limit)
 }
-/// fn_26783c. Expand phonetic replacement markers in a UTF-16 sequence.
+
 pub fn fn_26783c(
     m: &mut Memory<'_>,
     context: u32,
@@ -1462,7 +1453,6 @@ fn fix_word_length(
     m.put_word(word + 24, count as u32 * 2);
 }
 
-/// Indirect writer calls. Marker diagnostics execute the real render-part-b ports.
 pub trait WriterHost: Host + crate::render_part_b::RenderLog {
     fn write(
         &mut self,
@@ -1473,15 +1463,14 @@ pub trait WriterHost: Host + crate::render_part_b::RenderLog {
         size: u32,
     ) -> u32;
 }
-/// Guest addresses of this entry's immutable log labels.
+
 pub struct WriterEnvironment {
     pub before_write: u32,
     pub diagnostics: crate::render_part_b::RenderEnvironment,
     pub log_record: u32,
     pub content_type: u32,
 }
-/// Requires a base-zero view for the existing render-part-b diagnostic ports.
-/// fn_26b140. Pack 40-byte internal markers into 24-byte application records.
+
 pub fn fn_26b140(
     m: &mut Memory<'_>,
     context: u32,
@@ -1544,7 +1533,7 @@ pub fn fn_26b140(
     if result < 0x80000000
         && normalization::flag_byte(m.bytes, if log == 0 { 0 } else { log - m.base }) != 0
     {
-        // This callee's existing arena adapter owns its callback scripts.
+
         normalization::fanout_call(
             m.bytes,
             log - m.base,
@@ -1572,7 +1561,7 @@ pub struct SequenceWriterEnvironment {
 fn adjust_kind(k: u16) -> bool {
     matches!(k, 6 | 12 | 21 | 50 | 36 | 39 | 37 | 34 | 22 | 40 | 26 | 29)
 }
-/// fn_269ee4. Write UTF-16 text, rebase marker positions and publish packed markers.
+
 pub fn fn_269ee4(
     m: &mut Memory<'_>,
     context: u32,
@@ -1756,8 +1745,6 @@ pub fn fn_269ee4(
     }
 }
 
-/// Stream API callbacks. Local output cells are represented by `output`, not
-/// fabricated guest addresses. All heap strings and data retain guest pointers.
 pub trait StreamHost:
     Host + crate::boot_part_b::FormatHost + crate::render_part_b::RenderLog
 {
@@ -1786,7 +1773,7 @@ pub struct StreamEnvironment {
     pub short_query: u32,
     pub log_category: u32,
     pub query_format: u32,
-    /// Twenty disjoint caller-owned scratch bytes, restored after logging.
+
     pub log_scratch: u32,
 }
 fn stream_error(m: &mut Memory<'_>, logger: u32, e: &StreamEnvironment, h: &mut impl StreamHost) {
@@ -1845,7 +1832,7 @@ fn stream_parameter(
     );
     arena[2048] = 92;
     arena[2049] = 0;
-    // fn_176314 appends this one-byte literal; use the existing widening loop.
+
     fe_text::strcpy_widen_1763e4(&mut arena, (n as u32 - 1) * 2, 2048);
     let mut text = [0u16; 1024];
     for i in 0..n {
@@ -1858,8 +1845,7 @@ fn stream_parameter(
         &text[..n],
     )
 }
-/// fn_26d330. Feed one text range through the stream, gather phonetic attributes,
-/// remove query sentinels and rebuild relative word positions.
+
 pub fn fn_26d330(
     m: &mut Memory<'_>,
     p: u32,
@@ -1908,7 +1894,7 @@ pub fn fn_26d330(
     }
     let mut out = [0; 2];
     let mut rc = stream_invoke(m, p, 32, &[], &mut out, h);
-    // A closure implements C's shared cleanup label without allocating.
+
     let mut cleanup = true;
     let result = (|| {
         if rc >= 0x80000000 {
@@ -2048,7 +2034,7 @@ pub fn fn_26d330(
                         }
                         if frontend::compare_str(&code, &buf) != 0 && half(m, p + 0xc8) < 64 {
                             let oc = half(m, p + 0xc8);
-                            // fn_1763e4 widens the four local bytes including NUL.
+
                             let mut local = [0u8; 16];
                             local[8..12].copy_from_slice(&buf);
                             fe_text::strcpy_widen_1763e4(&mut local, 0, 8);
@@ -2199,7 +2185,7 @@ pub struct RenderWriterEnvironment {
     pub log_category: u32,
     pub input_format: u32,
     pub output_format: u32,
-    /// Sixty-four disjoint caller-owned bytes, restored on every return.
+
     pub scratch: u32,
 }
 fn blank(m: &Memory<'_>, text: u32, mut at: u16, end: u32) -> bool {
@@ -2211,7 +2197,7 @@ fn blank(m: &Memory<'_>, text: u32, mut at: u16, end: u32) -> bool {
     }
     true
 }
-/// fn_268cbc. Render byte text, apply marker passes, write text and markers.
+
 pub fn fn_268cbc(
     m: &mut Memory<'_>,
     context: u32,
@@ -2798,20 +2784,10 @@ pub fn fn_268cbc(
     m.bytes[at..at + 64].copy_from_slice(&saved);
     result
 }
-/// Live (arena-threaded) forms of the render writer.
-///
-/// The slice ports above take their allocator and method calls through
-/// arena-blind `frontend::heap_alloc` / `frontend::call_method`, which drop
-/// the arena on the way to the host. A live host cannot reenter the arena
-/// inside those callbacks, so these forms thread the caller's arena: heap
-/// traffic dispatches through the engine's own entries exactly as
-/// `boot_part_e::Heap` does for the boot heap, and the writer's own
-/// `write` / `position` calls dispatch the same way. The original ports are
-/// left unchanged.
+
 pub trait WriterLiveHost: crate::render_part_c::Host + SequenceWriterHost {}
 impl<T: crate::render_part_c::Host + SequenceWriterHost> WriterLiveHost for T {}
 
-/// The writer's heap methods, dispatched with the caller's arena.
 struct LiveHeap<'a, H> {
     heap: u32,
     host: &'a mut H,
@@ -2863,7 +2839,6 @@ impl<H: crate::render_part_c::Host> crate::frontend::HeapVtableM for LiveHeap<'_
     }
 }
 
-/// The writer's fetch host: the guest heap's methods with the caller's arena.
 struct LiveNorm<'a, H> {
     host: &'a mut H,
     cached_handle: [u8; 8],
@@ -2944,8 +2919,6 @@ impl<H: WriterLiveHost> crate::normalization::NormalizationHost for LiveNorm<'_,
     }
 }
 
-/// fetch over the caller's arena: the heap traffic dispatches through the
-/// engine's own entries. The writer chain is base-zero only.
 pub fn fetch_m(
     m: &mut Memory<'_>,
     seq: u32,
@@ -2988,7 +2961,6 @@ fn live_call_method(
     crate::render_part_c::Host::call(h, m, method, &[object, count, size])
 }
 
-/// fn_268a14_m. Live form: the fetch heap traffic runs through the engine's own dispatcher.
 pub fn fn_268a14_m(
     m: &mut Memory<'_>,
     seq: u32,
@@ -3070,7 +3042,6 @@ pub fn fn_268a14_m(
     0
 }
 
-/// fn_26783c_m. Live form: fetch and release run through the engine's own dispatcher.
 pub fn fn_26783c_m(
     m: &mut Memory<'_>,
     context: u32,
@@ -3566,7 +3537,6 @@ pub fn fn_26783c_m(
     0
 }
 
-/// fn_26b140_m. Live form: the record buffer runs through the engine's own dispatcher.
 pub fn fn_26b140_m(
     m: &mut Memory<'_>,
     context: u32,
@@ -3629,7 +3599,7 @@ pub fn fn_26b140_m(
     if result < 0x80000000
         && normalization::flag_byte(m.bytes, if log == 0 { 0 } else { log - m.base }) != 0
     {
-        // This callee's existing arena adapter owns its callback scripts.
+
         normalization::fanout_call(
             m.bytes,
             log - m.base,
@@ -3644,7 +3614,6 @@ pub fn fn_26b140_m(
     result
 }
 
-/// fn_269ee4_m. Live form of the write-text path over the caller's arena.
 pub fn fn_269ee4_m(
     m: &mut Memory<'_>,
     context: u32,
@@ -3828,10 +3797,6 @@ pub fn fn_269ee4_m(
     }
 }
 
-/// Stream API callbacks. Local output cells are represented by `output`, not
-
-/// fn_26a3e4_m. Live form of the render writer over the caller's arena.
-/// The byte-text branch (state+119 != 0) is not taken by the own request.
 pub fn fn_26a3e4_m(
     m: &mut Memory<'_>,
     context: u32,
@@ -3848,7 +3813,7 @@ pub fn fn_26a3e4_m(
         fn_269ee4_m(m, context, state, sequence, first, second, &e.sequence, &mut *h)
     }
 }
-/// fn_26a3e4. The original wrapper tests byte 119, not the writer's byte 120.
+
 pub fn fn_26a3e4(
     m: &mut Memory<'_>,
     context: u32,
@@ -3893,8 +3858,6 @@ fn debug_markers(
     );
 }
 
-/// Adapt the existing fn_1738e8 gate without consuming its legacy rule scripts.
-/// Only the configured indirect logger targets cross the host boundary.
 fn info_log(
     m: &mut Memory<'_>,
     logger: u32,
@@ -3945,15 +3908,13 @@ fn info_log(
     result
 }
 
-/// Constants and restored temporary storage for sequence destruction.
 pub struct CleanupEnvironment {
     pub engine: crate::render_part_c::Environment,
     pub user_names: [u32; 2],
     pub dictionary_name: u32,
     pub scratch: u32,
 }
-/// Indirect platform calls and unported outside-lane entries. Existing engine
-/// entries passed to cleanup_dependency must dispatch to their real Rust port.
+
 pub trait CleanupHost: crate::render_part_c::Host + crate::render_part_d::DictionaryHost {
     fn cleanup_dependency(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32;
 }
@@ -3980,7 +3941,7 @@ fn cleanup_context(m:&Memory<'_>,p:u32,e:&CleanupEnvironment)->(u32,u32) {
     let rc=frontend::resolve_engine_context(h[0],pointed,h[1],&e.engine.cached_handle,e.engine.default_context,&mut out);
     (rc,out)
 }
-/// fn_26a444, using src/fn_26a42c_merged.c selected by the census.
+
 pub fn fn_26a444(m:&mut Memory<'_>,p:u32,e:&CleanupEnvironment,h:&mut impl CleanupHost)->u32 {
     let mut rc=crate::render_part_c::fn_2c3008(m,m.word(p+0x40),&e.engine,h);
     if rc>=0x80000000 {return rc;}
@@ -4033,8 +3994,7 @@ pub fn fn_26a444(m:&mut Memory<'_>,p:u32,e:&CleanupEnvironment,h:&mut impl Clean
 fn first_error(error:&mut u32,rc:u32) {
     if rc>=0x80000000 && *error<0x80000000 {*error=rc;}
 }
-/// fn_26c858. Preserve first callback failure, but let the later owned-object
-/// cleanup failures replace it, matching the original error precedence.
+
 pub fn fn_26c858(m:&mut Memory<'_>,p:u32,e:&CleanupEnvironment,conversion:&crate::render_part_c2::Environment<'_>,h:&mut (impl CleanupHost + crate::render_part_c2::ResourceHost))->u32 {
     let mut error=0;
     let mut i=0u16;

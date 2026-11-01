@@ -1,74 +1,30 @@
-//! Caller-owned engine heap.
-//!
-//! `fn_1ea4e0` and its callees obtain storage through the engine's allocator
-//! object. The TTS-side entry points are thin vtable dispatchers:
-//!
-//! | US address | dispatch |
-//! | --- | --- |
-//! | `fn_196394` | `vt[0](object, size)` |
-//! | `fn_1963b8` | `vt[1](object, count, size)` |
-//! | `fn_1963e0` | `object ? vt[2](object, pointer, size) : vt[0](object, size)` |
-//! | `fn_196428` | `methods[3](object, pointer)` |
-//!
-//! The concrete methods those slots hold are the game's block allocator:
-//!
-//! | US address | role |
-//! | --- | --- |
-//! | `fn_184f20` | allocate entry: stores the heap configuration, then `fn_1850c0` |
-//! | `fn_1850c0` | best-fit/first-fit block search with alignment |
-//! | `fn_19b814` | carve a block, split the remainder into free blocks |
-//! | `fn_184f84` | release and coalesce with the free list |
-//! | `fn_1852d8` / `fn_1852e8` / `fn_1853c4` | configuration setters (`pool`, `flags`, `fill`) |
-//! | `fn_6bab68` | grow or shrink a block in place, absorbing the following free block |
-//! | `fn_6baddc` | block payload size |
-//!
-//! The block header is 16 bytes: `{u16 tag, u16 flags, u32 size, Block *prev,
-//! Block *next}` with tag `0x4652` for free blocks and `0x5544` for live ones.
-//! `flags` holds the header's own displacement in bits 8..14 and the carve
-//! direction in bit 15, so the block start is `header - ((flags << 17) >> 25)`.
-//! The free and used lists keep the original order: a carve inserts into the
-//! free list before the original predecessor and appends the live block at the
-//! used list's tail; release walks the free list forward from its head and stops
-//! at the first block at or above the released start.
-//!
-//! `EngineHeap` owns a caller-supplied `&mut [u8]` arena and keeps the original
-//! layout: the heap object starts at offset 0, the zero-on-allocate word is at
-//! `0x38`, the lists and configuration at `0x3c`, and blocks are carved from the
-//! rest. Every pointer is an arena offset, so pointer-derived values and
-//! capacity checks downstream behave exactly as they do in the original. The
-//! first free block is whatever the arena already holds at `first_block`.
-//!
-//! The heap is additive: other slices can take a `&mut impl Heap` and keep the
-//! same offsets.
 
-/// Free block tag.
+
 pub const FREE: u16 = 0x4652;
-/// Live block tag.
+
 pub const USED: u16 = 0x5544;
-/// Block header size.
+
 pub const HEADER: u32 = 16;
-/// Offset of the zero-on-allocate word.
+
 pub const ZERO_FLAG: u32 = 0x38;
-/// Offset of the free/used lists.
+
 pub const LISTS: u32 = 0x3c;
-/// Offset of the live allocation count `fn_184f20` keeps.
+
 pub const COUNT: u32 = 0x54;
 
-/// Storage for one call tree. Pointers are offsets into the caller's arena.
 pub trait Heap {
-    /// `fn_196394`. `None` when the allocator refuses.
+
     fn allocate(&mut self, size: u32) -> Option<u32>;
-    /// `fn_1963b8`: `count * size` bytes, zeroed. `None` when it refuses.
+
     fn allocate_zeroed(&mut self, count: u32, size: u32) -> Option<u32>;
-    /// `fn_1963e0`. `None` when it refuses.
+
     fn reallocate(&mut self, pointer: u32, size: u32) -> Option<u32>;
-    /// `fn_196428`.
+
     fn release(&mut self, pointer: u32);
-    /// The arena those offsets index.
+
     fn arena(&mut self) -> &mut [u8];
 }
 
-/// A heap that always refuses. Useful for the allocation-free paths.
 pub struct NoHeap;
 
 impl Heap for NoHeap {
@@ -115,7 +71,6 @@ fn set_byte(arena: &mut [u8], offset: u32, value: u8) {
     arena[offset as usize] = value;
 }
 
-/// A block header at `offset`: `(tag, flags, size, previous, next)`.
 #[derive(Clone, Copy)]
 struct Block {
     tag: u16,
@@ -157,12 +112,10 @@ fn init_block(arena: &mut [u8], offset: u32, tag: u16, size: u32) {
     );
 }
 
-/// Start of the block owning `header`, from its stored displacement.
 fn block_start(header: u32, flags: u16) -> u32 {
     header.wrapping_sub(u32::from(flags) << 17 >> 25)
 }
 
-/// Insert `block` into `list` (at `list_offset`) before `before`.
 fn link(arena: &mut [u8], list_offset: u32, before: u32, block: u32) {
     let next = if before != 0 {
         let following = word(arena, before + 12);
@@ -182,7 +135,6 @@ fn link(arena: &mut [u8], list_offset: u32, before: u32, block: u32) {
     }
 }
 
-/// Remove `block` from the list at `list_offset`.
 fn unlink(arena: &mut [u8], list_offset: u32, block: u32) {
     let previous = word(arena, block + 8);
     let next = word(arena, block + 12);
@@ -198,7 +150,6 @@ fn unlink(arena: &mut [u8], list_offset: u32, block: u32) {
     }
 }
 
-/// The block allocator over one caller-owned arena.
 pub struct EngineHeap<'a> {
     arena: &'a mut [u8],
     pool: u16,
@@ -209,8 +160,7 @@ pub struct EngineHeap<'a> {
 }
 
 impl<'a> EngineHeap<'a> {
-    /// Wrap an arena whose first block already sits at `first_block` and whose
-    /// region ends at `arena.len()`.
+
     pub fn new(arena: &'a mut [u8], first_block: u32) -> Self {
         EngineHeap {
             arena,
@@ -223,7 +173,6 @@ impl<'a> EngineHeap<'a> {
         .with_first_block(first_block)
     }
 
-    /// Wrap an arena that already holds a heap image.
     pub fn from_arena(arena: &'a mut [u8]) -> Self {
         EngineHeap {
             pool: half(arena, LISTS + 0x10),
@@ -235,13 +184,11 @@ impl<'a> EngineHeap<'a> {
         }
     }
 
-    /// The alignment the engine's allocator asks the block heap for.
     pub fn set_alignment(&mut self, alignment: u32) -> &mut Self {
         self.alignment = alignment;
         self
     }
 
-    /// The zero-on-allocate word at `ZERO_FLAG`.
     pub fn set_zero_on_allocate(&mut self, zero: bool) -> &mut Self {
         self.zero_on_allocate = zero;
         set_word(self.arena, ZERO_FLAG, u32::from(zero));
@@ -262,7 +209,6 @@ impl<'a> EngineHeap<'a> {
         self
     }
 
-    /// `fn_1852d8`. Returns the previous pool.
     pub fn set_pool(&mut self, pool: u16) -> u16 {
         let old = half(self.arena, LISTS + 0x10);
         set_half(self.arena, LISTS + 0x10, pool);
@@ -270,7 +216,6 @@ impl<'a> EngineHeap<'a> {
         old
     }
 
-    /// `fn_1852e8`. Returns the previous flag bit.
     pub fn set_flags(&mut self, flags: u16) -> u16 {
         let old = half(self.arena, LISTS + 0x12);
         set_half(self.arena, LISTS + 0x12, (old & !1) | (flags & 1));
@@ -278,7 +223,6 @@ impl<'a> EngineHeap<'a> {
         u32::from(old & 1) as u16
     }
 
-    /// `fn_1853c4`. Returns the previous fill value.
     pub fn set_fill(&mut self, fill: u8) -> u8 {
         let old = byte(self.arena, LISTS + 0x14);
         set_byte(self.arena, LISTS + 0x14, fill);
@@ -286,7 +230,6 @@ impl<'a> EngineHeap<'a> {
         old
     }
 
-    /// `fn_1850c0`. `alignment` is signed: negative searches from the tail.
     pub fn block_allocate(&mut self, requested: u32, alignment: i32) -> u32 {
         let pointer = self.search(requested, alignment);
         if pointer != 0 {
@@ -351,7 +294,6 @@ impl<'a> EngineHeap<'a> {
         0
     }
 
-    /// `fn_19b814`.
     fn carve(&mut self, block: u32, address: u32, size: u32, which: u32) -> u32 {
         let header = read_block(self.arena, block);
         let header_at = address - HEADER;
@@ -398,7 +340,6 @@ impl<'a> EngineHeap<'a> {
         address
     }
 
-    /// `fn_184f84`.
     pub fn block_release(&mut self, pointer: u32) {
         if pointer == 0 {
             return;
@@ -428,8 +369,6 @@ impl<'a> EngineHeap<'a> {
         }
     }
 
-    /// `fn_6bab68`: grow or shrink `pointer` in place, absorbing the following
-    /// free block. Returns the new payload size, or `None` when it cannot grow.
     pub fn block_resize(&mut self, pointer: u32, size: u32) -> Option<u32> {
         let want = size.wrapping_add(3) & !3;
         let block = pointer - HEADER;
@@ -466,9 +405,7 @@ impl<'a> EngineHeap<'a> {
             }
             let span = new_end.wrapping_sub(base);
             if word(self.arena, ZERO_FLAG) & 1 != 0 && span > 3 {
-                // 1:1 from C (fn_6bab68.c): zero [base, base+(span&~3)) with
-                // the C's write pattern: word at base if bit2 set, then
-                // 8-byte pairs. Same final state; kept 1:1 for write fidelity.
+
                 let mut w = base.wrapping_sub(4);
                 let mut n = span;
                 if (n.wrapping_shl(29) as i32) < 0 {
@@ -518,7 +455,6 @@ impl<'a> EngineHeap<'a> {
     }
 }
 
-/// `fn_184f84`'s inner merge step needs the removed predecessor.
 fn unlink_at(arena: &mut [u8], list_offset: u32, block: u32) -> u32 {
     let previous = word(arena, block + 8);
     unlink(arena, list_offset, block);
@@ -577,17 +513,15 @@ impl Heap for EngineHeap<'_> {
 }
 
 impl EngineHeap<'_> {
-    /// `fn_6baddc`: the payload size of a live block.
+
     pub fn block_size(&self, pointer: u32) -> u32 {
         word(self.arena, pointer - HEADER + 4)
     }
 
-    /// The arena, for tests that compare whole images.
     pub fn arena(&self) -> &[u8] {
         self.arena
     }
 
-    /// The arena, mutably.
     pub fn arena_mut(&mut self) -> &mut [u8] {
         self.arena
     }

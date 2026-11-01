@@ -1,13 +1,7 @@
-//! Arena-based translations of the slice 4b leaf functions.
-//!
-//! Every entry here is a leaf of the `fn_227d64` call tree: it calls nothing, so
-//! the whole body is a memory walk over the caller's arena. The row table in
-//! `scripts/slice4b_arena.py` drives one case format for all of them, and
-//! [`run`] is the single dispatch the test harness uses.
+
 
 use super::arena::Arena;
 
-/// True when `f` is one of the leaf rows [`run`] dispatches.
 pub fn is_leaf(f: u32) -> bool {
     matches!(
         f,
@@ -56,8 +50,6 @@ pub fn is_leaf(f: u32) -> bool {
     )
 }
 
-/// Runs one leaf row: `f` is the US entry address, `args` the register and
-/// stack arguments in order.
 pub fn run(arena: &mut Arena<'_>, f: u32, args: &[u32]) -> u32 {
     match f {
         0x195ae8 => copy_bytes(arena, args[0], args[1], args[2]),
@@ -127,8 +119,6 @@ pub fn run(arena: &mut Arena<'_>, f: u32, args: &[u32]) -> u32 {
     }
 }
 
-/// fn_195ae8 / EU fn_195b98 / KR fn_195bd4. Copies `count` bytes; a zero count
-/// copies nothing.
 pub fn copy_bytes(arena: &mut Arena<'_>, destination: u32, source: u32, count: u32) -> u32 {
     if count != 0 {
         arena.copy(destination, source, count);
@@ -136,8 +126,6 @@ pub fn copy_bytes(arena: &mut Arena<'_>, destination: u32, source: u32, count: u
     destination
 }
 
-/// fn_195bec / EU fn_195c9c / KR fn_195cd8. Fills `count` bytes with the low
-/// byte of `value`.
 pub fn fill_bytes(arena: &mut Arena<'_>, destination: u32, value: u32, count: u32) -> u32 {
     let byte = value as u8;
     let mut i = 0;
@@ -148,8 +136,6 @@ pub fn fill_bytes(arena: &mut Arena<'_>, destination: u32, value: u32, count: u3
     destination
 }
 
-/// fn_195c90 / EU fn_195d40 / KR fn_195d7c. Appends `source` to the end of the
-/// terminated string at `destination`, terminator included.
 pub fn append_string(arena: &mut Arena<'_>, destination: u32, source: u32) -> u32 {
     let mut d = destination;
     while arena.u8(d) != 0 {
@@ -168,8 +154,6 @@ pub fn append_string(arena: &mut Arena<'_>, destination: u32, source: u32) -> u3
     destination
 }
 
-/// fn_195cd0 / EU fn_195d80 / KR fn_195dbc. Copies a terminated string,
-/// terminator included.
 pub fn copy_string(arena: &mut Arena<'_>, destination: u32, source: u32) -> u32 {
     let mut d = destination;
     let mut s = source;
@@ -184,8 +168,6 @@ pub fn copy_string(arena: &mut Arena<'_>, destination: u32, source: u32) -> u32 
     }
 }
 
-/// fn_195d30 / EU fn_195de0 / KR fn_195e1c. Finds `value`'s low byte in the
-/// terminated string, the terminator itself included.
 pub fn find_byte(arena: &mut Arena<'_>, string: u32, value: u32) -> u32 {
     let wanted = value as u8;
     let mut s = string;
@@ -203,8 +185,6 @@ pub fn find_byte(arena: &mut Arena<'_>, string: u32, value: u32) -> u32 {
     }
 }
 
-/// fn_195d58 / EU fn_195e08 / KR fn_195e44. Compares two terminated strings and
-/// returns -1, 0 or 1.
 pub fn compare_strings(arena: &mut Arena<'_>, left: u32, right: u32) -> u32 {
     let mut a = left;
     let mut b = right;
@@ -220,7 +200,6 @@ pub fn compare_strings(arena: &mut Arena<'_>, left: u32, right: u32) -> u32 {
     (difference.signum() as u32) & 0xffff_ffff
 }
 
-/// fn_195d90 / EU fn_195e40 / KR fn_195e7c. Length of a terminated string.
 pub fn string_length(arena: &Arena<'_>, string: u32) -> u32 {
     let mut length = 0;
     while arena.u8(string.wrapping_add(length)) != 0 {
@@ -229,8 +208,6 @@ pub fn string_length(arena: &Arena<'_>, string: u32) -> u32 {
     length
 }
 
-/// fn_195df8 / EU fn_195ea8 / KR fn_195ee4. Compares at most `count` bytes and
-/// stops at a terminator, returning the byte difference.
 pub fn compare_bounded(arena: &Arena<'_>, left: u32, right: u32, count: u32) -> u32 {
     if count == 0 {
         return 0;
@@ -249,8 +226,6 @@ pub fn compare_bounded(arena: &Arena<'_>, left: u32, right: u32, count: u32) -> 
     (arena.u8(a) as u32).wrapping_sub(arena.u8(b) as u32)
 }
 
-/// fn_195e38 / EU fn_195ee8 / KR fn_195f24. Copies at most `count` bytes and
-/// zero-fills the rest of the count when the source terminates early.
 pub fn copy_string_bounded(
     arena: &mut Arena<'_>,
     destination: u32,
@@ -282,8 +257,6 @@ pub fn copy_string_bounded(
     destination
 }
 
-/// fn_195aac / EU fn_195b5c / KR fn_195b98. Compares exactly `count` bytes,
-/// returning the byte difference at the first mismatch.
 pub fn compare_bytes(arena: &Arena<'_>, left: u32, right: u32, count: u32) -> u32 {
     if count == 0 {
         return 0;
@@ -302,8 +275,6 @@ pub fn compare_bytes(arena: &Arena<'_>, left: u32, right: u32, count: u32) -> u3
     (arena.u8(a) as u32).wrapping_sub(arena.u8(b) as u32)
 }
 
-/// fn_195cf8 / EU fn_195da8 / KR fn_195de4. Finds the last occurrence of
-/// `value`'s low byte, the terminator included.
 pub fn find_last_byte(arena: &Arena<'_>, string: u32, value: u32) -> u32 {
     let wanted = value as u8;
     let mut end = string;
@@ -322,8 +293,6 @@ pub fn find_last_byte(arena: &Arena<'_>, string: u32, value: u32) -> u32 {
     }
 }
 
-/// fn_195eb4 / EU fn_195f70 / KR fn_195fac. Length of the leading run of bytes
-/// drawn from `accept`.
 pub fn span_bytes(arena: &Arena<'_>, string: u32, accept: u32) -> u32 {
     let mut table = [0u8; 32];
     let mut a = accept;
@@ -347,8 +316,6 @@ pub fn span_bytes(arena: &Arena<'_>, string: u32, accept: u32) -> u32 {
     }
 }
 
-/// fn_19600c / EU fn_1960c8 / KR fn_196104. Finds the first byte of `string`
-/// that also appears in `set`.
 pub fn find_any_byte(arena: &Arena<'_>, string: u32, set: u32) -> u32 {
     let mut table = [0u8; 32];
     let mut a = set;
@@ -373,8 +340,6 @@ pub fn find_any_byte(arena: &Arena<'_>, string: u32, set: u32) -> u32 {
     }
 }
 
-/// fn_1765ac / EU fn_17665c / KR fn_176608. Compares two terminated wide
-/// strings and returns the difference of the stopping halfwords.
 pub fn compare_wide_strings(arena: &Arena<'_>, left: u32, right: u32) -> u32 {
     let mut a = left;
     let mut b = right;
@@ -393,7 +358,6 @@ pub fn compare_wide_strings(arena: &Arena<'_>, left: u32, right: u32) -> u32 {
     (current as u32).wrapping_sub(arena.u16(b) as u32)
 }
 
-/// fn_176624 / EU fn_1766d4 / KR fn_176680. Length of a terminated wide string.
 pub fn wide_string_length(arena: &Arena<'_>, string: u32) -> u32 {
     let mut length: u32 = 0;
     while arena.u16(string.wrapping_add(length.wrapping_mul(2))) != 0 {
@@ -402,8 +366,6 @@ pub fn wide_string_length(arena: &Arena<'_>, string: u32) -> u32 {
     length
 }
 
-/// fn_176644 / EU fn_1766f4 / KR fn_1766a0. Copies at most `count` halfwords
-/// and zero-fills the rest when the source terminates early.
 pub fn copy_wide_string_bounded(
     arena: &mut Arena<'_>,
     destination: u32,
@@ -438,13 +400,10 @@ pub fn copy_wide_string_bounded(
     destination
 }
 
-/// fn_176fc0 / EU fn_177070 / KR fn_17701c. True when both halves match.
 pub fn compare_words(low: u32, high: u32, other_low: u32, other_high: u32) -> bool {
     high == other_high && low == other_low
 }
 
-/// fn_17497c / EU fn_174a2c / KR fn_1749d8. Byte at offset 0x40, or zero for a
-/// null pointer.
 pub fn byte_at_40(arena: &Arena<'_>, object: u32) -> u32 {
     if object == 0 {
         0
@@ -453,7 +412,6 @@ pub fn byte_at_40(arena: &Arena<'_>, object: u32) -> u32 {
     }
 }
 
-/// fn_1757a8 / EU fn_175864 / KR fn_175810. Zero for a non-null pointer.
 pub fn require_null(pointer: u32, error: u32) -> u32 {
     if pointer != 0 {
         0
@@ -462,7 +420,6 @@ pub fn require_null(pointer: u32, error: u32) -> u32 {
     }
 }
 
-/// fn_196764 / EU fn_196820 / KR fn_19685c. Word at index 12, or zero.
 pub fn word_at_12(arena: &Arena<'_>, object: u32) -> u32 {
     if object == 0 {
         0
@@ -471,7 +428,6 @@ pub fn word_at_12(arena: &Arena<'_>, object: u32) -> u32 {
     }
 }
 
-/// fn_1970a0 / EU fn_197150 / KR fn_19718c. Word at index 5, or zero.
 pub fn word_at_5(arena: &Arena<'_>, object: u32) -> u32 {
     if object == 0 {
         0
@@ -480,8 +436,6 @@ pub fn word_at_5(arena: &Arena<'_>, object: u32) -> u32 {
     }
 }
 
-/// fn_1970ac / EU fn_19715c / KR fn_197198. Writes the address of chunk `index`
-/// and reports whether the index was in range.
 pub fn chunk_at(arena: &mut Arena<'_>, chunks: u32, index: u32, out: u32) -> u32 {
     if chunks == 0 || out == 0 || index >= arena.u32(chunks.wrapping_add(0x14)) {
         return 0;
@@ -492,8 +446,6 @@ pub fn chunk_at(arena: &mut Arena<'_>, chunks: u32, index: u32, out: u32) -> u32
     1
 }
 
-/// fn_197168 / EU fn_197218 / KR fn_197254. Writes the address of the last
-/// chunk and reports whether the array had one.
 pub fn chunk_last(arena: &mut Arena<'_>, chunks: u32, out: u32) -> u32 {
     if chunks == 0 || out == 0 {
         return 0;
@@ -511,8 +463,6 @@ pub fn chunk_last(arena: &mut Arena<'_>, chunks: u32, out: u32) -> u32 {
     1
 }
 
-/// fn_198f74 / EU fn_199024 / KR fn_199060. Last node of the circular list
-/// before the sentinel, or zero for an empty list.
 pub fn list_last(arena: &Arena<'_>, head: u32) -> u32 {
     let mut p = arena.u32(head);
     if p != head {
@@ -534,7 +484,6 @@ pub fn list_last(arena: &Arena<'_>, head: u32) -> u32 {
     }
 }
 
-/// fn_198728 / EU fn_1987d8 / KR fn_198814. Initialises a list node.
 pub fn init_node(arena: &mut Arena<'_>, node: u32, first: u32, second: u32, third: u32) -> u32 {
     arena.set_u32(node.wrapping_add(0x18), 0);
     arena.set_u8(node.wrapping_add(0x0c), 1);
@@ -548,8 +497,6 @@ pub fn init_node(arena: &mut Arena<'_>, node: u32, first: u32, second: u32, thir
     node
 }
 
-/// fn_198a80 / EU fn_198b30 / KR fn_198b6c. Returns the last node before the
-/// sentinel in `node`'s list, or the first node whose `b` link leaves `node`.
 pub fn list_neighbour(arena: &Arena<'_>, sentinel: u32, node: u32) -> u32 {
     if arena.u32(node.wrapping_add(4)) != sentinel {
         let mut previous = arena.u32(node.wrapping_add(4));
@@ -573,14 +520,11 @@ pub fn list_neighbour(arena: &Arena<'_>, sentinel: u32, node: u32) -> u32 {
     }
 }
 
-/// fn_1baa14 / EU fn_1baad0 / KR fn_1bab0c. Word `index` of the table.
 pub fn word_array_at(arena: &Arena<'_>, table: u32, index: u32) -> u32 {
     let base = arena.u32(table.wrapping_add(4));
     arena.u32(base.wrapping_add(index.wrapping_mul(4)))
 }
 
-/// fn_1b20a4 / EU fn_1b2160 / KR fn_1b219c. Copies a four-word record and
-/// stores the trailing word.
 pub fn copy_quad(arena: &mut Arena<'_>, destination: u32, source: u32, extra: u32) -> u32 {
     let mut i = 0;
     while i < 4 {
@@ -592,15 +536,12 @@ pub fn copy_quad(arena: &mut Arena<'_>, destination: u32, source: u32, extra: u3
     0
 }
 
-/// fn_1b3580 / EU fn_1b363c / KR fn_1b3678. True when the two pointed-to words
-/// differ.
 pub fn compare_indirect(arena: &Arena<'_>, left: u32, right: u32) -> bool {
     let a = arena.u32(arena.u32(left));
     let b = arena.u32(arena.u32(right));
     a != b
 }
 
-/// fn_1a8684 / EU fn_1a8740 / KR fn_1a877c. One for 0..=2, zero otherwise.
 pub fn small_count(value: u32) -> u32 {
     let value = value as i32;
     if value < 0 {
@@ -613,8 +554,6 @@ pub fn small_count(value: u32) -> u32 {
     }
 }
 
-/// fn_1a9948 / EU fn_1a9a04 / KR fn_1a9a40. True when the high halves match and
-/// the third bytes are ordered.
 pub fn compare_high_bytes(left: u32, right: u32) -> bool {
     let left_high = left >> 16;
     let right_high = right >> 16;
@@ -623,14 +562,11 @@ pub fn compare_high_bytes(left: u32, right: u32) -> bool {
     left_high == right_high && left_third <= right_third
 }
 
-/// fn_17c7b8 / EU fn_17c868 / KR fn_17c814. Masked class bits of one byte.
 pub fn class_bits(arena: &Arena<'_>, table: u32, character: u32, mask: u32) -> u32 {
     let entry = arena.u16(table.wrapping_add((character & 0xff) * 2)) as u32;
     entry & mask
 }
 
-/// fn_17c8c0 / EU fn_17c970 / KR fn_17c91c. Adds 0x20 when the class bit is
-/// set.
 pub fn add_class_bit(arena: &Arena<'_>, table: u32, character: u32, bit: u32, delta: u32) -> u32 {
     let entry = arena.u16(table.wrapping_add((character & 0xff) * 2)) as u32;
     if entry & bit != 0 {
@@ -640,8 +576,6 @@ pub fn add_class_bit(arena: &Arena<'_>, table: u32, character: u32, bit: u32, de
     }
 }
 
-/// fn_17c8dc / EU fn_17c98c / KR fn_17c938. Subtracts 0x20 when the class bit
-/// is set.
 pub fn subtract_class_bit(
     arena: &Arena<'_>,
     table: u32,

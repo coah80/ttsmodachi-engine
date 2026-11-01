@@ -51,7 +51,6 @@ fn rounded_sqrt(significand: u128, shift: u32) -> u64 {
     (root + u128::from(remainder > root)) as u64
 }
 
-/// fn_1a78f8: square root with ARM's invalid-result NaN.
 pub fn sqrtf(x: f32) -> f32 {
     if x.is_nan() {
         return nan32(x, x);
@@ -78,7 +77,6 @@ pub fn sqrtf(x: f32) -> f32 {
     f32::from_bits((((exponent / 2 + 127) as u32) << 23) + root - 0x800000)
 }
 
-/// fn_83bff8: double square root with ARM's invalid-result NaN.
 pub fn sqrt(x: f64) -> f64 {
     if x.is_nan() {
         return nan64(x, x);
@@ -104,12 +102,10 @@ pub fn sqrt(x: f64) -> f64 {
     f64::from_bits((((exponent / 2 + 1023) as u64) << 52) + root - 0x10000000000000)
 }
 
-/// fn_1bf97c: ARM VCVT.U32.F32, including saturation and NaN -> zero.
 pub fn float_to_u32(x: f32) -> u32 {
     x as u32
 }
 
-/// fn_1c1c9c: floor, preserving signed zero and untouched NaN bits.
 pub fn floorf(x: f32) -> f32 {
     let mut bits = x.to_bits();
     let exponent = ((bits >> 23) & 255) as i32 - 127;
@@ -132,7 +128,6 @@ pub fn floorf(x: f32) -> f32 {
     f32::from_bits(bits & !mask)
 }
 
-/// fn_1b90a4: the engine's float classification codes.
 pub fn classifyf(x: f32) -> i32 {
     let bits = x.to_bits() << 1;
     let mut class = if bits << 8 != 0 { 4 } else { 0 };
@@ -149,7 +144,6 @@ pub fn classifyf(x: f32) -> i32 {
     }
 }
 
-/// fn_2fff20: the engine's double classification codes.
 pub fn classify(x: f64) -> i32 {
     let bits = x.to_bits();
     let mut class = if bits & 0xfffffffffffff != 0 { 4 } else { 0 };
@@ -167,23 +161,18 @@ pub fn classify(x: f64) -> i32 {
     }
 }
 
-/// fn_839800: absolute value, including unchanged NaN payloads.
 pub fn abs(x: f64) -> f64 {
     f64::from_bits(x.to_bits() & 0x7fffffffffffffff)
 }
 
-/// fn_1b9c34: the underflowing single-precision square.
 pub fn tinyf() -> f32 {
     0.0
 }
 
-/// fn_7fea60: the underflowing double-precision square.
 pub fn tiny() -> f64 {
     0.0
 }
 
-/// fn_1a2dc8: fmod wrapper over fn_1ba20c's nearest-remainder library leaf.
-/// The library flushes tiny remainders before this wrapper repairs their sign.
 pub fn remainderf(x: f32, y: f32) -> f32 {
     let magnitude_y = f32::from_bits(y.to_bits() & 0x7fffffff);
     if x.is_nan() || y.is_nan() || x.is_infinite() || magnitude_y < f32::MIN_POSITIVE {
@@ -260,7 +249,6 @@ fn truncated_remainder(x: f32, y: f32) -> f32 {
     f32::from_bits(a | sign)
 }
 
-/// fn_19c674, EU fn_1b5de8: cosine-table interpolation in 256-turn units.
 pub fn cosine(x: f32, tables: &crate::tables::NumericTables<'_>) -> f32 {
     let mut angle = f32::from_bits(x.to_bits() & 0x7fffffff);
     if angle.to_bits() as i32 >= 0x47800000 {
@@ -272,7 +260,6 @@ pub fn cosine(x: f32, tables: &crate::tables::NumericTables<'_>) -> f32 {
     tables.float(0x8cbfe0, index + 1) + fraction * tables.float(0x8cbfe0, index + 3)
 }
 
-/// fn_1acf74 / EU fn_1acfc8 / KR fn_1ad060: sine interpolation in 256-turn units.
 pub fn sine(x: f32, tables: &crate::tables::NumericTables<'_>) -> f32 {
     let mut angle = f32::from_bits(x.to_bits() & 0x7fffffff);
     if angle.to_bits() as i32 >= 0x47800000 {

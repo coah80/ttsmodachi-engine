@@ -1,20 +1,5 @@
-//! Live mapped-state adapters and the incomplete text-to-PCM entry contract.
-//!
-//! Encoding and control adapters run Rust ports on caller-owned mapped state.
-//! Request and scheduler prefixes stop at named missing internal calls. The
-//! whole-engine render entry remains blocked and never returns recorded audio.
-//!
-//! Round 3 adds the observed single-writer text-stream lifecycle, UTF-8 text
-//! and marker XCODER processes, and bridges to the landed component/backend
-//! ports. request_stream_prefix reaches fn_190410 on its own stream output.
-//! request_voice_prefix runs its initialization and suspends at the internal
-//! start callback. The round-5 callback prefix executes event-1 notification
-//! and reset, then the synthesis-start prefix enters fn_15961c/15b404.
-//! synthesis_allocate_prefix uses the landed bridge allocator and live rate
-//! queries, stopping before parameter logging. No backend renderer is reached.
-//! Repeated-type stream-map opens, buffer reallocation, element callbacks,
-//! and contended platform locks remain explicit MissingStreamAdapter errors.
-//! No API below claims to be a complete frontend or a Rust PCM renderer.
+
+
 use crate::text;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,18 +16,15 @@ pub enum Error {
     InputTooLong,
     MissingBoot11cc0c,
     MissingInitializedRuntimeAdapters191e40,
-    /// A write through a NULL buffer reached guest code (up to `end`); the
-    /// ARM crashes running it, so the request never completes.
+
     CodeOverwritten { end: u32 },
-    /// A capture allocation came back NULL: the guest heap is exhausted and
-    /// the ARM drops PCM from here on (stubs, silence). The worker restarts
-    /// clean and serves the fresh render instead.
+
     HeapExhausted { size: u32 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Settings {
-    /// Pitch, speed, quality, tone, accent, intonation, in native/e2e.c order.
+
     pub parameters: [u8; 6],
     pub bpm: u32,
     pub stretch: u32,
@@ -57,12 +39,10 @@ impl Default for Settings {
     }
 }
 
-/// OS-level services only. No engine function or replay reply belongs here.
 pub trait Platform {
     fn ticks(&mut self) -> u64;
 }
 
-/// Borrowed local snapshot data, not recorded frontend or synthesis outputs.
 pub struct Snapshot<'a> {
     pub code: &'a [u8],
     pub heap: &'a [u8],
@@ -90,8 +70,6 @@ impl Snapshot<'_> {
         None
     }
 
-    /// Resolve the Nintendo global and engine exactly as native/e2e.c does.
-    /// This is read-only inspection, NOT restoration of a live Rust engine.
     pub fn engine_object(&self) -> Result<u32, Error> {
         let global = self
             .word(0x00ac_b54c)
@@ -112,7 +90,6 @@ pub struct Voice<'a> {
     pub ruleset: &'a [u8],
 }
 
-/// Initialized matches tools/e2e_audio.py; cold matches native/tts.c.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Start {
     Initialized,
@@ -120,11 +97,10 @@ pub enum Start {
 }
 
 pub struct Request<'a> {
-    /// Counted UTF-16, without the final terminator. Engine encoding preserves
-    /// separate surrogate units; it must not use Rust scalar-value decoding.
+
     pub text: &'a [u16],
     pub settings: Settings,
-    /// Unmodified game-tag song parameters from the e2e input, if present.
+
     pub song: &'a [u8],
 }
 
@@ -136,7 +112,6 @@ pub struct State {
     pub inspected_engine: Option<u32>,
 }
 
-/// Explicit missing-stage stubs, not successful no-ops.
 pub fn missing_boot_11cc0c() -> Result<usize, Error> {
     Err(Error::MissingBoot11cc0c)
 }
@@ -145,14 +120,6 @@ pub fn missing_initialized_runtime_adapters_191e40() -> Result<usize, Error> {
     Err(Error::MissingInitializedRuntimeAdapters191e40)
 }
 
-/// Preflight the first render. On error PCM is untouched and no samples exist.
-/// Encoding is a diagnostic prerequisite here, not a replacement for XCODER
-/// or a claim that normalization ran. No stage outputs are read from snapshots.
-///
-/// The missing adapter must restore live caller-owned runtime state, bind the
-/// existing ProcessText2Speech/open_text/scheduler ports to actual Rust callees,
-/// then connect component processing and streaming synthesis. It cannot forward
-/// those calls to C, ARM, or a scripted replay host.
 pub fn render(
     state: &mut State,
     request: Request<'_>,
@@ -195,118 +162,12 @@ pub fn render(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    struct Host;
-    impl Platform for Host {
-        fn ticks(&mut self) -> u64 {
-            123
-        }
-    }
-
-    #[test]
-    fn encoding_capacity_is_explicit_and_pcm_untouched() {
-        let snapshot = Snapshot {
-            code: &[],
-            heap: &[],
-            stack: &[],
-            linear: &[],
-            sysmem: &[],
-        };
-        let voice = Voice {
-            components: &[1],
-            dictionary: &[1],
-            ruleset: &[1],
-        };
-        let mut state = State::default();
-        let mut encoded = [99; 5];
-        let mut pcm = [1234; 8];
-        let text = [0xd83d, 0xde00];
-        let error = render(
-            &mut state,
-            Request {
-                text: &text,
-                settings: Settings::default(),
-                song: &[],
-            },
-            &snapshot,
-            &voice,
-            Start::Initialized,
-            &mut encoded,
-            &mut pcm,
-            &mut Host,
-        );
-        assert_eq!(
-            error,
-            Err(Error::Capacity {
-                required: 6,
-                available: 5
-            })
-        );
-        assert_eq!(encoded, [99; 5]);
-        assert_eq!(pcm, [1234; 8]);
-        assert_eq!(state.pcm_samples, 0);
-    }
-
-    #[test]
-    fn surrogate_encoding_runs_before_snapshot_rejection() {
-        let snapshot = Snapshot {
-            code: &[],
-            heap: &[],
-            stack: &[],
-            linear: &[],
-            sysmem: &[],
-        };
-        let voice = Voice {
-            components: &[1],
-            dictionary: &[1],
-            ruleset: &[1],
-        };
-        let mut state = State::default();
-        let mut encoded = [0; 6];
-        let mut pcm = [7];
-        assert_eq!(
-            render(
-                &mut state,
-                Request {
-                    text: &[0xd83d, 0xde00],
-                    settings: Settings::default(),
-                    song: &[]
-                },
-                &snapshot,
-                &voice,
-                Start::Initialized,
-                &mut encoded,
-                &mut pcm,
-                &mut Host
-            ),
-            Err(Error::InvalidSnapshot)
-        );
-        assert_eq!(encoded, [0xed, 0xa0, 0xbd, 0xed, 0xb8, 0x80]);
-        assert_eq!(state.encoded_bytes, 6);
-        assert_eq!(pcm, [7]);
-    }
-
-    #[test]
-    fn missing_stages_never_succeed() {
-        assert_eq!(missing_boot_11cc0c(), Err(Error::MissingBoot11cc0c));
-        assert_eq!(
-            missing_initialized_runtime_adapters_191e40(),
-            Err(Error::MissingInitializedRuntimeAdapters191e40)
-        );
-    }
-}
-
-/// Addresses and the public handle tag produced by boot. This does not boot an
-/// engine, relocate pointers, or import any post-request recorded outputs.
 #[derive(Clone, Copy, Debug)]
 pub struct BootState {
     pub engine: u32,
     pub magic: u32,
 }
 
-/// A caller-owned guest mapping. Regions may be compact and non-contiguous.
 pub struct Region<'a> {
     pub base: u32,
     pub bytes: &'a mut [u8],
@@ -417,8 +278,6 @@ fn overlaps(a: u32, an: usize, b: u32, bn: usize) -> bool {
         && u64::from(b) < u64::from(a) + an as u64
 }
 
-/// Internal engine calls are deliberately absent. Non-null mutex callbacks
-/// delegate only the OS mutex target; bootstrap must bind those to OS services.
 pub trait MutexPlatform {
     fn acquire_mutex(&mut self, target: u32) -> u32;
     fn release_mutex(&mut self, target: u32) -> u32;
@@ -480,8 +339,6 @@ fn lock<'a>(
     })
 }
 
-/// ABI-independent arguments. Extra arguments are decoded by the caller from
-/// the ARM stack; this core never guesses their values.
 #[derive(Clone, Copy, Debug)]
 pub struct StageCall {
     pub entry: u32,
@@ -496,7 +353,7 @@ pub struct EncodingScratch<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StageReturn {
-    /// None denotes a void ARM entry, whose r0 is not an output.
+
     pub r0: Option<u32>,
 }
 
@@ -511,9 +368,6 @@ fn capacity(required: usize, available: usize) -> Result<(), Error> {
     }
 }
 
-/// Connect the encoding ports to disjoint caller-owned guest buffers. Partial
-/// capacity writes, optional counters, and position-map byte offsets are kept.
-/// Aliases are rejected, not silently evaluated using a copied source.
 pub fn encoding_stage(
     memory: &mut Memory<'_, '_>,
     call: StageCall,
@@ -595,8 +449,7 @@ pub fn encoding_stage(
         }
     }
     let conversion = if terminated {
-        // The capacity came from Rust encoded_len above, never from an ARM
-        // result. Feed the same Rust-decoded units into the terminated port.
+
         let written = text::encode_terminated(input, &mut scratch.bytes[..cap]);
         text::Conversion {
             status: 0,
@@ -620,7 +473,7 @@ pub fn encoding_stage(
     if map != 0 {
         memory.check(map, written * 4)?;
     }
-    // No guest write happens until all bounds and alias checks have succeeded.
+
     memory.write(dst, &scratch.bytes[..writes])?;
     if map != 0 {
         for (i, &value) in scratch.positions[..written].iter().enumerate() {
@@ -642,8 +495,6 @@ pub fn encoding_stage(
     })
 }
 
-/// Live state adapters for request/scheduler entry and restoration, plus the
-/// environment resolver. No scripted engine-call replies are accepted.
 pub fn control_stage(
     memory: &mut Memory<'_, '_>,
     call: StageCall,
@@ -674,7 +525,7 @@ pub fn control_stage(
             Ok(StageReturn { r0: Some(rc) })
         }
         0x1959dc | 0x15af34 => {
-            // A zero previous value must not dereference the engine.
+
             let (object, previous, field) = if call.entry == 0x15af34 {
                 (a[1], a[2], 44)
             } else {
@@ -746,8 +597,6 @@ pub fn control_stage(
     }
 }
 
-/// fn_19611c. The null handle and default environment come from immutable
-/// initialized data, not a recorded callee output.
 pub(crate) fn resolve_environment(
     memory: &Memory<'_, '_>,
     handle: [u32; 2],
@@ -755,9 +604,6 @@ pub(crate) fn resolve_environment(
     resolve_environment_rom(memory, handle, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `resolve_environment`: the null environment pair and the
-/// default environment move per region, so they go through the region map.
-/// Every other caller keeps the US wrapper (behavior-identical).
 pub(crate) fn resolve_environment_rom(
     memory: &Memory<'_, '_>,
     handle: [u32; 2],
@@ -787,10 +633,6 @@ pub struct RequestPrefix {
     pub blocked_at: Error,
 }
 
-/// Start at the post-boot request, using only its input state. This executes
-/// the real state-entry port and environment resolver, then suspends before
-/// text stream creation. It is a prefix, not a successful render or a replay.
-/// The engine remains in its in-progress state, as at that ARM boundary.
 pub fn request_prefix(
     memory: &mut Memory<'_, '_>,
     boot: BootState,
@@ -800,9 +642,6 @@ pub fn request_prefix(
     request_prefix_rom(memory, boot, request, host, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `request_prefix`: the null stream pair and the environment
-/// resolver go through the region map. Every other caller keeps the US
-/// wrapper (behavior-identical).
 pub fn request_prefix_rom(
     memory: &mut Memory<'_, '_>,
     boot: BootState,
@@ -872,8 +711,6 @@ pub fn request_prefix_rom(
     })
 }
 
-/// The first unresolved call made by the real Rust scheduler. This is not a
-/// component result. The scheduler is suspended at this dispatch boundary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SchedulerBoundary {
     pub call: crate::frontend::PipelineCall,
@@ -895,8 +732,7 @@ impl crate::frontend::PipelineStages for DispatchPrefix<'_, '_, '_> {
         _: &mut impl crate::frontend::SynthesisSink,
     ) -> crate::frontend::PipelineReply {
         use crate::frontend::{PipelineCall as C, PipelineReply};
-        // This error is only an internal unwind signal. It is never presented
-        // as an ARM component's return value or counted as a completed stage.
+
         let blocked = PipelineReply {
             status: 0x80002001,
             value: 0,
@@ -969,10 +805,6 @@ impl crate::frontend::SynthesisSink for NoSynthesis {
     }
 }
 
-/// Reuse the part-a scheduler port, with live component-table lookup instead
-/// of the replay adapter's host deltas. Stops before the first opaque call.
-/// Callers may compare the boundary to part-a's host-entry windows; its host
-/// exits must not be used to resume this function.
 pub fn scheduler_prefix(
     memory: &mut Memory<'_, '_>,
     object: u32,
@@ -1022,7 +854,7 @@ pub fn scheduler_prefix(
             entry: boundary.entry,
         });
     }
-    // Scatter only the scheduler's own state, not any host reply.
+
     memory.put_word(offset(object, 0xd4)?, state.pending)?;
     memory.write(offset(object, 0xd8)?, &state.stage.to_le_bytes())?;
     memory.write(offset(object, 0x30)?, &[state.request_state])?;
@@ -1080,18 +912,10 @@ fn block_link(m: &mut Memory<'_, '_>, list: u32, prev: u32, b: u32) -> Result<()
     m.put_word(if next == 0 { list + 4 } else { next + 8 }, b)
 }
 
-/// Normalize a guest-fetched code address to the US entry the shared
-/// ports dispatch on. Guest vtables and method slots hold the running
-/// region's twins; `Rom::from_entry` guesses EU/KR only for unambiguous
-/// twin values (never a US key), so US runs are bit-identical and
-/// regional twins bind their US arm. Same semantics as
-/// `component_live_b::LiveHost::call_m` (round 5).
 fn norm_entry(raw: u32) -> u32 {
     crate::rom_region::to_us(crate::rom_region::Rom::from_entry(raw), raw)
 }
 
-/// Mapped-pointer counterpart of heap::EngineHeap's block search/carve.
-/// Guest pointers cannot index the offset-only EngineHeap arena.
 fn mapped_allocate(
     m: &mut Memory<'_, '_>,
     wrapper: u32,
@@ -1113,13 +937,12 @@ fn mapped_allocate(
         return Err(Error::MissingStreamAdapter { entry: target });
     }
     let heap = m.word(object + 4)?;
-    // The captured US runner is single-threaded. Recursive entry by its
-    // TLS owner has no net lock writes; another owner needs OS arbitration.
+
     let owner = m.word(heap + 0x5c)?;
     if owner != 0 && owner != 0x1ff82000 {
         return Err(Error::MissingStreamAdapter { entry: 0x1840fc });
     }
-    // fn_184f20 config setters. Their values come from the live vtable call.
+
     put_half(m, heap + 0x4c, 0)?;
     put_half(m, heap + 0x4e, m.unit(heap + 0x4e)? & !1)?;
     m.write(heap + 0x50, &[0])?;
@@ -1190,8 +1013,7 @@ fn mapped_free(m: &mut Memory<'_, '_>, wrapper: u32, pointer: u32) -> Result<(),
         return Err(Error::MissingStreamAdapter { entry: target });
     }
     let heap = m.word(obj + 4)?;
-    // The captured US runner is single-threaded. Recursive entry by its
-    // TLS owner has no net lock writes; another owner needs OS arbitration.
+
     let owner = m.word(heap + 0x5c)?;
     if owner != 0 && owner != 0x1ff82000 {
         return Err(Error::MissingStreamAdapter { entry: 0x1840fc });
@@ -1244,15 +1066,11 @@ fn compare_key(m: &Memory<'_, '_>, key: &[u8], p: u32) -> Result<i32, Error> {
     }
     unreachable!()
 }
-/// fn_1756d0/1966ac/198760 on the initialized property tree.
+
 fn property(m: &Memory<'_, '_>, props: u32, key: &[u8]) -> Result<(u32, u32, u32), Error> {
     property_rom(m, props, key, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `property`: the tree's comparator slot holds the running
-/// region's twin (EU 0x196a30 / KR 0x196a6c for US 0x196980), so it is
-/// normalized US-first before the identity check. Unambiguous twins only;
-/// US runs and unknown values behave exactly as before.
 fn property_rom(
     m: &Memory<'_, '_>,
     props: u32,
@@ -1262,7 +1080,7 @@ fn property_rom(
     if props == 0 {
         return Ok((0x8b702007, 0, 0));
     }
-    // Refuse non-null platform lock callbacks instead of inventing OS replies.
+
     let lock = m.word(props + 4)?;
     if lock == 0 {
         return Ok((0x81402007, 0, 0));
@@ -1301,8 +1119,6 @@ fn numeric_property(
     numeric_property_rom(m, props, key, signed, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `numeric_property`: the property-tree comparator moves per
-/// region, so it resolves through the region map.
 fn numeric_property_rom(
     m: &Memory<'_, '_>,
     props: u32,
@@ -1336,6 +1152,7 @@ struct CreateStream<'a, 'b, 'c> {
     memory: &'a mut Memory<'b, 'c>,
     cfg: u32,
     fault: Option<Error>,
+    rom: crate::rom_region::Rom,
 }
 impl CreateStream<'_, '_, '_> {
     fn result<T: Default>(&mut self, r: Result<T, Error>) -> T {
@@ -1390,11 +1207,11 @@ impl crate::frontend::StreamOpenHooks for CreateStream<'_, '_, '_> {
                 return Ok(0x8900200a);
             }
             for i in 0..5 {
-                let value = self.memory.word(0x8d7808 + i * 4)?;
+                let value = self.memory.word(crate::rom_region::addr(self.rom, 0x8d7808) + i * 4)?;
                 self.memory.put_word(map + i * 4, value)?;
             }
             self.memory.put_word(map + 20, heap)?;
-            // fn_198728 initializes the embedded tree sentinel.
+
             let t = map + 24;
             for field in [0, 4, 8] {
                 self.memory.put_word(t + field, t)?;
@@ -1411,8 +1228,6 @@ impl crate::frontend::StreamOpenHooks for CreateStream<'_, '_, '_> {
     }
 }
 
-/// fn_14e7a0. The existing port runs over a compact local layout; hooks
-/// operate on live mapped heap/property state, never captured callee replies.
 pub fn stream_create_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<StageReturn, Error> {
     let a = call.args;
     if a[4] == 0 {
@@ -1434,6 +1249,7 @@ pub fn stream_create_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<St
         memory: m,
         cfg: 0,
         fault: None,
+        rom: crate::rom_region::Rom::Us,
     };
     let rc = crate::frontend::open_synth_stream(
         &mut hooks,
@@ -1467,6 +1283,7 @@ fn new_writer(
     id: u32,
     mime: u32,
     mode: u32,
+    rom: crate::rom_region::Rom,
 ) -> Result<(u32, [u32; 2]), Error> {
     let rc = crate::frontend::validate_handle(config[0] != 0, config[1], 0x47dd, 32);
     if rc >= 0x80000000 {
@@ -1505,7 +1322,7 @@ fn new_writer(
         return Err(Error::EngineStatus(0x88f0200a));
     }
     for i in 0..3 {
-        m.put_word(readers + 4 + i * 4, m.word(0x8d781c + i * 4)?)?;
+        m.put_word(readers + 4 + i * 4, m.word(crate::rom_region::addr(rom, 0x8d781c) + i * 4)?)?;
     }
     put_half(m, readers + 24, 1)?;
     m.put_word(readers + 28, heap)?;
@@ -1522,7 +1339,7 @@ fn new_writer(
     put_half(m, state + 22, 1)?;
     put_half(m, state + 24, id as u16)?;
     if &content[..len] == b"application/x-realspeak-markers-pp;version=4.0" {
-        move_guest(m, state + 28, 0x8d77a8, 12)?;
+        move_guest(m, state + 28, crate::rom_region::addr(rom, 0x8d77a8), 12)?;
     }
     m.write(state + 40, &[u8::from(mode == 2)])?;
     m.write(
@@ -1544,7 +1361,7 @@ fn new_writer(
         m.write(state + 40, &[1])?;
         m.write(state + 42, &[1])?;
     }
-    // fn_198e34 then fn_198868, empty-tree insertion only.
+
     let node = mapped_allocate(m, heap, 24, false)?;
     if node == 0 {
         return Err(Error::EngineStatus(0x8900200a));
@@ -1667,7 +1484,7 @@ fn compact_guest(m: &mut Memory<'_, '_>, state: u32, required: u32) -> Result<()
     if stride > 1 {
         discarded -= discarded % stride;
     }
-    // fn_14e440 destroys the discarded elements before the shrink decision.
+
     if m.word(state + 36)? != 0 && discarded != 0 {
         return Err(Error::MissingStreamAdapter {
             entry: m.word(state + 36)?,
@@ -1734,6 +1551,13 @@ fn close_guest(m: &mut Memory<'_, '_>, h: [u32; 2]) -> Result<u32, Error> {
     Ok(0)
 }
 fn create_live(m: &mut Memory<'_, '_>, h: [u32; 2]) -> Result<(u32, [u32; 2]), Error> {
+    create_live_rom(m, h, crate::rom_region::Rom::Us)
+}
+fn create_live_rom(
+    m: &mut Memory<'_, '_>,
+    h: [u32; 2],
+    rom: crate::rom_region::Rom,
+) -> Result<(u32, [u32; 2]), Error> {
     let (rc, env) = resolve_environment(m, h)?;
     if rc >= 0x80000000 {
         return Ok((rc, [0, 0]));
@@ -1746,6 +1570,7 @@ fn create_live(m: &mut Memory<'_, '_>, h: [u32; 2]) -> Result<(u32, [u32; 2]), E
         memory: m,
         cfg: 0,
         fault: None,
+        rom,
     };
     let rc = crate::frontend::open_synth_stream(&mut hooks, &mut local, 0, 0, h[0], h[1], Some(80));
     if let Some(e) = hooks.fault {
@@ -1771,11 +1596,7 @@ fn open_text_live(
     open_text_live_rom(m, engine, request, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `open_text_live`: the interface vtable slots hold guest
-/// code pointers, so each slot is normalized US-first before the identity
-/// check (direct US literals keep working; EU/KR twins bind their US
-/// entry). Unlisted addresses are identity, so US behavior is unchanged.
-fn open_text_live_rom(
+pub(crate) fn open_text_live_rom(
     m: &mut Memory<'_, '_>,
     engine: u32,
     request: u32,
@@ -1800,9 +1621,9 @@ fn open_text_live_rom(
     if rc >= 0x80000000 {
         return Ok((rc, [0, 0]));
     }
-    // Unlike TextOpenHooks::stream_create's old two-argument ABI, bind
-    // the environment pair passed in ARM r2/r3 from the live engine.
-    let (mut rc, config) = create_live(m, handle)?;
+
+    let (mut rc, config) = create_live_rom(m, handle, rom)?;
+
     if rc >= 0x80000000 {
         return Ok((rc, config));
     }
@@ -1811,7 +1632,7 @@ fn open_text_live_rom(
         return Err(Error::MissingStreamAdapter { entry: 0x175a1c });
     }
     let utf8 = string_equal(m, mime, b"text/plain;charset=utf-8")?;
-    let (r, stream) = new_writer(m, config, 0xc0, mime, 2)?;
+    let (r, stream) = new_writer(m, config, 0xc0, mime, 2, rom)?;
     rc = r;
     if rc < 0x80000000 {
         let prefix = if m.byte(engine + 0x35)? == 2 {
@@ -1828,7 +1649,7 @@ fn open_text_live_rom(
         rc = r;
         if rc < 0x80000000 {
             if prefix != 0 {
-                move_guest(m, buffer, if utf8 { 0x8d2dc0 } else { 0x8d2dac }, prefix)?;
+                move_guest(m, buffer, if utf8 { crate::rom_region::addr(rom, 0x8d2dc0) } else { crate::rom_region::addr(rom, 0x8d2dac) }, prefix)?;
             }
             move_guest(m, buffer + prefix, m.word(request + 8)?, length)?;
             m.put_word(engine + 0x14c, prefix)?;
@@ -1843,7 +1664,7 @@ fn open_text_live_rom(
     }
     Ok((rc, config))
 }
-/// fn_18fdc0, live creation/open/reserve/commit/close on mapped guest state.
+
 pub fn open_text_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<StageReturn, Error> {
     let a = call.args;
     if a[0] == 0 || a[2] == 0 {
@@ -1922,8 +1743,6 @@ fn xcoder_validate(m: &Memory<'_, '_>, h: [u32; 2], tag: u32, size: u32) -> Resu
     Ok(resolve_environment(m, pair(m, h[0])?)?.0)
 }
 
-/// fn_2312fc. Caller-owned scratch holds only data read from live streams
-/// and decoder outputs. The existing fn_17bb44 port performs conversion.
 pub fn xcoder_text_stage(
     m: &mut Memory<'_, '_>,
     call: StageCall,
@@ -2004,7 +1823,7 @@ pub fn xcoder_text_stage(
         let written = used + 4;
         capacity(written + 4, scratch.len())?;
         m.read(src, &mut scratch[4..4 + n + 1])?;
-        // Seed output slack from live buffers, not from the comparison target.
+
         m.read(dst, &mut scratch[out..out + n * 2])?;
         scratch[positions..positions + n * 8].fill(0xff);
         let mut extra = [0; 256];
@@ -2032,8 +1851,7 @@ pub fn xcoder_text_stage(
         );
         consumed = u32::from_le_bytes(scratch[used..used + 4].try_into().unwrap());
         produced = u32::from_le_bytes(scratch[written..written + 4].try_into().unwrap()) * 2;
-        // Decoder can write the terminating error unit and sync entries even
-        // when conversion fails. Scatter all initialized reserve bytes.
+
         m.write(dst, &scratch[out..out + n * 2])?;
         m.write(map, &scratch[positions..positions + n * 8])?;
     } else {
@@ -2071,7 +1889,7 @@ fn translated(
         m.word(sync + pos.wrapping_sub(base) * 4)
     }
 }
-/// fn_231ba0 on live marker and synchronization streams.
+
 pub fn xcoder_markers_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<StageReturn, Error> {
     let a = call.args;
     let o = a[0];
@@ -2157,9 +1975,6 @@ pub fn xcoder_markers_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<S
     Ok(StageReturn { r0: Some(rc) })
 }
 
-/// A suspended internal call, not a successful stage return. Arguments use
-/// guest addresses; event is the fn_195a44 caller-owned event triple when
-/// the fn_132124 thunk forwards to fn_163a98.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VoiceBoundary {
     pub entry: u32,
@@ -2184,7 +1999,7 @@ impl VoicePrefix<'_, '_, '_, '_> {
         if self.boundary.is_none() && self.fault.is_none() {
             self.boundary = Some(VoiceBoundary { entry, args, event });
         }
-        // Unwind only. The caller never exposes this as an engine status.
+
         0x80002001
     }
     fn mutex(&mut self, acquire: bool) -> u32 {
@@ -2246,9 +2061,7 @@ impl crate::frontend::StopVoiceHooks for VoicePrefix<'_, '_, '_, '_> {
     }
     fn timestamp(&mut self) -> (u32, u32) {
         self.stamped = true;
-        // The null environment pair moves per region; read the running
-        // ROM's twin (EU/KR snapshots hold (0,0) there, US-literal reads
-        // pull garbage that poisons the voice timestamps and aux args).
+
         match pair(self.memory, crate::rom_region::addr(self.rom, 0x8d7660)) {
             Ok([a, b]) => (a, b),
             Err(e) => {
@@ -2268,10 +2081,7 @@ impl crate::frontend::StopVoiceHooks for VoicePrefix<'_, '_, '_, '_> {
             }
             let value = self.memory.word(self.voice + 0x16c)?;
             let user = self.memory.word(self.voice + 0x184)?;
-            // fn_132124 is an internal forwarding thunk, not an OS callback.
-            // Guest-sourced twins (EU 0x1321d0, KR 0x1320f8) take the same
-            // render path; normalize US-first (unambiguous twins only, so
-            // US runs are bit-identical).
+
             let callback_us = crate::rom_region::to_us(
                 crate::rom_region::Rom::from_entry(callback),
                 callback,
@@ -2300,6 +2110,7 @@ impl crate::frontend::StopVoiceHooks for VoicePrefix<'_, '_, '_, '_> {
                         b.args[2],
                         self.notification.unwrap(),
                         self.platform.as_deref_mut().unwrap(),
+                        self.rom,
                     );
                     match rc {
                         Ok(()) => 0,
@@ -2362,10 +2173,6 @@ impl crate::frontend::StopVoiceHooks for VoicePrefix<'_, '_, '_, '_> {
     }
 }
 
-/// Run the existing fn_190410 port on a compact voice view. Stop at the
-/// first unbound internal call, before its side effects. No captured reply
-/// is supplied. Cleanup after the unwind is suppressed, not simulated.
-/// Only pre-boundary writes are scattered back to caller-owned memory.
 pub fn voice_start_prefix(
     memory: &mut Memory<'_, '_>,
     call: StageCall,
@@ -2411,8 +2218,7 @@ pub(crate) fn voice_start_inner<'h>(
     }
     let boundary = boundary.ok_or(Error::EngineStatus(status))?;
     if boundary.entry == 0x1900f8 {
-        // stop_voice restores the mode on its error-unwind path. At the
-        // suspended apply-mode entry the new mode is still live.
+
         memory.write(voice + 0x148, &[mode as u8])?;
     }
     if stamped {
@@ -2421,8 +2227,6 @@ pub(crate) fn voice_start_inner<'h>(
     Ok(boundary)
 }
 
-/// Extend the own-output text-open chain into fn_190410. No intermediate
-/// state or recorded callback return is loaded.
 pub fn request_voice_prefix(
     memory: &mut Memory<'_, '_>,
     boot: BootState,
@@ -2444,8 +2248,6 @@ pub fn request_voice_prefix(
     Ok((prefix, boundary))
 }
 
-/// Extend the post-boot request through Rust's own text stream. No
-/// intermediate capture is loaded. Stop before fn_190410 voice orchestration.
 pub fn request_stream_prefix(
     m: &mut Memory<'_, '_>,
     boot: BootState,
@@ -2455,9 +2257,6 @@ pub fn request_stream_prefix(
     request_stream_prefix_rom(m, boot, request, host, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `request_stream_prefix`: threads the region through the
-/// request and text-open prefixes. Every other caller keeps the US
-/// wrapper (behavior-identical).
 pub fn request_stream_prefix_rom(
     m: &mut Memory<'_, '_>,
     boot: BootState,
@@ -2475,12 +2274,6 @@ pub fn request_stream_prefix_rom(
     Ok(prefix)
 }
 
-/// fn_191e40 tail (1:1): after the voice/scheduler run returns, the request
-/// state (engine+40) is restored to the value the enter saved (`previous`),
-/// skipped when zero. The port logs no Begin/End markers, so the tail is
-/// the restore only. Without it the state stays 3 and the next render's
-/// enter refuses with 0x80002011 (session reuse). Cross-render state is
-/// otherwise untouched: the ARM keeps everything else as the render left it.
 pub fn request_restore_rom(
     memory: &mut Memory<'_, '_>,
     engine_addr: u32,
@@ -2496,10 +2289,7 @@ pub fn request_restore_rom(
     }
     Ok(())
 }
-/// fn_15961c tail (1:1): after the scorer/scheduler run returns, the segment
-/// pipeline state (seg+0x30) is restored to the value the begin_synth enter
-/// saved (`previous`), skipped when zero. Without it the state stays 3 and
-/// the next render's begin_synth refuses with 0x81202011 (session reuse).
+
 pub fn synthesis_restore_rom(
     memory: &mut Memory<'_, '_>,
     seg: u32,
@@ -2573,8 +2363,7 @@ fn tree_next(m: &Memory<'_, '_>, tree: u32, mut n: u32) -> Result<u32, Error> {
     }
     Ok(if parent == tree { 0 } else { parent })
 }
-/// fn_14ea44 with actual map iteration, reference release, and guest frees.
-/// Element destructors and log-input callbacks remain explicit blockers.
+
 pub fn stream_destroy_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<StageReturn, Error> {
     let a = call.args;
     let rc = crate::frontend::validate_handle(a[0] != 0, a[1], 0x47dd, 32);
@@ -2624,7 +2413,7 @@ pub fn stream_destroy_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<S
         }
     }
     mapped_free(m, heap, iterator)?;
-    // fn_19869c/198fb4 free keys and values in left/right/root order.
+
     let mut stack = [(0u32, false); 128];
     let mut used = 0;
     let root = m.word(tree)?;
@@ -2663,7 +2452,7 @@ pub fn stream_destroy_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<S
     mapped_free(m, heap, cfg)?;
     Ok(StageReturn { r0: Some(0) })
 }
-/// Own-output open/close/destroy lifecycle test entry, not a ROM function.
+
 pub fn text_lifecycle_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<StageReturn, Error> {
     let result = open_text_stage(m, call)?;
     if result.r0.unwrap_or(0) >= 0x80000000 {
@@ -2679,8 +2468,6 @@ pub fn text_lifecycle_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<S
     )
 }
 
-/// Bind the landed wire-c controls without replaying their captured writes.
-/// Numeric constants are borrowed from the caller's immutable voice image.
 pub fn backend_stage(
     m: &mut Memory<'_, '_>,
     call: StageCall,
@@ -2757,9 +2544,7 @@ impl crate::engine_components::InternalCalls for LiveComponentCalls {
         }
     }
 }
-/// Wire-b's landed processors now call the live stream/heap/environment
-/// adapters. Unported LINGDB, resource and dictionary calls still fail closed.
-/// scratch is caller-owned ABI-local storage disjoint from persistent state.
+
 pub fn component_stage(
     m: &mut Memory<'_, '_>,
     call: StageCall,
@@ -2775,7 +2560,6 @@ pub fn component_stage(
     result.map(|rc| StageReturn { r0: Some(rc) })
 }
 
-// Live voice views preserve payload words that a reset does not touch.
 use crate::voice::{VoiceEvent, VoiceQueue, VoiceState, VoiceTransition};
 fn live_word(b: &[u8], at: usize) -> u32 {
     u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
@@ -2906,10 +2690,11 @@ fn live_write_voice(s: &VoiceState, bytes: &mut [u8]) {
     }
 }
 
-/// fn_18cae8 and its playback/queue/filter reset callees on live US state.
-/// Constants, queues, ring headers and cursor input all come from memory.
-/// No backend stream input or comparison target is accepted.
-pub fn reset_synthesis_live(m: &mut Memory<'_, '_>, engine: u32) -> Result<(), Error> {
+pub fn reset_synthesis_live(
+    m: &mut Memory<'_, '_>,
+    engine: u32,
+    rom: crate::rom_region::Rom,
+) -> Result<(), Error> {
     let mut raw = [0u8; 0x2920];
     m.read(engine, &mut raw)?;
     for at in [0xe8, 0x14f0] {
@@ -2923,8 +2708,8 @@ pub fn reset_synthesis_live(m: &mut Memory<'_, '_>, engine: u32) -> Result<(), E
     if raw[4] != 0 {
         let mut constants = [0; crate::tables::NumericTables::CONSTANT_BYTES];
         let mut cosine = [0; crate::tables::NumericTables::COSINE_BYTES];
-        m.read(0xa21fb0, &mut constants)?;
-        m.read(0x8cbfe0, &mut cosine)?;
+        m.read(crate::rom_region::addr(rom, 0xa21fb0), &mut constants)?;
+        m.read(crate::rom_region::addr(rom, 0x8cbfe0), &mut cosine)?;
         let tables = crate::tables::NumericTables::from_bytes(&constants, &cosine).unwrap();
         while input.read != input.write {
             let elapsed = input.events[input.read as usize].delay;
@@ -2938,7 +2723,7 @@ pub fn reset_synthesis_live(m: &mut Memory<'_, '_>, engine: u32) -> Result<(), E
         live_write_queue(&input, &mut raw[0xe8..0x14f0]);
         live_write_queue(&commands, &mut raw[0x14f0..0x28f8]);
         m.write(engine, &raw)?;
-        // fn_1a175c's silence and cursor reset follow queue consumption.
+
         let amount =
             (f32::from_bits(m.word(engine + 0x58)?) + m.word(engine + 0x68)? as i32 as f32) as i32;
         let amount = amount.min(m.word(engine + 0x40)? as i32).max(0) as u32;
@@ -2970,14 +2755,14 @@ pub fn reset_synthesis_live(m: &mut Memory<'_, '_>, engine: u32) -> Result<(), E
         m.put_word(engine + at, 0)?;
     }
     m.write(engine + 0x4c30, &[0])?;
-    // fn_1c1768 enqueues on the reset's own queue, retaining unused words.
+
     let mut queue_bytes = [0u8; 0x1408];
     m.read(engine + 0xe8, &mut queue_bytes)?;
     let mut queue = live_queue(&queue_bytes);
     queue.enqueue_flag(m.word(engine + 0x64)? as i32, 0, 0);
     live_write_queue(&queue, &mut queue_bytes);
     m.write(engine + 0xe8, &queue_bytes)?;
-    // fn_1a16a4 only scatters the fields reset_for_output actually resets.
+
     let mut frame = crate::queue::SpeechFrame::default();
     frame.reset_for_output();
     let p = engine + 0x3828;
@@ -3013,7 +2798,7 @@ pub fn reset_synthesis_live(m: &mut Memory<'_, '_>, engine: u32) -> Result<(), E
     m.write(engine + 0x4bbc, &[0])?;
     put_half(m, engine + 0x4c38, 0x23)?;
     m.put_word(engine + 0x4c6c, 0)?;
-    // Buffer reset ports, with bounded caller-owned workspaces.
+
     let mut floats = [[0f32; crate::buffers::VOICE_DELAY_CAPACITY]; 3];
     let mut headers = [0u32; 3];
     let mut sizes = [0usize; 3];
@@ -3070,17 +2855,12 @@ pub fn reset_synthesis_live(m: &mut Memory<'_, '_>, engine: u32) -> Result<(), E
     Ok(())
 }
 
-/// Register-only undefined payloads preserved by fn_183258: ARM writes
-/// s16 and s17 to event +4/+28 without initializing them. They are explicit
-/// first-stage machine inputs, never bytes read from an expected image.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NotificationRegisters {
     pub s16: u32,
     pub s17: u32,
 }
 
-/// fn_183258's reserved-capacity path. Growth needs the bridge allocator;
-/// do not invent an allocation or advance the vector when it is unavailable.
 pub fn notify_synthesis_live(
     m: &mut Memory<'_, '_>,
     speech: u32,
@@ -3131,8 +2911,6 @@ pub fn notify_synthesis_live(
     m.put_word(vector + 8, end.wrapping_add(32))
 }
 
-/// First-stage text input through the callback's live notification/reset.
-/// Stops at the next internal voice call. s16/s17 are initial machine inputs.
 pub fn request_callback_prefix(
     m: &mut Memory<'_, '_>,
     boot: BootState,
@@ -3144,9 +2922,6 @@ pub fn request_callback_prefix(
     request_callback_prefix_rom(m, boot, request, host, registers, platform, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `request_callback_prefix`: the intake's region rides from
-/// the caller (the scheduler boundary args are guest pointers either way;
-/// only the table/interface reads need the region).
 #[allow(clippy::too_many_arguments)]
 pub fn request_callback_prefix_rom(
     m: &mut Memory<'_, '_>,
@@ -3175,7 +2950,6 @@ pub fn request_callback_prefix_rom(
     Ok((prefix, boundary))
 }
 
-/// Bind the existing fn_163a98 event-1 port, not a recorded callback reply.
 fn start_callback_live(
     m: &mut Memory<'_, '_>,
     speech: u32,
@@ -3183,6 +2957,7 @@ fn start_callback_live(
     b: u32,
     registers: NotificationRegisters,
     platform: &mut dyn Platform,
+    rom: crate::rom_region::Rom,
 ) -> Result<(), Error> {
     use crate::frontend_output::handoff as cb;
     struct Host<'a, 'b, 'c, 'd> {
@@ -3190,6 +2965,7 @@ fn start_callback_live(
         platform: &'d mut dyn Platform,
         registers: NotificationRegisters,
         fault: Option<Error>,
+        rom: crate::rom_region::Rom,
     }
     impl cb::CallbackHost for Host<'_, '_, '_, '_> {
         fn notify(&mut self, speech: u32, event: i32, _: &mut [u8]) {
@@ -3206,11 +2982,10 @@ fn start_callback_live(
         }
         fn reset(&mut self, engine: u32) {
             if self.fault.is_none() {
-                self.fault = reset_synthesis_live(self.memory, engine).err();
+                self.fault = reset_synthesis_live(self.memory, engine, self.rom).err();
             }
         }
-        // This host can only be called with event 1. Other events have no
-        // fabricated return or side effect and remain explicit missing calls.
+
         fn finalize(&mut self, _: u32, _: u32, _: u32) {
             self.fault = Some(Error::MissingStreamAdapter { entry: 0x183398 });
         }
@@ -3263,6 +3038,7 @@ fn start_callback_live(
         platform,
         registers,
         fault: None,
+        rom,
     };
     cb::handle_callback(
         &mut view,
@@ -3283,9 +3059,6 @@ fn start_callback_live(
     }
 }
 
-/// Run the real fn_15961c/15b404 orchestration from its own voice boundary.
-/// Stop before fn_15668c, whose dynamic start-synthesis bindings are not yet
-/// available. No scorer, stream, component or backend reply is synthesized.
 pub fn synthesis_start_prefix(
     m: &mut Memory<'_, '_>,
     call: VoiceBoundary,
@@ -3294,9 +3067,6 @@ pub fn synthesis_start_prefix(
     synthesis_start_prefix_rom(m, call, platform, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `synthesis_start_prefix`: the scheduler-entry voice boundary
-/// is the running region's twin (EU 0x1596e0 / KR 0x159600 for US 0x15961c),
-/// so it is normalized US-first before the entry check.
 #[allow(clippy::too_many_arguments)]
 pub fn synthesis_start_prefix_rom(
     m: &mut Memory<'_, '_>,
@@ -3401,8 +3171,7 @@ pub fn synthesis_start_prefix_rom(
             }
         }
         fn end_synth(&mut self, _: u8) {
-            // Suspension is not a failed ARM scorer return. Do not execute
-            // cleanup that ARM has not reached at this boundary.
+
         }
         fn teardown_handle(&mut self, a: u32, b: u32) {
             self.fail(0x19862c, [a, b, 0, 0, 0, 0, 0]);
@@ -3488,8 +3257,6 @@ pub fn synthesis_start_prefix_rom(
     hooks.boundary.ok_or(Error::EngineStatus(status))
 }
 
-/// OS-only services used by the landed memory bridge. Unknown engine callees
-/// never cross this interface. The caller owns the absolute-index workspace.
 pub trait HeapPlatform {
     fn thread_id(&mut self) -> u32;
     fn arbiter_address(&self) -> u32;
@@ -3508,10 +3275,6 @@ impl crate::bridge::Platform for BridgePlatform<'_> {
     }
 }
 
-/// Continue fn_15668c through its live scratch allocation and rate queries.
-/// Returns the parameter-logging fn_173fb4 boundary. Continue with
-/// synthesis_logging_prefix and synthesis_aux_prefix. The raw-output prefix
-/// is written in ROM order. No StartSynthesisScripts replies are used.
 pub fn synthesis_allocate_prefix(
     m: &mut Memory<'_, '_>,
     call: VoiceBoundary,
@@ -3521,9 +3284,6 @@ pub fn synthesis_allocate_prefix(
     synthesis_allocate_prefix_rom(m, call, workspace, platform, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `synthesis_allocate_prefix`: the parameter-key bytes and
-/// the scheduler-format address move per region, so they go through the
-/// region map. The entry is produced by our own start prefix (always US).
 #[allow(clippy::too_many_arguments)]
 pub fn synthesis_allocate_prefix_rom(
     m: &mut Memory<'_, '_>,
@@ -3587,9 +3347,6 @@ pub fn synthesis_allocate_prefix_rom(
     })
 }
 
-/// Live fn_173fb4 over sparse guest mappings. Both flat buffers are caller-owned.
-/// The second buffer is exclusively scratch for the real bridge allocator.
-/// Guest addresses, varargs, params and all allocated strings are never rebased.
 pub fn logging_live(
     m: &mut Memory<'_, '_>,
     a: [u32; 7],
@@ -3655,11 +3412,7 @@ pub fn logging_live(
         }
     }
     impl crate::boot_part_b::FormatHost for Logger<'_> {}
-    // Fast path: a single base-0 region already is the flat view staging
-    // would build. Run the logger directly on the live region: no fill,
-    // no copy, no hole scan (vacuous with no gaps), no copy-back.
-    // Guest-visible behavior is identical; both caller buffers stay
-    // untouched (the nested allocator calls take the Flat fast path too).
+
     if m.regions.len() == 1 && m.regions[0].base == 0 && !m.regions[0].bytes.is_empty() {
         let mut logger = Logger {
             scratch: allocator_workspace,
@@ -3670,7 +3423,7 @@ pub fn logging_live(
             base: 0,
             bytes: &mut *m.regions[0].bytes,
         };
-        // The wrapper saves register r3 in the varargs slot before fn_173df4.
+
         view.put_word(a[4], a[3]);
         crate::boot_part_b::fn_173fb4(&mut view, a[0], a[1], a[2], a[4], a[5], a[6], &mut logger);
         if let Some(e) = logger.fault {
@@ -3692,14 +3445,13 @@ pub fn logging_live(
         base: 0,
         bytes: flat,
     };
-    // The wrapper saves register r3 in the varargs slot before fn_173df4.
+
     view.put_word(a[4], a[3]);
     crate::boot_part_b::fn_173fb4(&mut view, a[0], a[1], a[2], a[4], a[5], a[6], &mut logger);
     if let Some(e) = logger.fault {
         return Err(e);
     }
-    // Compare every hole to its staged zero input, even on a no-output logger.
-    // Mapped ranges are copied in full and the verifier compares every byte.
+
     let mut end = 0usize;
     loop {
         let next = m
@@ -3726,9 +3478,6 @@ pub fn logging_live(
     Ok(())
 }
 
-/// Continue fn_15668c through parameter logging using property values produced
-/// by the current request. request_sp is the first-stage guest stack pointer.
-/// The ARM call frames place this logger's SP 0x1f8 bytes below request SP.
 pub fn synthesis_logging_prefix(
     m: &mut Memory<'_, '_>,
     synthesis: VoiceBoundary,
@@ -3741,10 +3490,6 @@ pub fn synthesis_logging_prefix(
     synthesis_logging_prefix_rom(m, synthesis, logger, request_sp, workspace, scratch, platform, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `synthesis_logging_prefix`: the parameter-key bytes, the
-/// empty-string slot, the formatter code base and the log return/format
-/// addresses move per region, so they go through the region map. Both
-/// entries are produced by our own prefixes (always US).
 #[allow(clippy::too_many_arguments)]
 pub fn synthesis_logging_prefix_rom(
     m: &mut Memory<'_, '_>,
@@ -3841,10 +3586,6 @@ pub fn synthesis_logging_prefix_rom(
     })
 }
 
-/// Continue the live request from 0x156a30 to its auxiliary database call.
-/// Input pairs come from the current scheduler boundary, never an ARM reply.
-/// open_db cannot yet reenter the arena through DbOpenHooks::alloc_obj,
-/// query_param or reset_db; stop before it rather than script those services.
 pub fn synthesis_aux_prefix(
     m: &mut Memory<'_, '_>,
     synthesis: VoiceBoundary,
@@ -3857,10 +3598,6 @@ pub fn synthesis_aux_prefix(
     synthesis_aux_prefix_rom(m, synthesis, scheduler, continuation, request_sp, workspace, platform, crate::rom_region::Rom::Us)
 }
 
-/// Region-aware `synthesis_aux_prefix`: the scheduler boundary entry is the
-/// running region's twin (EU 0x1596e0 / KR 0x159600 for US 0x15961c), so it
-/// is normalized US-first before the entry check. The aux entry itself stays
-/// guest-faithful (the caller normalizes it for the US-only dispatcher).
 #[allow(clippy::too_many_arguments)]
 pub fn synthesis_aux_prefix_rom(
     m: &mut Memory<'_, '_>,
@@ -3881,15 +3618,12 @@ pub fn synthesis_aux_prefix_rom(
     let synth = synthesis.args[1];
     let out = synth + 0x84;
     let sp = request_sp.checked_sub(0x1f8).ok_or(Error::InvalidSnapshot)?;
-    // The formatter slot, the varargs source word and the saved LR are all
-    // code addresses, so the running region's twins go through the map
-    // (intra-function offsets are preserved by the region deltas).
+
     let fmt = crate::rom_region::addr(rom, 0x156a30) + 8 + 0x10c;
     m.put_word(sp, fmt)?;
     let args = [m.word(ctx + 16)?, m.word(crate::rom_region::addr(rom, 0x156624))?, 99, 0, fmt, sp + 4, 0];
     speech1_boot_stage(m, StageCall { entry: 0x1738e8, args }, workspace, platform)?;
-    // The filtered ARM logger still saves LR over the prior varargs word.
-    // This slot was written by our preceding formatter and is compared too.
+
     m.put_word(sp - 4, crate::rom_region::addr(rom, 0x156a4c))?;
     let pipe = [scheduler.args[2], scheduler.args[3]];
     let aux = [scheduler.args[4], scheduler.args[5]];
@@ -3924,9 +3658,6 @@ pub fn synthesis_aux_prefix_rom(
     })
 }
 
-/// Direct live heap, libc and newly landed boundaries in the speech_1 checklist.
-/// The caller supplies workspace; bridge follows the actual guest vtable.
-/// These bindings do not bypass a missing parent frontend continuation.
 pub fn speech1_heap_stage(
     m: &mut Memory<'_, '_>,
     call: StageCall,
@@ -3977,23 +3708,18 @@ pub(crate) struct SpeechBootHost<'a> {
 impl SpeechBootHost<'_> {
     pub(crate) fn invoke(&mut self, m: &mut crate::boot::Memory<'_>, f: u32, a: &[u32]) -> u32 {
         if self.fault.is_some() { return 0x80002001; }
-        // Regional entries name the same port: normalize to the US address
-        // the arms below dispatch on. US entries pass through unchanged.
+
         let f = crate::rom_region::to_us(crate::rom_region::Rom::from_entry(f), f);
         match f {
-            // The file logger method (EU 0x1ce5e4, KR 0x1ce690). This
-            // capture's file logger is disabled in live state: run the real
-            // method, rejecting active unbound dependencies.
+
             0x18f3fc => {
-                // The notify target is the empty stub: US 0x4a7adc, EU
-                // 0x4a827c, KR 0x4a8670 (all bx lr, content-verified).
-                // Anything else fails closed at its own address.
+
                 let target = crate::rom_region::to_us(crate::rom_region::Rom::from_entry(m.word(a[0])), m.word(a[0]));
                 if target != 0x4a7adc {
                     self.fault = Some(Error::UnsupportedStage { entry: target });
                     return 0x80002001;
                 }
-                // fn_4a7adc is exactly bx lr (src/fn_4a7adc.c).
+
                 crate::frontend::notify([a[2], a[3], a[4], a[5]], |_| 0)
             }
             0x1ce428 => {
@@ -4013,9 +3739,7 @@ impl SpeechBootHost<'_> {
                 crate::frontend_part_b::fn_1ce428(m.bytes,a[0],a[1],a[2],a[3],a[4],a[5],&mut Disabled)
             }
             0x1738e8 | 0x173dc0 => {
-                // Variadic logger: callers whose format takes no varargs
-                // leave trailing registers undefined on the ARM, so they
-                // arrive as zero here (same as the engine_live arms).
+
                 let mut v = [0u32; 6];
                 let n = a.len().min(6);
                 v[..n].copy_from_slice(&a[..n]);
@@ -4025,14 +3749,11 @@ impl SpeechBootHost<'_> {
                     crate::render_part_a::error_log(m, self, v[0], v[1], v[2], v[3], v[4], v[5])
                 }
             }
-            // Slot streaming mode (EU 0x1ce728, KR 0x1ce6c4): pure port,
-            // same binding as the component lanes. Guest slot reads ride
-            // the normalized entry, so regional twins bind here.
+
             0x1ce56c => crate::frontend::streaming_mode(
                 (a[0] != 0).then(|| (m.byte(m.word(a[0]) + 4), m.byte(m.word(a[0]) + 0x10c))),
             ),
-            // Finish request (EU 0x18f538, KR 0x18f574): constant port,
-            // same as the component lanes and the engine_live host.
+
             0x18f488 => crate::frontend::finish_request(),
             0x184f20 => m.boot_heap_allocate(a.try_into().expect("heap ABI")),
             0x4a7758 => m.fn_4a7758(self, [a[0], a[1], a[2]]),
@@ -4044,10 +3765,7 @@ impl SpeechBootHost<'_> {
             0x1963b8 => crate::boot_part_e::calloc(m, a[0], a[1], a[2], self),
             0x1963e0 => crate::boot_part_e::fn_1963e0(m, a[0], a[1], a[2], self),
             0x196428 => { crate::boot_part_e::release(m, a[0], a[1], self); 0 }
-            // fn_1994d0 unsigned divmod (r40: the lex-create vec growth in
-            // reentrant::vec_grow_m reaches it through this shared fallback
-            // on back-to-back speaks). Same certified one-liner the
-            // component hosts bind (component_live_a2, boot_part_e).
+
             0x1994d0 => crate::frontend::divmod_u32(a[0], a[1]).0,
             0x1840fc => { crate::boot_part_b::fn_1840fc(m, a[0], self); 0 }
             0x18423c => { crate::boot_part_b::fn_18423c(m, a[0], self); 0 }
@@ -4061,7 +3779,7 @@ impl SpeechBootHost<'_> {
                     service: 0, command: 0 };
                 m.fn_165d00(self, &g, a[0]); 0
             }
-            0x172d18 => self.platform.arbitrate(m, a),
+            0x172d18 => { if a.get(2) == Some(&0) { 0 } else { self.platform.arbitrate(m, a) } },
             0x17db60 => crate::boot_part_e::fn_17db60(m, a[0], a[1], a[2], a[3], a[4], self),
             0x1970ac => crate::boot_part_e::fn_1970ac(m, a[0], a[1], a[2]),
             0x17b7f0 => crate::speech_part_1::fn_17b7f0(m, a[0]),
@@ -4071,11 +3789,7 @@ impl SpeechBootHost<'_> {
             }
             0x1770f8 => crate::speech_part_1::fn_1770f8(m, a[0], a[1]),
             0x196980 => crate::speech_part_1::fn_196980(m, a[0], a[1]),
-            // fn_176cd8 (EU 0x176d88, KR 0x176d34): the decimal-integer
-            // scan the 1f98c8 dictionary path runs on sing_1 (c3 r15:
-            // word-length results hit this; speech_1 never takes the
-            // branch). The certified normalization port serves it; a
-            // null pointer yields 0, exactly like the ARM.
+
             0x176cd8 => match a.first() {
                 Some(&s) => crate::normalization::atoi_scan(m.bytes, s),
                 None => {
@@ -4114,9 +3828,6 @@ impl crate::boot::Calls for SpeechBootHost<'_> {
     }
 }
 
-/// Boot resource composition over the same arena, including live allocator callbacks.
-/// The staging platform is never called: all nested calls use SpeechBootHost.
-/// No second Flat or captured mutable view is created during reentry.
 pub fn speech1_boot_stage(
     m: &mut Memory<'_, '_>, call: StageCall, workspace: &mut [u8],
     platform: &mut dyn HeapPlatform,

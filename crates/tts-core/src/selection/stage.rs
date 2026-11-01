@@ -1,31 +1,12 @@
-//! SELECT_BET2 stage entry and its synthesis setup tree.
-//!
-//! Direct translations of the `src/` C under the Process entry
-//! (`fn_227d64` / EU `fn_227f20` / KR `fn_227fcc`) that operate on the
-//! caller's byte arena, following the conventions in [`super::arena_mid`]:
-//! every call that leaves the ported set goes through [`Host`], ROM-literal
-//! pointer arguments pass as `0xFFFF_FFFF`, and C stack out-pointers arrive
-//! as explicit trailing scratch addresses. Already-ported leaves run inline
-//! through [`super::arena_leaf::run`], so the fixture log never carries their
-//! ids; already-ported mid-level functions are called directly with the same
-//! arena and host.
-//!
-//! The engine/stream model is address based: the `Engine` words below name
-//! the field offsets of `src/fn_22508c.c`, the pipe method words name the
-//! `Pipe` offsets there, and the synthesis object words name the phase views
-//! in `src/fn_2a0aac.c`, `src/fn_2a497c.c`, `src/fn_2a651c.c` and
-//! `src/fn_2a6718.c`. Voice and blending tables are borrowed.
+
 
 use super::arena::{Arena, Host};
 use super::arena_leaf;
 use super::arena_mid;
 use super::{DecisionNode, DecisionTree, SelectionFeatures};
 
-/// Sentinel the harness uses for a ROM-literal pointer argument.
 const ROM_SENTINEL: u32 = 0xffff_ffff;
 
-/// Engine words from `src/fn_22508c.c`. The object is 0x7f5 bytes; the
-/// handle check in `fn_227d64` covers 0x7f8.
 const ENG_CTX: u32 = 0x08;
 const ENG_PIPE: u32 = 0x0c;
 const ENG_F10: u32 = 0x10;
@@ -52,25 +33,18 @@ const ENG_F7EC: u32 = 0x7ec;
 const ENG_F7F0: u32 = 0x7f0;
 const ENG_STATE: u32 = 0x7f4;
 
-/// Pipe method words from `src/fn_22508c.c`.
 const PIPE_CLOSE: u32 = 0x24;
 const PIPE_READ: u32 = 0x2c;
 const PIPE_CONSUME: u32 = 0x30;
 const PIPE_WRITE: u32 = 0x34;
 const PIPE_AVAIL: u32 = 0x48;
 
-/// Synthesis object words in the engine's own view from `src/fn_22508c.c`.
 const SYN_F20: u32 = 0x20;
 const SYN_ARENA: u32 = 0x24;
 const SYN_FEATURES: u32 = 0x3c;
 const SYN_CUR: u32 = 0x564;
 const SYN_POS: u32 = 0x568;
 
-/// fn_2a0090 / EU fn_2a024c / KR fn_2a02f8.
-///
-/// Tears down the voice object: frees the null-terminated pointer array,
-/// releases the sub object, releases every item and frees the object itself
-/// through the owner's heap at `object -> f0 -> heap`.
 pub fn teardown_voice_object(arena: &mut Arena<'_>, host: &mut impl Host, object: u32) -> u32 {
     let mut rc = 0;
     if object != 0 {
@@ -116,12 +90,6 @@ pub fn teardown_voice_object(arena: &mut Arena<'_>, host: &mut impl Host, object
     rc
 }
 
-/// fn_2a651c / EU fn_2a66d8 / KR fn_2a6784.
-///
-/// Walks the model list to the latched end, latches the walked prefix, then
-/// runs the forward, distribution and stream passes. The three passes and the
-/// diagnostic log are host calls here; the trace open/close pairs only run
-/// with a nonzero trace object.
 pub fn step_models(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -246,12 +214,6 @@ pub fn step_models(
     result as u32
 }
 
-/// Runs one duration-table query for [`build_models`].
-///
-/// The environment is the feature block at `state + 0x3c`, the table window
-/// is `trees + 8`, and the parsed nodes travel in the caller's scratch. The
-/// question extent is scanned from the nodes exactly as far as the walk in
-/// [`DecisionTree::select`] reads.
 fn select_duration_row(
     arena: &Arena<'_>,
     state: u32,
@@ -299,16 +261,6 @@ fn select_duration_row(
         .expect("decision table resolves")
 }
 
-/// fn_2a497c / EU fn_2a4b38 / KR fn_2a4be4.
-///
-/// Builds the timed model list from the feature durations, then marks phrase
-/// boundaries and latches the list. The decision-tree query runs inline
-/// through [`DecisionTree::select`], durations through
-/// [`arena_mid::read_durations`], and pool/log/dump calls through the host.
-/// `nodes` must hold the largest table the queries touch; `scratch` supplies
-/// eight bytes for the duration reads. The `0x989680` target clamp and the
-/// `0x7fffff` stretch clamp are the pool words the original loads in every
-/// region, verified from the US, EU and KR images.
 #[allow(clippy::too_many_arguments)]
 pub fn build_models(
     arena: &mut Arena<'_>,
@@ -787,16 +739,6 @@ pub fn build_models(
     status
 }
 
-/// fn_2a6718 / EU fn_2a68d4 / KR fn_2a6980.
-///
-/// Renders one synthesis pass from the phone models into the output rows.
-/// The filter-row, input-table, gain-table, workspace and stream helpers run
-/// through [`arena_mid`], voice pairs through [`super::arena::read_voice_pair`],
-/// and the lattice/mean/variance stages, heap and log through the host.
-/// `values` supplies twelve bytes for the mean/variance out-pointers; the
-/// blending tables borrow the seven `D_917238` words per side. The
-/// `fn_195ae8` tail copy runs inline through [`arena_leaf`], so the fixture
-/// log never carries its id.
 #[allow(clippy::too_many_arguments)]
 pub fn synthesize_phones(
     arena: &mut Arena<'_>,
@@ -1310,8 +1252,7 @@ pub fn synthesize_phones(
         }
         order = order.wrapping_add(1);
     }
-    // A failed order iteration jumps straight to cleanup, skipping the
-    // overlap store and the first-order fill.
+
     if rc < 0x8000_0000 {
         arena.set_u32(synth.wrapping_add(0x3a98), overlap as u32);
     }
@@ -1342,7 +1283,6 @@ pub fn synthesize_phones(
     )
 }
 
-/// Address of one history word: `synth + 0x56c + ((frame * 50 + order) * 3 + channel) * 4`.
 fn history_at(synth: u32, frame: i32, order: i32, channel: i32) -> u32 {
     synth.wrapping_add(0x56c).wrapping_add(
         (((frame as u32).wrapping_mul(50).wrapping_add(order as u32))
@@ -1352,20 +1292,16 @@ fn history_at(synth: u32, frame: i32, order: i32, channel: i32) -> u32 {
     )
 }
 
-/// Address of one tail word: `synth + 0x344c + (order * 10 + index) * 4`.
 fn tails_at(synth: u32, order: i32, index: i32) -> u32 {
     synth
         .wrapping_add(0x344c)
         .wrapping_add(((order as u32).wrapping_mul(10).wrapping_add(index as u32)).wrapping_mul(4))
 }
 
-/// Reads one blending weight, panicking when the borrowed table is short.
 fn blend_value(table: &[i32], index: i32) -> i32 {
     table[index as usize]
 }
 
-/// Releases the mean/variance buffers, the borrowed input rows, both heaps
-/// and the finished previous pass, then restores the channel count.
 #[allow(clippy::too_many_arguments)]
 fn cleanup(
     arena: &mut Arena<'_>,
@@ -1419,8 +1355,6 @@ fn cleanup(
     rc
 }
 
-/// Inlines `allocateRows` from `src/fn_2a6718.c`: two heap builds plus the
-/// row-pointer fan-out over `rows` rows of `columns` with `pad` guard words.
 fn allocate_rows(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -1462,17 +1396,6 @@ fn allocate_rows(
     0
 }
 
-/// fn_2a0aac / EU fn_2a0c68 / KR fn_2a0d14.
-///
-/// Parses the phoneme text, binds the text/marker streams, allocates the
-/// sixty feature columns and runs the voice rule pass. Parser, pool, stream,
-/// rule, voice-data and log calls go through the host; the small string and
-/// memory leaves run inline through [`arena_leaf`], so the fixture log never
-/// carries their ids. `scratch` supplies 176 bytes: the debug number at +0,
-/// the phone probe at +16, the parser slot at +20, the phone-name slot at
-/// +24, the debug name at +32, the `"!<>"` / `"-%'\"*"` literals at +96 and
-/// +100, and the two `u8`/`u16` feature-name prefixes at +107 and +139 for
-/// the inline copy.
 #[allow(clippy::too_many_arguments)]
 pub fn setup_features(
     arena: &mut Arena<'_>,
@@ -1508,7 +1431,7 @@ pub fn setup_features(
     let not_set = scratch.wrapping_add(96);
     let special_set = scratch.wrapping_add(100);
     let prefix8 = scratch.wrapping_add(107);
-    // prefix8 holds 32 chars plus the terminator; prefix16 starts past it.
+
     let prefix16 = scratch.wrapping_add(140);
     arena_leaf::run(arena, 0x195bec, &[number, 0, 16]);
     for (i, byte) in [0x21u8, 0x3c, 0x3e, 0].iter().enumerate() {
@@ -1542,8 +1465,7 @@ pub fn setup_features(
         rc = host
             .call(arena, 0x17b704, &[heap, ROM_SENTINEL, parser_slot])
             .0;
-        // The callee writes the slot even on failure; the tail releases a
-        // non-null parser.
+
         parser = arena.u32(parser_slot);
         if rc >= 0x8000_0000 {
             return finish_setup(
@@ -1606,9 +1528,7 @@ pub fn setup_features(
             );
         }
     } else {
-        // The original restarts from the unskipped text here (`movne r5,
-        // r7`); the skip loop only feeds the '#' check. The C reuses the
-        // skipped cursor, which drops leading quote bytes.
+
         cursor = text;
         while arena.u8(cursor) != 0 {
             let ch = arena.u8(cursor);
@@ -2236,9 +2156,6 @@ pub fn setup_features(
     )
 }
 
-/// Releases the parser, then on failure tears down the arena, the features
-/// and any published marker table, matching the `done` label in
-/// `src/fn_2a0aac.c`.
 #[allow(clippy::too_many_arguments)]
 fn finish_setup(
     arena: &mut Arena<'_>,
@@ -2266,7 +2183,6 @@ fn finish_setup(
     rc
 }
 
-/// Logs the allocation failure and finishes through [`finish_setup`].
 #[allow(clippy::too_many_arguments)]
 fn setup_alloc_failed(
     arena: &mut Arena<'_>,
@@ -2293,15 +2209,6 @@ fn setup_alloc_failed(
     )
 }
 
-/// fn_2a0178 / EU fn_2a0334 / KR fn_2a03e0.
-///
-/// Loads the voice object from the resource reader, dispatching on chunk
-/// tags. Reader, heap and voice-data calls go through the host; the small
-/// string and memory leaves run inline through [`arena_leaf`], so the
-/// fixture log never carries their ids. `scratch` supplies 96 bytes: the
-/// chunk tag at +0, the `TAGA` halfword at +8, the entry length at +12, the
-/// eleven tag literals at +16, the handle context slot at +72, and the
-/// reader remainder and cursor slots at +76 and +80.
 #[allow(clippy::too_many_arguments)]
 pub fn open_voice_object(
     arena: &mut Arena<'_>,
@@ -2569,8 +2476,6 @@ pub fn open_voice_object(
     rc
 }
 
-/// Releases a failed voice-object load, matching the `cleanup` label in
-/// `src/fn_2a0178.c`.
 fn teardown_load(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -2619,20 +2524,6 @@ fn teardown_load(
     rc
 }
 
-/// fn_227d64 / EU fn_227f20 / KR fn_227fcc.
-///
-/// The SELECT_BET2 Process entry: a four-state machine over the engine.
-/// State 0 consumes the text/marker streams and runs [`setup_features`] and
-/// [`build_models`]; state 1 steps the model list with [`step_models`];
-/// states 2 and 3 render frames with [`synthesize_phones`] and publish them.
-/// Pipe, pool, heap, log and unported setup/teardown calls go through the
-/// host. `scratch` supplies 284 bytes for the pipe out-words at +0, the
-/// model-step flag at +20, the frame flag at +21, the feature-setup scratch
-/// at +32, the duration scratch at +208 and the mean/variance scratch at
-/// +216 (the +228/+256 bytes are unused: the blend weights come from the
-/// D_917238 ROM words, see stage_state_emit); `nodes` must hold the largest
-/// duration table the model build
-/// touches. The unused `a`/`b` parameters are kept for call-shape fidelity.
 #[allow(clippy::too_many_arguments)]
 pub fn process_stage(
     arena: &mut Arena<'_>,
@@ -2644,6 +2535,7 @@ pub fn process_stage(
     status: u32,
     scratch: u32,
     nodes: &mut [DecisionNode],
+    rom: crate::rom_region::Rom,
 ) -> u32 {
     let context = arena.u32(engine.wrapping_add(ENG_CTX));
     let heap = arena.u32(context.wrapping_add(4));
@@ -2719,7 +2611,7 @@ pub fn process_stage(
         }
     } else if state == 2 || state == 3 {
         rc = stage_state_emit(
-            arena, host, engine, heap, log, pipe, status, scratch, done_slot, state,
+            arena, host, engine, heap, log, pipe, status, scratch, done_slot, state, rom,
         );
     }
     if arena.u32(engine.wrapping_add(ENG_PROF)) != 0 {
@@ -2736,8 +2628,6 @@ pub fn process_stage(
     rc
 }
 
-/// State 0 of [`process_stage`]: stream intake, synthesis setup and the jump
-/// to state 1 or -1.
 #[allow(clippy::too_many_arguments)]
 fn stage_state_zero(
     arena: &mut Arena<'_>,
@@ -3074,16 +2964,12 @@ fn stage_state_zero(
     rc
 }
 
-/// Latches `state` and status 4 for [`process_stage`], returning the
-/// failure code the `fail0` path in `src/fn_22508c.c` returns.
 fn stage_fail(arena: &mut Arena<'_>, engine: u32, status: u32, state: i8, rc: u32) -> u32 {
     arena.set_u8(engine.wrapping_add(ENG_STATE), state as u8);
     arena.set_u8(status, 4);
     rc
 }
 
-/// States 2 and 3 of [`process_stage`]: frame render, marker walk, frame
-/// publication and the finishing teardown.
 fn stage_state_emit(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -3095,6 +2981,7 @@ fn stage_state_emit(
     scratch: u32,
     done_slot: u32,
     state: i32,
+    rom: crate::rom_region::Rom,
 ) -> u32 {
     let synth = arena.u32(engine.wrapping_add(ENG_SYNTH));
     if arena.u32(engine.wrapping_add(ENG_PROF)) != 0 {
@@ -3109,20 +2996,16 @@ fn stage_state_emit(
         );
     }
     let values = scratch.wrapping_add(216);
-    // Blend weights (seg5 r5): the ARM reads the D_917238 ROM words
-    // directly (current [1..7] at 0x91728c, previous [7..1] at 0x9172a8;
-    // verified against the blend loop's literal pool on speech_2). The
-    // old scratch+228/+256 reads saw whatever the duration tables left
-    // behind (nothing ever writes them), so any call with a nonzero
-    // blend bound (numbers/dates branches) exploded linear[0..6].
-    // US addresses, matching the 0x2a7740 arm's convention.
+
+    let wcur = crate::rom_region::addr(rom, 0x91728c);
+    let wprev = crate::rom_region::addr(rom, 0x9172a8);
     let mut blend_current = [0i32; 7];
     let mut blend_previous = [0i32; 7];
     for i in 0..7 {
         blend_current[i] =
-            arena.u32(0x91728c_u32.wrapping_add((i as u32).wrapping_mul(4))) as i32;
+            arena.u32(wcur.wrapping_add((i as u32).wrapping_mul(4))) as i32;
         blend_previous[i] =
-            arena.u32(0x9172a8_u32.wrapping_add((i as u32).wrapping_mul(4))) as i32;
+            arena.u32(wprev.wrapping_add((i as u32).wrapping_mul(4))) as i32;
     }
     let mut rc = synthesize_phones(
         arena,
@@ -3345,7 +3228,6 @@ fn stage_state_emit(
     emit_epilogue(arena, host, engine, rc)
 }
 
-/// Runs the shared stage epilogue: the unconditional profile tick.
 fn emit_epilogue(arena: &mut Arena<'_>, _host: &mut impl Host, engine: u32, rc: u32) -> u32 {
     arena_leaf::run(
         arena,
@@ -3358,5 +3240,3 @@ fn emit_epilogue(arena: &mut Arena<'_>, _host: &mut impl Host, engine: u32, rc: 
     );
     rc
 }
-
-// __APPEND_3__

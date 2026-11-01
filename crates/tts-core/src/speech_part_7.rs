@@ -1,6 +1,5 @@
-//! Speech synthesis over caller-owned guest memory.
-//! Callers provide disjoint twelve-byte local-parameter scratch and ROM weights.
-//! The host must dispatch available engine callees to their real Rust ports.
+
+
 use crate::selection::{arena::{Arena, Host}, arena_mid as mid, arena_mid, arena_leaf};
 const ROM_SENTINEL:u32=u32::MAX;
 const ROM: u32 = u32::MAX;
@@ -16,7 +15,7 @@ fn local(m:&mut Arena<'_>,p:u32,body:impl FnOnce(&mut Arena<'_>)->u32)->u32 {
     for (i,v) in saved.iter().enumerate(){m.set_u32(p+i as u32*4,*v);}
     rc
 }
-/// fn_2a8414. weights are the eight signed D_91726c words.
+
 pub fn fn_2a8414(m:&mut Arena<'_>,h:&mut impl Host,ctx:u32,voice:u32,settings:u32,params:u32,weights:&[i32;8])->u32 {
     if m.u32(ctx+0x454)==0 {return 0;}
     local(m,params,|m| {
@@ -127,13 +126,11 @@ pub fn fn_2a8414(m:&mut Arena<'_>,h:&mut impl Host,ctx:u32,voice:u32,settings:u3
         mid::release_selector(m,h,workspace);mid::release_filter(m,h,filter);rc
     })
 }
-/// fn_2a6718. Adapted from the existing arena translation, including its
-/// private allocateRows. Caller scratch is restored after the pass.
+
 pub fn fn_2a6718(m:&mut Arena<'_>,h:&mut impl Host,s:u32,model:u32,cfg:u32,done:u32,params:u32,current:&[i32;7],previous:&[i32;7])->u32 {
     local(m,params,|m|synthesize_phones_body(m,h,s,model,cfg,done,params,current,previous))
 }
-/// fn_2a7740. weights are the fourteen D_91728c words. The host must bind
-/// fn_2a2be0 to the existing speech_part_5 port and its caller-owned FilterWork.
+
 pub fn fn_2a7740(m:&mut Arena<'_>,h:&mut impl Host,ctx:u32,config:u32,options:u32,output:u32,weights:&[i32;14])->u32 {
     if m.u8(options+0x46)==0 {return 0;}
     local(m,output,|m| {
@@ -194,7 +191,7 @@ pub fn fn_2a7740(m:&mut Arena<'_>,h:&mut impl Host,ctx:u32,config:u32,options:u3
                             for channel in 0..get(m,p+0x18) {
                                 let v=get(m,at(m.u32(output+4),channel+1)).clamp(-0x1f400000,0x1f400000);
                                 m.set_u32(cell(m,m.u32(p+0x30),channel,count),v as u32);
-                                // The ROM's q-voice branch repeats this same clamp.
+
                                 if m.u8(model+20)&4!=0 && channel==0 && m.u8(options+0x42)==b'q' {
                                     let dst=cell(m,m.u32(p+0x30),0,count);m.set_u32(dst,get(m,dst).clamp(-0x1f400000,0x1f400000) as u32);
                                 }
@@ -268,7 +265,6 @@ pub fn fn_2a7740(m:&mut Arena<'_>,h:&mut impl Host,ctx:u32,config:u32,options:u3
     })
 }
 
-// Adapted from selection::stage. Keep all local helpers in this owned unit.
 fn synthesize_phones_body(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -776,8 +772,7 @@ fn synthesize_phones_body(
         }
         order = order.wrapping_add(1);
     }
-    // A failed order iteration jumps straight to cleanup, skipping the
-    // overlap store and the first-order fill.
+
     if rc < 0x8000_0000 {
         arena.set_u32(synth.wrapping_add(0x3a98), overlap as u32);
     }
@@ -808,7 +803,6 @@ fn synthesize_phones_body(
     )
 }
 
-/// Address of one history word: `synth + 0x56c + ((frame * 50 + order) * 3 + channel) * 4`.
 fn history_at(synth: u32, frame: i32, order: i32, channel: i32) -> u32 {
     synth.wrapping_add(0x56c).wrapping_add(
         (((frame as u32).wrapping_mul(50).wrapping_add(order as u32))
@@ -818,20 +812,16 @@ fn history_at(synth: u32, frame: i32, order: i32, channel: i32) -> u32 {
     )
 }
 
-/// Address of one tail word: `synth + 0x344c + (order * 10 + index) * 4`.
 fn tails_at(synth: u32, order: i32, index: i32) -> u32 {
     synth
         .wrapping_add(0x344c)
         .wrapping_add(((order as u32).wrapping_mul(10).wrapping_add(index as u32)).wrapping_mul(4))
 }
 
-/// Reads one blending weight, panicking when the borrowed table is short.
 fn blend_value(table: &[i32], index: i32) -> i32 {
     table[index as usize]
 }
 
-/// Releases the mean/variance buffers, the borrowed input rows, both heaps
-/// and the finished previous pass, then restores the channel count.
 #[allow(clippy::too_many_arguments)]
 fn cleanup(
     arena: &mut Arena<'_>,
@@ -885,8 +875,6 @@ fn cleanup(
     rc
 }
 
-/// Inlines `allocateRows` from `src/fn_2a6718.c`: two heap builds plus the
-/// row-pointer fan-out over `rows` rows of `columns` with `pad` guard words.
 fn allocate_rows(
     arena: &mut Arena<'_>,
     host: &mut impl Host,
@@ -927,4 +915,3 @@ fn allocate_rows(
     }
     0
 }
-

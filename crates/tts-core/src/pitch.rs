@@ -21,8 +21,6 @@ pub struct EuTracker {
     pub sample_rate: f32,
 }
 
-/// fn_1c1218's inline window_score: split accumulators preserve VFP rounding.
-/// Both windows must fit in `samples`.
 pub fn window_score(samples: &[i16], start: usize, candidate: usize, length: usize) -> f32 {
     let mut sum = 0.0;
     let mut second_sum = 0.0;
@@ -54,15 +52,10 @@ pub fn window_score(samples: &[i16], start: usize, candidate: usize, length: usi
     }
 }
 
-/// fn_1c1218, bound as native_us_pitch: US zero-crossing pitch tracker.
-/// Samples need readable padding through each candidate plus max_period / 2.
-/// `start + min_period` must remain readable even for an empty search.
 pub fn track_us(tracker: &mut PeriodTracker, samples: &[i16], start: usize, end: usize) -> i32 {
     track_crossings(tracker, samples, start, end, false)
 }
 
-/// KR fn_1c144c, counterpart of US fn_1c1218.
-/// Uses the US sample padding contract and reverses selection after stability 2.
 pub fn track_kr(tracker: &mut PeriodTracker, samples: &[i16], start: usize, end: usize) -> i32 {
     track_crossings(tracker, samples, start, end, true)
 }
@@ -165,8 +158,6 @@ fn track_crossings(
     selected
 }
 
-/// EU fn_1c7164: select a peak, then prefer the nearest qualifying crossing.
-/// `lo` must be readable even when `hi <= lo`; otherwise `lo..hi` must fit.
 pub fn select_eu_peak(
     tracker: &mut PeriodTracker,
     peaks: &[i16],
@@ -237,10 +228,6 @@ pub fn select_eu_peak(
     result
 }
 
-/// EU fn_1c12c8: resonator-guided pitch tracker, with caller-owned float scratch.
-/// `frequencies` is the external D_8bf7dc table. `scratch` needs max_period entries.
-/// Samples need max_period entries after start. Peaks need padding through the
-/// selected search offset, even when the logical end precedes that offset.
 pub fn track_eu(
     tracker: &mut EuTracker,
     samples: &[i16],
@@ -372,7 +359,6 @@ fn reset_eu(tracker: &mut EuTracker, reset: i8) -> i32 {
     tracker.period.period
 }
 
-/// Language selection for the shared engine. Japanese uses a separate pitch path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language {
     UsEnglish,
@@ -385,7 +371,6 @@ pub enum Language {
     Japanese,
 }
 
-/// fn_1c1218 / EU fn_1c12c8 / KR fn_1c144c state owned by one engine instance.
 #[derive(Clone, Copy, Debug)]
 pub enum PitchTracker {
     Crossings(PeriodTracker),
@@ -393,8 +378,7 @@ pub enum PitchTracker {
 }
 
 impl PitchTracker {
-    /// Dispatch the regional tracker without global language or scratch state.
-    /// EU languages require Resonator; US English and Korean require Crossings.
+
     pub fn track(
         &mut self,
         language: Language,

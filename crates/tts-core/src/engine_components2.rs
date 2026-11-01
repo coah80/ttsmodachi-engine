@@ -1,9 +1,5 @@
-//! Language/spelling processor prefixes and reserved component leaves.
-//!
-//! These are not complete call-tree implementations. Recorded language and
-//! spelling stages run through live properties, heap growth and stream methods,
-//! or fail closed at the first unwired resource service. Untested marker-mode
-//! paths remain explicit instruction boundaries. No recorded outputs enter here.
+
+
 use crate::engine::{Error, Memory};
 use crate::engine_components::{CoreCalls, InternalCalls, RomHost};
 use crate::rom_region::{Rom, addr, to_us};
@@ -28,21 +24,12 @@ fn invoke(
     args[0] = m.word(pair)?;
     args[1] = m.word(pair + 4)?;
     args[2..2 + rest.len()].copy_from_slice(rest);
-    // The slot holds a guest address: normalize region-first so a twin
-    // that collides with another region's US key still routes to the
-    // running region's function (KR 0x1ed1d0 names the lid query, US
-    // 0x1ed1d0 the canonicalizer). Port-code literals never pass through
-    // here, so the US-first rule for those is unaffected.
+
     let raw = m.word(table + slot)?;
     let entry = crate::rom_region::to_us_guest(h.rom(), raw);
     h.call(m, entry, &args[..2 + rest.len()])
 }
 
-/// Live stream/depes query bindings and reserved component leaves.
-/// Growth helpers dispatch through the real frontend heap wrappers. Concrete
-/// allocator methods not wired here still fail closed through CoreCalls.
-/// The local read_direct_start image contains only scalar input state. Its
-/// returned guest pointer is preserved, never used as a local offset.
 pub struct ReadCalls;
 impl InternalCalls for ReadCalls {
     fn call(&mut self, m: &mut Memory<'_, '_>, entry: u32, a: &[u32]) -> Result<u32, Error> {
@@ -51,8 +38,7 @@ impl InternalCalls for ReadCalls {
         read_call(m, to_us(rom, entry), a, &mut h)
     }
 }
-/// Region-aware form of [`ReadCalls`]. The caller builds it with the live
-/// region; nested ports read it through [`InternalCalls::rom`].
+
 pub struct RegionalReads {
     pub rom: Rom,
 }
@@ -101,9 +87,7 @@ pub(crate) fn read_call(m: &mut Memory<'_, '_>, entry:u32, a:&[u32], h:&mut impl
                     return Ok(rc);
                 }
                 let mut local = [0u8; 128];
-                // Stream at 4, state at 16; outputs at 112/116. Preserve the
-                // original address arithmetic by choosing the input buffer
-                // word so the port produces the actual guest pointer.
+
                 m.read(a[0], &mut local[4..16])?;
                 let state = m.word(a[0] + 4)?;
                 local[8..12].copy_from_slice(&16u32.to_le_bytes());
@@ -143,7 +127,7 @@ pub(crate) fn read_call(m: &mut Memory<'_, '_>, entry:u32, a:&[u32], h:&mut impl
                 let rc=opts.set(a[1],a[2] as i32,a[3] as i32,&mut Validator{object:a[0],key:a[1]});
                 if !bad(rc) {
                     let value=if a[3]==1 {opts.first} else {opts.second};
-                    m.put_word(a[0]+if a[3]==1 {56} else {60},value as u32)?; // negative-control: depes set
+                    m.put_word(a[0]+if a[3]==1 {56} else {60},value as u32)?;
                 }
                 Ok(rc)
             }
@@ -209,10 +193,6 @@ pub(crate) fn read_call(m: &mut Memory<'_, '_>, entry:u32, a:&[u32], h:&mut impl
     }
 }
 
-/// fn_1d3314 ABI: (LanguageEngine*, key=0xf3c0, unused, unused, active*) -> rc.
-/// s is a disjoint caller-owned 2048-byte local frame.
-/// Complete idle/empty-EOS paths; text and marker transformation remain unwired.
-/// Calls the real handle/stream Rust ports via ReadCalls on the live path.
 pub(crate) fn process_1d3314(
     m: &mut Memory<'_, '_>,
     p: u32,
@@ -225,7 +205,7 @@ pub(crate) fn process_1d3314(
     if bad(rc) {
         return Ok(0x8bd0_2008);
     }
-    m.write(active, &[1])?; // negative-control: language active write
+    m.write(active, &[1])?;
     if m.word(p + 32)? == 0 {
         return Ok(rc);
     }
@@ -265,8 +245,7 @@ pub(crate) fn process_1d3314(
     if byte(m, p + 68)? == 1 {
         let voice = m.word(p + 0x34c)?;
         if voice != 0 {
-            // Only the >3 predicate is needed. The fifth byte is our sentinel;
-            // the real strlen port computes the predicate on these inputs.
+
             let mut prefix = [0; 5];
             for i in 0..4 {
                 prefix[i] = byte(m, voice + i as u32)?;
@@ -330,11 +309,6 @@ pub(crate) fn process_1d3314(
     publish_tail(m,p,s,h)
 }
 
-/// The publish tail of fn_1d3314.
-///
-/// The ARM consumes the text into the input stream, publishes the events,
-/// writes the text, saves the retained events and writes the events.  Each
-/// call's arguments come from the frame the root body filled.
 fn publish_tail(m:&mut Memory<'_, '_>,p:u32,s:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
     if m.word(s+0x00)?!=0 {
         let rc=consume_text(m,m.word(p+0x30)?,m.word(s+0x00)?,m.word(s+0x0c)?,h)?;
@@ -357,13 +331,6 @@ fn publish_tail(m:&mut Memory<'_, '_>,p:u32,s:u32,h:&mut impl InternalCalls)->Re
     Ok(0)
 }
 
-/// The ARM's fn_1503b0: the stream's text consume.
-///
-/// The list is compacted when the buffer cannot hold the text, the text
-/// buffer is grown only when the compaction does not make room, the text is
-/// copied into the buffer at the stream's position and the stream's written
-/// word advances.  The event writer the ARM calls next writes no persistent
-/// byte.
 fn consume_text(m:&mut Memory<'_, '_>,stream:u32,count:u32,src:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
     let state=m.word(stream+4)?;
     let written=m.word(state+44)?;
@@ -391,7 +358,7 @@ fn consume_text(m:&mut Memory<'_, '_>,stream:u32,count:u32,src:u32,h:&mut impl I
                 m.put_word(state+64,need)?;
             }
         } else {
-            // The ROM advances the base and copies nothing.
+
             m.put_word(state+56,base.wrapping_add(count))?;
             copy=false;
         }
@@ -409,11 +376,6 @@ fn consume_text(m:&mut Memory<'_, '_>,stream:u32,count:u32,src:u32,h:&mut impl I
     Ok(0)
 }
 
-/// fn_21a25c ABI: (SpellingProcessor*, key=0xf389, unused, unused, active*) -> rc.
-/// s is a disjoint caller-owned 2048-byte local frame.
-/// Idle/drain/EOS, plain ASCII text, language-run rebuilding, allocation and
-/// cleanup are live. Dictionary expansion currently reaches the resource-read
-/// boundary; special marker modes beyond that boundary remain untranslated.
 pub(crate) fn process_21a25c(
     m: &mut Memory<'_, '_>,
     p: u32,
@@ -426,7 +388,7 @@ pub(crate) fn process_21a25c(
     if bad(rc) {
         return Ok(0x8a60_2008);
     }
-    m.write(active, &[1])?; // negative-control: spelling active write
+    m.write(active, &[1])?;
     m.write(s, &[0; 64])?;
     let table = m.word(p + 28)?;
     rc = invoke(m, h, table, 72, p + 32, &[s, s + 8])?;
@@ -464,8 +426,7 @@ pub(crate) fn process_21a25c(
             }
             return Ok(rc);
         }
-        // ROM property-key pointer is supplied in the literal pool. The
-        // dependency remains unwired rather than guessing a property value.
+
         return Err(Error::UnsupportedStage { entry: 0x175a1c });
     }
     let depes = m.word(p + 24)?;
@@ -520,7 +481,7 @@ pub(crate) fn process_21a25c(
     let text=m.word(s+12)?;
     let mut text_len=(m.word(s+16)?/2) as u16;
     let base=m.word(records+12)?;
-    // The old prefix didn't publish inputOffset=0 on this branch.
+
     if base==0 {m.put_word(s+20,0)?;}
     let logger=m.word(m.word(p)?+16)?;
     literal(m,s+100,b" \0")?;
@@ -542,7 +503,7 @@ pub(crate) fn process_21a25c(
             if i==text_len {trailing=(i as u32).wrapping_sub(1).wrapping_sub(leading)&255;single=true;}
         }
     }
-    // Logging is dispatched, not interpreted as a fabricated dependency reply.
+
     literal(m,s+100,b"Markers IN\0")?;
     h.call(m,0x1738e8,&[logger,addr(h.rom(), 0x8fa20c),5,0,s+100])?;
     literal(m,s+128,b"latin\0normal\0")?;
@@ -560,7 +521,6 @@ pub(crate) fn process_21a25c(
 
 }
 
-/// Dispatches only the two owned processors. UnsupportedStage is never success.
 pub fn process(
     m: &mut Memory<'_, '_>,
     entry: u32,
@@ -568,8 +528,7 @@ pub fn process(
     scratch: u32,
     h: &mut impl InternalCalls,
 ) -> Result<u32, Error> {
-    // The regional ROMs relocate the two processor entries. The region is
-    // caller-owned: it rides the wrapped host, never a global.
+
     let rom = h.rom().or(Rom::from_entry(entry));
     let mut h = RomHost { inner: h, rom };
     let h = &mut h;
@@ -586,8 +545,6 @@ fn half(m: &Memory<'_, '_>, a: u32) -> Result<u16, Error> {
     Ok(u16::from_le_bytes(bytes))
 }
 
-/// Adapt disjoint guest strings to the existing byte-string comparison port.
-/// Each step uses live input bytes; no maximum string length is imposed.
 fn compare_strings(m: &Memory<'_, '_>, mut a: u32, mut b: u32) -> Result<i32, Error> {
     loop {
         let x = byte(m, a)?;
@@ -601,9 +558,6 @@ fn compare_strings(m: &Memory<'_, '_>, mut a: u32, mut b: u32) -> Result<i32, Er
     }
 }
 
-/// fn_1cfc18 / EU fn_1cfdd4 / KR fn_1cfe80.
-/// ABI: (LanguageEngine*, const char* name, u32 alternate) -> LangEntry*.
-/// Searches the selected 26-byte-entry model in caller-owned guest memory.
 pub(crate) fn find_language(
     m: &Memory<'_, '_>,
     p: u32,
@@ -625,9 +579,6 @@ pub(crate) fn find_language(
     Ok(0)
 }
 
-/// fn_21a1fc / EU fn_21a3b8 / KR fn_21a464.
-/// ABI: (const TextEvent*, const TextEvent*) -> i32, returned as r0 bits.
-/// ARM subtraction wraps, and language markers precede a same-position 0x22.
 pub(crate) fn compare_events(m: &Memory<'_, '_>, a: u32, b: u32) -> Result<u32, Error> {
     let af = m.word(a.wrapping_add(12))?;
     let bf = m.word(b.wrapping_add(12))?;
@@ -646,9 +597,6 @@ pub(crate) fn compare_events(m: &Memory<'_, '_>, a: u32, b: u32) -> Result<u32, 
         .wrapping_sub(m.word(b.wrapping_add(4))?))
 }
 
-/// Adapt the existing frontend heap wrappers to live guest vtable calls.
-/// The local projection contains only the allocator object's context pointer.
-/// Callback errors are returned, never converted into allocation refusal.
 fn heap_binding(
     m: &mut Memory<'_, '_>,
     entry: u32,
@@ -688,7 +636,7 @@ fn heap_binding(
         }
     }
     let heap = a[0];
-    // A realloc with old=null still dispatches allocate if size != 0.
+
     let calls_method = heap != 0
         && if entry == 0x1963e0 {
             a[2] != 0
@@ -729,10 +677,6 @@ fn heap_binding(
     }
 }
 
-/// fn_1d1808 / EU fn_1d19c4 / KR fn_1d1a70.
-/// ABI: (LanguageEngine*, void** buffer, u32* capacity, u32* count,
-///       u32 element_size, u32 growth) -> rc.
-/// Allocation/reallocation goes through the live dependency dispatcher.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn grow_array(
     m: &mut Memory<'_, '_>,
@@ -772,9 +716,6 @@ pub(crate) fn grow_array(
     Ok(0)
 }
 
-/// fn_219e80 / EU fn_21a03c / KR fn_21a0e8.
-/// ABI: (SpellingProcessor*, Mark** array, u16* capacity, u32 need,
-///       u32 extra) -> rc. Padding bytes of each four-byte mark are preserved.
 pub(crate) fn reserve_marks(
     m: &mut Memory<'_, '_>,
     p: u32,
@@ -819,7 +760,7 @@ fn put_half(m: &mut Memory<'_, '_>, a: u32, v: u16) -> Result<(), Error> {
     m.write(a, &v.to_le_bytes())
 }
 fn copy_bytes(m: &mut Memory<'_, '_>, d: u32, s: u32, n: u32) -> Result<(), Error> {
-    // memmove permits overlap in either direction.
+
     if d > s && d.wrapping_sub(s) < n {
         for i in (0..n).rev() { m.write(d.wrapping_add(i), &[byte(m,s.wrapping_add(i))?])?; }
     } else {
@@ -873,8 +814,6 @@ fn allocation_log(m: &mut Memory<'_, '_>, p:u32, spelling:bool, h:&mut impl Inte
         if spelling {40000} else {0xbb80},0])?; Ok(())
 }
 
-/// fn_195d30. First `c` (low byte) in the NUL-terminated guest string,
-/// or 0 on a miss. A zero `c` matches the terminator, as the ROM does.
 fn find_separator(m: &Memory<'_, '_>, s: u32, c: u32) -> Result<u32, Error> {
     let c = c as u8;
     let mut p = s;
@@ -886,13 +825,11 @@ fn find_separator(m: &Memory<'_, '_>, s: u32, c: u32) -> Result<u32, Error> {
     }
 }
 
-/// fn_1cf868. Retained events are copied from live input, and the retained
-/// UTF-16 payload is independently allocated and copied, never borrowed.
 pub(crate) fn save_events(m:&mut Memory<'_, '_>,p:u32,clear:u32,events:u32,n:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
     let saved=p+0x2c0;
     if clear!=0 {
         if half(m,saved+48)?==0x15 && m.word(saved+68)?!=0 {free(m,p,m.word(saved+68)?,h)?;}
-        zero(m,saved,72)?; // negative-control: retained-event clear
+        zero(m,saved,72)?;
     }
     if events!=0 && byte(m,p+0x43)?==1 {
         for i in 0..n {
@@ -919,14 +856,12 @@ pub(crate) fn save_events(m:&mut Memory<'_, '_>,p:u32,clear:u32,events:u32,n:u32
     Ok(0)
 }
 
-/// fn_219f74. Fresh and grown arrays have deliberately different failure
-/// ownership, matching the ROM, including its nine-byte first allocation.
 pub(crate) fn intern_pair(m:&mut Memory<'_, '_>,p:u32,array:u32,count:u32,s:u32,index:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
     let n=half(m,count)? as u32;
     if n!=0 {
         for i in 0..n {
             if compare_strings(m,m.word(m.word(array)?+i*8)?,s)?==0 {
-                put_half(m,index,i as u16)?; // negative-control: interned index
+                put_half(m,index,i as u16)?;
                 return Ok(0);
             }
         }
@@ -961,8 +896,6 @@ pub(crate) fn intern_pair(m:&mut Memory<'_, '_>,p:u32,array:u32,count:u32,s:u32,
     Ok(0)
 }
 
-/// fn_219790. Registry methods remain real dependency calls, not success stubs.
-/// Resource names use the original in-function literal addresses.
 pub(crate) fn destroy_spelling(m:&mut Memory<'_, '_>,p:u32,key:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
     let rc=crate::normalization::quad_check(p,key,0xf389,0x4c);
     if bad(rc) {return Ok(0x8a602008);}
@@ -972,7 +905,7 @@ pub(crate) fn destroy_spelling(m:&mut Memory<'_, '_>,p:u32,key:u32,h:&mut impl I
         while i<half(m,p+72)? {
             let a=m.word(p+68)?+i as u32*8;
             free(m,p,m.word(a)?,h)?;
-            m.put_word(m.word(p+68)?+i as u32*8,0)?; // negative-control: freed pair
+            m.put_word(m.word(p+68)?+i as u32*8,0)?;
             free(m,p,m.word(m.word(p+68)?+i as u32*8+4)?,h)?;
             m.put_word(m.word(p+68)?+i as u32*8+4,0)?;
             i=i.wrapping_add(1);
@@ -980,8 +913,7 @@ pub(crate) fn destroy_spelling(m:&mut Memory<'_, '_>,p:u32,key:u32,h:&mut impl I
         free(m,p,m.word(p+68)?,h)?;
         m.put_word(p+68,0)?;
     }
-    // These are original literal addresses, not local synthetic registry data.
-    // The dispatcher may fail closed until the resource adapter is available.
+
     for name in [0x219890,0x21989c,0x2198a8] {
         h.call(m,0x17b1c4,&[m.word(m.word(p)?+24)?,name])?;
     }
@@ -989,10 +921,8 @@ pub(crate) fn destroy_spelling(m:&mut Memory<'_, '_>,p:u32,key:u32,h:&mut impl I
     Ok(0)
 }
 
-/// Caller-owned 2048-byte local frame for callbacks taking stack pointers.
-/// Its contents are temporary, not part of the processor's persistent state.
 pub fn leaf(m:&mut Memory<'_, '_>,entry:u32,a:&[u32],s:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
-    // The region is caller-owned: it rides the wrapped host, never a global.
+
     let rom = h.rom().or(Rom::from_entry(entry));
     let mut h = RomHost { inner: h, rom };
     let h = &mut h;
@@ -1009,7 +939,6 @@ pub fn leaf(m:&mut Memory<'_, '_>,entry:u32,a:&[u32],s:u32,h:&mut impl InternalC
 
 fn literal(m:&mut Memory<'_, '_>,s:u32,text:&[u8])->Result<u32,Error>{m.write(s,text)?;Ok(s)}
 
-/// fn_1cf9d0. Finalization, releases, and property unregistration.
 fn destroy_language(m:&mut Memory<'_, '_>,p:u32,key:u32,s:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
     let v=m.word(addr(h.rom(), 0x8f884c))?; let w=m.word(addr(h.rom(), 0x8f8850))?;
     let rc=crate::normalization::quad_check(p,key,0xf3c0,0x358);
@@ -1038,7 +967,6 @@ fn destroy_language(m:&mut Memory<'_, '_>,p:u32,key:u32,s:u32,h:&mut impl Intern
     Ok(0)
 }
 
-/// fn_1cfce8. Three-letter language list parser and alternate-model fallback.
 fn parse_codes(m:&mut Memory<'_, '_>,p:u32,codes:u32,s:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
     if m.word(p+0x7c)?!=0 {
         free(m,p,m.word(p+0x7c)?,h)?;
@@ -1094,13 +1022,12 @@ fn parse_codes(m:&mut Memory<'_, '_>,p:u32,codes:u32,s:u32,h:&mut impl InternalC
     Ok(0)
 }
 
-/// fn_1d18cc. Select voice and try the two live COMPQUERY methods.
 fn choose_voice(m:&mut Memory<'_, '_>,p:u32,count:u32,voices:u32,index:u32,out:u32,s:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
     m.put_word(s,0)?;
     literal(m,s+4,b"lidoriginalvoice\0")?;
     let rc=h.call(m,0x175a1c,&[m.word(m.word(p)?+20)?,s+4,s])?;
     if bad(rc) {m.put_word(s,0)?;}
-    put_half(m,index,0)?; // negative-control: selected voice reset
+    put_half(m,index,0)?;
     m.write(out,&[0])?;
     while (half(m,index)? as u32)<count {
         let name=m.word(voices+half(m,index)? as u32*8)?;
@@ -1136,7 +1063,6 @@ fn choose_voice(m:&mut Memory<'_, '_>,p:u32,count:u32,voices:u32,index:u32,out:u
     Ok(rc)
 }
 
-/// fn_1d1be8. Segment rejection, bias updates and allocated language events.
 fn segment_events(m:&mut Memory<'_, '_>,a:&[u32],s:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
     let (p,out,cap,count,owned,owcap,owcount,base)=(a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7]);
     let segs=half(m,p+0x346)?; let mut i=0u16; let mut rc=0;
@@ -1206,11 +1132,9 @@ fn segment_events(m:&mut Memory<'_, '_>,a:&[u32],s:u32,h:&mut impl InternalCalls
     Ok(rc)
 }
 
-/// fn_1d2fb0. Reserve and prepend pending language events without filling
-/// untouched event fields. All stream writes go through the supplied methods.
 fn prepare_events(m:&mut Memory<'_, '_>,a:&[u32],s:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
     let (p,input,output,ic,oc,allocated)=(a[0],a[1],a[2],a[3],a[4],a[5]);
-    m.put_word(oc,0)?;m.put_word(ic,0)?; // negative-control: event counts
+    m.put_word(oc,0)?;m.put_word(ic,0)?;
     let table=m.word(p+16)?;
     let rc=invoke(m,h,table,44,p+40,&[input,ic])?;
     if bad(rc) {return Ok(rc);}
@@ -1221,7 +1145,7 @@ fn prepare_events(m:&mut Memory<'_, '_>,a:&[u32],s:u32,h:&mut impl InternalCalls
     let props=m.word(m.word(p)?+20)?;
     if !bad(h.call(m,0x175a1c,&[props,s+4,s])?) {
         let property=m.word(s)?;
-        // The ROM copies this property into a local eight-byte voice buffer.
+
         string_copy(m,s+16,property,false)?;
         if compare_strings(m,property,addr(h.rom(), 0x8f86d2))?==0 {state=1;}
         if string_len(m,property,false)?==3 {state=2;}
@@ -1300,18 +1224,15 @@ fn analyze_segment(m:&mut Memory<'_, '_>,p:u32,text:u32,start:u32,length:u32,bas
     segment_events(m,&[p,s,s+4,s+8,s+12,s+16,s+20,start.wrapping_add(base>>1)],s+256,h)
 }
 
-/// fn_1d2098. Language marker transformation. The caller supplies a disjoint
-/// 2048-byte local frame. LID analysis, property and stream methods are real
-/// dependencies through InternalCalls; an unwired method always blocks.
 fn language_text(m:&mut Memory<'_, '_>,p:u32,s:u32,h:&mut impl InternalCalls)->Result<u32,Error>{
-    // Local pointer/count cells, not persistent engine state.
+
     zero(m,s,64)?;
     let mut inserted=0u32;let mut number=0u32;
     let table=m.word(p+16)?;
     let props=m.word(m.word(p)?+20)?;
     let mut rc=0u32;
     let result=(||->Result<u32,Error>{
-        m.write(p+64,&[1])?; // negative-control: alternate-model selection
+        m.write(p+64,&[1])?;
         literal(m,s+80,b"mertfrq\0mertfrq_latn\0")?;
         let lid=m.word(p+12)?;
         let mut query=invoke(m,h,lid,68,p+4,&[s+80,0,s+64,s+1400])?;
@@ -1512,8 +1433,7 @@ fn language_text(m:&mut Memory<'_, '_>,p:u32,s:u32,h:&mut impl InternalCalls)->R
         }
         invoke(m,h,table,48,p+40,&[event_count.wrapping_mul(24)])
     })();
-    // Do not run speculative cleanup after an unwired dependency. Native error
-    // returns, including OOM, do execute the ROM's cleanup sequence.
+
     let rc=result?;
     for k in 0..m.word(s+20)? {
         let event=m.word(s)?+m.word(m.word(s+12)?+k*4)?.wrapping_mul(24);
@@ -1543,8 +1463,6 @@ fn destroy_models(m:&mut Memory<'_, '_>,p:u32,h:&mut impl InternalCalls)->Result
     Ok(0)
 }
 
-/// Platform operations are the CP15 identity and kernel address arbitration
-/// only. Allocator and stream callbacks always execute the bridge's Rust ports.
 pub trait ComponentPlatform {
     fn thread_id(&mut self) -> u32;
     fn arbiter_address(&self) -> u32;
@@ -1557,14 +1475,10 @@ impl<P:ComponentPlatform> crate::bridge::Platform for PlatformAdapter<'_,P> {
     fn arbitrate(&mut self,m:&mut crate::boot::Memory<'_>,a:&[u32])->u32 {self.0.arbitrate(m,a)}
 }
 
-/// Live bridge bindings with caller-owned absolute-index workspace. It must
-/// reach the end of the highest guest mapping. No storage is allocated here.
-/// ReadCalls remains a fail-closed fallback for callers without workspace.
 pub struct BridgeCalls<'a,P> {
     pub workspace:&'a mut [u8],
     pub platform:&'a mut P,
-    /// The ROM whose guest memory is live. The caller sets it; US keeps the
-    /// old behavior exactly. Regional entries are also honored per call.
+
     pub rom: Rom,
 }
 impl<P:ComponentPlatform> InternalCalls for BridgeCalls<'_,P> {
@@ -1574,15 +1488,14 @@ impl<P:ComponentPlatform> InternalCalls for BridgeCalls<'_,P> {
     fn call(&mut self,m:&mut Memory<'_, '_>,entry:u32,a:&[u32])->Result<u32,Error>{
         let rom = self.rom.or(Rom::from_entry(entry));
         let entry = to_us(rom, entry);
-        // Null heap calloc reads no guest memory. Use the exact bridge entry
-        // on an empty input view rather than requiring a giant unused workspace.
+
         if entry==0x1963b8 && (a[0]==0 || a[1]==0 || a[2]==0) {
             return null_calloc(a);
         }
         match entry {
             0x1795f0 => open_broker_data(m, self.workspace, a, rom),
-            0x179f3c => {
-                // The broker's close, over the flat arena.
+            0x179f3c | 0x179fec => {
+
                 let rc = flat_stage(m, self.workspace, |flat| {
                     let mut host = broker_host(rom);
                     let rc = {
@@ -1598,7 +1511,7 @@ impl<P:ComponentPlatform> InternalCalls for BridgeCalls<'_,P> {
                 Ok(rc)
             }
             0x26b718 => {
-                // The opened module's key lookup, over the flat arena.
+
                 let rc = flat_stage(m, self.workspace, |flat| {
                     let mut host = broker_host(rom);
                     crate::speech_part_2::fn_26b718(
@@ -1614,7 +1527,7 @@ impl<P:ComponentPlatform> InternalCalls for BridgeCalls<'_,P> {
                 Ok(rc)
             }
             0x17a1a4 => {
-                // The archive range path, over the flat arena.
+
                 let rc = flat_stage(m, self.workspace, |flat| {
                     let mut host = broker_host(rom);
                     crate::component_live_c::broker_range_live_m(
@@ -1657,7 +1570,6 @@ impl<P:ComponentPlatform> InternalCalls for BridgeCalls<'_,P> {
     }
 }
 
-/// The live broker's host over the caller's scratch areas.
 fn broker_host(rom: Rom) -> LiveBrokerHost {
     LiveBrokerHost {
         query: QUERY_SCRATCH,
@@ -1671,12 +1583,6 @@ fn broker_host(rom: Rom) -> LiveBrokerHost {
     }
 }
 
-/// The broker's DataOpen, over the flat view of the caller's arena.
-///
-/// The broker's own services are the database query (fn_1772b0 over the
-/// map's iterator ports), the allocator, the property service and the
-/// logger.  The file interface is the live file platform over the archive
-/// the real cartridge files filled.
 fn open_broker_data(
     m: &mut Memory<'_, '_>,
     workspace: &mut [u8],
@@ -1712,7 +1618,6 @@ fn null_calloc(a:&[u32])->Result<u32,Error>{
     let rc=f.fn_1963b8(a[0],a[1],a[2]);f.finish()?;Ok(rc)
 }
 
-/// fn_1765ac. Wide-string compare, 0 on equal.
 fn wide_cmp(m:&Memory<'_, '_>,mut a:u32,mut b:u32)->Result<i32,Error>{
     loop {
         let x=half(m,a)?;let y=half(m,b)?;
@@ -1720,7 +1625,7 @@ fn wide_cmp(m:&Memory<'_, '_>,mut a:u32,mut b:u32)->Result<i32,Error>{
         a=a.wrapping_add(2);b=b.wrapping_add(2);
     }
 }
-/// fn_1765dc. Wide prefix compare over n units, 0 on match.
+
 fn wide_ncmp(m:&Memory<'_, '_>,mut a:u32,mut b:u32,mut n:u32)->Result<i32,Error>{
     while n!=0 {
         let x=half(m,a)?;let y=half(m,b)?;
@@ -1729,13 +1634,13 @@ fn wide_ncmp(m:&Memory<'_, '_>,mut a:u32,mut b:u32,mut n:u32)->Result<i32,Error>
     }
     Ok(0)
 }
-/// fn_176624. Wide strlen.
+
 fn wide_len(m:&Memory<'_, '_>,mut s:u32)->Result<u32,Error>{
     let mut n=0u32;
     while half(m,s)?!=0 {s=s.wrapping_add(2);n=n.wrapping_add(1);}
     Ok(n)
 }
-/// fn_176514. Locate wide char c at/after s, 0 on miss.
+
 fn wide_chr(m:&Memory<'_, '_>,mut s:u32,c:u32)->Result<u32,Error>{
     loop {
         let x=half(m,s)? as u32;
@@ -1744,7 +1649,7 @@ fn wide_chr(m:&Memory<'_, '_>,mut s:u32,c:u32)->Result<u32,Error>{
         s=s.wrapping_add(2);
     }
 }
-/// fn_176214. Wide copy with terminator.
+
 fn wide_copy(m:&mut Memory<'_, '_>,mut d:u32,mut s:u32)->Result<(),Error>{
     loop {
         let x=half(m,s)?;
@@ -1761,8 +1666,7 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
     m.put_word(s+68,marks)?;put_half(m,s+72,capacity)?;
     let mut mark_count=0u16;let mut record_index=0u16;let mut delta=0i16;
     let mut spell_mode=0;let mut in_marker=0;
-    // Mode-name records for the 0x15/0x22 dispatch (src/fn_219790.c):
-    // guest wide strings in the caller-owned frame past the s+450 slot.
+
     let spell_nm=s+460;let spell_pre=s+472;let spell_alnum=s+488;
     let alnum_nm=s+528;let digits_nm=s+556;let chars_nm=s+572;let normal_nm=s+588;
     let mut copy_marker=0u32;let mut saved_mode=normal_nm;let mut alnum_mode=0u32;
@@ -1777,12 +1681,10 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
     let mut previous_language=2;
     let mut skip_space=true;
     let mut rc=0;
-    // The ROM keeps the split spelling and language names across characters:
-    // only translation, the current language and the language index reset
-    // per character (src/fn_219790.c lookup_character, check_translation).
+
     let mut spelling_addr=0u32;
     let mut language_name=0u32;
-    // Saved mode strings and per-character temporaries are ABI locals.
+
     let result=(||->Result<u32,Error>{
         let mut text_index=0u16;
         while text_index<text_len {
@@ -1793,8 +1695,7 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                 m.put_word(e+12,position.max(0) as u32)?;
                 match half(m,e)? {
                     8=>{
-                        // fn_219790.c type-8: skip unless in spell/marker text,
-                        // else ensure a preceding space (space_before_marker).
+
                         if spell_mode==0 && in_marker==0 && text_index!=0 {
                             let prev=half(m,text+(text_index as u32-1)*2)?;
                             if prev!=0x20 {
@@ -1808,9 +1709,7 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                         }
                     }
                     0x15=>{
-                        // src/fn_219790.c mode record: leave spell mode on a
-                        // full spell-mode record, remember the mode, pad with a
-                        // space, then run the mode dispatch (type is 0x15).
+
                         let f20=m.word(e+20)?;
                         if spell_mode==1
                             && wide_cmp(m,f20,spell_nm)?==0 && wide_ncmp(m,f20,spell_pre,6)?==0
@@ -1847,9 +1746,7 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                         }
                     }
                     0x24=>{
-                        // src/fn_219790.c language record: pad like
-                        // space_before_marker, then resolve the ASCII language
-                        // name and select it as the default language.
+
                         if text_index!=0 {
                             let prev=half(m,text+(text_index as u32-1)*2)?;
                             if prev!=0x20 {
@@ -1889,16 +1786,13 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                         }
                     }
                     0x22=>{
-                        // src/fn_219790.c text_marker: following marker text
-                        // is copied raw. (C also tests type==0x15 for
-                        // check_mode here, unreachable: type is 0x22.)
+
                         let q=wide_chr(m,m.word(e+20)?,0x14)?;
                         in_marker=1;
                         if q!=0 {copy_marker=1;put_half(m,q,0)?;}
                     }
                     7=>{
-                        // src/fn_219790.c check_span_marker: only '+' spans
-                        // run spelling_span; anything else is next.
+
                         if m.word(e+20)?==0x2b {
                             let mut span_hash=0u32;let mut span_start=1u32;let mut span_space=0u32;
                             let span_marker=record_index as u32;
@@ -1978,7 +1872,7 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                                 }
                             }
                             if (record_index as u32)>=count && ((record_index as u32)!=count || span_end!=text_len) {
-                                // next_marker: fall through to the common increment.
+
                             } else {
                                 let span_len=span_end.wrapping_sub(text_index) as u32;
                                 let span_bytes=span_len.wrapping_mul(2);
@@ -2094,14 +1988,12 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                 let mut translation:u32;
                 let mut language=2u32;
                 if copy_marker!=0 {
-                    // src/fn_219790.c copyMarkerText path: raw char copy
-                    // straight to translation_ready.
+
                     m.write(s+320,&[ch as u8,0])?;
                     spelling_addr=s+320;
                     translation=s+320;
                 } else if in_marker!=0 && ch==0x15 {
-                    // src/fn_219790.c lookup_character in-marker 0x15 path:
-                    // fixed 0x15 translation with no dictionary lookup.
+
                     m.write(s+320,&[0x15,0])?;
                     spelling_addr=s+320;
                     translation=s+320;
@@ -2114,14 +2006,12 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                 literal(m,s+352,b"unixlit\0")?;
                 rc=invoke(m,h,m.word(p+12)?,28,p+4,&[s+352,s+320,s+344,s+340,s+342,s+450])?;
                 if bad(rc) {return Ok(rc);}
-                // ROM continuation (src/fn_219790.c lookup_character tail):
-                // split translation[sep]spelling[sep]language, resolve the
-                // language, then check/ready/switch/emit like the ROM.
+
                 let translations=m.word(s+344)?;
                 let translation_count=half(m,s+340)? as i16;
                 let separator=byte(m,s+342)? as u32;
                 if translation_count==0 {
-                    // translation is still null (reset for every character).
+
                     delta=delta.wrapping_sub(2);
                     text_index=text_index.wrapping_add(1);
                     continue;
@@ -2155,25 +2045,24 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                     }
                 }
                 }
-                // check_translation: a null or empty translation skips the
-                // character; a missing spelling defaults to the translation.
+
                 if translation==0 {delta=delta.wrapping_sub(2);text_index=text_index.wrapping_add(1);continue;}
                 if byte(m,translation)?==0 {delta=delta.wrapping_sub(2);text_index=text_index.wrapping_add(1);continue;}
                 if spelling_addr==0 || byte(m,spelling_addr)?==0 {spelling_addr=translation;}
-                // translation_ready.
+
                 literal(m,s+360,b" \0")?;
                 if compare_strings(m,translation,s+360)?==0 {
                     let t2=delta as i32+text_index as i32*2;
                     if t2==0 && !single {delta=delta.wrapping_sub(2);text_index=text_index.wrapping_add(1);continue;}
                 }
-                // switch_language.
+
                 if (previous_language==1 && language==0) || (previous_language==0 && language==1) {
                     literal(m,s+360,b" \0")?;
                     rc=invoke(m,h,table,52,p+48,&[s+360,1])?;if bad(rc) {return Ok(rc);}
                     rc=reserve_marks(m,p,s+68,s+72,mark_count as u32,1,h)?;if bad(rc) {return Ok(rc);}
                     m.write(m.word(s+68)?+mark_count as u32*4+2,&[1])?;mark_count=mark_count.wrapping_add(1);
                 }
-                // emit_translation.
+
                 previous_language=language;
                 let spell_path=copy_marker==0 && (single || spell_mode!=0);
                 let mut do_spell=false;
@@ -2186,7 +2075,7 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                     }
                 }
                 if do_spell {
-                    // src/fn_219790.c write_spelling: spell the name out.
+
                     let slen=string_len(m,spelling_addr,false)?;
                     if slen>1 {
                         literal(m,s+360,&[0x11,0])?;
@@ -2225,9 +2114,9 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                     text_index=text_index.wrapping_add(1);
                     continue;
                 }
-                // Shared translation write.
+
                 if in_marker!=0 {
-                    // src/fn_219790.c: dash runs inside marker text.
+
                     let dash_len=string_len(m,translation,false)?;
                     if dash_len!=1
                         && (find_separator(m,translation,0x20)?!=0 || find_separator(m,translation,0x5f)?!=0) {
@@ -2266,8 +2155,7 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                     continue;
                 }
                 {
-                    // state stays 9999 here (span runs before spelling:);
-                    // defaultLanguage follows the 0x24 language markers.
+
                     let lang_index=half(m,s+64)?;
                     let same=lang_index==9999 && default_lang==9999;
                     if language_name==0 && same {
@@ -2293,8 +2181,7 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
                         }
                         mark_count=mark_count.wrapping_add(tlen as u16);
                     }
-                    // language_name set with a matching index writes no
-                    // marks (check_write).
+
                 }
                 if bad(rc) {return Ok(rc);}
                 delta=delta.wrapping_add(tlen as i16).wrapping_sub(2);
@@ -2410,8 +2297,7 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
         literal(m,s+420,b"internal\0")?;
         let pipeline=m.word(s+400)?;
         if rc!=0 || pipeline==0 || compare_strings(m,pipeline,s+420)?!=0 {
-            // src/fn_219790.c single-character synthetic modes: emit two
-            // 0x15 records around the lone character, then update_offset.
+
             let mut cur_lang=0u32;
             if single {cur_lang=m.word(records+16)?;}
             if single && cur_lang!=0 {
@@ -2458,19 +2344,6 @@ fn spelling_loop(m:&mut Memory<'_, '_>,p:u32,s:u32,mut records:u32,owned:u32,mar
     Ok(rc)
 }
 
-/// fn_196860 / EU fn_196910 / KR fn_19694c.
-///
-/// The map iterator's step.  `it` is the ROM's three-word iterator: the map
-/// object, the current node and the pending node.  The step publishes the
-/// pending node's key and value and stores the node that follows it in the
-/// tree's order.  A null iterator or a null output reports the ROM's
-/// 0x89002007; an exhausted iterator zeroes both outputs and reports
-/// 0x89002017.
-///
-/// The order of the stores is the ARM's: the current node, then the key
-/// output, then the value output read back through the current node, then
-/// the pending node.  An output that aliases the iterator therefore sees
-/// the same bytes the ARM leaves behind.
 pub fn fn_196860(m:&mut crate::boot::Memory<'_>,it:u32,outa:u32,outb:u32)->u32 {
     if it==0||outa==0||outb==0 {return 0x8900_2007;}
     let next=m.word(it+8);
@@ -2491,11 +2364,6 @@ pub fn fn_196860(m:&mut crate::boot::Memory<'_>,it:u32,outa:u32,outb:u32)->u32 {
     0
 }
 
-/// The negative control of fn_196860: the same step with the node's value
-/// read from the key's word instead of the value's word.  The engine never
-/// calls it; the certification harness runs it beside the port so the
-/// comparison can be shown to reject a broken port.  The walk is the ROM's,
-/// so the variant always terminates.
 pub fn fn_196860_negative(m:&mut crate::boot::Memory<'_>,it:u32,outa:u32,outb:u32)->u32 {
     if it==0||outa==0||outb==0 {return 0x8900_2007;}
     let next=m.word(it+8);
@@ -2516,16 +2384,8 @@ pub fn fn_196860_negative(m:&mut crate::boot::Memory<'_>,it:u32,outa:u32,outb:u3
     0
 }
 
-/// The live broker's database services, over the caller's arena.
-///
-/// `fn_1772b0` reaches the database through six services: the database lock
-/// and its release, the map iterator's open, step and close, and the
-/// case-insensitive key compare.  Every one of them is a real port over the
-/// arena the caller owns: the map's own iterator ports publish the handle
-/// and step it, the map's heap releases it, and the compare folds the two
-/// keys.  Nothing is invented and no reply is fabricated.
 pub struct LiveBroker<'a, H> {
-    /// The engine services the map's ports reach.
+
     pub host: &'a mut H,
 }
 
@@ -2558,8 +2418,6 @@ impl<H: crate::boot_part_b::Host + crate::boot_part_e::Host + crate::component_l
     }
 }
 
-/// The broker's regional constants for `rom`, from the derived scenes.
-/// US behavior is unchanged; EU/KR resolve their own data twins.
 pub fn broker_for(rom: Rom) -> crate::boot_port_2c::BrokerGlobals {
     crate::boot_port_2c::BrokerGlobals {
         module: addr(rom, 0x8d7668),
@@ -2572,45 +2430,36 @@ pub fn broker_for(rom: Rom) -> crate::boot_port_2c::BrokerGlobals {
         linguistic_desc: addr(rom, 0x8d773c),
     }
 }
-/// The US broker's constants. Regional callers use [`broker_for`].
+
 pub fn us_broker() -> crate::boot_port_2c::BrokerGlobals {
     broker_for(Rom::Us)
 }
 
-/// The live broker's host: the engine's allocator, the broker database
-/// query, the file interface and the logger, all over the caller's arena.
-///
-/// The scratch areas are the caller's, disjoint from the arena and from
-/// every other area.  The host owns no storage of its own.
 pub struct LiveBrokerHost {
-    /// The broker query's 16 byte scratch.
+
     pub query: u32,
-    /// The DataOpen globals' 24 byte scratch.
+
     pub data: u32,
-    /// The file platform's 4608 byte scratch.
+
     pub files: u32,
-    /// The lid lookup's 80 byte scratch.
+
     pub lid: u32,
-    /// The broker unmap environment's 64 byte scratch.
+
     pub unmap: u32,
-    /// The broker close's 64 byte scratch.
+
     pub close: u32,
-    /// The block release the close's heap vtable recorded.  The port's heap
-    /// vtable has no arena, so the caller applies the release.
+
     pub pending_release: Option<u32>,
-    /// The ROM whose guest memory is live. The caller sets it via
-    /// `broker_host(rom)`; every data literal in the broker path follows it.
+
     pub rom: Rom,
 }
 impl LiveBrokerHost {
-    /// The engine services the broker's open reaches.
+
     fn dispatch(&mut self, m: &mut crate::boot::Memory<'_>, f: u32, a: &[u32]) -> u32 {
-        // Guest vtable slots carry the running region's twins (EU 0x4a7f30
-        // for US 0x4a7758); US-first keeps every port literal identical
-        // while twin slots land on the US arm below.
+
         let f = to_us(self.rom, f);
         match f {
-            // The varargs hash of the logger has no guest effect.
+
             0xffff0001 => 0,
             0x196394 => crate::boot_part_e::alloc(m, a[0], a[1], self),
             0x1963b8 => crate::boot_part_e::calloc(m, a[0], a[1], a[2], self),
@@ -2659,7 +2508,7 @@ impl LiveBrokerHost {
                 let target = m.word(m.word(a[0]) + 12);
                 self.dispatch(m, target, &[a[0], a[1]])
             }
-            // The arbiter's thread identity.
+
             0x183edc => 0x1ff82000,
             0x172d18 => 0,
             0x1738e8 => {
@@ -2667,14 +2516,14 @@ impl LiveBrokerHost {
                 crate::log_live::fn_1738e8(m, a[0], a[1], a[2], a[3], a[4], varargs, self)
             }
             0x173dc0 => 0,
-            // The broker database query's own ports.
+
             0x196794 => {
                 crate::component_live_a2::alloc_handle_for_key_m(m, a[0], a[1], a[2], a[3], self)
             }
             0x196860 => fn_196860(m, a[0], a[1], a[2]),
             0x196830 => crate::component_live_a::release_owner_m(m, a[0], self),
             0x176f2c | 0x176f5c => 0,
-            // The broker's mapped key lookup and its unmap.
+
             0x17a1a4 => crate::leftovers_1::fn_17a1a4(
                 m,
                 a[0],
@@ -2689,15 +2538,13 @@ impl LiveBrokerHost {
             0x179208 => {
                 crate::boot_part_e::fn_179208(m, a[0], a[1], a[2], &unmap_environment(self.unmap, self.rom), self)
             }
-            0x179f3c => {
+            0x179f3c | 0x179fec => {
                 let rom = self.rom;
                 let rc = {
                     let mut host = CloseHost { inner: self };
                     crate::leftovers_1::fn_179f3c(m, a[0], a[1], &close_runtime(rom), &mut host)
                 };
-                // The port's heap vtable has no arena, so the block release
-                // it recorded is applied here with the arena the ROM
-                // released from.
+
                 if let Some(object) = self.pending_release.take() {
                     let heap = m.word(m.word(m.word(a[0] + 4) + 8) + 4);
                     crate::boot_part_e::release(m, heap, object, self);
@@ -2707,29 +2554,26 @@ impl LiveBrokerHost {
             0x1731c4 => crate::boot_part_d::fn_1731c4(m, a[0], a[1], a[2], a[3], &mut DataHost(self)),
             0x1730fc => crate::boot_part_d::fn_1730fc(m, a[0], &mut DataHost(self)),
             0x17ca94 => crate::boot_part_b::fn_17ca94(m, a[0], self),
-            // The case-insensitive byte compare and the string helpers.
+
             0x1769d0 => crate::fe_text::strcmp_ci_1769d0(m.bytes, a[0], a[1]) as u32,
             0x195d90 => crate::fe_text::strlen_195d90(m.bytes, a[0]) as u32,
             0x195d58 => crate::normalization::strcmp_at(m.bytes, a[0], a[1]) as u32,
             0x17c8c0 => crate::fe_text::fold_17c8c0(a[0]),
-            // The file interface vtable thunks.
+
             0x4a794c => crate::speech_part_3::fn_4a794c(m, a[0], a[1], a[2], a[3]),
             0x4a78f0 => crate::speech_part_3::fn_4a78f0(m, a[0], a[1], a[2], a[3]),
             0x4a7aac => crate::speech_part_3::fn_4a7aac(m, a[0], self),
-            // The archive range path: the broker map, the archive stream's
-            // seek and read, and the archive's own file reader.
+
             0x17a1a4 | 0x179208 | 0x17c9d8 | 0x179374 | 0x1b2760 | 0x1b254c | 0x1b2974
             | 0x172d30 | 0x172de0 => {
                 crate::component_live_c::broker_range_live_m(m, f, a, RANGE_SCRATCH, self)
             }
-            // The broker DB comparator (EU 0x1771a8 lands here via the
-            // to_us normalization above; KR 0x177154 likewise).
+
             0x1770f8 => crate::speech_part_1::fn_1770f8(m, a[0], a[1]),
             _ => 0x8000_2001,
         }
     }
 
-    /// The block heap's allocate, under the block lock.
     fn locked_allocate(
         &mut self,
         m: &mut crate::boot::Memory<'_>,
@@ -2745,18 +2589,15 @@ impl LiveBrokerHost {
         r
     }
 
-    /// fn_1840fc: the block lock.
     fn lock(&mut self, m: &mut crate::boot::Memory<'_>, address: u32) {
         crate::boot_part_b::fn_1840fc(m, address, &mut LockHost);
     }
 
-    /// fn_18423c: the block unlock.
     fn unlock(&mut self, m: &mut crate::boot::Memory<'_>, address: u32) {
         crate::boot_part_b::fn_18423c(m, address, &mut LockHost);
     }
 }
 
-/// The block lock's platform: the thread identity is the arbiter's.
 struct LockHost;
 impl crate::boot_part_b::Host for LockHost {
     fn call(&mut self, _m: &mut crate::boot::Memory<'_>, _f: u32, _a: &[u32]) -> u32 {
@@ -2767,8 +2608,6 @@ impl crate::boot_part_b::Host for LockHost {
     }
 }
 
-/// The US broker's unmap environment: the log category, the begin, end and
-/// error format literals and the three error labels.
 pub(crate) fn unmap_environment(scratch: u32, rom: Rom) -> crate::boot_part_e::UnmapEnvironment {
     crate::boot_part_e::UnmapEnvironment {
         category: addr(rom, 0x8d7668),
@@ -2780,8 +2619,6 @@ pub(crate) fn unmap_environment(scratch: u32, rom: Rom) -> crate::boot_part_e::U
     }
 }
 
-/// The US broker's close runtime: the log category, the begin and end format
-/// literals, the two error keys and the case-folding table.
 fn close_runtime(rom: Rom) -> crate::leftovers_1::CloseRuntime {
     crate::leftovers_1::CloseRuntime {
         category: addr(rom, 0x8d7668),
@@ -2795,12 +2632,10 @@ fn close_runtime(rom: Rom) -> crate::leftovers_1::CloseRuntime {
     }
 }
 
-/// The FNV-1a hash the broker's format keys use.
 fn hash_text(bytes: &[u8]) -> u32 {
     bytes.iter().fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619))
 }
 
-/// The US character class table's fold bits: bit zero marks A-Z.
 fn ascii_fold_table() -> [u16; 256] {
     let mut table = [0u16; 256];
     let mut i = 0usize;
@@ -2811,11 +2646,6 @@ fn ascii_fold_table() -> [u16; 256] {
     table
 }
 
-/// The broker close's host: the allocator, the tree lookup and the logger.
-///
-/// The port's heap vtable has no arena, so the block release is recorded by
-/// `release_at` and applied by the caller with the arena the ROM released
-/// from.
 struct CloseHost<'a> {
     inner: &'a mut LiveBrokerHost,
 }
@@ -2877,10 +2707,7 @@ impl crate::log_live::LogMethodsM for CloseHost<'_> {
 
 impl crate::leftovers_1::CloseHost for CloseHost<'_> {
     fn select_close_lock(&mut self, _lock: u32) {}
-    /// The tree comparison needs the arena, which the port's signature does
-    /// not carry.  It is reached only on the name-lookup path of a close
-    /// whose data block is still live; reporting a fixed order fails closed
-    /// there instead of matching a wrong key.
+
     fn compare_tree_keys(&mut self, _a: u32, _b: u32) -> i32 {
         1
     }
@@ -3012,7 +2839,6 @@ impl crate::boot_part_b::DataHost for LiveBrokerHost {
     }
 }
 
-/// The data host adapter the broker's file interface needs.
 struct DataHost<'a>(&'a mut LiveBrokerHost);
 
 impl crate::boot_part_d::Host for DataHost<'_> {
@@ -3032,25 +2858,17 @@ impl crate::boot_part_d::Host for DataHost<'_> {
     }
 }
 
-
-/// The live broker's scratch areas, in the machine stack window.
-///
-/// The window is above the ROM's stack pointer and below every mapping the
-/// recorded stages carry, so the areas are disjoint from the arena, from
-/// the processor's own frame and from each other.  They are scratch: the
-/// recorded comparison ignores the whole stack window.
 const DATA_SCRATCH: u32 = 0x0e0f_0000;
 const QUERY_SCRATCH: u32 = 0x0e0f_0020;
 const LID_SCRATCH: u32 = 0x0e0f_0040;
 const UNMAP_SCRATCH: u32 = 0x0e0f_00a0;
 const CLOSE_SCRATCH: u32 = 0x0e0f_00e0;
 const FILE_SCRATCH: u32 = 0x0e0f_0100;
-/// The broker range path's 88 disjoint restored scratch bytes.
+
 const RANGE_SCRATCH: u32 = 0x0e0f_0200;
-/// The window the scratch areas live in.
+
 const SCRATCH_WINDOW: (u32, u32) = (0x0e0f_0000, 0x0e10_0000);
 
-/// The archive environment the file platform resolves paths with.
 fn archive_environment(rom: Rom) -> crate::speech_part_1::ArchiveEnvironment {
     crate::speech_part_1::ArchiveEnvironment {
         dot: addr(rom, 0x8cd208),
@@ -3059,20 +2877,10 @@ fn archive_environment(rom: Rom) -> crate::speech_part_1::ArchiveEnvironment {
     }
 }
 
-/// The ROM's "rb" file-mode literal.  It sits 0xf8 past the 0x173000
-/// function entry in every region (EU 0x1731a8, KR 0x173154, both read
-/// back as "rb"), so the port resolves it through the region table
-/// instead of the US address the file open checks for 'r'.
 pub(crate) fn rb_literal(rom: Rom) -> u32 {
     addr(rom, 0x173000) + 0xf8
 }
 
-/// The flat view of the caller's guest mappings.
-///
-/// The engine's ports address one arena from zero.  The mappings are staged
-/// into the caller's workspace, the port runs over the flat bytes and the
-/// bytes are written back.  A byte the port wrote outside the mappings is
-/// an error, never a silent write; the scratch window is exempt.
 fn flat_stage(
     m: &mut Memory<'_, '_>,
     workspace: &mut [u8],
@@ -3109,7 +2917,6 @@ fn flat_stage(
     Ok(rc)
 }
 
-/// The first byte the port wrote in `[from,to)` that is not scratch.
 fn first_dirty(bytes: &[u8], from: usize, to: usize, window: (usize, usize)) -> Option<usize> {
     let mut at = from;
     while at < to {
@@ -3150,14 +2957,10 @@ fn lid_query(m:&mut Memory<'_, '_>,a:&[u32],h:&mut impl InternalCalls)->Result<u
     let handle=m.word(s)?;
     let rc=h.call(m,0x26b718,&[p+if a[3]!=0 {0x48} else {8},a[2],m.word(p+if a[3]!=0 {0x44} else {4})?,handle,a[4]])?;
     if bad(rc) {return Ok(rc);}
-    h.call(m,0x179f3c,&[broker,handle])?;
+    h.call(m,crate::rom_region::addr(h.rom(),0x179f30).wrapping_add(12),&[broker,handle])?;
     Ok(rc)
 }
 
-/// ABI bridge up to the first missing resource open. The typed pronunciation
-/// lookup owns a borrowed arena across error cleanup; invoking it with an
-/// invented host error would incorrectly run cleanup past the missing call.
-/// This branch publishes only the ARM prefix, then calls the real dependency.
 pub(crate) fn lookup_dictionary_prefix(m:&mut Memory<'_, '_>,a:&[u32],h:&mut impl InternalCalls)->Result<u32,Error> {
     let p=a[0];
     if bad(crate::normalization::quad_check(p,a[1],0xf37f,0x2a4)) {return Ok(0x89802008);}
@@ -3221,56 +3024,34 @@ fn lookup_cached_prefix(m:&mut Memory<'_, '_>,a:&[u32],h:&mut impl InternalCalls
         m.write(state+4,&[byte(m,header+0x11)?])?;
         position=m.word(state)?.wrapping_mul(8).wrapping_add(byte(m,state+4)? as u32);
     }
-    // The map read needs one disjoint word plus the unmap environment's 64
-    // bytes. Both live past the caller's literal string in its own scratch.
+
     let map_scratch=a.get(7).copied().ok_or(Error::UnsupportedStage{entry:0x17a1a4})?
         .wrapping_add(64);
-    // The ROM's map read clears the caller's buffer before it maps the
-    // archive range. The mapping service is the next dependency.
+
     m.put_word(state+8,0)?;
     h.call(m,0x17a1a4,&[m.word(state+16)?,m.word(state+20)?,m.word(tables+0x40)?.wrapping_add(position>>3),half(m,header+0x32)? as u32,state+8,map_scratch])?;
     Err(Error::UnsupportedStage{entry:0x26c1c0})
 }
 
-
-/// The live file boundary: the ROM's own file code at 0x132ab8, and the
-/// file platform the broker's DataOpen reaches through it.
-///
-/// The ARM emulator's file layer serves one real cartridge file per resource
-/// slot. The slot's UTF-16 name is reduced to its base name, the file's bytes
-/// come from the cartridge, the buffer comes from the ROM's block heap
-/// (fn_163f20), and the slot records the buffer, the file's size and the
-/// loaded state. A name the cartridge does not have fails with 0x80000014,
-/// the ROM's own "no such file" status.
-///
-/// The core never reads a filesystem and never synthesises a file: the caller
-/// supplies the real cartridge bytes. One boundary serves the boot lanes that
-/// load the TTS library's modules and the broker's DataOpen that reads them
-/// back.
 pub mod live_fs {
     use crate::boot::Memory;
 
-    /// The real cartridge files behind the ROM's resource names.
     pub trait GameFiles {
-        /// The bytes of one real cartridge file, named by the base name the
-        /// ROM's resource slot carries. `None` when the cartridge has none.
+
         fn file(&mut self, name: &[u8]) -> Option<&[u8]>;
     }
 
-    /// The ROM's block heap. The file layer allocates its buffer here.
     pub trait BlockHeap {
-        /// fn_163f20: allocate `length` bytes for `allocator` and return the
-        /// guest pointer, or zero when the allocation fails.
+
         fn allocate(&mut self, m: &mut Memory<'_>, a: [u32; 4]) -> u32;
     }
 
-    /// The ROM's own "no such file" status.
     pub const NO_FILE: u32 = 0x8000_0014;
-    /// The ROM's own "no memory" status.
+
     pub const NO_MEMORY: u32 = 0x8060_200a;
-    /// The loaded state the ROM's file layer writes into the resource slot.
+
     pub const LOADED: u8 = 2;
-    /// The units the ARM's file layer reads from the slot's name.
+
     pub const NAME_UNITS: u32 = 128;
 
     fn unit(m: &Memory<'_>, address: u32) -> u16 {
@@ -3283,21 +3064,17 @@ pub mod live_fs {
         m.bytes[at] = value;
     }
 
-    /// The ROM's file layer at 0x132ab8, over the real cartridge files.
     pub struct LiveFileService<'a, F> {
-        /// The real cartridge files.
+
         pub files: &'a mut F,
     }
 
     impl<'a, F: GameFiles> LiveFileService<'a, F> {
-        /// The service over the caller's real cartridge files.
+
         pub fn new(files: &'a mut F) -> Self {
             Self { files }
         }
 
-        /// The ROM's resource name: the slot's UTF-16 name reduced to its
-        /// base name, the part after the last '/' or '\'. The ARM's file
-        /// layer reads 128 units. Returns the length written to `name`.
         pub fn slot_name(m: &Memory<'_>, slot: u32, name: &mut [u8]) -> u32 {
             let mut units = 0u32;
             while units < NAME_UNITS {
@@ -3324,13 +3101,6 @@ pub mod live_fs {
             len
         }
 
-        /// fn_132ab8's boundary: serve the slot's real file.
-        ///
-        /// `name` is a caller-owned buffer of at least 128 bytes for the
-        /// resource's base name. `heap` is the ROM's block heap. On success
-        /// the slot records the buffer, the file's size and the loaded state
-        /// and the status is zero. A name the cartridge does not have fails
-        /// with NO_FILE and leaves the slot alone.
         pub fn serve_slot(
             &mut self,
             m: &mut Memory<'_>,
@@ -3366,30 +3136,17 @@ pub mod live_fs {
         }
     }
 
-    /// The TTS library's file platform: the source object's own file code.
-    ///
-    /// The source object names an archive and an allocator. Its `open` slot
-    /// is the ROM's fn_4a77ac: it normalises the path, appends ".dat" and
-    /// looks the entry up in the archive. The archive is the one the live
-    /// file service filled with the real cartridge files. A path the archive
-    /// does not have fails with the ROM's NO_FILE.
     pub struct FilePlatform {
-        /// The archive environment: the dot, parent and locale literals the
-        /// archive's path resolution needs.
+
         pub env: crate::speech_part_1::ArchiveEnvironment,
-        /// The caller's scratch: 4096 bytes, disjoint from the archive, the
-        /// handle object and every nested allocation.
+
         pub scratch: u32,
-        /// The guest "rb" mode string the ROM passes to the open slot.
+
         pub rb: u32,
     }
 
     impl FilePlatform {
-        /// fn_4a77ac: the source object's open slot.
-        ///
-        /// `src` is the source object, `path` the requested name and `out`
-        /// the caller's handle word. The ROM allocates the file object
-        /// before it checks the name, so the handle is written first.
+
         pub fn open_source(
             &mut self,
             m: &mut Memory<'_>,
@@ -3448,12 +3205,6 @@ pub mod live_fs {
     }
 }
 
-/// The broker's DataOpen with the live file platform.
-///
-/// `h` owns the engine's allocator, the broker database query, the property
-/// service and the logging. This binding owns the file platform: the source
-/// object's own file code, over the archive the live file service filled with
-/// the real cartridge files.
 pub fn fn_1795f0_live(
     m: &mut crate::boot::Memory<'_>,
     broker: u32,
@@ -3472,6 +3223,10 @@ struct DataOpenHost<'a, H> {
     platform: &'a mut live_fs::FilePlatform,
 }
 impl<'a, H: crate::boot_part_b::DataHost> crate::boot_part_b::Host for DataOpenHost<'a, H> {
+    fn real_log_args(&mut self)->bool { self.inner.real_log_args() }
+    fn format_address_m(&mut self,m:&crate::boot::Memory<'_>,format:&[u8])->Option<u32> { self.inner.format_address_m(m,format) }
+    fn log_variadic(&mut self,m:&mut crate::boot::Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool { self.inner.log_variadic(m,entry,a,format,varargs) }
+
     fn call(&mut self, m: &mut crate::boot::Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.inner.call(m, f, a)
     }

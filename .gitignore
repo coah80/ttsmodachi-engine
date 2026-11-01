@@ -1,7 +1,6 @@
 target/
 node_modules/
 dist/
-data/
 cache/
 *.cxi
 *.3ds
@@ -10,3 +9,5 @@ cache/
 *.wire
 *.wav
 roms
+*.cci
+*.app

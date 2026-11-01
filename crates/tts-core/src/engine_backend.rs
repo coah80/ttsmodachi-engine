@@ -1,4 +1,4 @@
-//! Live backend controls. Guest pointers address caller-owned engine mappings.
+
 use crate::{
     engine::{Error, Memory},
     rom_region::Rom,
@@ -190,10 +190,7 @@ fn clear_ring(m: &mut Memory<'_, '_>, ring: u32, width: u32) -> Result<(), Error
     }
     m.put_word(ring + 12, 0)
 }
-/// fn_1be020. Reset Nintendo customization, drain the two existing voice
-/// queues with the Rust fn_1bcd84 port, enqueue defaults, and clear delay rings.
-/// `object` is the Nintendo backend, not the outer Voice wrapper. `tables`
-/// borrows the numeric tables from the same caller-owned voice image.
+
 pub(crate) fn reset(
     m: &mut Memory<'_, '_>,
     object: u32,
@@ -265,8 +262,7 @@ pub(crate) fn reset(
     m.put_word(object + 0x31a4 + 0x4c, 0)?;
     Ok(())
 }
-/// fn_743d70 numeric parameter dispatch. Mutates live fields and enqueues
-/// real Rust VoiceQueue events. Unsupported IDs return the ROM's -1.
+
 pub(crate) fn set_numeric(m: &mut Memory<'_, '_>, o: u32, id: u32, v: i32) -> Result<i32, Error> {
     let f = |m: &Memory<'_, '_>, at| m.word(o + at).map(f32::from_bits);
     let mut pair = None;
@@ -360,9 +356,7 @@ fn signed_half(m: &Memory<'_, '_>, a: u32) -> Result<i32, Error> {
     m.read(a, &mut b)?;
     Ok(i16::from_le_bytes(b) as i32)
 }
-/// fn_71efdc uses only index and offset; the mode register is overwritten.
-/// The two ROM tables move per region, so the caller threads `rom` and the
-/// reads go through the region map (US identity, EU/KR twins).
+
 fn convert(m: &Memory<'_, '_>, index: u32, value: i32) -> Result<i32, Error> {
     convert_rom(m, index, value, Rom::Us)
 }
@@ -375,12 +369,7 @@ fn convert_rom(m: &Memory<'_, '_>, index: u32, value: i32, rom: Rom) -> Result<i
     let hi = m.word(words + (k + 2) * 4)? as i32;
     Ok((lo as f32 + (hi.wrapping_sub(lo) as f32) * (value as f32 / span as f32)) as i32)
 }
-/// fn_3912fc/3912ec/39133c/39131c/39132c, through their concrete Nintendo
-/// vtable targets. `wrapper` owns the impl pointer at +8; value is signed.
-/// Speed (fn_39130c, the rate setter: convert idx1, rate clamp 50-400,
-/// update_rate propagation) uses `set_quality` instead: it needs the
-/// parameter lock host as well as the Nintendo wrapper. (The old comment
-/// mislabeled it quality; tomoFunc.h: speed=0x39130c, quality=0x3912ec.)
+
 pub(crate) fn set_voice(
     m: &mut Memory<'_, '_>,
     entry: u32,
@@ -390,10 +379,7 @@ pub(crate) fn set_voice(
 ) -> Result<(), Error> {
     set_voice_rom(m, entry, wrapper, value, tables, Rom::Us)
 }
-/// Region-aware `set_voice`: the per-voice-mode float tables move per
-/// region, so the table read goes through the region map. `entry` names
-/// the Nintendo setter (a dispatch key, not a guest address); `wrapper`
-/// is the caller-owned voice object from boot state.
+
 pub(crate) fn set_voice_rom(
     m: &mut Memory<'_, '_>,
     entry: u32,
@@ -416,8 +402,7 @@ pub(crate) fn set_voice_rom(
         return Ok(());
     }
     let backend = m.word(o + 0x61b8)?;
-    // Only speed and pitch index the per-voice-mode tables. The other
-    // Nintendo setters do not read the mode byte in the ROM.
+
     let mode = if index == 0 || index == 2 {
         let mode = byte(m, o + 0x17a)? as i8 as i32;
         if !(0..8).contains(&mode) {
@@ -483,10 +468,6 @@ fn intonation(m: &mut Memory<'_, '_>, o: u32, b: u32, v: i32) -> Result<(), Erro
     Ok(())
 }
 
-/// Regional resources and caller-owned EU pitch scratch. Korean timing comes
-/// from the live backend's regional timing table, not a US default.
-/// EU voices need a Resonator tracker and max_period floats of scratch;
-/// US/KR use Crossings and empty scratch. Retain scratch across calls.
 pub(crate) struct BackendRegion<'a> {
     pub(crate) language: crate::pitch::Language,
     pub(crate) scratch: &'a mut [f32],
@@ -494,32 +475,6 @@ pub(crate) struct BackendRegion<'a> {
     pub(crate) korean_timing: Option<&'a crate::output::KoreanTiming>,
 }
 
-/// Persistent typed binding of fn_1a18c4 to fn_1b0a64 and fn_1b7e6c.
-/// Decode the first backend input once into caller-owned state and buffers.
-/// Keep those objects across every event-16 call, then call with empty input
-/// and `flush = true` for event 2. Only incoming samples/events are per-call.
-/// No recorded synthesis replies or PCM enter this function.
-///
-/// Language, pitch scratch, frequencies and Korean timing are inputs.
-/// Initialize synth.voice from the same live
-/// voice held by setup. The binding swaps it across each PCM render so command
-/// updates and timer consumption share one state. Retain resources.synth,
-/// position, assembled frame/audio, all synthesis buffers, filter rings,
-/// effects, segments and lip-sync storage between calls. Never reseed from
-/// later ARM states.
-///
-/// Mapped Nintendo input: buffer pointers at +0x20/24/2c/3c/44/50, filter
-/// headers at +0x31d8/31dc/31e0/3210, frame at +0x3828, position at +0x4bc8.
-/// KR omits the word at +0x4bbc: subsequent guest offsets are four bytes
-/// lower. Decode that regional layout before calling this typed binding.
-/// Read rate from the initial parameter tree: sing_1 uses 74, not the 116
-/// restored by request teardown. persistent_backend_pcm demonstrates complete
-/// initialization and serialization without copying an ARM reply.
-///
-/// In engine.rs, use this call as the real synthesize closure for
-/// SynthesisCallback::render_stream on event 16 and SynthesisBoundary::finish
-/// on event 2. Those wrappers own publication and minimum output padding.
-/// Pass their output spans unchanged.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_backend<'a, 'b: 'a>(
     setup: &mut crate::orchestration::Setup<'a, 'b>,
@@ -664,9 +619,8 @@ pub(crate) fn render_backend<'a, 'b: 'a>(
     made
 }
 
-/// OS locks are host operations. Internal stop/start paths are not delegated.
 pub trait BackendLocks {
-    /// Caller-owned allocator binding used only when the event vector grows.
+
     fn event_allocate(
         &mut self,
         _: &mut Memory<'_, '_>,
@@ -676,12 +630,11 @@ pub trait BackendLocks {
     ) -> Result<u32, Error> {
         Err(Error::UnsupportedStage { entry: 0x183258 })
     }
-    /// Release the old caller-owned event allocation after relocation.
+
     fn event_release(&mut self, _: &mut Memory<'_, '_>, _: u32, _: u32) -> Result<(), Error> {
         Err(Error::UnsupportedStage { entry: 0x183258 })
     }
-    /// Heap-vtable binding for fn_176054. A null old pointer allocates;
-    /// otherwise the host regrows the caller-owned block, returning zero on refusal.
+
     fn parameter_resize(
         &mut self,
         _: &mut Memory<'_, '_>,
@@ -691,13 +644,13 @@ pub trait BackendLocks {
     ) -> Result<u32, Error> {
         Err(Error::UnsupportedStage { entry: 0x1963e0 })
     }
-    /// Live fn_19668c insertion. The default refuses unbound callers.
+
     fn parameter_insert(&mut self, _: &mut Memory<'_, '_>, _: u32, _: &[u8]) -> Result<u32, Error> {
         Err(Error::UnsupportedStage { entry: 0x19668c })
     }
-    /// Live fn_19310c begin/end and error trace, on the same request memory.
+
     fn parameter_trace(&mut self, _: &mut Memory<'_, '_>, _: u32, status: Option<u32>, _: bool) -> Result<(), Error> { if status.is_some() { Err(Error::UnsupportedStage { entry: 0x173dc0 }) } else { Ok(()) } }
-    /// Inherited ARM s16/s17 bits. Required on newly allocated log storage.
+
     fn event_vfp(&mut self) -> Option<[u32; 2]> {
         None
     }
@@ -710,10 +663,6 @@ pub trait BackendLocks {
     }
 }
 
-/// fn_3914e8 -> fn_75b708 + fn_35a958 -> fn_35a9b0.
-/// Covers active Nintendo voices and their running Nuance stop closure.
-/// Inactive fn_35adf8 unconditionally waits in SDK fn_183dd4. That boot
-/// dependency has no executable port yet, so ownership/restart fails closed.
 pub(crate) fn parameter_reset(
     m: &mut Memory<'_, '_>,
     wrapper: u32,
@@ -725,11 +674,10 @@ pub(crate) fn parameter_reset(
         return Ok(());
     }
     if byte(m, object + 0x9d)? == 0 {
-        // Required by fn_35adf8 at 0x35ae90, after the game audio restart.
-        // Do not run a partial restart or invent a platform success for it.
+
         return Err(Error::UnsupportedStage { entry: 0x183dd4 });
     }
-    // fn_35a9b0 sets the pending flag before trying vauto_ttsStop.
+
     m.write(object + 0x61a1, &[1])?;
     let engine = m.word(object + 0x11c)?;
     let tag = m.word(object + 0x120)?;
@@ -741,14 +689,11 @@ pub(crate) fn parameter_reset(
     m.write(object + 0x61a0, &[0])?;
     m.put_word(object + 0x80, 0)?;
     m.write(object + 0x61a2, &[0])?;
-    // fn_35a958 prepares the still-active voice after fn_35a9b0 returns.
+
     m.write(object + 0x61a0, &[1])?;
     Ok(())
 }
 
-/// fn_39130c -> fn_35980c -> fn_35b0ec. Set the live numeric rate and
-/// notify its registered Rust callbacks. Existing values may allocate or grow
-/// through the caller's live heap and map bindings.
 pub fn set_quality(
     m: &mut Memory<'_, '_>,
     wrapper: u32,
@@ -758,8 +703,7 @@ pub fn set_quality(
 ) -> Result<(), Error> {
     set_quality_rom(m, wrapper, value, locks, Rom::Us, host)
 }
-/// Region-aware `set_quality`: the rate table moves per region, so the
-/// read goes through the region map. `wrapper` is caller-owned boot state.
+
 pub fn set_quality_rom(
     m: &mut Memory<'_, '_>,
     wrapper: u32,
@@ -786,12 +730,10 @@ pub fn set_quality_rom(
         if locks.acquire_m(m, lock)? < 0x80000000 {
             let result = update_rate(m, params, rate, locks, rom, host);
             locks.release_m(m, lock)?;
-            // fn_35b0ec ignores vauto_ttsSetParamList's returned status.
-            // Missing Rust closure bindings still fail explicitly.
+
             match result {
                 Ok(()) => (),
-                // The error path additionally formats and publishes an engine
-                // trace. Do not report successful byte identity without it.
+
                 Err(Error::EngineStatus(status)) => {
                     locks.parameter_trace(m, engine, Some(status), false)?;
                 }
@@ -803,19 +745,11 @@ pub fn set_quality_rom(
     m.write(object + 0x6a02, &(value as i16).to_le_bytes())
 }
 
-/// Dispatcher host for the rate attr-propagation loop (`fn_174b38` body).
-/// Nested parameter calls (`0x19668c`/`0x1966ac`/`0x176054`) ride the live
-/// dispatcher 1:1; the first unbound entry is reported so the next bind
-/// lands precisely instead of failing at the whole setter.
 pub trait AttrHost {
     fn call_attr(&mut self, m: &mut Memory<'_, '_>, f: u32, a: &[u32]) -> u32;
     fn attr_unbound(&self) -> Option<u32>;
 }
 
-/// `fn_174b38` on the rate key: for each attribute object, look the key up
-/// in its dict; on a hit propagate the new value into the dependent slot.
-/// Caller-owned 32-byte window at `0x2000` (saved/restored); the key rides
-/// the tree's own name pointer, the value is copied into the window.
 fn attr_propagate(
     m: &mut Memory<'_, '_>,
     attrs: u32,
@@ -913,8 +847,7 @@ fn update_rate(
     };
     let missing = found == 0;
     if missing {
-        // Incoming Value has no per-value callbacks. Global callbacks still
-        // run before insertion, and after insertion with the incoming value.
+
         found = 0;
     }
     let data = if missing { 0 } else { m.word(found)? };
@@ -933,7 +866,7 @@ fn update_rate(
             None => return Err(Error::UnsupportedStage { entry: 0x174b38 }),
         }
     }
-    // fn_175170: value callbacks precede global callbacks, in both passes.
+
     for pass in 0..2 {
         for list in [if missing { 0 } else { m.word(found + 8)? }, m.word(params + 12)?] {
             if list == 0 {
@@ -945,10 +878,7 @@ fn update_rate(
             for i in 0..count {
                 let entry = base + i * stride;
                 let owner = m.word(entry)?;
-                // Callback slots hold guest code pointers: regional twins
-                // on EU/KR runs. Normalize US-first (direct US literals
-                // from the ports keep working); the unbound report keeps
-                // the raw guest entry.
+
                 let raw = m.word(entry + 4 + pass * 4)?;
                 let function = crate::rom_region::to_us(rom, raw);
                 if pass == 0 {
@@ -987,8 +917,7 @@ fn update_rate(
                             let lock = m.word(owner + 12)?;
                             if locks.acquire_m(m, lock)? < 0x80000000 {
                                 let engine = m.word(owner + 0x28)?;
-                                // fn_2a9e64. The table-like absolute is an integer,
-                                // not ROM bytes: the real callee is rounded_product.
+
                                 if (converted as u32).wrapping_sub(11) <= 189 {
                                     let scale = if converted == 100 {
                                         0x4000
@@ -1022,7 +951,6 @@ fn update_rate(
     Ok(())
 }
 
-/// Mapped fn_163a98 stop-event arm. All event-log storage is caller owned.
 fn stop_event(
     m: &mut Memory<'_, '_>,
     engine: u32,
@@ -1039,8 +967,7 @@ fn stop_event(
     let vfp = if let Some(bits) = host.event_vfp() {
         bits
     } else {
-        // Legacy boundary captures omit VFP registers. Preserve their two
-        // slot words only for a preallocated slot, never for fresh storage.
+
         let begin = m.word(speech + 0x61d0)?;
         let end = m.word(speech + 0x61d4)?;
         let capacity = m.word(speech + 0x61d8)? & 0x3fffffff;
@@ -1078,7 +1005,7 @@ fn stop_event(
             unreachable!()
         }
     }
-    // Logging was just executed above, not delegated to the event callback.
+
     let mut state = crate::frontend_output::SynthesisCallback::default();
     state.requested = byte(m, speech + 0x61a3)?;
     state
@@ -1088,7 +1015,6 @@ fn stop_event(
     Ok(0)
 }
 
-/// TTSEG break, with validated live environment and caller-owned local view.
 fn scheduler_break(
     m: &mut Memory<'_, '_>,
     object: u32,
@@ -1170,9 +1096,6 @@ fn scheduler_break(
     Ok(rc)
 }
 
-/// fn_194790 through the existing stop_synth port. Unknown methods and
-/// unsupported scheduler closures remain explicit errors. Event-log growth
-/// requires the allocator and inherited VFP bindings supplied by the caller.
 fn running_stop(
     m: &mut Memory<'_, '_>,
     engine: u32,
@@ -1243,7 +1166,7 @@ fn running_stop(
     }
     let mut local = [0; 0x200];
     m.read(engine, &mut local[64..64 + 0x188])?;
-    // Only the logger parent needs rebasing for stop_synth's local reads.
+
     let logger = m.word(m.word(engine + 0x10)? + 16)?;
     put(&mut local, 64 + 0x10, 8);
     put(&mut local, 24, logger);
@@ -1260,19 +1183,12 @@ fn running_stop(
     }
 }
 
-/// Game song-parameter layout. Japanese requests reject singing upstream.
 #[derive(Clone, Copy)]
 pub(crate) enum SongRegion {
     Western,
     Korean,
 }
 
-/// Construct and parse the supported serialized game song tags, then resolve
-/// note kinds through the regional ROM table. This composes fn_741654,
-/// fn_425948/fn_425b74, fn_7442e4 and fn_744bd0, or their KR equivalents.
-/// The reader's size prefix/newlines are not parameters. No captured output
-/// enters this path. Output is caller-owned, and malformed input is rejected
-/// before any write. This is conversion only, not the missing lyric generator.
 pub(crate) fn convert_song(
     raw: &[u8],
     bpm: u8,
@@ -1289,7 +1205,7 @@ pub(crate) fn convert_song(
     if out.len() < size {
         return Err(Error::InputTooLong);
     }
-    // Validate the complete stream before clearing caller state.
+
     let mut at = 0;
     while at < raw.len() {
         let (group, index, bytes, _) = song_tag(raw, at)?;
@@ -1310,7 +1226,7 @@ pub(crate) fn convert_song(
         put(out, o, 10000);
     }
     out[voice + 14..voice + 16].copy_from_slice(&10000u16.to_le_bytes());
-    // KR fn_170654 also zeroes its twelve-byte syllable array, already clear.
+
     let timing = if korean { 0x234 } else { 0x228 };
     let scale = if korean { 0x23c } else { 0x230 };
     let mut count = 0usize;
@@ -1350,7 +1266,6 @@ pub(crate) fn convert_song(
     Ok(size)
 }
 
-/// Validate one complete MSBT-style tag including its padding and newline.
 fn song_tag(raw: &[u8], at: usize) -> Result<(u16, u16, usize, u8), Error> {
     if raw.len().saturating_sub(at) < 12 {
         return Err(Error::InvalidSnapshot);
@@ -1369,23 +1284,16 @@ fn song_tag(raw: &[u8], at: usize) -> Result<(u16, u16, usize, u8), Error> {
     Ok((u16_at(2), u16_at(4), bytes, raw[at + 8]))
 }
 
-/// Caller-owned workspace for adapting the existing event-vector port to
-/// discontiguous engine memory. Capacity is explicit, never a heap allocation.
 pub struct EventWorkspace {
     bytes: [u8; 0xa400],
 }
 impl EventWorkspace {
-    /// Initialize empty temporary storage; no persistent engine state lives here.
+
     pub const fn new() -> Self {
         Self { bytes: [0; 0xa400] }
     }
 }
 
-/// fn_183258 via the existing boot port. Supports up to 256 old and 256
-/// grown entries. Allocator calls stay behind the host; copied old events,
-/// capacity flags, inherited VFP fields and tick writes are all Rust work.
-/// The workspace uses local addresses only; all published pointers are guest
-/// addresses. Refused ownership/allocation and empty vectors follow the ROM.
 pub fn append_event(
     m: &mut Memory<'_, '_>,
     speech: u32,
@@ -1415,7 +1323,7 @@ pub fn append_event(
     }
     let allocator = m.word(speech + 0x61cc)?;
     let ticks = host.ticks()?;
-    // fn_183258 returns without writing when growth is not owned.
+
     if grow && (allocator == 0 || flags & 0xc0000000 != 0x40000000) {
         return Ok(());
     }
@@ -1434,7 +1342,7 @@ pub fn append_event(
             &mut b[OLD as usize..OLD as usize + count as usize * 32],
         )?;
     }
-    // Preserve untouched tail bytes in the append slot.
+
     if !grow && end != 0 {
         m.read(
             end,
@@ -1466,9 +1374,7 @@ pub fn append_event(
                     .event_allocate(self.memory, self.allocator, args[1], args[2])
                     .and_then(|pointer| {
                         self.fresh = pointer;
-                        // The ARM faults copying a nonempty old vector to a
-                        // null allocation. Reject it rather than publish a
-                        // successful event append to unmapped address zero.
+
                         if pointer == 0 {
                             return Err(Error::InvalidSnapshot);
                         }
@@ -1535,9 +1441,6 @@ pub fn append_event(
     Ok(())
 }
 
-/// Mapped fn_176054 using the existing store_sized port. Local offsets cover
-/// only the value, source and heap descriptor; heap returns are translated
-/// back to guest pointers. Nothing copies allocator results from recordings.
 fn store_parameter(
     m: &mut Memory<'_, '_>,
     value: u32,
@@ -1628,18 +1531,15 @@ fn store_parameter(
     m.put_word(value + 4, text.len() as u32)
 }
 
-// Historical song tests include this source as a module. Keep the production
-// bridge in the normal library, which recorded_live_controls exercises directly.
 #[cfg(not(test))]
 pub use live_controls::LiveControls;
 #[cfg(not(test))]
 mod live_controls {
 use super::*;
-/// Production bindings for parked controls. All arenas, scratch, inherited
-/// VFP registers and OS services belong to the caller. No recorded replies.
+
 pub struct LiveControls<'a> {
     pub workspace: &'a mut [u8],
-    /// 128 disjoint mapped bytes, restored after each synchronous invocation.
+
     pub scratch: u32,
     pub platform: &'a mut dyn crate::engine::HeapPlatform,
     pub tick: u64,
@@ -1653,8 +1553,7 @@ impl crate::bridge::Platform for ControlPlatform<'_> {
         self.0.arbitrate(m, a)
     }
 }
-/// Only map value/key construction lives here. Heap operations are the real
-/// bridge ports; fn_176054 and strcmp use the existing frontend ports.
+
 struct ParameterMap<'a> { host: crate::engine::SpeechBootHost<'a> }
 impl crate::bridge::Live for ParameterMap<'_> {
     fn log<P: crate::bridge::Platform>(&mut self, f: &mut crate::bridge::Flat<'_, '_, '_, '_, P>,
@@ -1744,8 +1643,7 @@ impl BackendLocks for LiveControls<'_> {
         let result=(|| {
             m.write(s,b"rate\0")?;m.write(s+8,text)?;
             m.put_word(s+16,s+8)?;m.put_word(s+20,text.len() as u32)?;m.put_word(s+24,0)?;
-            // The tree and its callbacks share only the OS dispatcher. Every
-            // guest call reborrows the current Flat, never another staged arena.
+
             let cell=core::cell::RefCell::new(&mut *self.platform);
             let mut os=SharedPlatform(&cell);let mut callbacks=SharedPlatform(&cell);
             let mut f=crate::bridge::Flat::new(m,self.workspace,&mut os,0)?;
@@ -1761,7 +1659,7 @@ impl BackendLocks for LiveControls<'_> {
         let logger=m.word(m.word(engine+16)?+16)?;
         let s=self.scratch;
         let mut saved=[0;128];m.read(s,&mut saved)?;
-        // US fn_19310c literals. These are addresses, never captured output.
+
         let call=if let Some(status)=status {
             m.put_word(s,0x193bf8)?;m.put_word(s+4,3)?;
             m.put_word(s+8,0x193bf0)?;m.put_word(s+12,status)?;
@@ -1799,8 +1697,7 @@ impl ControlLog<'_> {
     fn invoke(&mut self,m:&mut crate::boot::Memory<'_>,entry:u32,a:&[u32])->u32 {
         match entry {
             0x1ce428 => {
-                // This capture's file logger is disabled in live state. Run
-                // the real method, rejecting active unbound dependencies.
+
                 struct Disabled;
                 impl crate::frontend_part_b::Host for Disabled {
                     fn call(&mut self,_:crate::frontend_part_b::Boundary,_:&[u32])->[u32;3] {unreachable!()}
@@ -1821,7 +1718,7 @@ impl ControlLog<'_> {
                 if target!=0x4a7adc {
                     self.inner.fault=Some(Error::UnsupportedStage {entry:target});return 0x80002001;
                 }
-                // fn_4a7adc is exactly bx lr, src/fn_4a7adc.c.
+
                 crate::frontend::notify([a[2],a[3],a[4],a[5]],|_|0)
             }
             _=>self.inner.invoke(m,entry,a),
@@ -1854,8 +1751,7 @@ struct ValueCalls<'a,'b>(&'a mut crate::engine::SpeechBootHost<'b>);
 impl crate::boot::Calls for ValueCalls<'_, '_> {
     fn call(&mut self,m:&mut crate::boot::Memory<'_>,entry:u32,a:&[u32])->u32 {
         if entry!=0x176054 {return self.0.invoke(m,entry,a);}
-        // fn_174a04 has just zero-allocated this Value. Dispatch its real
-        // data allocation before the existing fn_176054 port copies bytes.
+
         if m.word(a[0]+4)!=0 {
             self.0.fault=Some(Error::UnsupportedStage {entry:0x176054});return 0x8b702007;
         }

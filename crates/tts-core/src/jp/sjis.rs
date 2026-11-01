@@ -1,16 +1,5 @@
-// Generated Shift-JIS extension table (lane B round 5).
-//
-// The fast paths in encode_text (ASCII, half-width katakana,
-// katakana block, eight punctuation marks) are byte-exact against the
-// runner faithful fold (hiragana to katakana, then strict shift_jis).
-// Every other code point the runner can encode lives here with its
-// true bytes. Generated from CPython shift_jis codec output; see
-// scratch/laneB-r5-dump-sjis.py and the fold check in
-// scratch/laneB-r5-sjis-fold.json. Lookup is a binary search on the
-// code point; a zero trail byte marks a single-byte entry (no
-// Shift-JIS trail byte is ever zero).
 
-/// (code point, lead byte, trail byte or zero).
+
 pub(crate) const SJIS_EXT: &[(u16, u8, u8)] = &[
     (0x00A2, 0x81, 0x91),
     (0x00A3, 0x81, 0x92),
@@ -6717,9 +6706,6 @@ pub(crate) const SJIS_EXT: &[(u16, u8, u8)] = &[
     (0xFFE5, 0x81, 0x8F),
 ];
 
-/// True Shift-JIS bytes for a code point outside the encoder fast paths:
-/// `(lead, trail)` with a zero trail for single-byte entries. `None`
-/// means strict `shift_jis` cannot encode it (the ARM has no bytes either).
 pub(crate) fn lookup(cp: u32) -> Option<(u8, u8)> {
     if cp > 0xFFFF {
         return None;

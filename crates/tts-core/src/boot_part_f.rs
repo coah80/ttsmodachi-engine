@@ -1,6 +1,6 @@
-//! Boot parameter database and allocator ports. Guest callbacks receive live memory.
+
 use crate::{boot::Memory, normalization};
-/// ROM data addresses are supplied by the caller for the active region.
+
 pub struct Environment {
     pub stream_base_vtable: u32,
     pub stream_vtable: u32,
@@ -8,7 +8,7 @@ pub struct Environment {
     pub compare: u32,
     pub accept: u32,
 }
-/// An address-taken key can live in guest memory or in a caller's local frame.
+
 #[derive(Clone, Copy)]
 pub enum Key {
     Address(u32),
@@ -16,14 +16,14 @@ pub enum Key {
 }
 pub trait Host {
     fn call(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32;
-    /// The comparator receives mutable local pointer slots, just as the ARM ABI does.
+
     fn compare(&mut self, m: &mut Memory<'_>, method: u32, key: &mut Key, value: &mut u32) -> u32;
 }
 fn byte(m: &mut Memory<'_>, p: u32, v: u8) {
     let i = m.offset(p);
     m.bytes[i] = v;
 }
-/// Adapt stack-local double indirection to the existing fn_1b3580 port.
+
 pub fn compare_parameter(m: &Memory<'_>, key: Key, value: u32) -> u32 {
     let a = match key {
         Key::Address(p) => m.word(p),
@@ -167,8 +167,7 @@ pub fn fn_1b3fe8(
         m.put_word(p + 8, value);
     }
 }
-/// Live fn_1b449c. Unlike the legacy normalization model, this stores actual
-/// regional ROM vtables. Select Environment::US, ::EU or ::KR for the guest ROM.
+
 pub fn fn_1b449c(m: &mut Memory<'_>, p: u32, state: u32, e: &Environment) -> u32 {
     let status = fn_1ba3c0(m, p, e);
     if status == 0 {
@@ -230,7 +229,7 @@ pub fn fn_1babcc(
 }
 
 impl Environment {
-    /// Actual US ROM addresses, not synthetic vtable tokens.
+
     pub const US: Self = Self {
         stream_base_vtable: 0x917e80,
         stream_vtable: 0x917e8c,
@@ -238,7 +237,7 @@ impl Environment {
         compare: 0x1b3580,
         accept: 0x1b3c00,
     };
-    /// Actual EU ROM addresses, not synthetic vtable tokens.
+
     pub const EU: Self = Self {
         stream_base_vtable: 0x9190c0,
         stream_vtable: 0x9190cc,
@@ -246,7 +245,7 @@ impl Environment {
         compare: 0x1b35d4,
         accept: 0x1b3c54,
     };
-    /// Actual KR ROM addresses, not synthetic vtable tokens.
+
     pub const KR: Self = Self {
         stream_base_vtable: 0x93b420,
         stream_vtable: 0x93b42c,

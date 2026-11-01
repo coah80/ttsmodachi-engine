@@ -1,11 +1,10 @@
-//! Speech component lifetime operations. Guest memory remains caller-owned.
+
 use crate::{boot::Memory, frontend};
 
-/// Indirect guest methods reenter with the current arena, never a captured view.
 pub trait Host {
     fn call(&mut self, memory: &mut Memory<'_>, method: u32, args: &[u32]) -> u32;
 }
-/// Immutable ROM globals, supplied by the caller.
+
 pub struct Environment {
     pub cached_handle: [u8; 8],
     pub default_context: u32,
@@ -35,7 +34,7 @@ fn close_slots(
     }
     rc
 }
-/// fn_1f1138 / EU 1f12f4 / KR 1f13a0.
+
 pub fn fn_1f1138(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32 {
     let rc = frontend::validate_handle(p != 0, tag, 0xf488, 0x54);
     if rc >= 0x80000000 {
@@ -43,7 +42,7 @@ pub fn fn_1f1138(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32
     }
     close_slots(m, p, 12, 0x28, 4, rc, h)
 }
-/// fn_205e58 / EU 206014 / KR 2060c0.
+
 pub fn fn_205e58(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32 {
     let rc = frontend::validate_handle(p != 0, tag, 0xf38a, 0xb8);
     if rc >= 0x80000000 {
@@ -51,7 +50,7 @@ pub fn fn_205e58(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32
     }
     close_slots(m, p, 24, 28, 4, rc, h)
 }
-/// fn_21cd54 / EU 21cf10 / KR 21cfbc.
+
 pub fn fn_21cd54(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32 {
     let rc = frontend::validate_handle(p != 0, tag, 0xf389, 0x4c);
     if rc >= 0x80000000 {
@@ -59,7 +58,7 @@ pub fn fn_21cd54(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32
     }
     close_slots(m, p, 28, 32, 4, rc, h)
 }
-/// fn_219c8c / EU 219e48 / KR 219ef4.
+
 pub fn fn_219c8c(
     m: &mut Memory<'_>,
     p: u32,
@@ -182,7 +181,7 @@ fn release_blobs(
         }
     }
 }
-/// fn_2318f0 / EU 231aac / KR 231b58.
+
 pub fn fn_2318f0(m: &mut Memory<'_>, p: u32, tag: u32, e: &Environment, h: &mut impl Host) -> u32 {
     let rc = context(m, p, tag, 0x354, 300, e);
     if rc < 0x80000000 {
@@ -190,7 +189,7 @@ pub fn fn_2318f0(m: &mut Memory<'_>, p: u32, tag: u32, e: &Environment, h: &mut 
     }
     rc
 }
-/// fn_23220c / EU 2323c8 / KR 232474.
+
 pub fn fn_23220c(m: &mut Memory<'_>, p: u32, tag: u32, e: &Environment, h: &mut impl Host) -> u32 {
     let rc = context(m, p, tag, 0x356, 0x24, e);
     if rc < 0x80000000 {
@@ -199,8 +198,6 @@ pub fn fn_23220c(m: &mut Memory<'_>, p: u32, tag: u32, e: &Environment, h: &mut 
     rc
 }
 
-/// fn_1ef464 / EU 1ef620 / KR 1ef6cc.
-/// The caller supplies this component's two input/output MIME table entries.
 pub fn fn_1ef464(
     m: &mut Memory<'_>,
     p: u32,
@@ -268,7 +265,7 @@ pub fn fn_1ef464(
     close_slots(m, p, 12, 0x38, j, 0, h);
     rc
 }
-/// fn_226ef8 / EU 2270b4 / KR 227160.
+
 pub fn fn_226ef8(m: &mut Memory<'_>, _a: u32, _b: u32, p: u32) -> u32 {
     if p != 0 && m.word(p) != 0 {
         let at = m.word(p) + 0x1c;
@@ -278,7 +275,7 @@ pub fn fn_226ef8(m: &mut Memory<'_>, _a: u32, _b: u32, p: u32) -> u32 {
     }
     1
 }
-/// fn_24eac4 / EU 24ec80 / KR 24ed2c.
+
 pub fn fn_24eac4(
     m: &mut Memory<'_>,
     p: u32,
@@ -321,15 +318,14 @@ pub fn fn_24eac4(
     }
     0
 }
-/// fn_201eb0 / EU 20206c / KR 202118.
-/// Dictionary type literals are caller-supplied immutable strings.
+
 pub fn fn_201eb0(m: &mut Memory<'_>, p: u32, tag: u32, types: [&[u8]; 3]) -> u32 {
     if frontend::validate_handle(p != 0, tag, 0x2f0, 0x30) >= 0x80000000 {
         return 0;
     }
     let mut node = m.word(p + 28);
     while node != 0 {
-        // Translate one raw node into the existing typed list iterator.
+
         let mut nodes = [crate::frontend_resources::ResourceListNode {
             key: m.word(node),
             value: m.word(node + 4),
@@ -357,8 +353,7 @@ pub fn fn_201eb0(m: &mut Memory<'_>, p: u32, tag: u32, types: [&[u8]; 3]) -> u32
     }
     u32::from(m.word(p + 40) != 0)
 }
-/// fn_1e5af0 / EU 1e5cac / KR 1e5d58.
-/// fn_264578 has no port yet: the backend operation is an explicit host boundary.
+
 pub fn fn_1e5af0(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32 {
     if frontend::validate_handle(p != 0, tag, 0x3815, 0x30) >= 0x80000000 {
         return 0x81102008;
@@ -387,7 +382,6 @@ pub fn fn_1e5af0(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32
     0
 }
 
-/// Immutable content-type and diagnostic literal addresses for fn_2319f0.
 pub struct MarkerTypes {
     pub sync: u32,
     pub markers: u32,
@@ -395,8 +389,7 @@ pub struct MarkerTypes {
     pub content_type: u32,
     pub format: u32,
 }
-/// fn_2319f0 / EU 231bac / KR 231c58.
-/// scratch is 28 disjoint caller-owned stack bytes, restored before return.
+
 pub fn fn_2319f0(
     m: &mut Memory<'_>,
     p: u32,
@@ -467,14 +460,14 @@ pub fn fn_2319f0(
 }
 
 use crate::{log_live, normalization as norm};
-/// Immutable diagnostic addresses. The caller supplies literals from its ROM.
+
 pub struct SpeechLiterals {
     pub text: [u32; 16],
     pub end: u32,
-    /// domainIndex, iDomainIndexID, domain, max, and %s%d%s%d.
+
     pub errors: [u32; 5],
 }
-/// The dispatcher must invoke actual guest ports on the supplied memory.
+
 pub trait SpeechHost: Host + log_live::LogMethodsM + crate::boot_part_b::FormatHost {}
 impl<T: Host + log_live::LogMethodsM + crate::boot_part_b::FormatHost> SpeechHost for T {}
 fn half(m: &Memory<'_>, p: u32) -> u16 {
@@ -517,7 +510,7 @@ fn diagnostic(
     crate::render_part_a::error_log(m, h, m.word(m.word(p) + 16), category, code, fmt, s, s + 32);
     m.bytes[off..off + 52].copy_from_slice(&saved);
 }
-/// fn_24eb78. Requires a zero-based arena and 52 disjoint scratch bytes.
+
 pub fn fn_24eb78(
     m: &mut Memory<'_>,
     p: u32,
@@ -549,8 +542,7 @@ pub fn fn_24eb78(
             i = i.wrapping_add(1);
         } else {
             let a = m.word(domains);
-            // Run the destructor on the live arena before the existing removal port.
-            // Its callback-free phase uses the current post-destructor contents.
+
             let dtor = m.word(a + 12);
             if dtor != 0 {
                 Host::call(
@@ -563,8 +555,7 @@ pub fn fn_24eb78(
                     ],
                 );
             }
-            // remove_at would call the destructor a second time. The existing
-            // normalization array_remove is precisely its callback-free phase.
+
             if norm::array_remove(m.bytes, a, i as u32) == 0 {
                 diagnostic(
                     m,
@@ -681,7 +672,7 @@ fn token_domain(
         }
     }
 }
-/// fn_1ede44. Zero-based live memory, 84 disjoint scratch bytes, restored on return.
+
 pub fn fn_1ede44(
     m: &mut Memory<'_>,
     p: u32,
@@ -920,7 +911,7 @@ fn domain_value_live(
     }
     rc
 }
-/// fn_24e9cc. The setter has no separate Rust port.
+
 fn domain_end_live(
     m: &mut Memory<'_>,
     p: u32,
@@ -947,7 +938,7 @@ fn domain_end_live(
         norm::forward_error(0)
     }
 }
-/// fn_24c470. Zero-based live arena and 1120 disjoint scratch bytes.
+
 pub fn fn_24c470(
     m: &mut Memory<'_>,
     p: u32,
@@ -1132,7 +1123,7 @@ pub fn fn_24c470(
                     }
                 }
                 if half(m, r + 2) != end {
-                    // Existing setter port includes the same array lookup.
+
                     rc = domain_end_live(m, p, i as u32, end, t, logs, h);
                     if rc >= 0x80000000 {
                         break 'work;
@@ -1144,16 +1135,12 @@ pub fn fn_24c470(
             rc = fn_24eb78(m, p, t, logs, h);
         }
     }
-    // End format is supplied separately by the caller after the shared literals.
+
     live_log(m, p, m.word(p + 0x48), t.end, &[rc], logs, h);
     m.bytes[off..off + 1120].copy_from_slice(&saved);
     rc
 }
 
- 
-/// Host for round-three calls. All callbacks receive the current arena.
-/// Reentrant dependency dispatch must bind existing crate ports rather than
-/// substitute recorded replies. Only external/unported functions may be scripted.
 pub trait Round3Host: SpeechHost + crate::reentrant::HooksM {}
 impl<T: SpeechHost + crate::reentrant::HooksM> Round3Host for T {}
 struct SelectionHost<'a, H>(&'a mut H);
@@ -1176,14 +1163,7 @@ fn release_lookup(m: &mut Memory<'_>, p: u32, h: &mut impl Host) {
     let mut a = crate::selection::arena::Arena::new(m.base, m.bytes);
     crate::selection::arena_mid::release_frame_lookup(&mut a, &mut SelectionHost(h), p);
 }
-/// fn_225138. Parameter-change setter (src/fn_22508c.c): frequencyhz is
-/// rejected while streams are live; rate converts through fn_2a9608 into
-/// e->rate and waitfactor is stored, both with the module log line.
-/// Engine offsets from the ARM: in.p +0x7a0, framesOut.p +0x7b0,
-/// rate +0x740, waitFactor +0x744, ctx +0x8, log word(ctx+16), module
-/// literal 0x8fa510, formats 0x225280 ("Set rate %d (synth %d)") and
-/// 0x22529c ("Set wait factor %d"). `scratch` supplies 8 guest bytes for
-/// the log varargs block.
+
 pub fn fn_225138(
     m: &mut Memory<'_>,
     e: u32,
@@ -1242,15 +1222,6 @@ pub fn fn_225138(
     crate::speech_part_2::Host::call(h, m, 0x1738e8, &[log, 0x8fa510, 3, 0, 0x22529c, scratch])
 }
 
-/// fn_228aac and the fn_228780 it drives (src/fn_228780.c): the synth
-/// parameter change callback. A known parameter name parses the value and
-/// applies it: audiooutputbufsamples resizes the buffer, volume stores
-/// below 101, rate converts through fn_2a9608 into the engine pitch scale
-/// with a log line, wait is rejected, pitch stores (value-50)*5 through
-/// the engine pitch field with a log line. Offsets from the ARM: synth
-/// bufferSamples +0x14, frameSamples +0x18, volume +0x24, lock +0x12,
-/// engine +0x28, engine pitch +0x32, engine pitch scale +0x36, voice rate
-/// +0x740. `scratch` supplies 8 guest bytes for log varargs.
 pub fn fn_228aac(
     m: &mut Memory<'_>,
     p: u32,
@@ -1259,9 +1230,7 @@ pub fn fn_228aac(
     scratch: u32,
     h: &mut impl Round3Host,
 ) -> u32 {
-    // Classify the name without holding the borrow, then work with a
-    // static copy: 0 audiooutputbufsamples, 1 volume, 2 rate, 3 ratewpm,
-    // 4 pitch, 255 unknown (ignored, rc 0).
+
     let kind = {
         let base = m.offset(name);
         let len = crate::frontend::strlen_bytes(&m.bytes[base..]) as usize;
@@ -1382,8 +1351,7 @@ fn fn_228780(
                 &[log, 0x8fa510, 3, 0, 0x228998, scratch],
             );
             if result < 0x80000000 {
-                // fn_2a9e48 inlined from its disassembly: the value is
-                // already range-checked, store value<<6 as a halfword.
+
                 let engine = m.word(p + 0x28);
                 m.put_half(engine + 32, ((pitch << 6) as i16) as u16);
             }
@@ -1397,11 +1365,6 @@ fn fn_228780(
     }
 }
 
-/// fn_226f14. Releases a shared stream, its lookup and non-static storage.
-/// fn_22508c. Parameter-change check callback (src/fn_22508c.c): marks the
-/// parameter handled, rejecting frequencyhz while streams are live and a
-/// negative waitfactor. All other names (rate, pitch, volume, ...) stay
-/// handled with rc 0; the value string is only read for waitfactor.
 pub fn fn_22508c(m: &mut Memory<'_>, e: u32, name: u32, value: u32, handled: u32) -> u32 {
     let is_freq = {
         let base = m.offset(name);
@@ -1445,8 +1408,7 @@ pub fn fn_226f14(m: &mut Memory<'_>, p: u32, heap: u32, h: &mut impl Round3Host)
         }
     }
 }
-/// fn_24e2f8. Appends a ten-byte active-domain record. out is caller-owned.
-/// The disjoint scratch word is restored, including on allocation failure.
+
 pub fn fn_24e2f8(
     m: &mut Memory<'_>,
     p: u32,
@@ -1466,7 +1428,7 @@ pub fn fn_24e2f8(
     diagnostic(m, p, m.word(p + 0x48), 0x5df0, 0, &[], scratch, h);
     norm::error_code(10)
 }
-/// fn_2276dc. Close all streams and preserve the first failing close status.
+
 pub fn fn_2276dc(
     m: &mut Memory<'_>,
     p: u32,
@@ -1539,7 +1501,6 @@ pub fn fn_2276dc(
     rc
 }
 
-/// ROM literals used by the selection open path.
 pub struct SelectionOpenLiterals {
     pub mime: [u32; 5],
     pub category: u32,
@@ -1547,7 +1508,7 @@ pub struct SelectionOpenLiterals {
     pub content_type: u32,
     pub callbacks: [u32; 3],
 }
-/// fn_2279b4. scratch is 64 disjoint bytes, restored on every exit.
+
 pub fn fn_2279b4(
     m: &mut Memory<'_>,
     p: u32,
@@ -1604,7 +1565,7 @@ pub fn fn_2279b4(
         if required {
             rc = r;
             if rc >= 0x80000000 {
-                // The context is at p+8 rather than p+0 as in token code.
+
                 m.put_word(scratch + 12, t.content_type);
                 m.put_word(scratch + 16, t.mime[mi]);
                 crate::render_part_a::error_log(
@@ -1630,7 +1591,6 @@ pub fn fn_2279b4(
     rc
 }
 
-/// Live selector cleanup dispatch used by reentrant hosts.
 pub fn selection_cleanup(m: &mut Memory<'_>, f: u32, p: u32, h: &mut impl Host) -> u32 {
     let mut arena = crate::selection::arena::Arena::new(m.base, m.bytes);
     let mut host = SelectionHost(h);
@@ -1641,14 +1601,12 @@ pub fn selection_cleanup(m: &mut Memory<'_>, f: u32, p: u32, h: &mut impl Host) 
     }
 }
 
-/// Literal addresses for fn_1ecf68.
 pub struct QueryLiterals {
     pub category: u32,
     pub enter: u32,
     pub lid: u32,
 }
-/// fn_1ecf68. scratch reserves 80 disjoint bytes and is restored on exit.
-/// Live broker-backed contains query. scratch reserves 80 disjoint bytes.
+
 pub fn fn_26b718(m:&mut Memory<'_>,p:u32,key:u32,size:u32,found:u32,scratch:u32,h:&mut impl Round3Host)->u32 {
  let off=m.offset(scratch);let mut saved=[0u8;80];saved.copy_from_slice(&m.bytes[off..off+80]);
  let rc=crate::reentrant::contains_m(m,&mut QueryMaps {h,scratch:scratch+4},p,key,size,found,scratch);
@@ -1709,7 +1667,6 @@ pub fn fn_1ecf68(
     rc
 }
 
-/// Region-specific immutable dictionary strings and diagnostic addresses.
 pub struct DictionaryLiterals<'a> {
     pub types: [&'a [u8]; 3],
     pub disabled_mode: &'a [u8],
@@ -1720,7 +1677,7 @@ pub struct DictionaryLiterals<'a> {
     pub name: u32,
     pub empty: u32,
     pub type_label: u32,
-    /// BEG/END trace formats and their literal argument labels.
+
     pub trace_formats: [u32; 4],
     pub labels: [u32; 7],
 }
@@ -1735,9 +1692,7 @@ fn dictionary_trace(m: &mut Memory<'_>, p: u32, fmt: u32, args: &[u32], h: &mut 
     a[3..3 + args.len()].copy_from_slice(args);
     Host::call(h, m, 0x17486c, &a[..3 + args.len()]);
 }
-/// fn_202348. The memory must be zero-based. scratch is 128 disjoint bytes.
-/// Parameter dispatch binds fetch_parameter_m and bridge-4's real memory-passing
-/// lookup; dictionary transcriptions use the real M entry as well.
+
 pub fn fn_202348(
     m: &mut Memory<'_>,
     p: u32,
@@ -1961,8 +1916,7 @@ pub fn fn_202348(
                 }
             }
         }
-        // A successful dictionary lookup jumps straight to cleanup in C.
-        // Distinguish it from exhausting the iterator before running langCb.
+
         if iterator == 0 {
             if m.word(p + 40) != 0 {
                 err = Host::call(h, m, m.word(p + 40), &[m.word(p + 44), text, len, out]);
@@ -1979,8 +1933,6 @@ pub fn fn_202348(
     err
 }
 
-/// fn_2031b0. Reuses the complete FE_DEPES translation and restores the
-/// legacy entry's fixed local slots, which are not engine state.
 pub fn fn_2031b0(
     m: &mut Memory<'_>,
     p: u32,
@@ -1998,7 +1950,6 @@ pub fn fn_2031b0(
     rc
 }
 
-/// Immutable ROM addresses used by fn_230e1c.
 pub struct XcoderLiterals {
     pub input_key: u32,
     pub native_key: u32,
@@ -2043,8 +1994,7 @@ fn parameter(m: &mut Memory<'_>, context: u32, key: u32, out: u32, h: &mut impl 
     let rc = Host::call(h, m, 0x175a1c, &[m.word(context + 20), key, out]);
     if rc >= 0x80000000 { 0 } else { m.word(out) }
 }
-/// fn_230e1c. scratch is 512 disjoint bytes, restored before returning.
-/// fn_175a1c dispatch must bind the live fetch_parameter_m adapter.
+
 pub fn fn_230e1c(
     m: &mut Memory<'_>,
     p: u32,
@@ -2174,7 +2124,6 @@ pub fn fn_230e1c(
     result
 }
 
-/// Region-dependent parameter and G2P diagnostic literals.
 pub struct G2pLiterals {
     pub key: u32,
     pub category: u32,
@@ -2203,9 +2152,7 @@ fn g2p_log(
         h,
     );
 }
-/// fn_26ff18. Seven tail words are start, record, record object/data,
-/// end output, tokenCheck and langOnly. scratch is 256 disjoint bytes.
-/// fn_175a1c dispatch is rebound to the live fetch_parameter_m adapter.
+
 pub fn fn_26ff18(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -2306,8 +2253,7 @@ pub fn fn_26ff18(
                 m.put_byte(split, 0);
                 cursor = split + 1;
             }
-            // Seven separators expose pos, domain, phon, gpos, priority,
-            // unused field six and language. A further separator terminates it.
+
             let pos = fields[0];
             let dom = fields[1];
             let mut phon = fields[2];
@@ -2598,7 +2544,6 @@ pub fn fn_26ff18(
     result
 }
 
-/// Diagnostic addresses used by fn_24bbc8.
 pub struct DomainOpenLiterals {
     pub formats: [u32; 12],
     pub trace: u32,
@@ -2634,9 +2579,7 @@ fn rule_live(
         );
         wrote = half(m, s + 4);
     }
-    // The ROM ignores the second method's return value and checks only
-    // its written count. Feed that count into the existing result port.
-    // No recorded reply or fabricated guest read is used.
+
     let mut frame = [0u8; 0x530];
     for (at, v) in [
         (0x504, status),
@@ -2718,7 +2661,7 @@ fn domain_open_log(
     );
     m.bytes[off..off + 32].copy_from_slice(&saved);
 }
-/// fn_24bbc8. Caller-owned scratch spans 1600 disjoint bytes and is restored.
+
 pub fn fn_24bbc8(
     m: &mut Memory<'_>,
     p: u32,
@@ -3078,9 +3021,7 @@ fn lattice_div(v: i32, d: i32) -> i32 {
         .expect("ARM division by zero")
         .quotient
 }
-/// Memory-passing adapter for the existing BandSystem forward/backward ports.
-/// Reads each row and input at the point it is consumed, so guest aliasing does
-/// not become simultaneous Rust mutable/immutable references.
+
 fn band_m(m: &mut Memory<'_>, p: u32, which: u32, a: u32, b: u32, c: u32) {
     let n = m.word(p + 32) as i32;
     let width = m.word(p + 36) as i32;
@@ -3164,8 +3105,7 @@ fn band_m(m: &mut Memory<'_>, p: u32, which: u32, a: u32, b: u32, c: u32) {
         }
     }
 }
-/// fn_2a24f8. Full normal-equation assembly and both order branches.
-/// The current arena is passed through every diagnostic/runtime callback.
+
 pub fn fn_2a24f8<H: Round3Host + crate::speech_part_5::Host>(
     m: &mut Memory<'_>,
     context: u32,
@@ -3243,9 +3183,6 @@ pub fn fn_2a24f8<H: Round3Host + crate::speech_part_5::Host>(
     }
 }
 
-/// Reentrant fn_175a1c dispatch, rebound to bridge-4's live fetch wrapper.
-/// The out word models a caller-local pointer cell, disjoint from registry
-/// state. Its initial value is retained on validation paths that do not write it.
 pub fn fetch_parameter_m(
     m: &mut Memory<'_>,
     registry: u32,
@@ -3267,9 +3204,7 @@ pub fn fetch_parameter_m(
     m.put_word(out, value);
     rc
 }
-/// Adapt the immutable legacy lock header to a callback on live memory.
-/// Only the three consumed header words are projected, never the arena or
-/// callback state. The original makes no subsequent header read after dispatch.
+
 pub fn parameter_lock_m(m: &mut Memory<'_>, lock: u32, release: bool, h: &mut impl Host) -> u32 {
     if lock == 0 {
         return if release {

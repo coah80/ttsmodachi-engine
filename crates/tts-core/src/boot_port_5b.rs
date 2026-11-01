@@ -1,18 +1,17 @@
-//! CDCT dictionary construction, interface lookup and boot attachment.
+
 use crate::boot::Memory;
 
-/// Platform callbacks and explicitly unported base-class methods.
 pub trait Host: crate::boot_part_f::Host {
     fn context_pair(&mut self, _m:&Memory<'_>)->[u8;8] {[0;8]}
     fn default_context(&mut self, _m:&Memory<'_>)->u32 {0}
     fn literal(&mut self, _m: &Memory<'_>, us: u32) -> u32 { us }
-    /// The regional base vtable fn_2e4afc publishes in the object.
+
     fn base_vtable(&self) -> u32 { 0 }
-    /// The regional interface vtable fn_2fbe90 publishes in the object.
+
     fn interface_vtable(&self) -> u32 { 0 }
-    /// The regional dictionary vtable fn_2de614 publishes in the object.
+
     fn ctor_vtable(&self) -> u32 { 0 }
-    /// The regional parameter tables.
+
     fn parameters(&self) -> crate::boot_part_f::Environment {
         crate::boot_part_f::Environment {
             stream_base_vtable: 0,
@@ -22,13 +21,12 @@ pub trait Host: crate::boot_part_f::Host {
             accept: 0,
         }
     }
-    /// The section names the CDCT constructors open.
+
     fn ctor_names(&self) -> Names {
         Names { entry: 0, first: 0, second: 0 }
     }
 }
 
-/// fn_2b1d0c: destroy the collection, optional interface record, and base.
 pub fn fn_2b1d0c(m: &mut Memory<'_>, h: &mut impl Host, p: u32) {
     let allocator = m.word(p.wrapping_add(0x34));
     let collection = m.word(p.wrapping_add(0x5c));
@@ -40,7 +38,6 @@ pub fn fn_2b1d0c(m: &mut Memory<'_>, h: &mut impl Host, p: u32) {
     fn_2de278(m, h, p);
 }
 
-/// fn_2de278: release the base class members, then the base itself.
 pub fn fn_2de278(m: &mut Memory<'_>, h: &mut impl Host, p: u32) {
     let allocator = m.word(p.wrapping_add(0x34));
     crate::boot_part_f::fn_1b2128(m, allocator, m.word(p.wrapping_add(0x44)), h);
@@ -52,7 +49,6 @@ pub fn fn_2de278(m: &mut Memory<'_>, h: &mut impl Host, p: u32) {
     fn_2de8ac(m, h, p);
 }
 
-/// fn_2de8ac: release the grandbase members, then the base itself.
 pub fn fn_2de8ac(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     crate::boot_part_f::fn_1b2128(m, m.word(p.wrapping_add(0x34)), m.word(p.wrapping_add(0x2c)), h);
     m.put_word(p.wrapping_add(0x2c), 0);
@@ -75,13 +71,8 @@ pub fn fn_2de8ac(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     fn_2e4b58(m, h, p)
 }
 
-/// Canonical code-pointer token for the interface release method. The C oracle
-/// and the ARM emulator resolve the same slot to their own address, so the
-/// token is the only address the Rust side can dispatch on.
 pub const IFACE_RELEASE_TOKEN: u32 = 0x9000_0040;
 
-/// The archive host the interface release path needs. Only the reference
-/// counting path is reachable, so every service call is out of scope.
 struct IfaceHost<'a, H>(&'a mut H);
 impl<H: Host> crate::boot_part_e::Host for IfaceHost<'_, H> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 { self.0.call(m, f, a) }
@@ -95,9 +86,6 @@ impl<H: Host> crate::boot_part_e::ArchiveHost for IfaceHost<'_, H> {
     }
 }
 
-/// fn_2e4b58: release the interface reference through its vtable, then the base.
-/// The vtable slot holds a canonical token, so the release is dispatched on the
-/// token and the adjustment word comes from the same table.
 pub fn fn_2e4b58(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     let iface = m.word(p.wrapping_add(0x14));
     if iface != 0 {
@@ -116,13 +104,11 @@ pub fn fn_2e4b58(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     crate::boot_port_1::fn_1b44c8(m)
 }
 
-/// fn_2de1bc: construct the base class, publish its vtable, then dispatch.
 pub fn fn_2de1bc(m: &mut Memory<'_>, h: &mut impl Host, p: u32, allocator: u32,
     methods: u32, entry: u32, arg5: u32, t: &Tables) -> u32 {
     let saved = m.word(t.slot);
     m.put_word(t.slot, 0);
-    // The archive open is outside this lane and has no usable unit; the host
-    // supplies it and publishes the stream pointer in the caller's slot.
+
     let s = h.call(m, 0x1aaa80, &[allocator, allocator, methods, entry, arg5]);
     let stream = m.word(t.slot);
     m.put_word(t.slot, saved);
@@ -136,10 +122,9 @@ pub fn fn_2de1bc(m: &mut Memory<'_>, h: &mut impl Host, p: u32, allocator: u32,
     h.call(m, m.word(table.wrapping_add(16)), &[stream])
 }
 
-/// fn_2e40d0: validate the dictionary payload before the table is released.
 pub fn fn_2e40d0(m: &mut Memory<'_>, h: &mut impl Host, a: u32) -> u32 {
     if m.word(a.wrapping_add(0x18)) != 0 {
-        // The ROM string "pDct" lives at 0x2e3f04; fn_1b4238 never reads it.
+
         return crate::speech_part_5::fn_1b4238(m, 0x2e3f04);
     }
     let flag = m.byte(a.wrapping_add(0x14));
@@ -147,7 +132,6 @@ pub fn fn_2e40d0(m: &mut Memory<'_>, h: &mut impl Host, a: u32) -> u32 {
     fn_30047c(m, h, a)
 }
 
-/// fn_30047c: release the dictionary payload, its two blocks and its node list.
 pub fn fn_30047c(m: &mut Memory<'_>, h: &mut impl Host, a: u32) -> u32 {
     let allocator = m.word(a.wrapping_add(0x24));
     let block = m.word(a);
@@ -170,7 +154,6 @@ pub fn fn_30047c(m: &mut Memory<'_>, h: &mut impl Host, a: u32) -> u32 {
     0
 }
 
-/// fn_300530: release the dictionary payload and its node chain.
 pub fn fn_300530(m: &mut Memory<'_>, h: &mut impl Host, a: u32) -> u32 {
     let allocator = m.word(a.wrapping_add(0x24));
     let node = m.word(a.wrapping_add(0x28));
@@ -186,7 +169,6 @@ pub fn fn_300530(m: &mut Memory<'_>, h: &mut impl Host, a: u32) -> u32 {
     rc
 }
 
-/// fn_301e5c: release a node chain through the f20 link.
 fn fn_301e5c(m: &mut Memory<'_>, h: &mut impl Host, allocator: u32, node: u32) -> u32 {
     if node == 0 { return 0; }
     let next = m.word(node.wrapping_add(0x20));
@@ -199,7 +181,6 @@ fn fn_301e5c(m: &mut Memory<'_>, h: &mut impl Host, allocator: u32, node: u32) -
     0
 }
 
-/// fn_30a388: release the node pool and the owner list that holds it.
 fn fn_30a388(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     let pool = m.word(p);
     fn_309fc4(m, h, pool);
@@ -207,7 +188,6 @@ fn fn_30a388(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     0
 }
 
-/// fn_309fc4: return the pool block to the free list and release it.
 fn fn_309fc4(m: &mut Memory<'_>, h: &mut impl Host, p: u32) {
     let count = m.word(p.wrapping_add(8));
     if count != 0 {
@@ -225,7 +205,6 @@ fn fn_309fc4(m: &mut Memory<'_>, h: &mut impl Host, p: u32) {
     crate::boot_part_f::fn_1b2128(m, allocator, p, h);
 }
 
-/// fn_309ca8: push a pool block back onto the owner free list.
 fn fn_309ca8(m: &mut Memory<'_>, h: &mut impl Host, owner: u32, index: u32) {
     let node = owner.wrapping_add(index.wrapping_mul(20));
     let left = m.word(node.wrapping_add(8));
@@ -237,7 +216,6 @@ fn fn_309ca8(m: &mut Memory<'_>, h: &mut impl Host, owner: u32, index: u32) {
     m.put_word(owner.wrapping_add(4), index);
 }
 
-/// fn_308ed0: release the owner block and clear the owner list head.
 fn fn_308ed0(m: &mut Memory<'_>, h: &mut impl Host, x: u32) {
     let allocator = m.word(x.wrapping_add(0x14));
     if allocator != 0 {
@@ -248,7 +226,6 @@ fn fn_308ed0(m: &mut Memory<'_>, h: &mut impl Host, x: u32) {
     m.put_word(x.wrapping_add(4), 0);
 }
 
-/// fn_2b2de8: release a dictionary table and its three slots.
 pub fn fn_2b2de8(m: &mut Memory<'_>, h: &mut impl Host, p: u32) {
     let allocator = m.word(p.wrapping_add(0x38));
     if crate::boot_port_1::fn_1ba384(m, allocator, m.word(p.wrapping_add(0x4c)), h) != 0 { return; }
@@ -266,19 +243,16 @@ pub fn fn_2b2de8(m: &mut Memory<'_>, h: &mut impl Host, p: u32) {
     }
     let slots = m.word(p.wrapping_add(0x44));
     crate::boot_part_f::fn_1b2128(m, allocator, slots, h);
-    // The table base destructor releases the interface reference first.
+
     fn_2e4b58(m, h, p);
 }
 
-/// fn_2b2210: query a CDCT interface, falling back to the real base query.
 pub fn fn_2b2210(m: &mut Memory<'_>, p: u32, id: u32, out: u32) -> u32 {
     let offset = match id { 0x18b53e23 => 0x50, 0x18b54089 => 0x4c,
         0x482d5ba8 => 0x54, _ => return crate::boot_port_5::fn_2e4bf8(m,p,id,out) };
     m.put_word(out,p.wrapping_add(offset));0
 }
 
-/// Regional ROM table addresses. Scratch is a disjoint caller-owned byte for
-/// the existing calloc wrapper's guest status slot.
 pub struct Tables {
     pub dictionary: u32,
     pub collection: u32,
@@ -292,12 +266,12 @@ struct Lane6<'a,H>(&'a mut H);
 impl<H:Host> crate::boot_port_6::Host for Lane6<'_,H> {
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.0.call(m,f,a)}
 }
-/// fn_2b22b0: allocate and construct a CDCT wrapper using the live allocator.
+
 pub fn fn_2b22b0(m:&mut Memory<'_>,h:&mut impl Host,heap:u32,allocator:u32,methods:u32,entry:u32,context:u32,out:u32,t:&Tables)->u32 {
     let mut status=0;
     let p=crate::boot_part_f::fn_1b2140(m,heap,0x60,&mut status,h);
     if status!=0 {return status as u32;}
-    // The generic CDCT base constructor is outside this lane and unported.
+
     status=fn_2de1bc(m,h,p,allocator,methods,entry,context,t) as u8;
     if status==0 {
         m.put_word(p+0xc,t.dictionary.wrapping_sub(0x24));
@@ -348,9 +322,6 @@ fn engine_free(m:&mut Memory<'_>,h:&mut impl Host,heap:u32,p:u32) {
     crate::frontend::heap_release_m(m.bytes,if heap==0{None}else{Some(heap-m.base)},if p==0{None}else{Some(p)},&mut vt);
 }
 
-/// ROM literals used by fn_281f34. The type strings must be mapped in Memory.
-/// Scratch is 64 disjoint caller-owned bytes, saved and restored like an ARM
-/// stack frame. Table scratch is a separate temporary byte.
 pub struct Attach {
     pub types: [u32;3],
     pub category: u32,
@@ -400,7 +371,6 @@ fn cleanup(m:&mut Memory<'_>,h:&mut impl Host,a:u32,e:u32,l:&Attach) {
     }
 }
 
-/// fn_281f34: attach the selected dictionary and publish its lookup interface.
 pub fn fn_281f34(m:&mut Memory<'_>,h:&mut impl Host,a:u32,e:u32,l:&Attach)->u32 {
     let t=m.word(e+8);
     let (mut status,ctx)=context(m,h,a,l.scratch);
@@ -409,8 +379,7 @@ pub fn fn_281f34(m:&mut Memory<'_>,h:&mut impl Host,a:u32,e:u32,l:&Attach)->u32 
     let mut clean=false;
     if equal(m,t,l.types[0]) {
         let at=m.offset(l.scratch+8);let mut saved=[0u8;16];saved.copy_from_slice(&m.bytes[at..at+16]);
-        // TEMPORARY 2b4010 STUB boundary, owned by boot-port-5.
-        // Rebind this call to its real Rust entry when that port lands.
+
         status=h.call(m,0x2b4010,&[a+24,a+24,l.scratch+8,a+44,e,a+60,1,e+32]) as u8 as u32;
         m.bytes[at..at+16].copy_from_slice(&saved);
         if status!=0 {
@@ -447,11 +416,6 @@ pub fn fn_281f34(m:&mut Memory<'_>,h:&mut impl Host,a:u32,e:u32,l:&Attach)->u32 
     status
 }
 
-// ---------------------------------------------------------------- CDCT archive
-// The archive stream table the CDCT constructors and the stream methods
-// dispatch through. The native oracle resolves a slot to its own source
-// unit and the ARM emulator to the regional ROM entry, so the Rust side
-// dispatches on the token instead of on a ROM address.
 pub const STREAM_MAGIC: u32 = 0x9000_0260;
 pub const STREAM_VERSION: u32 = 0x9000_0280;
 pub const STREAM_SECTION: u32 = 0x9000_02a0;
@@ -459,14 +423,9 @@ pub const STREAM_RELEASE: u32 = 0x9000_02c0;
 pub const STREAM_READ: u32 = 0x9000_02e0;
 pub const STREAM_OPEN: u32 = 0x9000_0300;
 pub const STREAM_CALL: u32 = 0x9000_0320;
-/// The token of the section reader the fn_1aa3cc row dispatches through.
+
 pub const SECTION_READ: u32 = 0x9000_0340;
 
-/// The three section tags the CDCT constructors open. The ROM holds them as
-/// four byte values in the literal pool of the constructor (US 0x2de7ec
-/// "EDKE", 0x2de7f0 "EDEC", 0x2de7f4 "EDCO") and the section lookup
-/// compares the name as a u32, so the tag is what travels in the call and
-/// it reads the same in every region.
 #[derive(Clone, Copy)]
 pub struct Names {
     pub entry: u32,
@@ -474,42 +433,37 @@ pub struct Names {
     pub second: u32,
 }
 
-/// The archive stream implementation the stream methods need. The native
-/// oracle links the real source units and the ARM emulator runs the
-/// regional ROM entries, so the Rust side asks the host for the calls that
-/// reach outside the ported code.
 pub trait StreamHost: Host + crate::boot_port_5c::Host {
-    /// fn_1a9a60: look a named section up in the stream.
+
     fn section_lookup(&mut self, _m: &mut Memory<'_>, _a: [u32; 7], _scratch: u32) -> u32 {
         crate::normalization::code_4(0)
     }
-    /// fn_1a8cf8: initialize a stream handle.
+
     fn stream_init(&mut self, _m: &mut Memory<'_>, _a: [u32; 6]) -> u32 {
         crate::normalization::code_4(0)
     }
-    /// fn_1a86a0: validate a stream handle and publish its two status bytes.
+
     fn stream_validate(&mut self, _m: &mut Memory<'_>, _a: [u32; 4]) -> u32 {
         crate::normalization::code_4(0)
     }
-    /// fn_1a90c0: the handle vtable's slot four.
+
     fn handle_check(&mut self, _m: &mut Memory<'_>, _handle: u32) -> u32 {
         0
     }
-    /// fn_1aa8fc: the section object's vtable slot 0x40.
+
     fn section_open(&mut self, _m: &mut Memory<'_>, _object: u32) -> u32 {
         0
     }
-    /// fn_1aa8fc: the section result object's vtable slot 0x10.
+
     fn section_call(&mut self, _m: &mut Memory<'_>, _object: u32, _arg: u32) -> u32 {
         0
     }
-    /// fn_1aa3cc: the section reader's vtable slot 0x18.
+
     fn section_read(&mut self, _m: &mut Memory<'_>, _a: &[u32]) -> u32 {
         crate::normalization::code_4(0)
     }
 }
 
-/// fn_1a9a60: the section lookup, composed with the real regional ports.
 pub fn fn_1a9a60(
     m: &mut Memory<'_>,
     args: [u32; 7],
@@ -544,9 +498,6 @@ pub fn fn_1a9a60(
     )
 }
 
-/// fn_1a86a0: the archive validator. The archive environment and the real
-/// regional ports do the work, so the stream methods of this lane reach the
-/// same validation the archive open does.
 pub fn fn_1a86a0(
     m: &mut Memory<'_>,
     args: [u32; 4],
@@ -566,10 +517,6 @@ pub fn fn_1a86a0(
     )
 }
 
-/// fn_1a90c0: open a handle for the section the caller named.
-/// `state` is the owning stream, `version` the packed section version the
-/// handle keeps, `out` the handle slot, `status` the status byte slot and
-/// `flag` the flag byte slot.
 pub fn fn_1a90c0(
     m: &mut Memory<'_>,
     h: &mut impl StreamHost,
@@ -617,10 +564,6 @@ pub fn fn_1a90c0(
     r
 }
 
-/// fn_1a9c50: open the named section of the stream. The scratch bytes are
-/// caller owned and hold the four out slots the ROM keeps on its frame.
-/// The C and the ARM keep those slots in the frame of the callee, so the
-/// borrowed scratch is restored before the row compares the arena.
 pub fn fn_1a9c50(
     m: &mut Memory<'_>,
     h: &mut impl StreamHost,
@@ -705,7 +648,6 @@ fn fn_1a9c50_frame(
     0
 }
 
-/// fn_1aa8fc: release the section handle and run the section's release path.
 pub fn fn_1aa8fc(m: &mut Memory<'_>, h: &mut impl StreamHost, this: u32, p: u32) -> u32 {
     let at = m.offset(this.wrapping_add(0x48));
     m.bytes[at] = 0;
@@ -733,9 +675,6 @@ pub fn fn_1aa8fc(m: &mut Memory<'_>, h: &mut impl StreamHost, this: u32, p: u32)
     }
 }
 
-/// fn_1aa3cc: read a section payload. The three words of the section
-/// descriptor travel in the frame of the caller. The flag byte lives in the
-/// frame of the callee in the C and in the ARM, so it is restored here.
 pub fn fn_1aa3cc(
     m: &mut Memory<'_>,
     h: &mut impl StreamHost,
@@ -778,9 +717,6 @@ fn fn_1aa3cc_frame(
     0
 }
 
-/// fn_2fd9a0: the CDCT object constructor. Boot-port-5c reconstructed the
-/// function and certified it against the C, the ARM ROM and Rust, so the
-/// constructor is the real port here and not a stub.
 pub fn fn_2fd9a0(
     m: &mut Memory<'_>,
     h: &mut impl StreamHost,
@@ -793,7 +729,6 @@ pub fn fn_2fd9a0(
     crate::boot_port_5c::fn_2fd9a0(m, h, t, heap, allocator, stream, out)
 }
 
-/// fn_2fac04: the buffer record constructor of boot-port-5c.
 pub fn fn_2fac04(
     m: &mut Memory<'_>,
     h: &mut impl StreamHost,
@@ -806,7 +741,6 @@ pub fn fn_2fac04(
     crate::boot_port_5c::fn_2fac04(m, h, t, allocator, value, size, out)
 }
 
-/// fn_302e38: the block record constructor of boot-port-5c.
 pub fn fn_302e38(
     m: &mut Memory<'_>,
     h: &mut impl StreamHost,
@@ -818,16 +752,12 @@ pub fn fn_302e38(
     crate::boot_port_5c::fn_302e38(m, h, t, allocator, data, out)
 }
 
-/// The stream table slot the CDCT constructors dispatch through, and the
-/// object the slots address.
 fn stream_table(m: &Memory<'_>, stream: u32) -> (u32, u32) {
     let vt = m.word(stream);
     let adj = m.word(vt.wrapping_add(0x68));
     (vt, stream.wrapping_sub(adj))
 }
 
-/// fn_2de614: build the CDCT dictionary from the archive stream. The
-/// scratch bytes are caller owned and hold the four out slots of the frame.
 pub fn fn_2de614(
     m: &mut Memory<'_>,
     h: &mut impl StreamHost,
@@ -936,8 +866,6 @@ pub fn fn_2de614(
     )
 }
 
-/// fn_2ddfe4: build the CDCT voice table from the archive stream. The
-/// scratch bytes are caller owned and hold the four out slots of the frame.
 pub fn fn_2ddfe4(
     m: &mut Memory<'_>,
     h: &mut impl StreamHost,

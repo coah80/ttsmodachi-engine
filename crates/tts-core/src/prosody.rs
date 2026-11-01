@@ -1,6 +1,5 @@
 use crate::frontend_types::Error;
 
-/// fn_1deae8 / EU fn_1deca4 / KR fn_1ded50.
 pub fn validate_phrasing(present: bool, tag: u32) -> u32 {
     if present && tag == 0xf387 {
         0
@@ -9,17 +8,14 @@ pub fn validate_phrasing(present: bool, tag: u32) -> u32 {
     }
 }
 
-/// fn_1deb04 / EU fn_1decc0 / KR fn_1ded6c.
 pub fn close_phrasing(present: bool, tag: u32) -> u32 {
     validate_phrasing(present, tag)
 }
 
-/// fn_1e03ac / EU fn_1e0568 / KR fn_1e0614.
 pub fn check_phrasing(present: bool, tag: u32) -> u32 {
     validate_phrasing(present, tag)
 }
 
-/// fn_1f51dc / EU fn_1f5398 / KR fn_1f5444.
 pub fn validate_global(present: bool, tag: u32) -> u32 {
     if present && tag == 0xf388 {
         0
@@ -28,12 +24,10 @@ pub fn validate_global(present: bool, tag: u32) -> u32 {
     }
 }
 
-/// fn_1f7e8c / EU fn_1f8048 / KR fn_1f80f4.
 pub fn check_global(present: bool, tag: u32) -> u32 {
     validate_global(present, tag)
 }
 
-/// fn_1e03c8 / EU fn_1e0584 / KR fn_1e0630.
 pub fn phrasing_interface<'a, T: ?Sized>(
     index: u32,
     table: &'a T,
@@ -46,7 +40,6 @@ pub fn phrasing_interface<'a, T: ?Sized>(
     0
 }
 
-/// fn_1f7ea8 / EU fn_1f8064 / KR fn_1f8110.
 pub fn global_interface<'a, T: ?Sized>(
     index: u32,
     table: &'a T,
@@ -59,7 +52,6 @@ pub fn global_interface<'a, T: ?Sized>(
     0
 }
 
-/// fn_2943ec / EU fn_2945a8 / KR fn_294654.
 pub fn count_phrase_boundaries(bytes: &[u8], count: u32) -> Result<u32, Error> {
     if count == 1 {
         return Ok(0);
@@ -97,7 +89,7 @@ pub struct SynthesisWindow {
 }
 
 impl SynthesisWindow {
-    /// fn_29556c / EU fn_295728 / KR fn_2957d4.
+
     pub fn set_percent(&mut self, percent: i32) -> Result<(), Error> {
         if percent <= 0 {
             return Ok(());
@@ -111,7 +103,6 @@ impl SynthesisWindow {
         Ok(())
     }
 
-    /// fn_295444 / EU fn_295600 / KR fn_2956ac.
     pub fn set_duration(
         &mut self,
         duration: i32,
@@ -147,7 +138,6 @@ pub enum ProsodyResource {
     Dictionary,
 }
 
-/// Caller-owned FE_PHRASING environment view, resolved through `fn_19611c`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PhrasingEnv {
     pub id: u32,
@@ -156,21 +146,18 @@ pub struct PhrasingEnv {
     pub registry: u32,
 }
 
-/// One acquired FE_* component: its interface pointer and two-word handle.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PhrasingResource {
     pub interface: u32,
     pub handle: [u32; 2],
 }
 
-/// Two-word engine handle published by an open/close entry point.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FeHandle {
     pub obj: u32,
     pub tag: u32,
 }
 
-/// FE_PHRASING module instance (`fn_1de880`), 40 bytes in the original.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Phrasing {
     pub env: u32,
@@ -184,7 +171,7 @@ pub struct Phrasing {
 }
 
 impl Phrasing {
-    /// Original 40-byte field order, for differential comparison.
+
     pub fn words(&self) -> [u32; 10] {
         [
             self.env,
@@ -210,7 +197,6 @@ pub trait PhrasingHost {
     fn install(&mut self, object: u32, phrasing: Phrasing);
 }
 
-/// fn_1de880 / EU fn_1dea3c / KR fn_1deae8.
 pub fn open_phrasing(
     a: u32,
     b: u32,
@@ -270,7 +256,6 @@ pub fn open_phrasing(
     status
 }
 
-/// Caller-owned FE_GLOBAL environment view, resolved through `fn_19611c`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GlobalEnv {
     pub id: u32,
@@ -280,7 +265,6 @@ pub struct GlobalEnv {
     pub res: u32,
 }
 
-/// One `getCfg` result: value count, flag and first value byte.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ConfigResult {
     pub count: u16,
@@ -289,7 +273,6 @@ pub struct ConfigResult {
     pub first: u8,
 }
 
-/// FE_GLOBAL module instance (`fn_1f4e2c`), 64 bytes in the original.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Global {
     pub id: u32,
@@ -312,7 +295,7 @@ pub struct Global {
 }
 
 impl Global {
-    /// Original 64-byte field order, for differential comparison.
+
     pub fn words(&self) -> [u32; 16] {
         [
             self.env,
@@ -350,7 +333,6 @@ pub trait GlobalHost {
     fn install(&mut self, object: u32, global: Global);
 }
 
-/// fn_1f4e2c / EU fn_1f4fe8 / KR fn_1f5094.
 pub fn open_global(a: u32, b: u32, host: &mut impl GlobalHost, out: Option<&mut FeHandle>) -> u32 {
     let Some(out) = out else {
         return 0x8a102007;
@@ -415,7 +397,6 @@ pub fn open_global(a: u32, b: u32, host: &mut impl GlobalHost, out: Option<&mut 
     status
 }
 
-/// fn_1f5138 / EU fn_1f52f4 / KR fn_1f53a0.
 pub fn refresh_global(global: Option<&mut Global>, b: u32, host: &mut impl GlobalHost) -> u32 {
     let status = host.validate(
         global.as_ref().map_or(0, |global| global.id),
@@ -435,7 +416,6 @@ pub fn refresh_global(global: Option<&mut Global>, b: u32, host: &mut impl Globa
     status
 }
 
-/// Caller-owned synthesis window buffers touched by `fn_2955c0`.
 pub struct WindowBuffers<'a> {
     pub vectors: [&'a mut [u8]; 6],
     pub scratch: &'a mut [u8],
@@ -462,7 +442,6 @@ pub trait WindowResetHost {
     fn fill_table(&mut self, table: &mut [u8]);
 }
 
-/// fn_2955c0 / EU fn_29577c / KR fn_295828.
 pub fn reset_window(
     buffers: &mut WindowBuffers<'_>,
     cursor: &mut WindowCursor,
@@ -485,8 +464,6 @@ pub fn reset_window(
     cursor.f2c = 0;
 }
 
-/// Voice table consulted by `fn_28ff3c`: borrowed candidate names and the
-/// voice-feature flag at +0x9e0.
 pub struct VoiceSelector<'a> {
     pub names: &'a [Option<&'a [u8]>],
     pub voice_feature: i32,
@@ -498,10 +475,6 @@ impl VoiceSelector<'_> {
     }
 }
 
-/// fn_2d0840 / EU fn_2d09fc / KR fn_2d0aa8.
-///
-/// Fixed-point product through the shared `fn_29b3f4`/`fn_29b0e8` helpers.
-/// Only reached here through the synthesis-window table fill below.
 pub fn fixed_product(first: i32, second: i32) -> i32 {
     let (first_high, first_low) = crate::selection::split_fixed(first);
     let (second_high, second_low) = crate::selection::split_fixed(second);
@@ -529,9 +502,6 @@ pub fn fixed_product(first: i32, second: i32) -> i32 {
     )
 }
 
-/// fn_2d08d8 / EU fn_2d0a94 / KR fn_2d0b40.
-///
-/// Window sine used by the `fn_29527c`/`fn_2956f4` table fill.
 pub fn window_sine(angle: i32) -> i32 {
     let mut angle = angle;
     if angle < 0 {
@@ -559,13 +529,6 @@ pub fn window_sine(angle: i32) -> i32 {
         .wrapping_mul(sign)
 }
 
-/// fn_28ff3c / EU fn_2900f8 / KR fn_2901a4.
-///
-/// Scans `text` at `index` for a `name\` voice escape, resolves it against the
-/// borrowed voice table, folds the escape out of `text`/`weights` and updates
-/// `length`. `weights` starts four bytes into the caller's allocation so the
-/// original `weights[index - 1]` read stays in bounds when `index` is zero.
-/// Returns 1 when an escape was consumed, 0 otherwise.
 pub fn select_voice(
     voice: &VoiceSelector<'_>,
     text: &mut [u8],
@@ -607,8 +570,7 @@ pub fn select_voice(
     if search_len == 0 {
         return 0;
     }
-    // ARM checks the voice list only when it is non-empty, but the `T`
-    // fallback applies whenever no entry matched, including an empty list.
+
     let mut matched = false;
     if voice.name(0).is_some() {
         let mut slot = 0usize;
@@ -656,8 +618,7 @@ pub fn select_voice(
         *default_voice = kind;
     }
     let name_len = string_length(&name[..]) as u32;
-    // Logical weight `i` lives at `weights[i + 4]`; the four leading guard
-    // bytes keep the original `weights[index - 1]` read in bounds.
+
     if let Some(weights) = weights.as_deref_mut() {
         let at = |i: i32| (i + 4) as usize;
         let mut pos = (index + 1) as i16;
@@ -702,14 +663,6 @@ pub fn select_voice(
     1
 }
 
-/// Caller-owned synthesis-window object shared by `fn_29527c`, `fn_29564c`
-/// and `fn_2956f4` (260 bytes in the original).
-///
-/// `fn_295444` views the same bytes with overlapping fields: its `duration`
-/// sits in the padding at +0x08, and its `samples` overwrites `limit` at
-/// +0x0c. The ports below preserve the original call order, so the overlay
-/// behaves identically. Pointer fields are host tokens; 0 is null. The sine
-/// table itself is a separate caller slice passed alongside the object.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WindowObject {
     pub rate: u16,
@@ -782,11 +735,7 @@ impl Default for WindowObject {
 }
 
 impl WindowObject {
-    /// Field comparison with pointer tokens reduced to presence bits, in
-    /// offset order: eleven half-words, length, three half-words, table and
-    /// phase tokens, six vec tokens, three ready words, aux/block tokens, the
-    /// pending byte, two cursors, the active byte and owner/heap tokens.
-    /// `table_bytes` and `vec_lens` are compared separately.
+
     pub fn shape(&self) -> [u32; 33] {
         let present = |token: u32| u32::from(token != 0);
         [
@@ -827,7 +776,6 @@ impl WindowObject {
     }
 }
 
-/// Engine calls reached by the synthesis-window lifecycle ports.
 pub trait WindowHost {
     fn grow_buffer(&mut self, vec: u32, len: &mut u32, length: u32) -> bool;
     fn realloc(&mut self, heap: u32, ptr: u32, size: u32) -> u32;
@@ -858,11 +806,6 @@ fn fill_sine_table(table: &mut [i16], overlap: i16) {
     }
 }
 
-/// fn_29527c / EU fn_295438 / KR fn_2954e4.
-///
-/// Retunes the window for rate `v`, growing the six sample vectors and
-/// refilling the sine `table` when present. A zero `table` token skips the
-/// refill; the harness keeps the token in sync with the borrowed slice.
 pub fn retune_window(
     obj: &mut WindowObject,
     v: i32,
@@ -915,7 +858,6 @@ pub fn retune_window(
     0
 }
 
-/// fn_29564c / EU fn_295808 / KR fn_2958b4.
 pub fn destroy_window(slot: &mut u32, obj: &mut WindowObject, host: &mut impl WindowHost) {
     for vec in obj.vecs {
         host.destroy_buffer(vec);
@@ -936,10 +878,6 @@ pub fn destroy_window(slot: &mut u32, obj: &mut WindowObject, host: &mut impl Wi
     *obj = WindowObject::default();
 }
 
-/// fn_2956f4 / EU fn_2958b0 / KR fn_29595c.
-///
-/// Creates a window for rate `v`, replaying the `fn_295444` duration setup
-/// inline on the same bytes. Returns the object token, or 0 on failure.
 pub fn create_window(
     obj: &mut WindowObject,
     slot: &mut u32,
@@ -1004,9 +942,7 @@ pub fn create_window(
     if n > 0 {
         fill_sine_table(table, obj.overlap);
     }
-    // ARM stores the scaled quotient scratch at +0x14, not +0x20: the
-    // companion duration value at +0x20 is preserved, and the spare field
-    // subtracts the scratch value.
+
     obj.divisor = 100;
     obj.average = ((obj.bound as i32).wrapping_mul(obj.divisor as i32) / 100) as i16;
     let quotient = crate::runtime::signed_division(obj.average as i32, obj.bound as i32)
@@ -1032,8 +968,6 @@ pub fn create_window(
     address
 }
 
-/// `fn_295444` replayed on the shared window bytes for `create_window`.
-/// EU fn_295600 / KR fn_2956ac.
 fn init_window_duration(obj: &mut WindowObject, duration: i32, host: &mut impl WindowHost) -> u32 {
     obj.duration = duration;
     let samples = (obj.rate as i32).wrapping_mul(duration) / 1000;
@@ -1066,9 +1000,6 @@ fn init_window_duration(obj: &mut WindowObject, duration: i32, host: &mut impl W
     0
 }
 
-/// Caller-owned phoneme-timing views for `fn_29442c`. All byte buffers are
-/// NUL-terminated like the original inputs; the carrier copy scratch must
-/// hold `carrier` plus its terminator.
 pub struct PhonemeTiming<'a> {
     pub phonemes: &'a mut [u8],
     pub weights: Option<&'a mut [u8]>,
@@ -1079,7 +1010,6 @@ pub struct PhonemeTiming<'a> {
     pub carrier_scratch: &'a mut [u8],
 }
 
-/// Engine calls reached by `fn_29442c`.
 pub trait TimingHost {
     fn alloc(&mut self, heap: u32, size: u32) -> u32;
     fn free(&mut self, heap: u32, ptr: u32);
@@ -1114,10 +1044,6 @@ fn timing_strstr(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
-/// fn_29442c / EU fn_2945e8 / KR fn_294694.
-///
-/// Resolves tap carriers against the phoneme string, emits per-phoneme timing
-/// pairs and folds consumed escapes out of the borrowed buffers.
 pub fn align_timings(
     allocator: u32,
     log: u32,
@@ -1520,7 +1446,6 @@ pub fn align_timings(
     0
 }
 
-/// fn_1dea78 / EU fn_1dec34 / KR fn_1dece0.
 pub fn destroy_phrasing(
     present: bool,
     tag: u32,
@@ -1537,7 +1462,6 @@ pub fn destroy_phrasing(
     0
 }
 
-/// fn_1f4d94 / EU fn_1f4f50 / KR fn_1f4ffc.
 pub fn destroy_global(
     present: bool,
     tag: u32,
@@ -1554,7 +1478,6 @@ pub fn destroy_global(
     0
 }
 
-/// One pronunciation-view mark consumed by `process_phrasing`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PhrasingMark {
     pub r#type: u16,
@@ -1562,16 +1485,6 @@ pub struct PhrasingMark {
     pub value: u32,
 }
 
-/// Caller-owned scratch buffers for `process_phrasing` (`fn_1deb20`) and
-/// `process_phrasing_stage` (`fn_1df780`).
-///
-/// Every slice stands in for one C heap/LINGDB buffer; the harness sizes each
-/// one to the recorded case: `text`/`map` hold `capacity` bytes, `input` the
-/// pronunciation buffer, `marks` at least one slot (slot 0 is read even when
-/// the recorded count is 0, matching the C), `mode`/`next_mode`/merge slots
-/// the recorded NUL-terminated strings, and `output`/`flags` the recorded
-/// engine outputs plus one NUL byte. `input_prefix` is the byte before
-/// `input[0]` (`input[-1]` in C, read when a word starts at offset 0).
 pub struct PhrasingBuffers<'a> {
     pub text: &'a mut [u8],
     pub map: &'a mut [u8],
@@ -1586,18 +1499,6 @@ pub struct PhrasingBuffers<'a> {
     pub flags: &'a mut [u8],
 }
 
-/// Node/engine/dictionary/config calls reached by `process_phrasing`
-/// (`fn_1deb20`) and `process_phrasing_stage` (`fn_1df780`).
-///
-/// Field values cross as raw `u32`; the caller truncates to the C width.
-/// `node_data` lends word strings for one loop iteration only; every longer
-/// lived string is copied out into `PhrasingBuffers` (`root_text`,
-/// `root_marks`, `mode_text`, `merge_param`) because the C keeps it across
-/// later calls. String arguments cross without the NUL terminator. Lengths
-/// that the C ignores are still returned for the harness.
-/// The `env` argument is the raw environment word; the host resolves
-/// heap/log/config from the environment block. Log stages are 0/1/2/3 for the
-/// `L1`/`L2`/`O1`/`O3` calls; `merge_param` always queries section `fecfg`.
 pub trait PhrasingProcessHost {
     fn next_node(&mut self, handle: [u32; 2], node: u16) -> (u32, u16);
     fn previous_node(&mut self, handle: [u32; 2], node: u16) -> (u32, u16);
@@ -1638,9 +1539,7 @@ pub trait PhrasingProcessHost {
     fn validate(&mut self, object: [u32; 2], tag: u32, size: u32) -> u32;
     fn alloc_text(&mut self, env: u32, capacity: u16) -> u32;
     fn free_text(&mut self, env: u32, addr: u32);
-    /// Commit one input-text byte back to the guest arena (the ARM rewrites
-    /// the lattice text in place, e.g. the phrasing-mode `?` -> `.`).
-    /// Default no-op; the live lattice host overrides it.
+
     fn commit_input_byte(&mut self, _offset: u32, _value: u8) {}
 }
 
@@ -1648,17 +1547,12 @@ fn c_strlen(bytes: &[u8]) -> usize {
     bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len())
 }
 
-/// Length of the NUL-terminated string at the start of `bytes`.
-///
-/// Panics when unterminated: the C reads until NUL in real memory, so a
-/// missing terminator is a harness contract violation, never valid input.
 fn c_str_len(bytes: &[u8], what: &str) -> usize {
     let len = c_strlen(bytes);
     assert!(len < bytes.len(), "{what} is not NUL-terminated");
     len
 }
 
-/// `fn_195d58`: compare until the first difference or NUL, clamped to -1/0/1.
 fn c_strcmp(a: &[u8], b: &[u8]) -> i32 {
     let mut i = 0;
     loop {
@@ -1672,7 +1566,6 @@ fn c_strcmp(a: &[u8], b: &[u8]) -> i32 {
     }
 }
 
-/// `fn_1960a8` with a non-empty needle: true when `needle` occurs in `hay`.
 fn c_strstr(hay: &[u8], needle: &[u8]) -> bool {
     let hlen = c_strlen(hay);
     let nlen = c_strlen(needle);
@@ -1685,7 +1578,6 @@ fn c_strstr(hay: &[u8], needle: &[u8]) -> bool {
     (0..=hlen - nlen).any(|i| hay[i..i + nlen] == needle[..nlen])
 }
 
-/// `fn_195d30`: position of `c` in `bytes[..len]`; `c == 0` matches at `len`.
 fn c_strchr(bytes: &[u8], len: usize, c: u8) -> Option<usize> {
     if c == 0 {
         return Some(len);
@@ -1693,16 +1585,10 @@ fn c_strchr(bytes: &[u8], len: usize, c: u8) -> Option<usize> {
     bytes[..len].iter().position(|&b| b == c)
 }
 
-/// `fn_195cf8`: last position of `c` in `bytes[..len]`.
 fn c_strrchr(bytes: &[u8], len: usize, c: u8) -> Option<usize> {
     bytes[..len].iter().rposition(|&b| b == c)
 }
 
-/// `fn_17c550`: skip bytes 9-13 and 32, optional sign, then decimal digits.
-///
-/// The skip/digit classes are the `D_8dc30c` masks verified from the ROM
-/// (bit 8 set exactly on 9, 10, 11, 12, 13, 32; bit 4 exactly on digits).
-/// Overflow wraps like the ARM.
 fn phrasing_atoi(bytes: &[u8]) -> i32 {
     let mut i = 0;
     while i < bytes.len() && matches!(bytes[i], 9 | 10 | 11 | 12 | 13 | 32) {
@@ -1744,10 +1630,6 @@ fn out_byte(buf: &[u8], pos: usize) -> u8 {
     buf.get(pos).copied().unwrap_or(0)
 }
 
-/// Parses a `#...` pause at `output[*pos]`, consuming `[digits]` when present.
-///
-/// Mirrors both `fn_1deb20` pause sites: `pause_duration == 0` parses the
-/// bracket text, otherwise the low 16 bits are the pause.
 fn parse_pause(output: &[u8], pos: &mut usize, pause_duration: u32) -> i16 {
     *pos += 1;
     let mut text = [0u8; 12];
@@ -1772,15 +1654,6 @@ fn parse_pause(output: &[u8], pos: &mut usize, pause_duration: u32) -> i16 {
     }
 }
 
-/// fn_1deb20 / EU fn_1decdc / KR fn_1ded88.
-///
-/// Runs one FE_PHRASING mode span: builds the word text/map from the
-/// pronunciation nodes, runs the phrasing engine, and writes phrase pause
-/// fields back. `buffers.text`/`map` are the caller word buffers;
-/// `buffers.mode` holds the NUL-terminated mode; `pause_duration` is the raw
-/// `u32` weights word (`0` selects `[pause]` parsing, otherwise its low 16
-/// bits are the pause). `node`/`mark_index` are in/out cursors; `last_node`
-/// receives the final word node.
 #[allow(clippy::too_many_arguments)]
 pub fn process_phrasing(
     phrasing: &Phrasing,
@@ -1940,9 +1813,7 @@ pub fn process_phrasing(
         if let Some(question) = c_strrchr(buffers.input, input_end, b'?') {
             if question != 0 && buffers.input[question - 1] != b' ' {
                 buffers.input[question] = b'.';
-                // The ARM rewrites the lattice text in place: commit the
-                // byte to the guest arena (seg5 r15: the missing write
-                // left '?' where the ARM has '.').
+
                 host.commit_input_byte(question as u32, b'.');
             }
         }
@@ -2111,13 +1982,6 @@ pub fn process_phrasing(
     result
 }
 
-/// Merges adjacent `fn_1df780` mode spans with compatible phrasing rules.
-///
-/// Walks the mode nodes after `start`, looking up `phrasing_<mode>` rules for
-/// the next and current modes; while they agree, `out_end` advances to the
-/// next span end. Both value truncations use the second lookup's separator (a
-/// single C local). Over-long modes fall back to `normal` (`D_1df298`, read as
-/// `normal` from all three ROMs).
 #[allow(clippy::too_many_arguments)]
 fn merge_modes(
     phrasing: &Phrasing,
@@ -2234,14 +2098,6 @@ fn merge_modes(
     result
 }
 
-/// fn_1df780 / EU fn_1df93c / KR fn_1df9e8.
-///
-/// FE_PHRASING stage Process entry: validates the module object, sizes the
-/// word buffers, then walks the mode spans calling `process_phrasing` and
-/// copying word pauses. `object` is the module handle, `handle` the LINGDB
-/// handle; `active` is set to 1. Text/map addresses land in
-/// `phrasing.z32`/`z36` (0 after cleanup; left allocated on the two direct
-/// error returns, matching the C).
 pub fn process_phrasing_stage(
     phrasing: &mut Phrasing,
     object: [u32; 2],
@@ -2520,13 +2376,6 @@ pub fn process_phrasing_stage(
     result
 }
 
-/// `fn_1769d0` compared against zero: ASCII case-insensitive match with
-/// prefix semantics.
-///
-/// Mirrors the C exactly: scanning stops with success at `a`'s NUL (so both a
-/// strict prefix and a superstring of `b` match); only a mismatching byte
-/// fails. The uppercase class is bit 1 of `D_8dc30c`, verified from the ROM to
-/// be exactly `A-Z`.
 fn c_strcasecmp_prefix(a: &[u8], b: &[u8]) -> bool {
     fn lower(c: u8) -> u8 {
         if c.is_ascii_uppercase() {
@@ -2550,11 +2399,6 @@ fn c_strcasecmp_prefix(a: &[u8], b: &[u8]) -> bool {
     lower(a.get(i).copied().unwrap_or(0)) == lower(b.get(i).copied().unwrap_or(0))
 }
 
-/// Phonmap resource table loaded by `load_phonmap` (`fn_1e0400`).
-///
-/// `f12`-`f40`/`f556`/`f560` are the ten section slots (`LANG`, `VOIC`,
-/// `LEXA`, `VEXA`, `SLAN`, `SVOI`, `SLEX`, `SVEX`, `IPA`, `SAPI`);
-/// `b44`/`b300` the two version strings.
 pub struct PhonmapObj {
     pub h: [u32; 2],
     pub p8: u32,
@@ -2573,8 +2417,7 @@ pub struct PhonmapObj {
 }
 
 impl PhonmapObj {
-    /// Section slot by `fn_1e0400` order: 0-9 map to `f12`, `f20`, `f28`,
-    /// `f36`, `f16`, `f24`, `f32`, `f40`, `f556`, `f560`.
+
     fn slot_mut(&mut self, slot: u8) -> &mut u32 {
         match slot {
             0 => &mut self.f12,
@@ -2591,12 +2434,6 @@ impl PhonmapObj {
     }
 }
 
-/// Resource/config calls reached by `load_phonmap` (`fn_1e0400`).
-///
-/// String arguments cross without the NUL terminator. `param` lends config
-/// values for immediate use only; the language code is copied out into the
-/// caller buffer because the C keeps it across later queries. `params`
-/// resolves the `p8` block to `(f12, f20)`; `version` reads `D_8f8ad4`.
 pub trait PhonmapHost {
     fn version(&mut self) -> u32;
     fn params(&mut self, p8: u32) -> (u32, u32);
@@ -2636,13 +2473,6 @@ fn section_slot(tag: &[u8]) -> Option<u8> {
     .map(|(_, slot)| *slot)
 }
 
-/// fn_1e0400 / EU fn_1e05bc / KR fn_1e0668.
-///
-/// Loads the phonmap resources: releases the old sections, builds the two
-/// lookup paths from config, then opens each pack and installs the advertised
-/// sections plus the `version` strings into `b44`/`b300`. `arg` is the
-/// NUL-terminated voice argument; `lang` receives the language code.
-/// A second-pack open failure returns 0, matching the C.
 pub fn load_phonmap(
     obj: &mut PhonmapObj,
     arg: &[u8],
@@ -2817,13 +2647,6 @@ pub fn load_phonmap(
     status
 }
 
-/// Caller-owned scratch buffers for `process_global_stage` (`fn_1f51f8`).
-///
-/// `layers` are the seven layer buffers (`f20`/`f24`/`f28`/`f2c`/`f30`/`f34`/
-/// `f38`), each `total` bytes; `input` is the pronunciation text (mutated:
-/// `-` becomes `_`); `input_prefix` is the byte before `input[0]`; `word` and
-/// `w80` are per-node scratch; `lastw` persists across nodes; `output` is the
-/// engine output with 11 spare bytes for the `\TQ\` insertion.
 pub struct GlobalBuffers<'a> {
     pub layers: [&'a mut [u8]; 7],
     pub input: &'a mut [u8],
@@ -2834,10 +2657,6 @@ pub struct GlobalBuffers<'a> {
     pub output: &'a mut [u8],
 }
 
-/// The seven `fn_1f51f8` layer strings with tracked lengths.
-///
-/// Appends NUL-terminate like the C `strcat`/`strncat` calls; every length
-/// below matches the C `strlen` at the same point.
 struct GlobalLayers<'a, 'b> {
     layers: &'a mut [&'b mut [u8]; 7],
     lens: [usize; 7],
@@ -2858,7 +2677,6 @@ impl<'a, 'b> GlobalLayers<'a, 'b> {
         self.layers[idx][self.lens[idx]] = 0;
     }
 
-    /// Appends `first` to layer 0 and `rest` to layers 1-5 (never 6).
     fn append6(&mut self, first: &[u8], rest: &[u8]) {
         self.append(0, first);
         for idx in 1..6 {
@@ -2885,22 +2703,6 @@ impl<'a, 'b> GlobalLayers<'a, 'b> {
     }
 }
 
-/// Node/layer/dictionary calls reached by `process_global_stage` (`fn_1f51f8`).
-///
-/// Mirrors the `LingIf`/`DepesIf`/`DctVt` methods used by the C: `first_node`
-/// is `m34`, `next_node` is `m3c`, `set_pred` is `m50` (field 3, the 4-byte
-/// out block is unobserved), `node_field` is `m54`, `node_count` is `m5c`;
-/// `input_text`/`word_text`/`alt_text`/`tag_text` copy out `m58` modes
-/// 0/3/10/4 because the C keeps them across later calls, while `mode_text`
-/// lends mode-4 tag bytes for immediate use and `layer_byte` returns the
-/// single bytes the C reads from `m58` modes 5/6/9; `set_layer_input` is
-/// `m24`, `layer_output` is `m28`, `run_layers` is `m2c`,
-/// `set_layer_input2` is `m40`, `prepare_layer` is the dictionary `m20`
-/// (which may rewrite the layer, so the full buffer crosses); `foreign_param`
-/// reads `foreignpron`. String arguments cross without the NUL terminator.
-/// The `env` argument is the raw environment word; the host resolves
-/// heap/log/params from the environment block. Log stages are 0-6 for the
-/// `L1`-`L7` calls and 7 for `O1`.
 #[allow(clippy::too_many_arguments)]
 pub trait GlobalProcessHost {
     fn validate(&mut self, object: u32, b: u32, tag: u32, size: u32) -> u32;
@@ -2931,53 +2733,31 @@ pub trait GlobalProcessHost {
     fn log_nomem(&mut self, env: u32);
     fn alloc_layer(&mut self, env: u32, size: u16) -> u32;
     fn free_layer(&mut self, env: u32, addr: u32);
-    /// Guest-memory channel for the ROM's own in-guest writes. The C keeps
-    /// token and layer text in guest buffers the port only borrows: the
-    /// fill loop strcats into the f20.. staging buffers
-    /// (pc 0x1f6298-0x1f62ac), the layer fetch NUL-terminates the guest
-    /// layer text in place, and the token loop NUL-terminates each guest
-    /// token at its delimiter (pc 0x1f7ce8). The port performs those writes
-    /// through these primitives; the live host stores them in the guest
-    /// arena, scripted hosts ignore them (their script asserts the port's
-    /// own calls, which are unchanged).
+
     fn guest_read_byte(&self, _addr: u32) -> u8 {
         0
     }
     fn guest_write_byte(&mut self, _addr: u32, _val: u8) {}
     fn guest_write_bytes(&mut self, _addr: u32, _data: &[u8]) {}
-    /// Guest cursor for the token loop's in-guest NUL writes: the guest
-    /// address of the current token's first byte (0 when unknown).
+
     fn token_cursor(&self) -> u32 {
         0
     }
     fn set_token_cursor(&mut self, _cur: u32) {}
-    /// Guest address of the layer staging buffer for `index` (0 unknown).
+
     fn staging_buffer(&self, _index: i32) -> u32 {
         0
     }
-    /// NUL-terminate the guest layer text fetched by the last `layer_output`.
+
     fn terminate_layer_text(&mut self, _len: u16) {}
 }
-/// Mirror the C token loop's in-guest NUL termination: scan the guest token
-/// from the cursor for the first ' ', '#' or NUL; NUL-terminate at a
-/// delimiter and leave the cursor past it (plus any further delimiters),
-/// exactly like the C (`*tail = 0`, `ostr[0] = fk`, skip loop; pc 0x1f7ce8).
-/// The old code placed the NUL at `cursor + rust_len - 1`, which misses
-/// whenever the Rust token and the guest token have different lengths
-/// (seg5 r15: live NUL at 0x57, ARM at 0x53 on 'who won the game?').
-/// Mirror the caller `output` buffer back over the guest layer-0 row
-/// (`ostr[0]` from `m28`/GetLayer, whose base the host stashed as the
-/// token cursor). The C rewrites that row in place (quote map,
-/// compaction, tag insertion); without this the guest keeps the
-/// pre-insertion bytes and every later guest scan drifts.
+
 fn commit_layer_output<H: GlobalProcessHost>(host: &mut H, output: &[u8], cnt: u16) {
     let base = host.token_cursor();
     if base == 0 {
         return;
     }
-    // Include the terminator at `[cnt]`: the C shift loop moves the old
-    // `[old_cnt]` NUL there, and the final walk stops its guest scan on
-    // it (ROM 0x1f7a58 writes down through the tag-shifted tail).
+
     let end = (cnt as usize).wrapping_add(1);
     if end <= output.len() {
         host.guest_write_bytes(base, &output[..end]);
@@ -3011,9 +2791,7 @@ fn terminate_guest_token<H: GlobalProcessHost>(host: &mut H) {
     }
     host.set_token_cursor(next);
 }
-/// Mirror the C fill loop's strcat into the guest staging buffers
-/// (pc 0x1f6298-0x1f62ac): copy the layer text to the guest staging
-/// buffer, exactly as the depes call leaves it.
+
 fn mirror_guest_staging<H: GlobalProcessHost>(host: &mut H, index: i32, text: &[u8]) {
     let base = host.staging_buffer(index);
     if base == 0 {
@@ -3023,11 +2801,6 @@ fn mirror_guest_staging<H: GlobalProcessHost>(host: &mut H, index: i32, text: &[
     host.guest_write_byte(base.wrapping_add(text.len() as u32), 0);
 }
 
-/// Appends `lastw[1..lw-1]` (`strncat(lastw + 1, lw - 2)`).
-///
-/// `lw == 1` copies only the NUL (a no-op); `lw == 0` would read past the
-/// terminator into heap garbage, which no harness can reproduce, so it is a
-/// loud contract violation.
 fn append_lastw_inner(layers: &mut GlobalLayers<'_, '_>, lastw: &[u8], lw: usize) {
     if lw >= 2 {
         layers.append(6, &lastw[1..lw - 1]);
@@ -3036,12 +2809,6 @@ fn append_lastw_inner(layers: &mut GlobalLayers<'_, '_>, lastw: &[u8], lw: usize
     }
 }
 
-/// Appends an input span (`strncat(f24, input + beg, n)`).
-///
-/// Copies until the input NUL at the latest: `n <= 0` copies nothing for 0
-/// and everything up to the NUL for negative `n`, matching `fn_195dac`.
-/// `beg` past the terminator would read heap garbage, so it is a loud
-/// contract violation.
 fn append_span(
     layers: &mut GlobalLayers<'_, '_>,
     idx: usize,
@@ -3064,13 +2831,6 @@ fn append_span(
     layers.append(idx, &input[beg..beg + k]);
 }
 
-/// fn_1f51f8 / EU fn_1f53b4 / KR fn_1f5460.
-///
-/// FE_GLOBAL stage Process entry: sizes and builds the six pronunciation
-/// layers (plus the tag layer), runs them through the rule layers, and writes
-/// the output tokens back to the word nodes. `done` is set to 1; layer
-/// addresses land in `global.f20`-`f38` (0 after cleanup; left allocated on
-/// the two direct engine-error returns, matching the C).
 #[allow(clippy::too_many_arguments)]
 pub fn process_global_stage(
     global: &mut Global,
@@ -3126,14 +2886,13 @@ pub fn process_global_stage(
         if status >= 0x80000000 {
             break 'fail status;
         }
-        // Size walk.
+
         let mut n64 = 0u32;
         let mut n60 = 0u32;
         let mut first = true;
         let mut has_t = 0u16;
         let mut w80_len = 0usize;
-        // NOTE: the C `word` pointer is set by the size walk too, so kind-7
-        // nodes before the fill walk's first word still see it.
+
         let mut word_seen = false;
         while id_b != 0 {
             let (status, raw, _) = host.node_field(handle, id_b, 0, 1);
@@ -3141,12 +2900,7 @@ pub fn process_global_stage(
                 break 'fail status;
             }
             let kind = raw as u8;
-            // ROM 0x1f5400-0x1f5498: kinds 4/9/10/11/13/12/14 share the word
-            // arm. Kind 10 enters at the n60 flush (0x1f5450), skipping the
-            // n64 flush, then takes the separator +1 and sets n64 (0x1f5490)
-            // exactly like kind 13 sets n60 (0x1f54ac), before the shared
-            // word-length tail. The old `kind == 10` divert above skipped the
-            // word arm, so dictionary phonetic words (e.g. "mii") sized 1.
+
             if kind == 4
                 || kind == 9
                 || kind == 10
@@ -3288,7 +3042,7 @@ pub fn process_global_stage(
         if n60 != 0 {
             total = (total.wrapping_add(2)) & 0xffff;
         }
-        // Layer buffers.
+
         global.f20 = host.alloc_layer(global.env, total as u16);
         if global.f20 == 0 {
             host.log_nomem(global.env);
@@ -3331,7 +3085,7 @@ pub fn process_global_stage(
             }
             layers.layers[6][0] = 0;
         }
-        // Fill walk.
+
         first = true;
         has_t = 0;
         let (status, id) = host.first_node(handle, 2, u32::from(id_a));
@@ -3530,16 +3284,7 @@ pub fn process_global_stage(
                             }
                             total = total.wrapping_add(1);
                         }
-                        // ROM 0x1f6188-0x1f6228: kind 10 with n64 == 0 appends
-                        // "\x11/+" to layer 0 and "   " to layers 1-5, then
-                        // sets n64 (r1 carries the "   " into the shared
-                        // tail). It never takes the kind-13 pad path: the
-                        // draft C's shared `after_pad` (and the old `pad`
-                        // flag here) wrongly gave kind-10 words the
-                        // "\x10\x12" marker, breaking every dictionary
-                        // phonetic word (e.g. "mii" lost its transcription).
-                        // Kind 13 alone appends "\x10\x12" / "  " and sets
-                        // n60.
+
                         if kind == 10 && n64 == 0 {
                             layers.append6(b"\x11/+", b"   ");
                             total = total.wrapping_add(3);
@@ -3572,7 +3317,7 @@ pub fn process_global_stage(
                         }
                         layers.append_byte(4, cbuf);
                         layers.append(5, &buffers.w80[..w80_len]);
-                        // Three-way width alignment.
+
                         let span = ((i32::from(end) - i32::from(beg)) as i16) as i32;
                         let dw_path = (w80_len as i32) >= span && {
                             let dw4 = w80_len as i32;
@@ -3951,7 +3696,7 @@ pub fn process_global_stage(
                 }
                 id_b = next;
             }
-            // Trailing tag flush.
+
             if global.use_tn_tag != 0 && !first {
                 if !lastw_valid {
                     al1 = 0;
@@ -4108,7 +3853,7 @@ pub fn process_global_stage(
                     *b = cbuf;
                 }
             }
-            // Compaction: delete `~` bytes and `0x1e..0x1f` spans.
+
             al2 = 0;
             if cnt != 0 {
                 loop {
@@ -4162,7 +3907,7 @@ pub fn process_global_stage(
                     }
                 }
             }
-            // Trailing `?` handling with `\TQ\` insertion.
+
             let input_len = c_strlen(buffers.input);
             let last = if input_len == 0 {
                 buffers.input_prefix
@@ -4233,9 +3978,7 @@ pub fn process_global_stage(
                         }
                         loop {
                             if lvl > 2 {
-                                // ROM 0x1f7924: this exit runs `pos++`
-                                // before the space skip (like the `#`
-                                // exit), it does not stop on the byte.
+
                                 pos = pos.wrapping_add(1) & 0xffff;
                                 break;
                             }
@@ -4376,15 +4119,11 @@ pub fn process_global_stage(
                     inserted = true;
                 }
                 if inserted {
-                    // Commit the tag insertion to the guest layer-0
-                    // row the same way the C's in-place edit leaves
-                    // it: the row holds the shifted bytes and the tag,
-                    // and the final walk splits it into tokens from
-                    // there.
+
                     commit_layer_output(host, buffers.output, cnt);
                 }
             }
-            // Final walk: write output tokens back.
+
             let (status, id) = host.first_node(handle, 2, u32::from(id_a));
             fill_rc = status;
             if fill_rc >= 0x80000000 || id == 0 {
@@ -4523,15 +4262,12 @@ pub fn process_global_stage(
     rc
 }
 
-/// One `FeatureRules` table from `VoiceFeatures`: `count` entries of `stride`
-/// bytes at `entries`.
 pub struct ProsodyRules<'a> {
     pub count: u16,
     pub stride: u16,
     pub entries: &'a [u8],
 }
 
-/// Borrowed `TtsMarker`: only kind/active/position are read by `fn_2902d8`.
 #[derive(Clone, Copy)]
 pub struct ProsodyMarker {
     pub kind: u16,
@@ -4539,12 +4275,6 @@ pub struct ProsodyMarker {
     pub position: u32,
 }
 
-/// Borrowed `VoiceFeatures` tables read by `fn_2902d8`.
-///
-/// `modifiers`, the voice/set names and the rule strings are NUL-terminated
-/// like the originals. `pitch_ranges` is a byte view of the `u16` table;
-/// `modifier_pitch_rules`/`phrase_pitch_rules` are byte views of the 12/16
-/// byte rule records.
 pub struct ProsodyVoice<'a> {
     pub categories: &'a [u8],
     pub vowel_types: &'a [u8],
@@ -4588,15 +4318,6 @@ pub struct ProsodyVoice<'a> {
     pub phoneme_table: &'a [u32],
 }
 
-/// Caller-owned `TtsFeatures` planes for `fn_2902d8`.
-///
-/// `bytes[f]`/`words[f]` are `None` where the original pointer is null.
-/// `pitch` holds 4 `u16` per entry, `contexts` 9 bytes per entry, `timings`
-/// 2 `i32` per entry (flat, as `fn_29442c` indexes it). `bytes[59]` is the
-/// tap carrier `fn_29442c` reads; `carrier_scratch` must hold the carrier
-/// plus its terminator. `bytes[0]` starts with one guard byte ahead of
-/// logical index 0 (a stale scan index can read `bytes[0][-1]`) and
-/// `bytes[1]` with four (`fn_28ff3c` folds weights at `index - 1`).
 pub struct ProsodyFeatures<'a> {
     pub bytes: [Option<&'a mut [u8]>; 60],
     pub words: [Option<&'a mut [u16]>; 60],
@@ -4616,11 +4337,6 @@ pub struct ProsodyFeatures<'a> {
     pub carrier_scratch: &'a mut [u8],
 }
 
-/// One dumped feature plane for `fn_173b00`.
-///
-/// `PitchBytes` covers the pitch plane dumped with a width other than 2:
-/// the host serializes the first `len` little-endian bytes of the `u16`
-/// plane, exactly the bytes the C `buffer`/`count` pair spans.
 pub enum DumpBytes<'a> {
     B8(&'a [u8]),
     B16(&'a [u16]),
@@ -4629,16 +4345,10 @@ pub enum DumpBytes<'a> {
         pitch: &'a [u16],
         len: usize,
     },
-    /// Null C `buffer` with its byte length, passed through untouched.
+
     Null(usize),
 }
 
-/// Engine calls reached by `fn_2902d8`.
-///
-/// `compute_features` runs the voice `compute_features` callback, which
-/// writes one byte to each of `out0`/`out1`; `category` selects the category
-/// (`kind` 0) versus phoneme (`kind` 1) call. `log_level` is `fn_173fd8` and
-/// `write_output` is `fn_173b00`.
 pub trait ProsodyHost: TimingHost {
     fn compute_features(
         &mut self,
@@ -4661,9 +4371,6 @@ pub trait ProsodyHost: TimingHost {
     );
 }
 
-/// Plane base offsets: `bytes[0]` carries one guard byte ahead of index 0
-/// (a stale scan index can read `bytes[0][-1]`), `bytes[1]` four (the
-/// `fn_28ff3c` weights fold); every other plane starts at its index 0.
 fn plane_base(f: usize) -> usize {
     match f {
         0 => 1,
@@ -4712,11 +4419,6 @@ fn prosody_strstr(haystack: &[u8], needle: &[u8]) -> bool {
     timing_strstr(haystack, needle).is_some()
 }
 
-/// `fn_2902d8` rule matcher shared by all five rule blocks.
-///
-/// Checks the current/next/previous/+2 phoneme sets and the two voice sets
-/// exactly like the duration block; `output`/`previous`/`count` are the
-/// precomputed neighbor indices.
 fn prosody_rule_matches(
     voice: &ProsodyVoice<'_>,
     data: &ProsodyFeatures<'_>,
@@ -4775,9 +4477,6 @@ fn prosody_rule_matches(
     true
 }
 
-/// `fn_2902d8` multiply application shared by the duration, alternate
-/// duration, acoustic and secondary acoustic blocks: `n == 0` scales by 5,
-/// `n == 1` clears, else scales by `n`.
 fn prosody_apply_scale(slot: &mut i32, n: u32) {
     if n == 0 {
         *slot = slot.wrapping_mul(5);
@@ -4788,7 +4487,6 @@ fn prosody_apply_scale(slot: &mut i32, n: u32) {
     }
 }
 
-/// Logical `bytes[1]` read through the guard-prefixed plane.
 fn w1(data: &ProsodyFeatures<'_>, k: usize) -> u8 {
     feat_get(data, 1, k)
 }
@@ -4815,10 +4513,6 @@ fn render_u32(mut value: u32, out: &mut [u8]) -> usize {
     count
 }
 
-/// `fn_2902d8` backward boundary scan shared by the `bytes[11]`/`bytes[20]`
-/// tail: walks back from `previous` for `*`/`%`/`#`, refines a `*`/`#`
-/// hit with a forward class scan, then maps `bytes[11]` to `bytes[20]`
-/// (1->3, 2->1, 3->0, 4->2, 5->4, anything else unwritten).
 fn prosody_boundary_tail(
     data: &mut ProsodyFeatures<'_>,
     classes: &[u8; 256],
@@ -4890,14 +4584,6 @@ fn prosody_boundary_tail(
     }
 }
 
-/// fn_2902d8 / EU fn_290494 / KR fn_290540.
-///
-/// Builds the per-phone prosody features: marker weights, voice escapes,
-/// tap-carrier timing alignment, markup stripping, `#[pause]` folding, the
-/// forward phone scan, the backward phrase scan, context windows, default
-/// acoustic/duration fills, the five rule blocks, pitch/category/phoneme
-/// features, `-2` boundary compaction and the optional feature dump.
-/// Returns the `fn_29442c` status on the success path.
 #[allow(clippy::too_many_lines)]
 pub fn build_phone_features(
     allocator: u32,
@@ -5003,8 +4689,7 @@ pub fn build_phone_features(
         data.bytes[0] = b0;
         data.bytes[1] = b1;
     }
-    // Leading `#` strip loop; the markup `<` branch enters the body once
-    // unconditionally like the C `goto`.
+
     let markup_entry = voice.markup != 0 && feat_get(data, 0, 0) == b'<';
     if markup_entry {
         found = 1;
@@ -5190,7 +4875,7 @@ pub fn build_phone_features(
                 let address_idx = (output - 1) as usize;
                 index = position as u32;
                 word_set(data, 3, i as usize, table as i16 as u16);
-                // C L341: j = address (output-1); fold re-scans from same output.
+
                 j = ((output - 1) as i16) as i32;
                 if !feat_present(data, 1) {
                     let mut table_it = output;
@@ -5985,8 +5670,7 @@ pub fn build_phone_features(
         if !(i > 0) {
             break;
         }
-        // ARM gates the whole body (through the markup block and
-        // `output -= 1`) on the class check; only `i -= 1` is shared.
+
         if voice.phoneme_classes[usize::from(feat_get(data, 0, i as usize))] != 255 {
             phrase_count = count as u8;
             let at_o = output as usize;
@@ -6157,8 +5841,7 @@ pub fn build_phone_features(
         i = (i.wrapping_sub(1) as i16) as i32;
     }
     output = 0;
-    // ARM (US 0x292218/0x292220/0x292224/0x29222c) writes count+1 here, not
-    // phrase_count+1 as src/fn_2902d8.c:1335-1337 does (C translation defect).
+
     let post_count = (count as u8).wrapping_add(1);
     feat_set(data, 14, 0, post_count);
     feat_set(data, 14, 1, post_count);
@@ -6772,7 +6455,7 @@ pub fn build_phone_features(
                     &feature_name[..name_len]
                 };
                 if f == 46 {
-                    // `buffer` is the contexts plane: `count * 2` raw bytes.
+
                     let n = count_d.wrapping_mul(2) as usize;
                     let bytes = match data.contexts.as_deref() {
                         Some(p) => DumpBytes::B8(&p[..n]),
@@ -6803,7 +6486,7 @@ pub fn build_phone_features(
                 let ac = usize::from(voice.acoustic_count);
                 let dc = usize::from(voice.duration_count);
                 if f == 24 {
-                    // `buffer` is the pitch plane: `count * 4` raw bytes.
+
                     let n = count_d.wrapping_mul(4) as usize;
                     let bytes = match data.pitch.as_deref() {
                         Some(p) => DumpBytes::PitchBytes { pitch: p, len: n },
@@ -6811,7 +6494,7 @@ pub fn build_phone_features(
                     };
                     host.write_output(request, kind, &message_name[..message_len], mime, bytes);
                 } else if f == 46 {
-                    // `buffer` is the contexts plane: `count * 4` raw bytes.
+
                     let n = count_d.wrapping_mul(4) as usize;
                     let bytes = match data.contexts.as_deref() {
                         Some(p) => DumpBytes::B8(&p[..n]),
@@ -6857,7 +6540,7 @@ pub fn build_phone_features(
                 &feature_name[..name_len]
             };
             if f == 24 {
-                // `buffer` is the pitch plane: `count` raw bytes.
+
                 let bytes = match data.pitch.as_deref() {
                     Some(p) => DumpBytes::PitchBytes {
                         pitch: p,

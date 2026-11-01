@@ -1,7 +1,6 @@
-//! Boot resource and file-interface leaves. Guest addresses remain caller-owned.
+
 use crate::{boot::Memory, frontend};
 
-/// Platform vtable boundary. Every callback receives the current arena.
 pub trait Host {
     fn call(&mut self, m: &mut Memory<'_>, method: u32, arguments: &[u32]) -> u32;
 }
@@ -78,9 +77,7 @@ pub(crate) fn release(m: &mut Memory<'_>, p: u32, v: u32, h: &mut impl Host) {
     frontend::heap_release_m(m.bytes, off, if v == 0 { None } else { Some(v) }, &mut vt)
 }
 pub(crate) fn calloc(m: &mut Memory<'_>, p: u32, n: u32, size: u32, h: &mut impl Host) -> u32 {
-    // The existing call_method port only reads memory, but its callback can
-    // reenter through an owned scalar result after dispatch. Use its M-free
-    // dispatch to select the exact arguments, then call with live memory.
+
     struct Select {
         args: [u32; 3],
     }
@@ -97,7 +94,7 @@ pub(crate) fn calloc(m: &mut Memory<'_>, p: u32, n: u32, size: u32, h: &mut impl
     frontend::call_method(m.bytes, nz(m, p), n, size, &mut select);
     h.call(m, m.word(m.word(p) + 4), &select.args)
 }
-/// fn_1963e0. Real memory-passing allocator dispatch.
+
 pub fn fn_1963e0(m: &mut Memory<'_>, p: u32, old: u32, n: u32, h: &mut impl Host) -> u32 {
     if p == 0 || n == 0 {
         return 0;
@@ -106,7 +103,7 @@ pub fn fn_1963e0(m: &mut Memory<'_>, p: u32, old: u32, n: u32, h: &mut impl Host
     let mut vt = heap(m, p, h);
     frontend::heap_realloc_m(m.bytes, off, old, n, &mut vt)
 }
-/// fn_1970ac. Resolve a bounded fixed-stride item.
+
 pub fn fn_1970ac(m: &mut Memory<'_>, p: u32, i: u32, out: u32) -> u32 {
     if p == 0 || out == 0 || i >= m.word(p + 20) {
         return 0;
@@ -116,7 +113,7 @@ pub fn fn_1970ac(m: &mut Memory<'_>, p: u32, i: u32, out: u32) -> u32 {
     m.put_word(out, m.word(p).wrapping_add(i.wrapping_mul(size)));
     1
 }
-/// fn_199134. Read through the file interface.
+
 pub fn fn_199134(
     m: &mut Memory<'_>,
     dst: u32,
@@ -134,7 +131,7 @@ pub fn fn_199134(
     }
     h.call(m, f, &[dst, size, count, m.word(p + 8)])
 }
-/// fn_1991d0. Dispatch the optional file operation.
+
 pub fn fn_1991d0(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x80602000;
@@ -145,7 +142,7 @@ pub fn fn_1991d0(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     }
     h.call(m, f, &[m.word(p + 8)])
 }
-/// fn_1990ec. Release the file wrapper only on successful close.
+
 pub fn fn_1990ec(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     if p == 0 {
         return 0x80602007;
@@ -157,7 +154,7 @@ pub fn fn_1990ec(m: &mut Memory<'_>, p: u32, h: &mut impl Host) -> u32 {
     }
     rc
 }
-/// fn_199034. Create and initialize a file wrapper.
+
 pub fn fn_199034(
     m: &mut Memory<'_>,
     src: u32,
@@ -192,7 +189,6 @@ pub fn fn_199034(
     rc
 }
 
-/// fn_17ad10. Release all parts through the real fn_196428 port.
 pub fn fn_17ad10(m: &mut Memory<'_>, o: u32, p: u32, h: &mut impl Host) {
     if p == 0 {
         return;
@@ -226,7 +222,7 @@ fn stream_call(m: &mut Memory<'_>, p: u32, slot: u32, a: &[u32], h: &mut impl Ho
     args[1..1 + a.len()].copy_from_slice(a);
     h.call(m, m.word(vt + slot), &args[..a.len() + 1])
 }
-/// fn_17c9d8. Allocate, seek and copy an archive range.
+
 pub fn fn_17c9d8(
     m: &mut Memory<'_>,
     p: u32,
@@ -270,7 +266,7 @@ fn dot(m: &Memory<'_>, p: u32) -> u32 {
 fn move_bytes(m: &mut Memory<'_>, d: u32, s: u32, n: u32) {
     crate::fe_text::memmove_195b38(m.bytes, d - m.base, s - m.base, n)
 }
-/// fn_17db60. Join and normalize path segments using real string ports.
+
 pub fn fn_17db60(
     m: &mut Memory<'_>,
     out: u32,
@@ -336,9 +332,6 @@ pub fn fn_17db60(
     0
 }
 
-/// Regional logger constants and disjoint caller-owned temporary guest memory.
-/// scratch spans 64 bytes and is restored before return. error_format points
-/// to the mapped "%s%p%s%p%s%x" literal. labels are hData, pData, lhError.
 pub struct UnmapEnvironment {
     pub category: u32,
     pub begin_format: u32,
@@ -396,8 +389,7 @@ impl<H: Host> crate::boot_part_b::Host for UnmapHost<'_, H> {
     }
 }
 impl<H: Host> crate::boot_part_b::FormatHost for UnmapHost<'_, H> {}
-/// fn_179208. Live logging and live fn_17331c, not recorded engine replies.
-/// Uses fn_17331c's zero-based arena contract. scratch must be disjoint.
+
 pub fn fn_179208(
     m: &mut Memory<'_>,
     hdata: u32,
@@ -473,8 +465,7 @@ use crate::{
     boot_part_c::{BootC5Host, BootCHost},
     boot_part_f,
 };
-/// Regional data addresses and a disjoint 128-byte temporary guest frame.
-/// The caller maps the three vtables and the NVAR/Chinese literals read below.
+
 pub struct ArchiveEnvironment {
     pub parameters: boot_part_f::Environment,
     pub stream_table: u32,
@@ -485,20 +476,15 @@ pub struct ArchiveEnvironment {
     pub chinese: u32,
     pub scratch: u32,
 }
-/// Only platform methods and unported, out-of-list services reach this host.
-/// Local output values preserve the BootC5Host contract.
+
 pub trait ArchiveHost: Host {
     fn service(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32], out: &mut [u32; 4]) -> u32;
     fn read(&mut self, m: &mut Memory<'_>, f: u32, ctx: u32, out: &mut [u8]) -> u32;
-    /// Regional stream constructors and a disjoint guest scratch frame.
-    /// The scratch pointer names at least 64 guest bytes that no archive
-    /// object, input buffer or output slot occupies.
+
     fn streams(&self) -> (crate::boot_port_1::Streams, u32) {
         panic!("archive query requires caller-owned stream environment")
     }
-    /// The five archive engine services bind to their real engine ports
-    /// when the host owns the regional engine environment. The deep archive
-    /// capture still models them as scripts, so its host keeps the default.
+
     fn bind_engine_services(&self) -> bool {
         false
     }
@@ -578,9 +564,7 @@ impl<H: ArchiveHost> BootCHost for ArchiveCalls<'_, H> {
             0x1b4104 | 0x1babcc => {
                 let slot = self.e.scratch + 96;
                 let saved = m.word(slot);
-                // fn_1babcc leaves its out-parameter untouched on its first
-                // allocation failure. Preserve the wrapper field, not an
-                // invented zero from the scalar host return convention.
+
                 m.put_word(
                     slot,
                     if f == 0x1babcc {
@@ -685,7 +669,7 @@ impl<H: ArchiveHost> BootC5Host for ArchiveCalls<'_, H> {
         }
     }
 }
-/// fn_1a8cf8, composed with the real regional fn_1b449c and allocator ports.
+
 pub fn fn_1a8cf8(
     m: &mut Memory<'_>,
     args: [u32; 6],
@@ -703,7 +687,7 @@ pub fn fn_1a8cf8(
         flag as u8,
     )
 }
-/// fn_1aaa80, composed with the real initialization and validation ports.
+
 pub fn fn_1aaa80(
     m: &mut Memory<'_>,
     args: [u32; 5],
@@ -713,8 +697,7 @@ pub fn fn_1aaa80(
 ) -> u32 {
     m.open_stream(&mut ArchiveCalls { h, e, wrapper: 0 }, args, out)
 }
-/// fn_17cbb4. Open and load an NVAR resource archive.
-/// scratch must not alias any archive state, input, or allocation.
+
 pub fn fn_17cbb4(
     m: &mut Memory<'_>,
     p: u32,
@@ -959,21 +942,20 @@ impl<H: ArchiveHost> boot_part_f::Host for MethodAllocator<'_, H> {
         boot_part_f::compare_parameter(m, *key, *value)
     }
 }
-/// fn_1b3208. Bounded stream length.
+
 pub fn fn_1b3208(m: &mut Memory<'_>, p: u32) -> u32 {
     m.word(p + 28)
 }
-/// fn_1aa8f0. Close the interface object through the fourth method of its
-/// vtable; the call passes the object itself.
+
 pub fn fn_1aa8f0(m: &mut Memory<'_>, p: u32, h: &mut impl boot_part_f::Host) -> u32 {
     let vt = m.word(p);
     h.call(m, m.word(vt + 16), &[p])
 }
-/// fn_172e18. The "stream finished" check of the release path.
+
 pub fn fn_172e18() -> u32 {
     0
 }
-/// fn_1aa390. Count table entries with the requested identifier.
+
 pub fn fn_1aa390(m: &mut Memory<'_>, p: u32, id: u32) -> u32 {
     let mut count = 0u32;
     for i in 0..m.word(p + 40) {
@@ -983,7 +965,7 @@ pub fn fn_1aa390(m: &mut Memory<'_>, p: u32, id: u32) -> u32 {
     }
     count
 }
-/// fn_1b44cc. Release a reference or dispatch the final destructor.
+
 pub fn fn_1b44cc(m: &mut Memory<'_>, p: u32, h: &mut impl ArchiveHost) -> u32 {
     let refs = m.word(p + 4);
     if refs != 1 {
@@ -1001,8 +983,7 @@ pub fn fn_1b44cc(m: &mut Memory<'_>, p: u32, h: &mut impl ArchiveHost) -> u32 {
         h.call(m, m.word(m.word(p) + 8), &[p])
     }
 }
-/// fn_1b3064. Read a bounded stream. out holds buffer, length, format byte,
-/// and EOF byte; unchanged slots retain their incoming caller-owned values.
+
 pub fn fn_1b3064(m: &mut Memory<'_>, p: u32, out: &mut [u32; 4], h: &mut impl ArchiveHost) -> u32 {
     let mut status = 0u8;
     if m.word(p + 24) == 0 {
@@ -1040,7 +1021,7 @@ pub fn fn_1b3064(m: &mut Memory<'_>, p: u32, out: &mut [u32; 4], h: &mut impl Ar
     }
     0
 }
-/// fn_1aa5e8. Query an occurrence and construct its stream wrapper.
+
 pub fn fn_1aa5e8(
     m: &mut Memory<'_>,
     p: u32,
@@ -1052,8 +1033,7 @@ pub fn fn_1aa5e8(
 ) -> u32 {
     let heap = m.word(p + 68);
     if !h.bind_engine_services() {
-        // The archive capture still models the query and the constructor as
-        // host scripts. The standalone rows use the real engine ports.
+
         let mut values = [0; 4];
         let rc = h.service(m, 0x1a9a60, &[p, key, occurrence], &mut values);
         if rc != 0 {
@@ -1089,7 +1069,7 @@ pub fn fn_1aa5e8(
         return rc;
     }
     let (streams, scratch) = h.streams();
-    // fn_1a9a60 writes four outputs and borrows a twelve-byte read buffer.
+
     let saved = core::array::from_fn::<_, 8, _>(|i| m.word(scratch + i as u32 * 4));
     let rc = crate::boot_port_1::fn_1a9a60(
         m,
@@ -1147,12 +1127,6 @@ pub fn fn_1aa5e8(
     rc
 }
 
-/// fn_1b2e04. Read a bounded stream into the caller's guest buffer.
-/// out[0] receives the byte count, out[2] the format flag and out[3] the
-/// end-of-stream flag. The host supplies the stream read and recover
-/// callbacks: the data read goes through the stream vtable with the guest
-/// buffer as its destination, the four-byte block header through the same
-/// method with a caller-owned destination.
 pub fn fn_1b2e04(
     m: &mut Memory<'_>,
     p: u32,
@@ -1238,11 +1212,6 @@ fn archive_method(m: &Memory<'_>, slot: u32) -> Option<u32> {
     Some(u32::from_le_bytes(bytes.try_into().ok()?))
 }
 
-/// Kernel address arbitration for the SDK wait/publication function.
-/// arbiter_address names a mapped guest word holding the current kernel handle.
-/// arbitrate receives [handle, address, type, value, timeout_lo, timeout_hi].
-/// A blocking platform operation must update the live guest semaphore before
-/// returning, as the kernel and other threads would.
 pub trait SynchronizationHost {
     fn arbiter_address(&self) -> u32;
     fn arbitrate(&mut self, memory: &mut Memory<'_>, arguments: &[u32; 6]) -> u32;
@@ -1268,9 +1237,7 @@ impl<H: SynchronizationHost> crate::boot::Calls for SynchronizationCalls<'_, H> 
         unreachable!("address arbitration returns a single word")
     }
 }
-/// fn_183dd4. Publish a pending event and wake its waiters.
-/// Exclusive access to caller-owned memory makes the ROM LDREX/STREX
-/// publication loops infallible. The embedded mutex and release use real ports.
+
 pub fn fn_183dd4(m: &mut Memory<'_>, p: u32, h: &mut impl SynchronizationHost) {
     if m.word(p) == u32::MAX {
         m.put_word(p, 0);

@@ -1,39 +1,15 @@
-//! Live component root 206be4 (word_expand), split from component_live_c.
-//!
-//! `fn_206be4` walks the phrase's node tree, expands the spans whose domain
-//! is not one of `spell`/`phon`/`raw`/`RAW` through `fn_284bc0` (the
-//! normalizer tokenizer) and then removes the covered or duplicated
-//! intervals. This file binds that root over the caller's arena:
-//!
-//! * the node methods come from the guest vtable at `p + 4`
-//!   (`find`, `next`, `attribute`, `data`, `hasField`, `remove`);
-//! * the expansion step is `fn_284bc0`, which reaches the depes VM through
-//!   `fn_283528` and the morphology family through `fn_26bb6c`;
-//! * the VM step is `component_live_c::vm_run_m`, the certified
-//!   memory-passing form of `fn_287cd8`.
-//!
-//! The morphology family gets its arena (`_m`) forms here: the slice ports in
-//! `morphology.rs` take borrowed buffers, so a live caller cannot use them
-//! across a broker callback. The `_m` forms below read the trie tables and
-//! the data pages straight out of the caller's arena.
+
 
 use crate::engine::{Error, Memory};
 use crate::engine_components::InternalCalls;
 use crate::rom_region::{Rom, to_us, to_us_guest};
 
-/// The status a live callee returns when nothing can serve it.
 pub const UNBOUND: u32 = 0x8000_2001;
 
-/// The guest entries the live tokenizer and root call, counted so the live
-/// run can be diffed against the ARM trace.
 pub const TRACED: [u32; 8] = [
     0x15c2f0, 0x15c544, 0x15c7d8, 0x15cdcc, 0x15d0c4, 0x15d378, 0x15da64, 0x15c744,
 ];
-/// The call counters of the traced entries, owned by the caller.
-/// Each `C4Calls` host carries its own array, so parallel tests never
-/// share counts the way the old `TRACE_COUNTS` static did.
 
-/// Count one guest call of a traced entry into the caller's array.
 pub fn trace_count_into(counts: &mut [u32; 8], entry: u32) {
     for (index, traced) in TRACED.iter().enumerate() {
         if *traced == entry {
@@ -42,8 +18,6 @@ pub fn trace_count_into(counts: &mut [u32; 8], entry: u32) {
     }
 }
 
-/// The live arena is one flat region; a flat view lets the slice ports that
-/// were written against the boot arena run against the same bytes.
 pub fn flat_view<'x, 'b>(m: &'x mut Memory<'_, 'b>) -> (u32, &'x mut [u8]) {
     let regions = &mut *m.regions;
     assert_eq!(regions.len(), 1, "the live arena must be one flat region");
@@ -51,39 +25,22 @@ pub fn flat_view<'x, 'b>(m: &'x mut Memory<'_, 'b>) -> (u32, &'x mut [u8]) {
     (first.base, &mut first.bytes[..])
 }
 
-/// Read one guest byte without panicking on a hostile arena.
 fn byte(m: &Memory<'_, '_>, a: u32) -> Result<u8, Error> {
     let mut v = [0u8; 1];
     m.read(a, &mut v)?;
     Ok(v[0])
 }
 
-/// Read one guest half without panicking on a hostile arena.
 fn half(m: &Memory<'_, '_>, a: u32) -> Result<u16, Error> {
     let mut v = [0u8; 2];
     m.read(a, &mut v)?;
     Ok(u16::from_le_bytes(v))
 }
 
-/// Write one guest half without panicking on a hostile arena.
 fn put_half(m: &mut Memory<'_, '_>, a: u32, v: u16) -> Result<(), Error> {
     m.write(a, &v.to_le_bytes())
 }
 
-// ---------------------------------------------------------------------------
-// The morphology family, over the caller's arena.
-//
-// fn_26b2f8 walks one bit of the trie, fn_26b444 and fn_26b37c read a
-// packed value out of the trie's value arrays and fn_26b530 reads a value
-// out of the byte stream. The C units are src/fn_26b2f8.c, src/fn_26b444.c,
-// src/fn_26b37c.c and src/fn_26b530.c; the field offsets below are theirs.
-// ---------------------------------------------------------------------------
-
-/// `fn_26b2f8`: walk the trie one bit at a time.
-///
-/// `reader` is the bit reader: the byte position at +0, the bit index at +4
-/// and the data page at +12. `tree` is the node array, two halfwords per
-/// node; a node whose first child is 0xffff is a leaf.
 pub fn fn_26b2f8_m(m: &mut Memory<'_, '_>, reader: u32, tree: u32, index: u32) -> Result<u32, Error> {
     let mut position = m.word(reader)?;
     let mut bit = byte(m, reader + 4)?;
@@ -113,11 +70,6 @@ pub fn fn_26b2f8_m(m: &mut Memory<'_, '_>, reader: u32, tree: u32, index: u32) -
     Ok(node)
 }
 
-/// `fn_26b444`: read a width-bit value out of the offset table.
-///
-/// The object holds the table at +12; the table holds the header at +0, the
-/// trie at +40 and the packed values at +60. The header holds the width at
-/// +12, the shift at +14, the inline limit at +18 and the trie root at +34.
 pub fn fn_26b444_m(m: &mut Memory<'_, '_>, obj: u32) -> Result<u32, Error> {
     let table = m.word(obj + 12)?;
     let header = m.word(table)?;
@@ -156,18 +108,11 @@ pub fn fn_26b444_m(m: &mut Memory<'_, '_>, obj: u32) -> Result<u32, Error> {
     Ok(value)
 }
 
-/// Read the halfword of the packed value array at `word`, shifted right by
-/// `sh`.
 fn read_packed(m: &mut Memory<'_, '_>, values: u32, word: u32, sh: u32) -> Result<u32, Error> {
     let at = values.wrapping_add(word.wrapping_mul(2));
     Ok(u32::from(half(m, at)?) >> sh)
 }
 
-/// `fn_26b37c`: read a bits-bit value out of the count table.
-///
-/// The object holds the table at +12; the table holds the header at +0, the
-/// trie at +36 and the counts at +56. The header holds the width at +13 and
-/// the trie root at +32.
 pub fn fn_26b37c_m(m: &mut Memory<'_, '_>, obj: u32) -> Result<u32, Error> {
     let table = m.word(obj + 12)?;
     let header = m.word(table)?;
@@ -195,11 +140,6 @@ pub fn fn_26b37c_m(m: &mut Memory<'_, '_>, obj: u32) -> Result<u32, Error> {
     Ok(lo.wrapping_add(next << (16 - sh)))
 }
 
-/// `fn_26b530`: read a value out of the byte stream.
-///
-/// The state holds the byte position at +0, the bit index at +4, the base
-/// pointer at +8 and the format descriptor at +12. The descriptor holds the
-/// width at +12 and the output shift at +14.
 pub fn fn_26b530_m(m: &mut Memory<'_, '_>, state: u32) -> Result<u32, Error> {
     let position = m.word(state)?;
     let bit = byte(m, state + 4)?;
@@ -238,31 +178,19 @@ pub fn fn_26b530_m(m: &mut Memory<'_, '_>, state: u32) -> Result<u32, Error> {
     Ok(value.wrapping_shl(shift))
 }
 
-// ---------------------------------------------------------------------------
-// The live callees of the `fn_206be4` root.
-// ---------------------------------------------------------------------------
-
-/// The live bindings of the `fn_206be4` subtree.
-///
-/// The bridge owns the guest heap, the stream ports and the LINGDB record
-/// table. This type adds the root's own ports and records the first callee
-/// it could not serve.
 pub struct C4Calls<'a, P> {
     pub platform: &'a mut P,
-    /// The first guest entry this lane could not serve.
+
     pub first_unbound: Option<u32>,
-    /// How many guest calls the root made.
+
     pub calls: u32,
-    /// The ROM whose guest memory is live. Regional guest entries arrive
-    /// relocated; ports dispatch on the US address and data literals follow
-    /// this region. US by default so US-only callers are unchanged.
+
     pub rom: Rom,
-    /// The live morphology decode workspace.
+
     pub dictionary: core::cell::RefCell<crate::component_live_c::DictionaryWorkspace>,
-    /// A disjoint scratch area for the callees that need one.
+
     pub scratch: u32,
-    /// The per-entry call counters, owned by this host so parallel tests
-    /// never share them.
+
     pub trace_counts: [u32; 8],
 }
 
@@ -289,16 +217,12 @@ impl<'a, P: crate::engine::HeapPlatform> C4Calls<'a, P> {
     }
 }
 
-
 impl<'a, P: crate::engine::HeapPlatform> C4Calls<'a, P> {
-    /// Map a relocated guest entry back to the US address the shared ports
-    /// dispatch on. Identity in US; unknown entries pass through so they
-    /// surface as `first_unbound` instead of misrouting.
+
     fn unrelocate(&self, entry: u32) -> u32 {
         to_us(self.rom, entry)
     }
 
-    /// The shared live host over the caller's flat arena.
     fn live(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_, '_>) -> Result<u32, Error> {
         let rom = self.rom;
         trace_count_into(&mut self.trace_counts, to_us(rom, entry));
@@ -308,6 +232,7 @@ impl<'a, P: crate::engine::HeapPlatform> C4Calls<'a, P> {
             platform: &mut *self.platform,
             fault: None,
             scratch,
+            rom,
         };
         let rc = host.call_m_with(
             entry,
@@ -322,11 +247,6 @@ impl<'a, P: crate::engine::HeapPlatform> C4Calls<'a, P> {
     }
 }
 
-/// The live `fn_206be4` root over the caller's arena.
-///
-/// `p` is the processor, `key` the quad-check key, `handle` the by-value
-/// node handle and `changed` the caller's changed flag. The scratch frame is
-/// the root's own ABI-local area.
 pub fn fn_206be4_m(
     m: &mut Memory<'_, '_>,
     p: u32,
@@ -390,47 +310,30 @@ impl<P: crate::engine::HeapPlatform> InternalCalls for C4Calls<'_, P> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The normalizer tokenizer: fn_284bc0 over fn_283528.
-//
-// `fn_284bc0` is the slice port `text_input::tokenize_span`; that port takes
-// its collaborators through traits, so the live port supplies them over the
-// caller's flat arena. The three method tables come from the processor: the
-// token table at `p + 4`, the dictionary table at `p + 16` and the context
-// table at `p + 28`.
-// ---------------------------------------------------------------------------
-
-/// The token method table slots of `fn_284bc0`'s token store.
 const TOKEN_CREATE: u32 = 44;
 const TOKEN_FIND: u32 = 52;
 const TOKEN_NEXT: u32 = 60;
 const TOKEN_SET: u32 = 80;
 const TOKEN_GET: u32 = 84;
 const TOKEN_STRING: u32 = 88;
-/// The dictionary method table slots.
+
 const DICT_FOLD: u32 = 32;
 const DICT_NORMALIZE: u32 = 36;
 const DICT_LOOKUP: u32 = 40;
 const DICT_SPACE: u32 = 48;
 const DICT_RULES: u32 = 72;
-/// The context method table slots.
+
 const CONTEXT_SET_TEXT: u32 = 36;
 const CONTEXT_GET_TEXT: u32 = 40;
 const CONTEXT_RUN: u32 = 44;
 
-/// The `fe_dctlkp` port's scratch frame.
-///
-/// The frame holds the three result cells of `fn_26bb6c`, the broker
-/// scratch of the dictionary data pages and the guest copy of the query
-/// text that `fn_26bb6c` reads.
 const DICT_CELLS: u32 = 0;
 const DICT_BROKER: u32 = 16;
-/// The guest copy of the query text: 1024 bytes.
+
 const DICT_QUERY: u32 = 0x200;
-/// The size of the `fe_dctlkp` port's scratch frame.
+
 pub const DICT_FRAME: u32 = 0x600;
 
-/// Copy bytes into the arena without panicking on a hostile pointer.
 fn put_bytes(arena: &mut [u8], at: u32, data: &[u8]) -> bool {
     let Ok(at) = usize::try_from(at) else {
         return false;
@@ -444,48 +347,43 @@ fn put_bytes(arena: &mut [u8], at: u32, data: &[u8]) -> bool {
     }
 }
 
-/// Read one byte from the arena without panicking on a hostile pointer.
 fn get_byte(arena: &[u8], at: u32) -> Option<u8> {
     let at = usize::try_from(at).ok()?;
     arena.get(at).copied()
 }
 
-/// Read one half from the arena without panicking on a hostile pointer.
 fn get_half(arena: &[u8], at: u32) -> Option<u16> {
     let at = usize::try_from(at).ok()?;
     let slot = arena.get(at..at.checked_add(2)?)?;
     Some(u16::from_le_bytes([slot[0], slot[1]]))
 }
 
-/// Read one word from the arena without panicking on a hostile pointer.
 fn get_word(arena: &[u8], at: u32) -> Option<u32> {
     let at = usize::try_from(at).ok()?;
     let slot = arena.get(at..at.checked_add(4)?)?;
     Some(u32::from_le_bytes([slot[0], slot[1], slot[2], slot[3]]))
 }
 
-/// The live collaborators of the normalizer tokenizer.
 struct TokenHost<'a> {
     platform: &'a mut dyn crate::engine::HeapPlatform,
-    /// The ROM whose guest memory is live. Regional guest entries arrive
-    /// relocated; ports dispatch on the US address.
+
     rom: Rom,
-    /// The token method table.
+
     tokens: u32,
-    /// The dictionary method table.
+
     dictionary: u32,
-    /// The context method table.
+
     context: u32,
-    /// Scratch cells for the field reads.
+
     scratch: u32,
-    /// The first guest entry this lane could not serve.
+
     first_unbound: &'a mut Option<u32>,
-    /// The caller's per-entry counters, borrowed from the owning host.
+
     counts: &'a mut [u32; 8],
 }
 
 impl TokenHost<'_> {
-    /// Call one guest entry over the caller's flat arena.
+
     fn guest(&mut self, entry: u32, args: &[u32], arena: &mut [u8]) -> u32 {
         let rom = self.rom;
         let entry = to_us(rom, entry);
@@ -499,6 +397,7 @@ impl TokenHost<'_> {
                 platform: &mut *self.platform,
                 fault: None,
                 scratch,
+                rom,
             };
             let rc = host.call_m_with(
                 entry,
@@ -517,7 +416,6 @@ impl TokenHost<'_> {
         rc
     }
 
-    /// Call the guest method of one slot of one method table.
     fn call_method(
         &mut self,
         table: u32,
@@ -532,10 +430,6 @@ impl TokenHost<'_> {
         self.guest(entry, args, arena)
     }
 
-    /// The two `fe_dctlkp` canonicalization entries the dictionary method
-    /// table names: `fn_1ed6c4` (ConvertToCanonicalWord) and `fn_1ed1d0`
-    /// (ConvertToCanonicalToken).  Both rewrite the caller's text buffer in
-    /// place.
     fn canonical(&mut self, entry: u32, args: &[u32], arena: &mut [u8]) -> u32 {
         if args.len() < 4 {
             return UNBOUND;
@@ -548,7 +442,7 @@ impl TokenHost<'_> {
             resources: core::cell::Cell::new(0),
         };
         let rc = if entry == 0x1ed1d0 {
-            // fn_1ed1d0(ctx, handle, key, text).
+
             let mut broker = DictBroker {
                 env: &env,
                 scratch: env.scratch.wrapping_add(DICT_BROKER),
@@ -569,11 +463,6 @@ impl TokenHost<'_> {
         rc
     }
 
-    /// The `fe_dctlkp` lookup: `fn_1edabc` (LookupMultiword) and
-    /// `fn_1ec7cc` (Lookup).
-    ///
-    /// `kind` is 0 for the multiword lookup and 1 for the plain lookup; the
-    /// two guest entries take their arguments in different orders.
     fn dictionary_lookup(&mut self, kind: u32, args: &[u32], arena: &mut [u8]) -> u32 {
         let env = DictEnv {
             platform: core::cell::RefCell::new(&mut *self.platform),
@@ -588,7 +477,6 @@ impl TokenHost<'_> {
     }
 }
 
-/// The length of the NUL terminated string at `at`, without its terminator.
 fn cstr_len(arena: &[u8], at: u32) -> usize {
     let mut length = 0usize;
     while length < 4096 {
@@ -601,7 +489,6 @@ fn cstr_len(arena: &[u8], at: u32) -> usize {
     length
 }
 
-/// Copy the NUL terminated string at `at` into `out`.
 fn copy_cstr(arena: &[u8], at: u32, out: &mut [u8; 1024]) -> usize {
     let length = cstr_len(arena, at).min(1023);
     let mut index = 0usize;
@@ -613,10 +500,6 @@ fn copy_cstr(arena: &[u8], at: u32, out: &mut [u8; 1024]) -> usize {
     length
 }
 
-/// The live `fe_dctlkp` lookup over the caller's arena.
-///
-/// The context is projected out of the arena, the lookup runs over the
-/// certified `pronunciation` ports and the context is written back.
 fn dictionary_port<'p>(
     kind: u32,
     args: &[u32],
@@ -666,7 +549,7 @@ fn dictionary_port<'p>(
         projected: [model.main, model.system, model.language],
     };
     let rc = if kind == 0 {
-        // fn_1edabc: (ctx, tag, text, key, name, out, count).
+
         let mut out = 0u32;
         let mut count = 0u16;
         let rc = crate::pronunciation::lookup_multiword(
@@ -682,14 +565,13 @@ fn dictionary_port<'p>(
             &mut count,
         );
         let arena = crate::heap::Heap::arena(&mut heap);
-        // The ARM rewrites the caller's text buffer in place: the character
-        // class run is dropped and the rest is folded or canonicalized.
+
         put_bytes(arena, args[2], &text[..text_len + 1]);
         put_bytes(arena, args[5], &out.to_le_bytes());
         put_bytes(arena, args[6], &count.to_le_bytes());
         rc
     } else {
-        // fn_1ec7cc: (ctx, tag, key, text, out, count, separator, total).
+
         let mut out = 0u32;
         let mut count = 0u16;
         let mut separator = 0u8;
@@ -718,31 +600,19 @@ fn dictionary_port<'p>(
     rc
 }
 
-/// `fn_1edabc`: the `fe_dctlkp` LookupMultiword entry, live over the arena.
-///
-/// The exact ARM call is `fn_1edabc(ctx, handle, text, key, name, out,
-/// count)`: `ctx` is the `fe_dctlkp` object, `handle` its tag word
-/// (`0xf37f`), `text` the guest text buffer that the ARM rewrites in place
-/// (the leading character-class run is dropped and the rest is folded or
-/// canonicalized), `key` the lookup key, `name` the dictionary name, `out`
-/// the `char ***` result slot and `count` the `u16` result count.  `a`
-/// carries the seven words in that order and `scratch` is a
-/// `DICT_FRAME`-byte caller-owned frame.
-///
-/// The port projects the `fe_dctlkp` context out of the arena, runs the
-/// certified `pronunciation` ports and writes the context back.
 pub fn fn_1edabc_m(
     m: &mut Memory<'_, '_>,
     a: [u32; 7],
     scratch: u32,
     platform: &mut dyn crate::engine::HeapPlatform,
+    rom: Rom,
 ) -> Result<u32, Error> {
     let (_, arena) = flat_view(m);
     let env = DictEnv {
         platform: core::cell::RefCell::new(platform),
         first_unbound: core::cell::RefCell::new(None),
         scratch,
-        rom: Rom::Us,
+        rom,
         resources: core::cell::Cell::new(0),
     };
     let rc = dictionary_port(0, &a, arena, &env);
@@ -752,30 +622,19 @@ pub fn fn_1edabc_m(
     }
 }
 
-/// `fn_1ec7cc`: the `fe_dctlkp` Lookup entry, live over the arena.
-///
-/// The exact ARM call is `fn_1ec7cc(ctx, handle, key, text, out, count,
-/// separator, total)`: `ctx` is the `fe_dctlkp` object, `handle` its tag
-/// word (`0xf37f`), `key` the lookup key, `text` the guest text, `out` the
-/// `char ***` result slot, `count` the `u16` result count, `separator` the
-/// `u8` separator cell and `total` how many times the lookup repeats.  `a`
-/// carries the eight words in that order and `scratch` is a
-/// `DICT_FRAME`-byte caller-owned frame.
-///
-/// A `total` of one is the plain lookup; a larger total repeats it with the
-/// numbered key, exactly as the ARM does.
 pub fn fn_1ec7cc_m(
     m: &mut Memory<'_, '_>,
     a: [u32; 8],
     scratch: u32,
     platform: &mut dyn crate::engine::HeapPlatform,
+    rom: Rom,
 ) -> Result<u32, Error> {
     let (_, arena) = flat_view(m);
     let env = DictEnv {
         platform: core::cell::RefCell::new(platform),
         first_unbound: core::cell::RefCell::new(None),
         scratch,
-        rom: Rom::Us,
+        rom,
         resources: core::cell::Cell::new(0),
     };
     let rc = dictionary_port(1, &a, arena, &env);
@@ -785,15 +644,13 @@ pub fn fn_1ec7cc_m(
     }
 }
 
-/// The `fe_dctlkp` handle seam.
 struct DictHost<'e, 'p> {
     env: &'e DictEnv<'p>,
 }
 
 impl crate::pronunciation::LookupHost for DictHost<'_, '_> {
     fn check(&mut self, handle: u32, tag: u32, _size: u32) -> u32 {
-        // fn_176f94: the object handle and the expected tag.  The
-        // `fe_dctlkp` object is validated with the tag 0xf37f.
+
         if handle == 0 || tag != 0xf37f {
             return 0x89802008;
         }
@@ -807,7 +664,7 @@ impl crate::pronunciation::LookupHost for DictHost<'_, '_> {
         let length = name.len().min(1023);
         buffer[..length].copy_from_slice(&name[..length]);
         buffer[length] = 0;
-        // The ARM passes the resource name as a guest string.
+
         let name_address = self.env.scratch.wrapping_add(DICT_QUERY);
         put_bytes(arena, name_address, &buffer[..length + 1]);
         let out = self.env.scratch.wrapping_add(DICT_CELLS + 8);
@@ -828,7 +685,7 @@ impl crate::pronunciation::LookupHost for DictHost<'_, '_> {
         self.env.guest(0x179f3c, &[resources, handle], arena);
     }
 
-    fn resource_release(&mut self, _handle: u32, _buffer: u32) {}
+    fn resource_release(&mut self, _handle: u32, _buffer: u32) { panic!("dictionary release requires live memory"); }
 }
 
 impl crate::text_input::TokenStoreHost for TokenHost<'_> {
@@ -882,8 +739,7 @@ impl crate::text_input::TokenStoreHost for TokenHost<'_> {
     }
 
     fn token_create(&mut self, arena: &mut [u8], h0: u32, h1: u32, tok: u32, out: u32) -> u32 {
-        // The token record creation of the C (`fn_283528`'s single-match
-        // path): the token table's slot 44, entry 0x15c2f0.
+
         self.call_method(self.tokens, TOKEN_CREATE, &[h0, h1, tok, out], arena)
     }
 
@@ -898,9 +754,7 @@ impl crate::text_input::TokenStoreHost for TokenHost<'_> {
         data: u32,
         out_written: u32,
     ) -> u32 {
-        // The token record stores of the C: the token table's slot 80,
-        // entry 0x15cdcc. The field bytes are read from the guest `data`
-        // pointer; only the written count is staged through scratch.
+
         let count = self.scratch.wrapping_add(8);
         let rc = self.call_method(
             self.tokens,
@@ -982,8 +836,7 @@ impl crate::text_input::TokenDictHost for TokenHost<'_> {
     }
 
     fn dict_is_space(&mut self, arena: &[u8], h0: u32, h1: u32, c: u8) -> u32 {
-        // fn_1edd3c: the character class of the dictionary context, at
-        // `h0 + 100`, is a NUL terminated list of the space characters.
+
         if h0 == 0 || h1 != 0xf37f {
             return 0;
         }
@@ -1069,16 +922,17 @@ impl crate::normalization::NormalizationHost for TokenHost<'_> {
         self.guest(0x196428, &[heap, ptr], arena);
     }
 
-    fn resolve(&mut self, _arena: &mut [u8], _h0: u32, _h1: u32) -> (u32, u32) {
-        (UNBOUND, 0)
+    fn resolve(&mut self, arena: &mut [u8], h0: u32, h1: u32) -> (u32, u32) {
+        let anchor = crate::rom_region::addr(self.rom, 0x8d7660) as usize;
+        let pair: [u8; 8] = arena[anchor..anchor + 8].try_into().unwrap();
+        let pointed = (h0 != 0).then(|| u16::from_le_bytes(arena[h0 as usize..h0 as usize + 2].try_into().unwrap()));
+        let mut context = 0;
+        let status = crate::frontend::resolve_engine_context(h0, pointed, h1, &pair,
+            crate::rom_region::addr(self.rom, 0x8d7640), &mut context);
+        (status, context)
     }
 }
 
-/// The live `fn_284bc0` normalizer tokenizer over the caller's arena.
-///
-/// `p` is the processor, `source` the span text, `position` and `end` the
-/// span bounds, `domain` the span's domain attribute, `handle` the node
-/// handle and `token` the token slot the tokenizer advances.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_284bc0_m(
     m: &mut Memory<'_, '_>,
@@ -1128,19 +982,6 @@ pub fn fn_284bc0_m(
     ))
 }
 
-// ---------------------------------------------------------------------------
-// The fe_dctlkp dictionary family: fn_1edabc (LookupMultiword) and
-// fn_1ec7cc (Lookup).
-//
-// Both walk the same `fe_dctlkp` context object: the owner at +0, the three
-// dictionaries at +4/+36/+68, the character class at +100, the key, table,
-// result, query and resource vectors at +104..+124, the counters at
-// +136..+142, the replacement table at +144, the mode at +156, the resource
-// name at +158, the cached name at +414, the cache flag at +670 and the
-// second replacement table at +672.
-// ---------------------------------------------------------------------------
-
-/// Read a NUL terminated string into a fixed buffer.
 fn read_cstr(arena: &[u8], at: u32, out: &mut [u8; 256]) {
     let mut index = 0usize;
     while index < 256 {
@@ -1153,7 +994,6 @@ fn read_cstr(arena: &[u8], at: u32, out: &mut [u8; 256]) {
     }
 }
 
-/// Write a fixed buffer as a NUL terminated string.
 fn write_cstr(arena: &mut [u8], at: u32, value: &[u8; 256]) {
     let mut index = 0usize;
     while index < 256 && value[index] != 0 {
@@ -1163,7 +1003,6 @@ fn write_cstr(arena: &mut [u8], at: u32, value: &[u8; 256]) {
     put_bytes(arena, at.wrapping_add(index as u32), &[0]);
 }
 
-/// Project the `fe_dctlkp` context out of the caller's arena.
 fn dctlkp_read(arena: &[u8], ctx: u32) -> crate::pronunciation::LookupContext {
     use crate::pronunciation::{LookupContext, LookupDictionary, LookupDictionaryState, LookupOwner};
     let mut model = LookupContext::default();
@@ -1207,7 +1046,6 @@ fn dctlkp_read(arena: &[u8], ctx: u32) -> crate::pronunciation::LookupContext {
     model
 }
 
-/// Write the `fe_dctlkp` context back into the caller's arena.
 fn dctlkp_write(arena: &mut [u8], ctx: u32, model: &crate::pronunciation::LookupContext) {
     let mut dictionary = |base: u32, dict: &crate::pronunciation::LookupDictionary| {
         put_bytes(arena, base, &dict.size.to_le_bytes());
@@ -1238,19 +1076,6 @@ fn dctlkp_write(arena: &mut [u8], ctx: u32, model: &crate::pronunciation::Lookup
     write_cstr(arena, ctx.wrapping_add(414), &model.name2);
 }
 
-/// `fn_1ed6c4`: the `fe_dctlkp` ConvertToCanonicalWord entry, live over the
-/// arena.
-///
-/// The exact ARM call is `fn_1ed6c4(ctx, handle, key, text)`: `ctx` is the
-/// `fe_dctlkp` object, `handle` its tag word (`0xf37f`), `key` the canonical
-/// map key and `text` the guest text buffer that the ARM rewrites in place
-/// (the leading and trailing character-class runs are dropped and the rest
-/// is folded to lower case unless the mode says otherwise).
-///
-/// The port runs the certified `pronunciation::canonical_word` port over the
-/// context fields the ROM reads: the character class at `ctx + 0x64`, the
-/// replacement table at `ctx + 0x90`, the mode at `ctx + 0x9c`, the cached
-/// name at `ctx + 0x19e` and the cache flag at `ctx + 0x29e`.
 fn dctlkp_canonical_word(
     arena: &mut [u8],
     ctx: u32,
@@ -1267,7 +1092,7 @@ fn dctlkp_canonical_word(
     let mut key_buffer = [0u8; 1024];
     let key_length = copy_cstr(arena, key, &mut key_buffer);
     if key_length + 1 > 256 {
-        // The cached name of the object is 256 bytes wide.
+
         return 0x89802007;
     }
     let mut text_buffer = [0u8; 1024];
@@ -1275,9 +1100,7 @@ fn dctlkp_canonical_word(
     let mut cached = [0u8; 256];
     read_cstr(arena, ctx.wrapping_add(414), &mut cached);
     let cache_enabled = model.flag29e != 0;
-    // The canonical map refresh, when the cache is on and the key changed.
-    // The slice port asks its loader for the refresh, so the refresh runs
-    // here and the loader stays idle.
+
     if cache_enabled && !same_bytes(&key_buffer[..key_length + 1], &cached) {
         let rc = canonical_map_refresh(arena, ctx, handle, &mut model, &key_buffer[..key_length + 1], env);
         if rc >= 0x8000_0000 {
@@ -1285,8 +1108,7 @@ fn dctlkp_canonical_word(
         }
         cached[..key_length + 1].copy_from_slice(&key_buffer[..key_length + 1]);
     }
-    // The character class and the replacement table are read while the arena
-    // is borrowed: the canonicalization itself only touches the buffers.
+
     let host = DictHost { env };
     let arena_ref: &[u8] = arena;
     let class = crate::pronunciation::text_at(arena_ref, model.field64);
@@ -1328,7 +1150,6 @@ fn dctlkp_canonical_word(
     rc
 }
 
-/// The canonical map refresh, `fn_1eb978`, over the caller's arena.
 fn canonical_map_refresh(
     arena: &mut [u8],
     ctx: u32,
@@ -1367,7 +1188,6 @@ fn canonical_map_refresh(
     )
 }
 
-/// The loader the canonicalization ports use when the refresh already ran.
 struct IdleLoader;
 
 impl crate::pronunciation::CanonicalLoader for IdleLoader {
@@ -1376,32 +1196,27 @@ impl crate::pronunciation::CanonicalLoader for IdleLoader {
     }
 }
 
-/// Whether two terminated strings hold the same bytes.
 fn same_bytes(a: &[u8], b: &[u8]) -> bool {
     let length = a.iter().position(|&byte| byte == 0).unwrap_or(a.len());
     let other = b.iter().position(|&byte| byte == 0).unwrap_or(b.len());
     a[..length] == b[..other]
 }
 
-/// The shared services of the dictionary port.
 struct DictEnv<'p> {
     platform: core::cell::RefCell<&'p mut dyn crate::engine::HeapPlatform>,
     first_unbound: core::cell::RefCell<Option<u32>>,
     scratch: u32,
-    /// The ROM whose guest memory is live. Regional guest entries arrive
-    /// relocated; ports dispatch on the US address.
+
     rom: Rom,
-    /// The resource vector of the `fe_dctlkp` owner.
+
     resources: core::cell::Cell<u32>,
 }
 
 impl DictEnv<'_> {
-    /// Call one guest entry over the caller's flat arena.
+
     fn guest(&self, entry: u32, args: &[u32], arena: &mut [u8]) -> u32 {
-        // 0xffff0001 is the logger's variadic argument service, not a guest
-        // entry: the recorded-reply ports answer it with no reply.
         if entry == 0xffff0001 {
-            return 0;
+            self.first_unbound.replace(Some(entry)); return 0x80002001;
         }
         let rom = self.rom;
         let entry = to_us(rom, entry);
@@ -1412,6 +1227,7 @@ impl DictEnv<'_> {
                 platform: &mut **platform,
                 fault: None,
                 scratch,
+                rom,
             };
             let rc = host.call_m_with(
                 entry,
@@ -1434,7 +1250,6 @@ impl DictEnv<'_> {
     }
 }
 
-/// The engine heap over the caller's flat arena.
 struct ArenaHeap<'a, 'e, 'p> {
     arena: &'a mut [u8],
     env: &'e DictEnv<'p>,
@@ -1468,22 +1283,17 @@ impl crate::heap::Heap for ArenaHeap<'_, '_, '_> {
     }
 }
 
-/// The `fe_dctlkp` dictionary set over the caller's arena.
 struct DictDictionaries<'e, 'p> {
     env: &'e DictEnv<'p>,
     workspace: core::cell::RefCell<crate::component_live_c::DictionaryWorkspace>,
-    /// The guest addresses of the three dictionary states.
+
     states: [u32; 3],
-    /// The projected states of the three dictionaries.
+
     projected: [crate::pronunciation::LookupDictionary; 3],
 }
 
 impl DictDictionaries<'_, '_> {
-    /// The guest address of the dictionary state the model handed over.
-    ///
-    /// The bit cursor and the tables move during a lookup, so the state is
-    /// matched on the two handle words of the dictionary, which the ARM
-    /// never rewrites.
+
     fn state_address(&self, state: &crate::pronunciation::LookupDictionaryState) -> u32 {
         for (index, projected) in self.projected.iter().enumerate() {
             if projected.state.h0 == state.h0 && projected.state.h1 == state.h1 {
@@ -1497,30 +1307,98 @@ impl DictDictionaries<'_, '_> {
 impl crate::pronunciation::LookupDictionaries for DictDictionaries<'_, '_> {
     fn load(
         &mut self,
-        _arena: &mut [u8],
-        _state: &mut crate::pronunciation::LookupDictionaryState,
-        _key: &[u8],
-        _size: u32,
-        _resource: u32,
+        arena: &mut [u8],
+        state: &mut crate::pronunciation::LookupDictionaryState,
+        key: &[u8],
+        size: u32,
+        resource: u32,
     ) -> u32 {
-        UNBOUND
+        let slot = self.env.scratch + DICT_CELLS;
+        let rc = self.env.guest(0x17a1a4, &[state.h0, state.h1, 40, size, slot], arena);
+        if rc != 0 {
+            self.env.guest(0x179f3c, &[state.h0, state.h1], arena);
+            state.h1 = 0;
+            return rc;
+        }
+        let buffer = get_word(arena, slot).expect("dictionary index window");
+        let mut position = 0;
+        while position < size {
+            let length = cstr_len(arena, buffer + position);
+            let name = &arena[(buffer + position) as usize..(buffer + position) as usize + length];
+            if name.eq_ignore_ascii_case(key) { break; }
+            position = (position + length as u32 + 4) & !3;
+            position += 4;
+        }
+        if position >= size {
+            self.env.guest(0x179208, &[state.h0, state.h1, buffer], arena);
+            return 0x89802014;
+        }
+        let position = (position + cstr_len(arena, buffer + position) as u32 + 4) & !3;
+        let offset = get_word(arena, buffer + position).expect("dictionary section offset");
+        self.env.guest(0x179208, &[state.h0, state.h1, buffer], arena);
+        let rc = self.env.guest(0x17a1a4, &[state.h0, state.h1, offset, 4, slot], arena);
+        if rc != 0 {
+            self.env.guest(0x179f3c, &[state.h0, state.h1], arena);
+            state.h1 = 0;
+            return rc;
+        }
+        let header = get_word(arena, slot).expect("dictionary size window");
+        let length = get_word(arena, header).expect("dictionary section size");
+        self.env.guest(0x179208, &[state.h0, state.h1, header], arena);
+        let rc = self.env.guest(0x17a1a4, &[state.h0, resource, offset, length, state.tables], arena);
+        if rc != 0 { return rc; }
+        let section = get_word(arena, state.tables).expect("dictionary mapped section");
+        let byte = |at| get_byte(arena, section + at).expect("dictionary header byte") as u32;
+        let half = |at| get_half(arena, section + at).expect("dictionary header half") as u32;
+        let mut offsets = [0u32; 19];
+        offsets[0] = section;
+        let mut cursor = section + 72;
+        offsets[1] = cursor;
+        cursor = cursor.wrapping_add(byte(5).wrapping_sub(byte(4)).wrapping_add(4) & !3);
+        offsets[2] = cursor;
+        cursor = cursor.wrapping_add(byte(7).wrapping_sub(byte(6)).wrapping_mul(2).wrapping_add(5) & !3);
+        offsets[3] = cursor;
+        cursor = cursor.wrapping_add((half(46) + 3) & !3);
+        offsets[4] = cursor;
+        cursor = cursor.wrapping_add(half(46) * 4);
+        offsets[5] = cursor;
+        cursor = cursor.wrapping_add(half(46) * 4);
+        offsets[6] = cursor;
+        for (index, field) in (7..=11).zip((26..=34).step_by(2)) {
+            cursor = cursor.wrapping_add(half(field) * 4 + 4);
+            offsets[index] = cursor;
+        }
+        for (index, field, width) in [(12,36,2),(13,38,1),(14,40,1),(15,42,2)] {
+            cursor = cursor.wrapping_add((half(field) * width + 3) & !3);
+            offsets[index] = cursor;
+        }
+        offsets[16] = offset.wrapping_add(length);
+        offsets[17] = offsets[16].wrapping_add((get_word(arena, section + 60).expect("dictionary tail size") + 3) & !3);
+        offsets[18] = offsets[17].wrapping_add((get_word(arena, section + 64).expect("dictionary tail size") + 3) & !3);
+        for (index, value) in offsets.into_iter().enumerate() {
+            assert!(put_bytes(arena, state.tables + index as u32 * 4, &value.to_le_bytes()));
+        }
+        0
     }
 
     fn unload(
         &mut self,
-        _arena: &mut [u8],
-        _state: &mut crate::pronunciation::LookupDictionaryState,
-        _resource: u32,
+        arena: &mut [u8],
+        state: &mut crate::pronunciation::LookupDictionaryState,
+        resource: u32,
     ) -> u32 {
-        UNBOUND
+        let buffer = get_word(arena, state.tables).expect("dictionary section release");
+        self.env.guest(0x179208, &[state.h0, resource, buffer], arena);
+        0
     }
 
     fn result_capacity(
         &mut self,
-        _arena: &[u8],
-        _state: &mut crate::pronunciation::LookupDictionaryState,
+        arena: &[u8],
+        state: &mut crate::pronunciation::LookupDictionaryState,
     ) -> u16 {
-        0
+        let header = get_word(arena, state.tables).expect("dictionary section header");
+        get_half(arena, header + 48).expect("dictionary result capacity")
     }
 
     fn separator(
@@ -1528,13 +1406,7 @@ impl crate::pronunciation::LookupDictionaries for DictDictionaries<'_, '_> {
         arena: &[u8],
         state: &mut crate::pronunciation::LookupDictionaryState,
     ) -> u8 {
-        // fn_26bb54: the separator byte of the dictionary state.  The ROM
-        // loads it in three steps (`ldr r0,[r0,#0xc]; ldr r0,[r0];
-        // ldrb r0,[r0,#9]`): the word at `state + 0xc` (the `tables`
-        // field) is dereferenced twice, then the byte at +9 is read.
-        // The tables pointer must come from the caller's live state: the
-        // guest copy lags it after a load, so resolving through the arena
-        // reads a stale pointer.
+
         let inner = state.tables;
         if inner == 0 {
             return 0;
@@ -1559,16 +1431,9 @@ impl crate::pronunciation::LookupDictionaries for DictDictionaries<'_, '_> {
         if address == 0 {
             return false;
         }
-        // The ARM's dictionary pointer is the guest state itself: fn_26bb6c
-        // reads the tables and the bit cursor from it and writes the cursor,
-        // the buffer and the output back into it.  The projected state has
-        // to be pushed into the guest before the call and read back after
-        // it, or the lookup would walk the previous tables.
+
         push_state(arena, address, state);
-        // The ARM writes the expansion into the output buffer and leaves the
-        // byte behind it as it was.  The certified port writes the expansion
-        // and its terminator, so the stale byte is saved here and put back
-        // after the call.
+
         let output_address = state.output;
         let mut stale = [0u8; 256];
         for (index, byte) in stale.iter_mut().enumerate() {
@@ -1581,10 +1446,7 @@ impl crate::pronunciation::LookupDictionaries for DictDictionaries<'_, '_> {
         put_bytes(arena, start_cell, &(*start as u16).to_le_bytes());
         put_bytes(arena, end_cell, &(*end as u16).to_le_bytes());
         put_bytes(arena, length_cell, &(*length as u16).to_le_bytes());
-        // The ARM hands fn_26bb6c the guest address of `ctx->query`.  The
-        // certified Rust port carries the query as a host slice, so it is
-        // copied into a private guest buffer first: fn_26bb6c only reads the
-        // text, so the bytes it sees are the ARM's bytes.
+
         let text_address = scratch.wrapping_add(DICT_QUERY);
         put_bytes(arena, text_address, text);
         let args = [
@@ -1613,7 +1475,7 @@ impl crate::pronunciation::LookupDictionaries for DictDictionaries<'_, '_> {
         *start = get_half(arena, start_cell).unwrap_or(0) as i16;
         *end = get_half(arena, end_cell).unwrap_or(0) as i16;
         *length = get_half(arena, length_cell).unwrap_or(0) as i16;
-        // The byte behind the expansion keeps the value the ARM leaves.
+
         let written = get_half(arena, length_cell).unwrap_or(0) as usize;
         if written < stale.len() {
             put_bytes(
@@ -1622,13 +1484,12 @@ impl crate::pronunciation::LookupDictionaries for DictDictionaries<'_, '_> {
                 &[stale[written]],
             );
         }
-        // The port moved the bit cursor and the buffer in the guest.
+
         pull_state(arena, address, state);
         rc.is_ok() && rc.unwrap_or(1) != 0
     }
 }
 
-/// Write the projected dictionary state into the guest state.
 fn push_state(
     arena: &mut [u8],
     address: u32,
@@ -1643,7 +1504,6 @@ fn push_state(
     put_bytes(arena, address + 24, &state.output.to_le_bytes());
 }
 
-/// Read the guest dictionary state back into the projection.
 fn pull_state(
     arena: &[u8],
     address: u32,
@@ -1658,7 +1518,6 @@ fn pull_state(
     state.output = get_word(arena, address + 24).unwrap_or(0);
 }
 
-/// The broker seam of the dictionary port.
 struct DictBroker<'e, 'p> {
     env: &'e DictEnv<'p>,
     scratch: u32,

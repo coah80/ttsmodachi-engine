@@ -1,4 +1,4 @@
-//! Live speech callees. All guest storage is supplied by the caller.
+
 use crate::{boot::Memory, speech_part_4};
 
 pub fn fn_129778(
@@ -13,12 +13,9 @@ pub fn fn_196964(m: &mut Memory<'_>, host: &mut impl speech_part_4::Host, pointe
     speech_part_4::fn_196964(m, host, pointer, heap)
 }
 
-/// Reentrant indirect methods and semantic logger events. Implementations must
-/// dispatch engine methods to their real ports. Only platform methods may be scripted.
 pub trait Host {
     fn call(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32;
-    /// Same semantic logger boundary as bridge::Live::log. Text is a static
-    /// format; values retain their guest addresses, never null substitutes.
+
     fn log(
         &mut self,
         m: &mut Memory<'_>,
@@ -55,9 +52,6 @@ fn failed(r: u32) -> bool {
     r >= 0x80000000
 }
 
-/// fn_24c9fc. scratch is eight disjoint caller-owned bytes, restored on return.
-/// prepare/check/exec are live vtable calls. A failed check is not an error
-/// and leaves prepare's status as the result.
 pub fn fn_24c9fc(m: &mut Memory<'_>, h: &mut impl Host, p: u32, scratch: u32) -> u32 {
     let mut saved = [0; 8];
     saved.copy_from_slice(&m.bytes[m.offset(scratch)..m.offset(scratch) + 8]);
@@ -112,9 +106,6 @@ pub fn fn_24c9fc(m: &mut Memory<'_>, h: &mut impl Host, p: u32, scratch: u32) ->
     rc
 }
 
-/// fn_1d8f28. scratch is 40 disjoint bytes restored on return. Lattice
-/// methods receive real addresses for all output slots; logs include the
-/// strings and pronunciation chosen by the original routine.
 pub fn fn_1d8f28(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -133,7 +124,7 @@ pub fn fn_1d8f28(
     saved.copy_from_slice(&m.bytes[at..at + 40]);
     let r = (|| {
         let [a, b] = db;
-        // from/to/type/len/node/hasPron/len2, followed by s1/s2/pron/tname.
+
         let s = scratch;
         for off in [10, 12] {
             put_half(m, s + off, 0);
@@ -258,8 +249,6 @@ pub fn fn_1d8f28(
     r
 }
 
-/// Regional string addresses from the owning ROM. No stack string is replaced
-/// by a null pointer. category is D_8f886c; langcode is the property key.
 pub struct TokenConstants {
     pub category: u32,
     pub langcode: u32,
@@ -373,8 +362,7 @@ fn release(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, p: u32) {
         &mut v,
     );
 }
-/// fn_1d5234. scratch is 64 disjoint guest bytes restored on return. cursor
-/// remains a live guest u16 pointer, including across insert/next callbacks.
+
 pub fn fn_1d5234(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -396,8 +384,7 @@ pub fn fn_1d5234(
     let mut saved = [0; 64];
     saved.copy_from_slice(&m.bytes[at..at + 64]);
     let s = scratch;
-    // +0 position, +2 length, +4 written, +6 kind, +8 first,
-    // +12 setting, +16 raw, +20 language, +24 upper, +28 key, +40 disabled.
+
     put_half(m, s, 0);
     let original = half(m, cursor) as u32;
     let mut rc = 0;
@@ -464,7 +451,7 @@ pub fn fn_1d5234(
                         b"Creating token %u %u in lingdb",
                         &[pos, end as u32],
                     );
-                    // End is also a real addressable local, not a null value.
+
                     put_half(m, s + 10, end);
                     for (key, n, data) in [
                         (1, 1, s),
@@ -721,9 +708,6 @@ pub fn fn_1d5234(
     r
 }
 
-/// fn_19658c. Tree traversal, initialization and insertion use the existing
-/// frontend ports. The tree/heap traits must dispatch real engine callbacks.
-/// The offset-based tree ports require a zero-based guest arena.
 pub fn fn_19658c(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -785,7 +769,6 @@ pub fn fn_19658c(
     rc
 }
 
-/// Direct conversion entries share the same live output and locale host.
 pub trait FormatHost: speech_part_4::Host + crate::render_part_d2::LocaleHost {}
 impl<T: speech_part_4::Host + crate::render_part_d2::LocaleHost> FormatHost for T {}
 fn output(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s: u32, v: u32) {
@@ -884,7 +867,7 @@ fn numeric(
     m.bytes[at..at + 2].copy_from_slice(&saved);
     result
 }
-/// RVCT %n. The ARM entry is an ARM-to-Thumb veneer at 0x100418.
+
 pub(crate) fn fn_100418(m: &mut Memory<'_>, s: u32, _c: u32, va: u32) -> u32 {
     let p = m.word(va);
     let flags = m.word(s);
@@ -1005,8 +988,7 @@ pub(crate) fn fn_302034(
     }
     n as u32
 }
-/// c==99 selects one unit; the two string veneers select an unbounded string.
-/// scratch is 32 caller-owned bytes, restored as the original private stack.
+
 fn format_text(
     m: &mut Memory<'_>,
     h: &mut impl FormatHost,
@@ -1037,8 +1019,7 @@ fn format_text(
         m.bytes[at..at + 32].copy_from_slice(&saved);
         return 1;
     }
-    // Decode/encode twice just as RVCT does. The locale state is reset
-    // between sizing and output, and output counts are updated at ROM points.
+
     while (if wide && width {
         one || n < limit
     } else if flags & 32 != 0 {
@@ -1154,7 +1135,7 @@ pub(crate) fn fn_4a7a84(
 ) -> u32 {
     format_text(m, h, s, m.word(va), false, true, tmp)
 }
-/// Source-backed forwarding entries bound to the real runtime conversions.
+
 pub(crate) fn fn_1a7970(
     m: &mut Memory<'_>,
     h: &mut impl speech_part_4::Host,
@@ -1174,8 +1155,6 @@ pub(crate) fn fn_1a7974(
     fn_10086c(m, h, s, c, va)
 }
 
-/// Table-driven entry used by the private differential tests. Other crate
-/// modules bind the pub(crate) address-named entries directly.
 pub fn replay_format(
     m: &mut Memory<'_>,
     h: &mut impl FormatHost,
@@ -1205,8 +1184,7 @@ pub fn replay_format(
         _ => panic!("unknown conversion entry"),
     }
 }
-// Floating entries preserve the RVCT frame writes; their private digit buffers
-// stay on the Rust stack. The shared binary64 arithmetic is the existing port.
+
 fn float_emit(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s: u32, b: u8) {
     output(m, h, s, b as u32);
     m.put_word(s + 32, m.word(s + 32).wrapping_add(1));
@@ -1292,7 +1270,7 @@ pub(crate) fn fn_10086c(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s:
     if (0..13).contains(&p) {
         let shift = 52 - 4 * p;
         let mask = (1u64 << shift) - 1;
-        // The Thumb helper examines one shifted word, not all discarded bits.
+
         let rem = if p < 5 { ((bits >> 32) as u32).wrapping_shl((4 * p + 12) as u32) }
             else { (bits as u32).wrapping_shl((4 * p - 20) as u32) };
         let half = 1u32 << 31;
@@ -1317,7 +1295,7 @@ pub(crate) fn fn_10086c(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s:
     let len = n as u32 + zeros as u32 + tn as u32 + 2 + u32::from(sign != 0) + u32::from(p > 13);
     m.put_word(s + 24, m.word(s + 24).wrapping_sub(len));
     if flags & 16 == 0 { speech_part_4::fn_2ffc14(m, h, s); }
-    // RVCT counts the prefix before issuing its callbacks.
+
     m.put_word(s + 32, m.word(s + 32).wrapping_add(2 + u32::from(sign != 0)));
     if sign != 0 { output(m, h, s, sign as u32); }
     output(m, h, s, b'0' as u32);

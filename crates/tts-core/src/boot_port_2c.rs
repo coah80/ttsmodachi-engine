@@ -1,22 +1,5 @@
-//! boot-port-2c: fn_26caec, fn_1ee9f8 and fn_1ef0a0, certified from live ARM boot scenes.
-//!
-//! Guest pointers stay guest addresses; the caller owns the arena. The three
-//! functions read engine objects that only a real boot builds, so the ports
-//! take the engine services as host traits and never script a result.
-//!
-//! The bodies follow the ROM's ARM, not `src/`. The join test of fn_1ee9f8,
-//! its `out520` comparison, the second `mlset` lookup and the 0xea62 log
-//! arguments differ from the decompiled C. The evidence is in
-//! `rust/evidence/boot-port-2c-round1.json`.
-//!
-//! The caller supplies the literals and the scratch windows. The literal
-//! window holds the strings the ROM reads from its literal pool; the scratch
-//! window holds the three 256-byte split buffers. Both live outside every
-//! compared page, exactly like the ARM's stack.
-
 use crate::boot::Memory;
 
-/// `Obj_fn_1ee808` field offsets.
 pub mod obj {
     pub const ENV: u32 = 0x00;
     pub const H0: u32 = 0x04;
@@ -32,7 +15,6 @@ pub mod obj {
     pub const SIZE: u32 = 0x54;
 }
 
-/// `Ctx_fn_1ee808` field offsets.
 pub mod ctx {
     pub const TAG: u32 = 0x00;
     pub const HEAP: u32 = 0x04;
@@ -44,7 +26,6 @@ pub mod ctx {
     pub const F1C: u32 = 0x1c;
 }
 
-/// The literal indices of the strings the three functions read.
 pub mod lit {
     pub const EXTCLCCFG: u32 = 0;
     pub const EXTRAESCLANG: u32 = 1;
@@ -67,83 +48,33 @@ pub mod lit {
     pub const FE_DEPES: u32 = 18;
     pub const FE_DCTLKP: u32 = 19;
     pub const NOCLMSET: u32 = 20;
-    /// The literal texts, each with its terminator.
-    pub const TEXTS: [&[u8]; 21] = [
-        b"extclccfg\0",
-        b"extraesclang\0",
-        b"extraesctn\0",
-        b"mlset\0",
-        b"langcode\0",
-        b"mpthree\0",
-        b"\0",
-        b"%s%s\0",
-        b"language\0",
-        b"lidvoiceswitch\0",
-        b"yes\0",
-        b"no\0",
-        b"lidlanguages\0",
-        b",\0",
-        b"*\0",
-        b"=\0",
-        b"+\0",
-        b"SYNTHSTREAM\0",
-        b"FE_DEPES\0",
-        b"FE_DCTLKP\0",
-        b"noclmset\0",
+
+    pub const ADDRESSES: [u32; 21] = [
+        0x17f9c0, 0x193bd4, 0x193be4, 0x17f9a4, 0x15df6c, 0x1d8dbc, 0x100006, 0x14f410, 0x155e60,
+        0x193bc4, 0x154ce8, 0x159050, 0x1cfbe4, 0x101108, 0x1000aa, 0x10124e, 0x1003cc, 0x152718,
+        0x1d8a08, 0x1cfbcc, 0x17f9b4,
     ];
-    const fn offsets() -> [u32; 21] {
-        let mut out = [0u32; 21];
-        let mut at = 0u32;
-        let mut i = 0;
-        while i < 21 {
-            out[i] = at;
-            at += TEXTS[i].len() as u32;
-            i += 1;
-        }
-        out
-    }
-    /// The offset of every literal inside the window.
-    pub const OFFSET: [u32; 21] = offsets();
-    /// The size of the whole literal window.
-    pub const SIZE: u32 = OFFSET[20] + TEXTS[20].len() as u32;
 }
 
-/// The canonical code-pointer tokens. The map object stores five callback
-/// addresses; native and ROM addresses differ per region, so both sides use
-/// these tokens.
 pub mod token {
     pub const COPY: u32 = 0x90000000;
     pub const DESTROY: u32 = 0x90000001;
     pub const COMPARE: u32 = 0x90000002;
     pub const RETAIN: u32 = 0x90000003;
     pub const RELEASE: u32 = 0x90000004;
-    /// The tokens in the order the map object stores its five callbacks.
+
     pub const ALL: [u32; 5] = [COPY, DESTROY, COMPARE, RETAIN, RELEASE];
 }
 
-/// The engine services the three functions need from the platform.
 pub trait Host {
-    /// `fn_175a1c`. A named parameter string: the status and the guest
-    /// address of the value.
     fn parameter(&mut self, m: &mut Memory<'_>, params: u32, name: u32) -> (u32, u32);
-    /// `fn_1759a0`. Set a named parameter string.
+
     fn set_parameter(&mut self, m: &mut Memory<'_>, params: u32, name: u32, value: u32) -> u32;
-    /// `fn_174f9c`. Register the owner of a named parameter.
-    fn set_owner(
-        &mut self,
-        m: &mut Memory<'_>,
-        params: u32,
-        key: u32,
-        owner: u32,
-        b: u32,
-        f: f32,
-    );
-    /// `fn_19611c`. The engine context block for a handle pair: the status and
-    /// the guest address of the block.
+
+    fn set_owner(&mut self, m: &mut Memory<'_>, params: u32, key: u32, owner: u32, b: u32, f: f32);
+
     fn context(&mut self, m: &mut Memory<'_>, h0: u32, h1: u32) -> (u32, u32);
-    /// `fn_19611c` with a caller-chosen out slot: the status; the block
-    /// lands at `out`. The default keeps the old behaviour. `fn_26caec`
-    /// takes its sub context in the pipeline object itself.
+
     fn context_into(&mut self, m: &mut Memory<'_>, h0: u32, h1: u32, out: u32) -> u32 {
         let (rc, ctx) = self.context(m, h0, h1);
         if rc < 0x80000000 {
@@ -151,30 +82,34 @@ pub trait Host {
         }
         rc
     }
-    /// `fn_17b058`. Open a named engine resource: the status and the guest
-    /// address of the resource block.
+
     fn resource_open(&mut self, m: &mut Memory<'_>, resources: u32, name: u32) -> (u32, u32);
-    /// `fn_17b1c4`. Release a named engine resource.
+
     fn release_resource(&mut self, m: &mut Memory<'_>, resources: u32, name: u32);
-    /// `fn_1963b8`. Allocate a zeroed block from the heap.
+
     fn calloc(&mut self, m: &mut Memory<'_>, heap: u32, count: u32, size: u32) -> u32;
-    /// `fn_196394`. Allocate a block from the heap.
+
     fn allocate(&mut self, m: &mut Memory<'_>, heap: u32, size: u32) -> u32;
-    /// `fn_196428`. Release a block.
+
     fn release(&mut self, m: &mut Memory<'_>, heap: u32, pointer: u32);
-    /// `fn_1964e0`. Create the map object with the five callback words.
-    fn map_create(&mut self, m: &mut Memory<'_>, ctx: u32, flag: u32, cb: [u32; 5], out: u32)
-        -> u32;
-    /// `fn_1966ac`. Look a key up in the map: the status and the value.
+
+    fn map_create(
+        &mut self,
+        m: &mut Memory<'_>,
+        ctx: u32,
+        flag: u32,
+        cb: [u32; 5],
+        out: u32,
+    ) -> u32;
+
     fn map_lookup(&mut self, m: &mut Memory<'_>, map: u32, key: u32) -> (u32, u32);
-    /// `fn_19668c`. Insert a key into the map.
+
     fn map_insert(&mut self, m: &mut Memory<'_>, map: u32, key: u32, value: u32) -> u32;
-    /// `fn_19672c`. Remove a key from the map.
+
     fn map_remove(&mut self, m: &mut Memory<'_>, map: u32, key: u32) -> u32;
-    /// `fn_196830`, `fn_196860` and `fn_1968cc`. Empty the map and release
-    /// every value it holds.
+
     fn clear_map(&mut self, m: &mut Memory<'_>, map: u32);
-    /// `fn_174e74`. Register the owner under a parameter key.
+
     fn register_owner(
         &mut self,
         m: &mut Memory<'_>,
@@ -184,61 +119,52 @@ pub trait Host {
         b: u32,
         f: f32,
     ) -> u32;
-    /// `fn_26c858`. Release a pipeline object.
+
     fn cleanup(&mut self, m: &mut Memory<'_>, p: u32) -> u32;
-    /// `fn_1961d0`. The engine's second handle pair.
-    ///
-    /// The default reports the call as unbound. The lane that binds the
-    /// engine's call boundary overrides it.
+
     fn engine_call(&mut self, _m: &mut Memory<'_>, _f: u32, _args: &[u32]) -> u32 {
         0x80602007
     }
-    /// `fn_174ca8`. The parameter table of one language.
-    ///
-    /// The default reports the table as unbound.
+
     fn secondary_parameters(&mut self, _m: &mut Memory<'_>, _a: [u32; 4]) -> u32 {
         0x80602007
     }
-    /// `fn_17ae04`. The linguistic table of one language.
-    ///
-    /// The default reports the table as unbound.
-    fn secondary_linguistic(
-        &mut self,
-        _m: &mut Memory<'_>,
-        _a: [u32; 4],
-        _scratch: u32,
-    ) -> u32 {
+
+    fn secondary_linguistic(&mut self, _m: &mut Memory<'_>, _a: [u32; 4], _scratch: u32) -> u32 {
         0x80602007
     }
-    /// `fn_179f30`. The broker's open of one file.
-    ///
-    /// The default reports the broker as unbound.
+
     fn broker_open(&mut self, _m: &mut Memory<'_>, _ctx: u32, _name: u32, _out: u32) -> u32 {
         0x80602007
     }
-    /// `fn_173dc0`. The engine log. `module` is the region's D_8f905a.
-    fn log(&mut self, m: &mut Memory<'_>, log: u32, module: u32, code: u32, fmt: u32, a: u32, b: u32);
+
+    fn log(
+        &mut self,
+        m: &mut Memory<'_>,
+        log: u32,
+        module: u32,
+        code: u32,
+        fmt: u32,
+        a: u32,
+        b: u32,
+    );
 }
 
-/// The regional data the three functions read.
 pub struct Environment {
-    /// The region's D_8f902c block.
     pub d8: u32,
-    /// The region's D_8f905a module name.
+
     pub d905a: u32,
-    /// The caller's literal window.
-    pub literals: u32,
-    /// The caller's scratch window. The three split buffers live at
-    /// `scratch`, `scratch + 0x100` and `scratch + 0x200`.
+
+    pub literals: [u32; 21],
+
     pub scratch: u32,
 }
 
 impl Environment {
-    /// The guest address of a literal.
     pub fn lit(&self, index: u32) -> u32 {
-        self.literals + lit::OFFSET[index as usize]
+        self.literals[index as usize]
     }
-    /// The three split buffers.
+
     pub fn out8(&self) -> u32 {
         self.scratch
     }
@@ -248,23 +174,13 @@ impl Environment {
     pub fn out520(&self) -> u32 {
         self.scratch + 0x200
     }
-    /// D_8f902c.fb0, the owner default of fn_174e74.
+
     pub fn owner_default(&self, m: &Memory<'_>) -> u32 {
         m.word(self.d8 + 0xb0)
     }
-    /// D_8f902c.fb4, the owner default of fn_174e74.
+
     pub fn owner_float(&self, m: &Memory<'_>) -> f32 {
         f32::from_bits(m.word(self.d8 + 0xb4))
-    }
-    /// Write the literal window into the arena.
-    pub fn write_literals(&self, m: &mut Memory<'_>) {
-        let mut at = self.literals;
-        for text in lit::TEXTS.iter() {
-            for byte in *text {
-                m.bytes[m.offset(at)] = *byte;
-                at += 1;
-            }
-        }
     }
 }
 
@@ -296,10 +212,6 @@ fn folded_eq(m: &Memory<'_>, a: u32, b: u32) -> bool {
     crate::fe_text::strcmp_ci_1769d0(m.bytes, a, b) == 0
 }
 
-/// `fn_1ee9f8`. Rebuild the extra language configuration of one owner.
-///
-/// The ROM returns zero only when both `extraesclang` and `extraesctn` are
-/// empty. The decompiled C tests the opposite pair.
 pub fn fn_1ee9f8(m: &mut Memory<'_>, p: u32, env: &Environment, h: &mut impl Host) -> u32 {
     let envp = m.word(p);
     let params = m.word(envp + ctx::PARAMS);
@@ -327,7 +239,7 @@ pub fn fn_1ee9f8(m: &mut Memory<'_>, p: u32, env: &Environment, h: &mut impl Hos
         h.set_parameter(m, params, env.lit(lit::LIDVOICESWITCH), env.lit(lit::YES));
         return join(m, p, env, h, r6, cfg, clang, ctn, mlset, langcode);
     }
-    // The parse loop: the clang list is cut into four-character groups.
+
     let out8 = env.out8();
     let mut r4 = 0u32;
     let mut r7 = 0u32;
@@ -380,12 +292,12 @@ pub fn fn_1ee9f8(m: &mut Memory<'_>, p: u32, env: &Environment, h: &mut impl Hos
         if r6 >= 0x80000000 {
             break;
         }
-        // The ROM leaves the loop when the length is shorter than the index.
+
         if cstr_len(m, clang) < r4 {
             break;
         }
     }
-    // The lidlanguages path.
+
     let len = cstr_len(m, clang);
     let heap = m.word(envp + ctx::HEAP);
     let buf = h.allocate(m, heap, len + 5);
@@ -404,8 +316,6 @@ pub fn fn_1ee9f8(m: &mut Memory<'_>, p: u32, env: &Environment, h: &mut impl Hos
     join(m, p, env, h, r6, cfg, clang, ctn, mlset, langcode)
 }
 
-/// The join block of `fn_1ee9f8`: the configuration string is split and every
-/// language is created.
 fn join(
     m: &mut Memory<'_>,
     p: u32,
@@ -427,14 +337,13 @@ fn join(
     if buf80 != 0 {
         copy_string(m, buf80, env.lit(lit::EMPTY));
     }
-    // The ROM returns zero only when both names are empty.
+
     if cstr_eq(m, clang, env.lit(lit::EMPTY)) && cstr_eq(m, ctn, env.lit(lit::EMPTY)) {
         return 0;
     }
     let mut src = cfg;
     let mut r6 = r6;
     loop {
-        // The three fields of one configuration entry.
         let mut idx = 0u32;
         loop {
             let c = m.byte(src);
@@ -498,7 +407,7 @@ fn join(
         if m.byte(src) == 44 {
             src += 1;
         }
-        // The star decision.
+
         let mut star2 = false;
         if !cstr_eq(m, out8, env.lit(lit::STAR)) && !folded_eq(m, langcode, out8) {
             if str_find(m, mlset, out8) == 0 {
@@ -510,13 +419,11 @@ fn join(
             }
         }
         if !star2 && !cstr_eq(m, out520, env.lit(lit::STAR)) {
-            // The ROM searches the country name for the voice name.
             if ctn == 0 || str_find(m, ctn, out520) == 0 {
                 star2 = true;
             }
         }
         if star2 {
-            // Drop the language the map still holds and continue.
             let map = m.word(p + obj::MAP76);
             let (rc, value) = h.map_lookup(m, map, out264);
             if rc >= 0x80000000 {
@@ -533,7 +440,6 @@ fn join(
                 }
             }
         } else {
-            // The nostar path: remember the entry and create the language.
             let buf80 = m.word(p + obj::BUF80);
             if buf80 == 0 {
                 let len = cstr_len(m, cfg);
@@ -579,13 +485,11 @@ fn join(
     }
 }
 
-/// The allocation failure path of `fn_1ee9f8` and `fn_1ef0a0`.
 fn alloc_fail(m: &mut Memory<'_>, envp: u32, env: &Environment, h: &mut impl Host) -> u32 {
     h.log(m, m.word(envp + ctx::LOG), env.d905a, 0xea60, 0, 0, 0);
     0x8c90200a
 }
 
-/// `fn_1ef0a0`. Create the extra-language owner of an engine handle.
 pub fn fn_1ef0a0(
     m: &mut Memory<'_>,
     h0: u32,
@@ -676,8 +580,14 @@ pub fn fn_1ef0a0(
     fail(m, o, out, rc, env, h)
 }
 
-/// The exit block of `fn_1ef0a0`.
-fn fail(m: &mut Memory<'_>, o: u32, out: u32, rc: u32, env: &Environment, h: &mut impl Host) -> u32 {
+fn fail(
+    m: &mut Memory<'_>,
+    o: u32,
+    out: u32,
+    rc: u32,
+    env: &Environment,
+    h: &mut impl Host,
+) -> u32 {
     m.put_word(out, o);
     m.put_word(out + 4, 0xf488);
     if rc >= 0x80000000 {
@@ -688,7 +598,6 @@ fn fail(m: &mut Memory<'_>, o: u32, out: u32, rc: u32, env: &Environment, h: &mu
     rc
 }
 
-/// `fn_1ee808`. Release the extra-language owner and everything it holds.
 pub fn fn_1ee808(
     m: &mut Memory<'_>,
     p: u32,
@@ -733,10 +642,6 @@ pub fn fn_1ee808(
     0
 }
 
-/// `fn_17b1c4`. Release a named engine resource.
-///
-/// The resource registry releases the entry and calls the entry's release
-/// callback. `scratch` is 32 caller-owned bytes.
 pub fn fn_17b1c4(
     m: &mut Memory<'_>,
     resources: u32,
@@ -747,17 +652,6 @@ pub fn fn_17b1c4(
     crate::render_part_c::registry_release_m(m, resources, name, scratch, h)
 }
 
-/// `fn_26caec`. Create the synthesis pipeline of one language.
-///
-/// The port follows the ROM's ARM up to and through the broker: the engine
-/// context, the 0x2d4 byte pipeline object, the engine's second context,
-/// the parameter table and the linguistic table, the "noclmset" parameter,
-/// the ":pipeline" name and the broker's open. The fail path releases the
-/// pipeline object and returns the status.
-///
-/// The ROM's object layout: the sub context at +0, the engine's handle pair
-/// at +4 and +8, the parameter table at +0x18, the linguistic table at
-/// +0x1c and the broker's file handle at +0x3c.
 pub fn fn_26caec(
     m: &mut Memory<'_>,
     h0: u32,
@@ -766,41 +660,35 @@ pub fn fn_26caec(
     h: &mut impl Host,
     env: &Environment,
 ) -> u32 {
-    // fn_19611c: the engine context of the handle pair.
     let (rc, ctx) = h.context(m, h0, h1);
     if rc >= 0x80000000 {
         return rc;
     }
     let heap = m.word(ctx + ctx::HEAP);
-    // fn_1963b8: the pipeline object.
+
     let obj = h.calloc(m, heap, 1, 0x2d4);
     if obj == 0 {
         h.log(m, m.word(ctx + ctx::LOG), env.d905a, 60000, 0, 0, 0);
         return 0x8c90200a;
     }
-    // fn_1961d0: the engine's second handle pair, in the object at +4.
-    // The ARM takes it through its stack slot and the stores land in the
-    // call's own write window, so the port stores into the object inline.
+
     let rc = h.engine_call(m, 0x1961d0, &[heap, m.word(ctx + ctx::F08), 0, 0, obj + 4]);
     if rc >= 0x80000000 {
         h.cleanup(m, obj);
         return rc;
     }
-    // fn_19611c: the sub context of the second handle pair, in the object
-    // at +0. The ARM's acquire writes the block to the object itself.
+
     let rc = h.context_into(m, m.word(obj + 4), m.word(obj + 8), obj);
     if rc >= 0x80000000 {
         h.cleanup(m, obj);
         return rc;
     }
     let sub = m.word(obj);
-    // The sub context takes the three words of the engine context.
+
     m.put_word(sub + 0x1c, m.word(ctx + ctx::F1C));
     m.put_word(sub + 0x0c, m.word(ctx + ctx::F0C));
     m.put_word(sub + 0x10, m.word(ctx + ctx::LOG));
-    // fn_174ca8: the parameter table. The ARM's call is
-    // fn_174ca8(0, obj[4], obj[8], obj[4]+0x14): the table goes into the sub
-    // context's own +0x14 field, not into the pipeline object.
+
     let rc = h.secondary_parameters(
         m,
         [0, m.word(obj + 4), m.word(obj + 8), m.word(obj + 4) + 0x14],
@@ -809,8 +697,7 @@ pub fn fn_26caec(
         h.cleanup(m, obj);
         return rc;
     }
-    // fn_17ae04: the linguistic table. The ARM's call is
-    // fn_17ae04(0, obj[4], obj[8], obj[4]+0x18): the sub context's +0x18.
+
     let rc = h.secondary_linguistic(
         m,
         [0, m.word(obj + 4), m.word(obj + 8), m.word(obj + 4) + 0x18],
@@ -820,10 +707,9 @@ pub fn fn_26caec(
         h.cleanup(m, obj);
         return rc;
     }
-    // fn_175a1c: the "noclmset" parameter. The broker's name is the text
-    // and ":pipeline"; the parameter's value is used after the broker.
+
     let _ = h.parameter(m, m.word(ctx + ctx::PARAMS), env.lit(lit::NOCLMSET));
-    // fn_195cd0 and fn_195c90: the pipeline's name.
+
     let buf = env.scratch + 0x300;
     copy_string(m, buf, text);
     let mut at = buf + cstr_len(m, buf);
@@ -831,23 +717,15 @@ pub fn fn_26caec(
         m.bytes[m.offset(at)] = *byte;
         at += 1;
     }
-    // fn_179f30: the broker's open.
+
     let rc = h.broker_open(m, m.word(sub + 0x0c), buf, obj + 0x3c);
     if rc >= 0x80000000 {
-        // fn_26c858: the pipeline release.
         h.cleanup(m, obj);
         return rc;
     }
     rc
 }
 
-/// `fn_174ca8`: the parameter table of one language.
-///
-/// The certified `boot::Memory::fn_174ca8` port takes the region's
-/// `D_8d7614` descriptor: the map's five callback words at +0, the first
-/// list's three words at +20 and the second list's three words at +32.
-/// `a` is the ROM's argument list: the flags, the handle pair and the
-/// caller's object slot.
 pub fn fn_174ca8_at(
     m: &mut Memory<'_>,
     h: &mut impl crate::boot::Calls,
@@ -857,17 +735,6 @@ pub fn fn_174ca8_at(
     m.fn_174ca8(h, a, desc)
 }
 
-/// `fn_17ae04`: the linguistic table of one language.
-///
-/// The certified `frontend::create_ling_table` port takes the answers of the
-/// four calls behind it, so the adapter makes those calls itself and then
-/// runs the certified port: the write order, the failure paths and the
-/// released object are the certified ones.
-///
-/// The map's five callback words come from the region's `D_8d773c`
-/// descriptor, which the ROM reads before the context acquire, so the
-/// adapter reads them there too. `scratch` is one caller-owned word: the
-/// context pointer the acquire writes.
 pub fn fn_17ae04_at(
     m: &mut Memory<'_>,
     h: &mut impl crate::boot::Calls,
@@ -883,7 +750,7 @@ pub fn fn_17ae04_at(
         m.word(desc + 12),
         m.word(desc + 16),
     ];
-    // fn_19611c: the engine context of the handle pair.
+
     let acquire = h.call(m, 0x19611c, &[h0, h1, scratch]);
     if acquire >= 0x80000000 {
         return acquire;
@@ -891,7 +758,7 @@ pub fn fn_17ae04_at(
     let ctx = m.word(scratch);
     let heap = m.word(ctx + 4);
     let res = m.word(ctx + 8);
-    // fn_1963b8: the twenty byte object.
+
     let object = h.call(m, 0x1963b8, &[heap, 1, 20]);
     if object == 0 {
         let scripts = crate::frontend::CreateScripts {
@@ -905,10 +772,10 @@ pub fn fn_17ae04_at(
         };
         return ling_table(m, h, [h0, h1], out, &scripts, heap, 0, 0);
     }
-    // fn_176e40: the owner of the table.
+
     let owner_rc = h.call(m, 0x176e40, &[res, heap, object + 12]);
     let owner = m.word(object + 12);
-    // fn_1964e0: the map of the table.
+
     let create = if owner_rc >= 0x80000000 {
         owner_rc
     } else {
@@ -931,12 +798,6 @@ pub fn fn_17ae04_at(
     ling_table(m, h, [h0, h1], out, &scripts, heap, object, owner)
 }
 
-/// Run the certified linguistic table port and the teardown it asks for.
-///
-/// The certified port owns the arena while it runs, so the two teardown
-/// calls it makes are recorded and issued afterwards. They touch the heap
-/// and the owner, never the caller's object slot, so the arena ends in the
-/// same state as the ROM's.
 fn ling_table(
     m: &mut Memory<'_>,
     h: &mut impl crate::boot::Calls,
@@ -972,37 +833,26 @@ fn ling_table(
     rc
 }
 
-/// The broker's regional constants.
-///
-/// The broker's globals live in the data segment, whose address differs per
-/// region, so the caller supplies them. The capture reads every address from
-/// the region's own literal pool (the broker's fn_1795f0 holds the module,
-/// the broker string key, the add item format and the broker label; the
-/// parameter and linguistic descriptors live in their own functions' pools).
 #[derive(Clone, Copy)]
 pub struct BrokerGlobals {
-    /// `D_8d7668`: the module block. Its name is the first 108 bytes and its
-    /// five callbacks follow at +108.
     pub module: u32,
-    /// `D_177264`: the broker string key.
+
     pub brokerstring_key: u32,
-    /// `D_177278`: the add item format.
+
     pub add_item_format: u32,
-    /// `D_17729c`: the broker label.
+
     pub broker_label: u32,
-    /// `D_17823c`: the full path property key.
+
     pub fullpath_key: u32,
-    /// `D_8dc30c`: the character class table the case fold uses.
+
     pub ctype_table: u32,
-    /// `D_8d7614`: the parameter table's callback descriptor (fn_174ca8).
+
     pub parameters_desc: u32,
-    /// `D_8d773c`: the linguistic table's descriptor (fn_17ae04).
+
     pub linguistic_desc: u32,
 }
 
 impl BrokerGlobals {
-    /// The `DataOpenGlobals` of the broker's open. `scratch` is the
-    /// caller's 24 byte area, disjoint from every allocation.
     pub fn data_open(&self, scratch: u32) -> crate::boot_part_b::DataOpenGlobals {
         crate::boot_part_b::DataOpenGlobals {
             module: self.module,
@@ -1017,45 +867,21 @@ impl BrokerGlobals {
     }
 }
 
-/// The broker database services `fn_1772b0` reaches.
-///
-/// The ROM walks the database through the map's own iterator functions
-/// (`fn_196794`, `fn_196860`, `fn_196830`) and takes the database lock
-/// (`fn_176f2c`, `fn_176f5c`). The port keeps those calls in the host, so the
-/// certified tree and allocator ports stay in one place and the query's own
-/// control flow stays here.
 pub trait BrokerQuery {
-    /// `fn_176f2c`. Acquire the database lock.
     fn db_lock(&mut self, m: &mut Memory<'_>, lock: u32) -> u32;
-    /// `fn_176f5c`. Release the database lock.
+
     fn db_unlock(&mut self, m: &mut Memory<'_>, lock: u32) -> u32;
-    /// `fn_196794`. Open the database iterator for `name`. `mode` is the
-    /// ROM's search flag: 1 is the ordered search, 0 the last-link scan.
-    fn db_open(
-        &mut self,
-        m: &mut Memory<'_>,
-        database: u32,
-        name: u32,
-        mode: u32,
-        out: u32,
-    ) -> u32;
-    /// `fn_196860`. Read the next key/value pair of the iterator.
+
+    fn db_open(&mut self, m: &mut Memory<'_>, database: u32, name: u32, mode: u32, out: u32)
+        -> u32;
+
     fn db_next(&mut self, m: &mut Memory<'_>, iterator: u32, key: u32, value: u32) -> u32;
-    /// `fn_196830`. Close the database iterator.
+
     fn db_close(&mut self, m: &mut Memory<'_>, iterator: u32) -> u32;
-    /// `fn_1769d0`. The case-insensitive key compare.
+
     fn db_compare(&mut self, m: &Memory<'_>, a: u32, b: u32) -> i32;
 }
 
-/// `fn_1772b0`. The broker's database query.
-///
-/// `broker` is the broker object, `name` the key and `out` the caller's
-/// entry slot. `scratch` is 12 caller-owned bytes: the iterator word, the
-/// key word and the value word, the ROM's three stack locals. The port
-/// follows the ROM's ARM, which is the same as `src/fn_1772b0.c`: the out
-/// slot is cleared before the null checks, the iterator is closed on every
-/// path that opened one, and the not-found status `0x89002014` of the
-/// iterator open becomes `0x8150600d`.
 pub fn fn_1772b0(
     m: &mut Memory<'_>,
     broker: u32,
@@ -1116,11 +942,6 @@ pub fn fn_1772b0(
     result
 }
 
-/// A `DataHost` adapter that answers the broker's database query with this
-/// lane's `fn_1772b0` port and leaves every other query to the inner host.
-///
-/// `scratch` is 16 caller-owned bytes: `fn_1772b0` uses the first twelve for
-/// its three stack locals, the last four receive the entry word.
 pub struct BrokerQueryHost<'a, H, Q> {
     pub inner: &'a mut H,
     pub database: &'a mut Q,
@@ -1128,7 +949,6 @@ pub struct BrokerQueryHost<'a, H, Q> {
 }
 
 impl<H: crate::boot_part_b::DataHost, Q: BrokerQuery> BrokerQueryHost<'_, H, Q> {
-    /// The broker query's answer: the status and the entry word.
     pub fn query(&mut self, m: &mut Memory<'_>, broker: u32, name: u32) -> (u32, u32) {
         let out = self.scratch + 12;
         let rc = fn_1772b0(m, broker, name, out, self.scratch, self.database);
@@ -1166,13 +986,7 @@ impl<H: crate::boot_part_b::DataHost, Q: BrokerQuery> crate::boot_part_b::QueryH
         }
         self.inner.query_output(m, f, args)
     }
-    fn insert_record(
-        &mut self,
-        m: &mut Memory<'_>,
-        db: u32,
-        key: u32,
-        record: [u32; 4],
-    ) -> u32 {
+    fn insert_record(&mut self, m: &mut Memory<'_>, db: u32, key: u32, record: [u32; 4]) -> u32 {
         self.inner.insert_record(m, db, key, record)
     }
     fn open_pair(&mut self, m: &mut Memory<'_>, f: u32, owner: [u32; 2], out: u32) -> u32 {

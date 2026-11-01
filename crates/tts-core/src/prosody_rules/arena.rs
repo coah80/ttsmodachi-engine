@@ -1,13 +1,8 @@
-//! Caller-owned byte arena modelling the engine heap and C string helpers
-//! used by the prosody rule interpreter (fn_196394 / fn_1963e0 / fn_196428 and
-//! the fn_195xxx string family). Pointers are arena offsets; 0 is null.
+
 
 pub const ARENA_BLOCKS: usize = 256;
 const SCRATCH: usize = 4096;
 
-/// Bump allocator over a caller-owned byte span. `alloc` mirrors fn_196394,
-/// `realloc` mirrors fn_1963e0 (contents preserved), `free` mirrors fn_196428.
-/// The offset 0 is reserved for null.
 pub struct Arena<'a> {
     bytes: &'a mut [u8],
     starts: [u32; ARENA_BLOCKS],
@@ -45,7 +40,6 @@ impl<'a> Arena<'a> {
             .position(|&start| start == offset)
     }
 
-    /// fn_196394: allocate `size` bytes, returning an offset or 0 on failure.
     pub fn alloc(&mut self, size: u32) -> u32 {
         if size == 0 || self.count >= ARENA_BLOCKS {
             return 0;
@@ -63,7 +57,6 @@ impl<'a> Arena<'a> {
         offset
     }
 
-    /// fn_1963e0: grow `offset` to `size`, preserving the old contents.
     pub fn realloc(&mut self, offset: u32, size: u32) -> u32 {
         if offset == 0 {
             return self.alloc(size);
@@ -82,7 +75,6 @@ impl<'a> Arena<'a> {
         fresh
     }
 
-    /// fn_196428: release `offset`. The bump allocator does not reclaim space.
     pub fn free(&mut self, offset: u32) {
         if let Some(index) = self.block(offset) {
             self.sizes[index] = 0;
@@ -93,7 +85,6 @@ impl<'a> Arena<'a> {
         (offset as usize).min(self.end())
     }
 
-    /// fn_195d90: length of the C string at `offset`.
     pub fn len(&self, offset: u32) -> usize {
         if offset == 0 {
             return 0;
@@ -105,7 +96,6 @@ impl<'a> Arena<'a> {
             .unwrap_or(self.end() - start)
     }
 
-    /// Borrow the C string at `offset`.
     pub fn str(&self, offset: u32) -> &[u8] {
         let start = self.start(offset);
         &self.bytes[start..start + self.len(offset)]
@@ -135,13 +125,11 @@ impl<'a> Arena<'a> {
         (buffer, end - start)
     }
 
-    /// fn_195cd0: copy the C string at `source` into `destination`.
     pub fn copy_str(&mut self, destination: u32, source: u32) {
         let (buffer, count) = self.gather(source, self.len(source));
         self.put(destination, &buffer[..count]);
     }
 
-    /// fn_195cd0 with an explicit byte string.
     pub fn put(&mut self, offset: u32, text: &[u8]) {
         if offset == 0 {
             return;
@@ -162,13 +150,11 @@ impl<'a> Arena<'a> {
         }
     }
 
-    /// fn_195c90: append the C string at `source` to `destination`.
     pub fn cat_from(&mut self, destination: u32, source: u32) {
         let (buffer, count) = self.gather(source, self.len(source));
         self.cat(destination, &buffer[..count]);
     }
 
-    /// fn_195c90 with an explicit byte string.
     pub fn cat(&mut self, offset: u32, text: &[u8]) {
         if offset == 0 {
             return;
@@ -182,13 +168,11 @@ impl<'a> Arena<'a> {
         self.bytes[start + count] = 0;
     }
 
-    /// fn_195dac: append at most `count` bytes of the C string at `source`.
     pub fn cat_n(&mut self, destination: u32, source: u32, count: usize) {
         let (buffer, count) = self.gather(source, count);
         self.cat(destination, &buffer[..count]);
     }
 
-    /// fn_195d58 / fn_1769d0: compare the C strings at `left` and `right`.
     pub fn eq(&self, left: u32, right: u32) -> bool {
         self.str(left) == self.str(right)
     }
@@ -197,7 +181,6 @@ impl<'a> Arena<'a> {
         self.str(offset) == text
     }
 
-    /// fn_195df8: compare at most `count` bytes of two C strings.
     pub fn eq_n(&self, left: u32, right: &[u8], count: usize) -> bool {
         let left = self.str(left);
         let left = &left[..left.len().min(count)];
@@ -205,7 +188,6 @@ impl<'a> Arena<'a> {
         left == right
     }
 
-    /// fn_195d30: find `byte` in the C string at `offset`.
     pub fn find_byte(&self, offset: u32, byte: u8) -> Option<u32> {
         self.str(offset)
             .iter()
@@ -213,7 +195,6 @@ impl<'a> Arena<'a> {
             .map(|index| offset + index as u32)
     }
 
-    /// fn_1960a8: locate `needle` in the C string at `offset`.
     pub fn find(&self, offset: u32, needle: &[u8]) -> Option<u32> {
         let haystack = self.str(offset);
         if needle.is_empty() || needle.len() > haystack.len() {
@@ -225,7 +206,6 @@ impl<'a> Arena<'a> {
             .map(|index| offset + index as u32)
     }
 
-    /// fn_195ae8: copy `count` bytes from `source` to `destination`.
     pub fn copy(&mut self, destination: u32, source: u32, count: usize) {
         let (buffer, count) = self.gather(source, count);
         let start = self.start(destination);
@@ -233,7 +213,6 @@ impl<'a> Arena<'a> {
         self.bytes[start..start + count].copy_from_slice(&buffer[..count]);
     }
 
-    /// fn_195bec: fill `count` bytes at `offset` with `value`.
     pub fn fill(&mut self, offset: u32, value: u8, count: usize) {
         let start = self.start(offset);
         let end = (start + count).min(self.end());

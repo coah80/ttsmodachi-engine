@@ -1,5 +1,5 @@
-/// Borrowed numeric constants and interpolation data supplied by the caller.
-/// No image bytes are embedded in the crate; the two regions total 5,392 bytes.
+
+
 #[derive(Clone, Copy)]
 pub struct NumericTables<'a> {
     constants: &'a [u8],
@@ -10,7 +10,6 @@ impl<'a> NumericTables<'a> {
     pub const CONSTANT_BYTES: usize = 0xa224c0 - 0xa21fb0;
     pub const COSINE_BYTES: usize = 256 * 16;
 
-    /// Borrow just the required regions of a caller-owned US code image.
     pub fn from_us_image(image: &'a [u8]) -> Option<Self> {
         Self::from_bytes(
             image.get(0xa21fb0 - 0x100000..0xa224c0 - 0x100000)?,
@@ -18,8 +17,6 @@ impl<'a> NumericTables<'a> {
         )
     }
 
-    /// Use separately loaded regions, avoiding retention of an entire image.
-    /// Constants start at US VA 0xa21fb0; cosine data starts at US VA 0x8cbfe0.
     pub fn from_bytes(constants: &'a [u8], cosine: &'a [u8]) -> Option<Self> {
         (constants.len() == Self::CONSTANT_BYTES && cosine.len() == Self::COSINE_BYTES)
             .then_some(Self { constants, cosine })

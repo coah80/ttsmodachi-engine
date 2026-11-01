@@ -1,31 +1,12 @@
-//! Boot-path cluster for fn_1e0400 (US/KR voice boot), lane 6b.
-//!
-//! The six callees and fn_1e0400 itself. Five bodies delegate to the
-//! already-certified arena ports; fn_2412a0_m is a full body (the only prior
-//! Rust shape was a model that skipped fn_243d50); fn_1e0400_m is the new
-//! orchestrator. Live allocations go through the engine heap on the arena;
-//! platform calls (log, release, context, file open) run through the host.
+
 
 use crate::boot::Memory;
 
-/// Host surface for the fn_1e0400 cluster.
-///
-/// `call` is the engine-heap seam (vtable slots the scenes point at the
-/// platform addresses). `release_chunk_243d50` binds fn_243d50, which has src
-/// (src/fn_243ad4.c) but no live-certified Rust port; the test harness
-/// emulates it with the certified owner-close port and a slot release, and
-/// the owning lane is named on the emulation.
 pub trait Host: crate::boot_part_e::Host {
     fn release_chunk_243d50(&mut self, m: &mut Memory<'_>, record: u32) -> u32;
-    /// fn_243a94 seam. The wrapper forwards (object, key, mode, path, 0, 0,
-    /// type, version, out) exactly like src/fn_243a94.c. The test harness
-    /// scripts the file open per scene mode and logs (mode, path length,
-    /// path byte-sum, version, type-ok) so the argument order is checked;
-    /// boot-a binds this seam to the real fn_242fd0_m in its voice harness.
+
     fn open_token_243a94(&mut self, m: &mut Memory<'_>, args: [u32; 9]) -> u32;
-    /// fn_175a1c seam: named-parameter lookup. No Rust port exists, so the
-    /// harness answers from the scene table and boot-a answers from live
-    /// voice parameters.
+
     fn parameter_175a1c(&mut self, m: &mut Memory<'_>, params: u32, key: u32) -> (u32, u32);
 }
 
@@ -46,7 +27,6 @@ impl<H: Host> crate::log_live::LogMethodsM for Log<'_, H> {
     }
 }
 
-/// fn_2421b0. Close the chunk reader: owner, name and chunk table.
 pub fn fn_2421b0_m<H: Host + crate::render_part_a::ReaderHost>(
     m: &mut Memory<'_>,
     h: &mut H,
@@ -56,7 +36,6 @@ pub fn fn_2421b0_m<H: Host + crate::render_part_a::ReaderHost>(
     crate::render_part_a::close_reader(m, h, r, k)
 }
 
-/// fn_2422ac. Pop the current chunk and advance past its aligned end.
 pub fn fn_2422ac_m<H: Host + crate::render_part_a::ReaderHost>(
     m: &mut Memory<'_>,
     h: &mut H,
@@ -66,7 +45,6 @@ pub fn fn_2422ac_m<H: Host + crate::render_part_a::ReaderHost>(
     crate::render_part_a::close_reader_chunk(m, h, r, k)
 }
 
-/// fn_24277c. Read a chunk header, validate it and push its descriptor.
 pub fn fn_24277c_m<H: Host + crate::render_part_a::ReaderHost>(
     m: &mut Memory<'_>,
     h: &mut H,
@@ -79,7 +57,6 @@ pub fn fn_24277c_m<H: Host + crate::render_part_a::ReaderHost>(
     crate::render_part_a::open_reader_chunk(m, h, r, name, out_len, out_data, k)
 }
 
-/// fn_242444. Copy a chunk string, decoding the reader's XOR layer.
 pub fn fn_242444_m(
     m: &mut Memory<'_>,
     r: u32,
@@ -93,7 +70,6 @@ pub fn fn_242444_m(
     crate::render_part_a::read_chunk_string(&mut arena, r, src, len, off, dst, out_len)
 }
 
-/// fn_2413c4. Open the string-map reader and publish it through `out`.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2413c4_m<H: Host + crate::render_part_a::ReaderHost>(
     m: &mut Memory<'_>,
@@ -111,9 +87,6 @@ pub fn fn_2413c4_m<H: Host + crate::render_part_a::ReaderHost>(
 
 const SM_MODULE: u32 = 0x914834;
 
-/// fn_2412a0. Close the string-map reader: its chunk records, name and self.
-/// Follows src/fn_240dcc.c: failing record closes stick, the object frees
-/// only when no record close failed.
 pub fn fn_2412a0_m<H: Host>(
     m: &mut Memory<'_>,
     h: &mut H,
@@ -177,7 +150,6 @@ fn strcmp(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     }
 }
 
-/// Case-insensitive compare following src/fn_1769d0.c (ASCII fold).
 fn casecmp(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     fn fold(c: u8) -> u8 {
         if c >= b'A' && c <= b'Z' {
@@ -226,21 +198,12 @@ fn strstr(m: &Memory<'_>, hay: u32, needle: u32) -> u32 {
     0
 }
 
-/// Environment for fn_1e0400_m: the string-map open inputs, the token-file
-/// open inputs, and the caller-owned literal addresses.
-///
-/// The ROM keeps its key/tag strings in rodata; the port takes their
-/// addresses from the caller so the harness can stage the same bytes in the
-/// arena (the C and ARM sides read them from ROM; only the bytes matter).
-/// `ver` is the D_8f8ad4 word (va in the low half, vb in byte 2): the C
-/// reads the ROM global, the ARM reads its own ROM, and the caller passes
-/// the same value in because the arena cannot see that address.
 pub struct Env6b<'a> {
     pub stringmap: &'a crate::boot_port_4::Environment,
     pub reader: &'a crate::render_part_a::ReaderRuntime,
-    /// Scratch word receiving the token-reader handle.
+
     pub open_out: u32,
-    /// Caller-staged NUL-terminated literals, same bytes as the ROM rodata.
+
     pub lit_empty: u32,
     pub lit_langcode: u32,
     pub lit_fedataprefix: u32,
@@ -273,13 +236,6 @@ pub struct Env6b<'a> {
     pub lit_sapi: u32,
 }
 
-/// fn_1e0400. Load the phonmap readers for one voice: close stale readers,
-/// resolve the language/packaging parameters, build the two candidate paths,
-/// open each PHMP token file and attach every chunk kind to its slot.
-///
-/// `p` is the Obj_fn_1e0400 phonmap object. `arg` selects the voice sub-path.
-/// Follows src/fn_1e0400.c exactly, including the i7==0/i7!=0 error rule and
-/// the version-string capture into b44/b300.
 #[allow(clippy::too_many_lines)]
 pub fn fn_1e0400_m<H: Host + crate::render_part_a::ReaderHost>(
     m: &mut Memory<'_>,
@@ -289,10 +245,7 @@ pub fn fn_1e0400_m<H: Host + crate::render_part_a::ReaderHost>(
     ver: u32,
     e: &Env6b<'_>,
 ) -> u32 {
-    // Caller-owned scratch: two 128-byte path buffers, two 256-byte line
-    // buffers, tag/length cells and the version cell. The ROM keeps these on
-    // the stack; the port keeps them in the reader scratch and restores the
-    // whole frame before returning so the replay stays whole-arena strict.
+
     let base = e.reader.scratch + 0x200;
     let buf0 = base;
     let buf1 = base + 128;
@@ -426,9 +379,7 @@ fn fn_1e0400_inner<H: Host + crate::render_part_a::ReaderHost>(
         let mode = if i7 == 0 { mode0 } else { mode1 };
         let ha = m.word(p);
         let hb = m.word(p + 4);
-        // fn_243a94 forwards (object, key, mode, path, 0, 0, type,
-        // version, out); the seam keeps the order and the harness (then
-        // boot-a's real fn_242fd0_m binding) runs the open.
+
         let args = [ha, hb, mode, path, 0, 0, e.lit_phmp, ver, e.open_out];
         status = h.open_token_243a94(m, args);
         let handle = m.word(e.open_out);
@@ -479,7 +430,7 @@ fn fn_1e0400_inner<H: Host + crate::render_part_a::ReaderHost>(
                         status = fn_2413c4_m(
                             m, h, ha, hb, path, handle, e.open_out, e.stringmap, e.reader,
                         );
-                        // Route the published reader to the matching slot.
+
                         m.put_word(slots[idx], m.word(e.open_out));
                         break;
                     }

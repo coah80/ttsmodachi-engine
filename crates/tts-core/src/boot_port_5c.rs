@@ -1,51 +1,44 @@
-//! CDCT constructors: fn_2fd9a0, fn_2fbf1c, fn_2fac04, fn_302e38 and the
-//! fn_30a7xx / fn_30bxxx closure they build on, reconstructed from the US ROM.
+
+
 use crate::boot::Memory;
 
-/// ROM literals the constructors publish. Every address is region specific, so
-/// the embedder supplies the values for the region under test.
 pub struct Tables {
-    /// D_917e80, the base vtable fn_1ba3c0 publishes.
+
     pub base_vtable: u32,
-    /// D_a1f7cc, the vtable fn_2fac04 publishes.
+
     pub v_2fac04: u32,
-    /// D_a1f94c, the vtable fn_2fbf1c publishes.
+
     pub v_2fbf1c: u32,
-    /// D_a1f96c, the vtable fn_302e38 publishes.
+
     pub v_302e38: u32,
-    /// D_a1fb00, the vtable fn_30a714 publishes.
+
     pub v_30a714: u32,
-    /// D_a1fb14, the vtable fn_30a73c publishes.
+
     pub v_30a73c: u32,
-    /// D_a1fb20, the vtable fn_30b480 publishes.
+
     pub v_30b480: u32,
-    /// D_a1fb2c, the vtable fn_30b634 publishes.
+
     pub v_30b634: u32,
-    /// D_a1fb38, the vtable fn_30b7bc publishes.
+
     pub v_30b7bc: u32,
-    /// D_a21eb8, the vtable fn_30d2e8 publishes.
+
     pub v_30d2e8: u32,
-    /// D_a21ecc, the vtable fn_30d370 publishes.
+
     pub v_30d370: u32,
-    /// D_a21edc, the vtable fn_30d41c publishes.
+
     pub v_30d41c: u32,
-    /// D_a21eec, the vtable fn_30d50c publishes.
+
     pub v_30d50c: u32,
-    /// D_a21efc, the vtable fn_30d594 publishes.
+
     pub v_30d594: u32,
 }
 
-/// The stream interface of the CDCT reader and the Huffman builders under
-/// fn_30b7bc. The stream methods are reached through the vtable the ROM calls,
-/// so the host sees the same method pointer the guest does. The out values of
-/// the stream calls live in the caller's frame in the ROM, so the host hands
-/// them back directly instead of through a guest pointer.
 pub trait Host: crate::boot_part_f::Host {
-    /// Resolve a ROM address for the active region. US is the default.
+
     fn literal(&mut self, _m: &mut Memory<'_>, us: u32) -> u32 {
         us
     }
-    /// The stream read method: the vtable slot at +0.
+
     fn stream_read(
         &mut self,
         m: &mut Memory<'_>,
@@ -54,11 +47,10 @@ pub trait Host: crate::boot_part_f::Host {
         tag: u32,
         out: &mut u32,
     ) -> u32;
-    /// The stream release method: the vtable slot at +8.
+
     fn stream_release(&mut self, m: &mut Memory<'_>, method: u32, this: u32, value: u32)
         -> u32;
-    /// The stream block reader: the vtable slot at +0x18. The first block
-    /// pointer is written to the guest slot, the second one is the size.
+
     fn stream_blocks(
         &mut self,
         m: &mut Memory<'_>,
@@ -71,7 +63,6 @@ pub trait Host: crate::boot_part_f::Host {
     ) -> u32;
 }
 
-/// The four byte resource tags the ROM passes to the stream methods.
 pub const TAG_FSFN: u32 = 0x4e46_5346;
 pub const TAG_FSBM: u32 = 0x4d42_5346;
 pub const TAG_FSID: u32 = 0x4449_5346;
@@ -86,8 +77,6 @@ pub const TAG_FNHA: u32 = 0x4148_4e46;
 pub const TAG_HUTR: u32 = 0x5254_5548;
 pub const TAG_HULE: u32 = 0x454c_5548;
 
-/// The stream vtable: the read method at +0, the release method at +8, the
-/// block reader at +0x18 and the single adjustment word at +0x68.
 fn vt(m: &Memory<'_>, stream: u32) -> u32 {
     m.word(stream)
 }
@@ -136,7 +125,6 @@ fn env(t: &Tables) -> crate::boot_part_f::Environment {
     }
 }
 
-/// fn_30a714: publish the fn_30a714 vtable when the base init succeeds.
 pub fn fn_30a714(m: &mut Memory<'_>, t: &Tables, p: u32) -> u32 {
     let rc = crate::boot_part_f::fn_1ba3c0(m, p, &env(t));
     if rc == 0 {
@@ -145,7 +133,6 @@ pub fn fn_30a714(m: &mut Memory<'_>, t: &Tables, p: u32) -> u32 {
     rc
 }
 
-/// fn_30b180: allocate the 28 byte object and build it with fn_30a73c.
 pub fn fn_30b180(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -170,7 +157,6 @@ pub fn fn_30b180(
     u32::from(status)
 }
 
-/// fn_30b480: allocate the 32 byte object and build it with fn_30b7bc.
 pub fn fn_30b480(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -198,7 +184,6 @@ pub fn fn_30b480(
     u32::from(status)
 }
 
-/// fn_30b634: allocate the 16 byte header record from the table buffer.
 pub fn fn_30b634(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -239,7 +224,6 @@ pub fn fn_30b634(
     u32::from(status)
 }
 
-/// fn_30a73c: read the FNEN, FNST and FNHA blocks and the hash width.
 pub fn fn_30a73c(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -274,7 +258,6 @@ pub fn fn_30a73c(
     rc
 }
 
-/// fn_30d370: build the shared Huffman tree descriptor.
 pub fn fn_30d370(
     m: &mut Memory<'_>,
     t: &Tables,
@@ -294,7 +277,6 @@ pub fn fn_30d370(
     rc
 }
 
-/// fn_30d594: build the shared code table descriptor.
 pub fn fn_30d594(m: &mut Memory<'_>, t: &Tables, obj: u32) -> u32 {
     let rc = crate::boot_part_f::fn_1ba3c0(m, obj, &env(t));
     if rc == 0 {
@@ -303,7 +285,6 @@ pub fn fn_30d594(m: &mut Memory<'_>, t: &Tables, obj: u32) -> u32 {
     rc
 }
 
-/// fn_30d41c: allocate the 20 byte 8 bit Huffman tree descriptor.
 pub fn fn_30d41c(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -329,7 +310,6 @@ pub fn fn_30d41c(
     u32::from(status)
 }
 
-/// fn_30d50c: allocate the 20 byte 16 bit Huffman tree descriptor.
 pub fn fn_30d50c(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -355,7 +335,6 @@ pub fn fn_30d50c(
     u32::from(status)
 }
 
-/// fn_30d2e8: allocate the 16 byte code table descriptor.
 pub fn fn_30d2e8(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -387,7 +366,6 @@ pub fn fn_30d2e8(
     u32::from(status)
 }
 
-/// fn_30b7bc: read the HUTR and HULE blocks and build the Huffman tree.
 pub fn fn_30b7bc(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -442,7 +420,6 @@ pub fn fn_30b7bc(
     rc
 }
 
-/// fn_2fbf1c: build the CDCT font object from the stream blocks.
 pub fn fn_2fbf1c(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -517,7 +494,6 @@ pub fn fn_2fbf1c(
     fn_30b634(m, h, t, m.word(obj + 0x30), m.word(obj + 0x28), obj + 0x2c)
 }
 
-/// fn_302e38: allocate the 16 byte block record and count it up.
 pub fn fn_302e38(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -553,7 +529,6 @@ pub fn fn_302e38(
     u32::from(status)
 }
 
-/// fn_2fac04: allocate the 8 byte buffer record for a 24 byte payload.
 pub fn fn_2fac04(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -586,7 +561,6 @@ pub fn fn_2fac04(
     u32::from(status)
 }
 
-/// fn_2fd9a0: allocate the 52 byte CDCT object and build it with fn_2fbf1c.
 pub fn fn_2fd9a0(
     m: &mut Memory<'_>,
     h: &mut impl Host,

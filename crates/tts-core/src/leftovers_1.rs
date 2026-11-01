@@ -1,12 +1,10 @@
-//! Previously unowned resource and normalizer ports. Absolute guest pointers.
+
 use crate::{boot::Memory, frontend as f};
 use core::cell::RefCell;
 fn nz(p: u32) -> Option<u32> {
     (p != 0).then_some(p)
 }
 
-// Relative header views bridge legacy immutable callback APIs without aliasing
-// live guest memory. Only pointer fields are translated, never payload bytes.
 fn view_word(v: &mut [u8], p: usize, x: u32) {
     v[p..p + 4].copy_from_slice(&x.to_le_bytes());
 }
@@ -186,7 +184,7 @@ impl<H: crate::render_part_c::Host> crate::boot_part_b::Host for TeardownMap<'_,
         unreachable!()
     }
 }
-/// US 17af38 / EU 17afe8 / KR 17af94. Close the linguistic registry.
+
 pub fn fn_17af38(m: &mut Memory<'_>, object: u32, h: &mut impl crate::render_part_c::Host) -> u32 {
     assert_eq!(m.base, 0);
     if object == 0 {
@@ -231,7 +229,7 @@ pub fn fn_17af38(m: &mut Memory<'_>, object: u32, h: &mut impl crate::render_par
     stage_release(m, m.word(m.word(object + 8) + 4), object, h);
     rc
 }
-/// US 196238 / EU 1962e8 / KR 196324. Clear and release an engine context.
+
 pub fn fn_196238(
     m: &mut Memory<'_>,
     handle: [u32; 2],
@@ -273,7 +271,6 @@ pub fn fn_196238(
     rc
 }
 
-/// Constants and disjoint 64-byte varargs workspace supplied by the caller.
 pub struct CloseRuntime {
     pub category: u32,
     pub begin: u32,
@@ -403,8 +400,7 @@ fn info(
     crate::log_live::fn_1738e8(m, m.word(ctx), k.category, 4, 0, format, k.scratch, h);
     m.bytes[k.scratch as usize..k.scratch as usize + 64].copy_from_slice(&saved);
 }
-/// fn_179f3c. Decrement a broker reference, unlink the final reference, and
-/// close/free its resource and handle. Allocation failure preserves the handle.
+
 pub fn fn_179f3c(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -495,14 +491,6 @@ pub fn fn_179f3c(
     rc
 }
 
-/// fn_179f3c_m. The memory-passing close: identical to fn_179f3c except
-/// every heap block release goes through boot_part_e::release on the
-/// arena in place, at the ARM's point in the sequence. The caller passes
-/// one host satisfying both bounds: CloseHost for the lookup/logs and
-/// boot_part_e::Host for the in-place heap release. No recorded or
-/// deferred side effects; the lock acquire/release pair (0x1840fc /
-/// 0x18423c) runs inside this call, before the end log, as the ARM does.
-/// Allocation failure preserves the handle, as in fn_179f3c.
 pub fn fn_179f3c_m(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -594,7 +582,7 @@ pub fn fn_179f3c_m(
 }
 
 pub trait NormalizerHost: crate::render_part_a2::RenderHost {
-    /// Live 253fd0 composition. Arguments retain all guest words.
+
     fn normalize_core(&mut self, m: &mut [u8], args: &[u32]) -> u32;
 }
 impl<H: crate::render_part_a3::RegionHost> NormalizerHost for H {
@@ -659,8 +647,7 @@ fn stream_index(m: &mut [u8], p: u32, i: u32) -> u32 {
     }
     rc
 }
-/// D_254aac. Split a marked token into normalized ranges, optionally inserting
-/// separators and position markers. Post-processing errors are swallowed by ROM.
+
 pub fn fn_254aac(
     m: &mut [u8],
     a: [u32; 5],
@@ -699,7 +686,7 @@ fn normalize_inner<H: NormalizerHost>(
     let origin = get!(stream_entry(m, markers, 0));
     let textbase = get!(stream_entry(m, text, 0));
     let current = get!(stream_entry(m, markers, 0xffff));
-    // fn_252a94 validates both stream and table even though its index is not used.
+
     let t = sw(m, markers + 12);
     let mut index = 0;
     let rc = n::current_index(
@@ -893,7 +880,7 @@ pub struct OpenRuntime {
     pub product_key: u32,
     pub error_format: u32,
     pub version_format: u32,
-    /// 1024 disjoint bytes replacing the ROM's locals and helper workspaces.
+
     pub scratch: u32,
 }
 fn literal(m: &mut Memory<'_>, p: u32, b: &[u8]) {
@@ -952,8 +939,7 @@ fn open_error(
         k.scratch + 0x1c0,
     );
 }
-/// fn_242fd0. Open a RIFF resource, read its type and optional INFO/VERS,
-/// compare the packed version and leave the reader at its first data chunk.
+
 pub fn fn_242fd0(
     m: &mut Memory<'_>,
     args: [u32; 9],
@@ -968,8 +954,7 @@ pub fn fn_242fd0(
     rc
 }
 fn close_open_record(m: &mut Memory<'_>, rec: u32, k: &OpenRuntime, h: &mut impl OpenHost) -> u32 {
-    // The older normalization helper omits the broker-backed branches.
-    // Execute both broker and mapped-file branches through the live ports.
+
     if m.byte(rec + 4) != 0 {
         return crate::normalization::close_owner_pair(m.bytes, rec, h);
     }
@@ -1402,7 +1387,6 @@ fn open_inner(m: &mut Memory<'_>, a: [u32; 9], k: &OpenRuntime, h: &mut impl Ope
     rc
 }
 
-/// Regional constants and disjoint 512-byte frame for the pipeline stages.
 pub struct PipelineStageData<'a> {
     pub constants: u32,
     pub unit_prefix: u32,
@@ -1674,7 +1658,7 @@ impl<H: crate::render_part_d2::PipelineHost> crate::render_part_a2::RenderHost
         (sw(m, self.one), rc)
     }
 }
-/// fn_2f0d3c. Apply native conversions between paired control markers.
+
 pub fn fn_2f0d3c(
     m: &mut Memory<'_>,
     a: [u32; 14],
@@ -1993,8 +1977,7 @@ fn stage_pattern(
     );
     (r, [offsets[0], offsets[1]])
 }
-/// fn_2f15bc. Mark regex matches in successive text ranges, preserving the
-/// byte offsets, temporary terminators and failure-state cursor updates.
+
 pub fn fn_2f15bc(
     m: &mut Memory<'_>,
     a: [u32; 9],
@@ -2198,7 +2181,7 @@ fn stage_exec_regex(
     tables: &crate::regex::PcreTables<'_>,
     host: &mut impl crate::normalization::NormalizationHost,
 ) -> i32 {
-    // Invalid handles are rejected before dereferencing the frame store.
+
     if crate::frontend::validate_handle(object != 0, key, 0xdd57, 24) >= 0x80000000 {
         return -16;
     }
@@ -2345,7 +2328,6 @@ fn stage_exec_regex(
     rc
 }
 
-/// US 179f30. Open a broker resource with flags zero.
 pub fn fn_179f30(
     m: &mut Memory<'_>, broker: u32, name: u32, out: u32,
     globals: &crate::boot_part_b::DataOpenGlobals,
@@ -2355,6 +2337,9 @@ pub fn fn_179f30(
 }
 struct MapCalls<'a, H>(&'a mut H);
 impl<H: crate::boot_part_b::Host> crate::boot_part_b::Host for MapCalls<'_, H> {
+    fn real_log_args(&mut self)->bool {self.0.real_log_args()}
+    fn format_address_m(&mut self,m:&Memory<'_>,format:&[u8])->Option<u32> {self.0.format_address_m(m,format)}
+    fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool {self.0.log_variadic(m,entry,a,format,varargs)}
     fn thread_id(&mut self) -> u32 { self.0.thread_id() }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         match f {
@@ -2377,8 +2362,7 @@ impl<H: crate::boot_part_b::Host> crate::boot_part_d::Host for MapCalls<'_, H> {
         panic!("map does not read archive parameters")
     }
 }
-/// US 17a1a4. Require the full requested broker mapping; unmap a short result.
-/// scratch is one disjoint word, separate from the unmap environment's 64 bytes.
+
 pub fn fn_17a1a4(
     m: &mut Memory<'_>, broker:u32, handle:u32, offset:u32, requested:u32, out:u32,
     scratch:u32, unmap:&crate::boot_part_e::UnmapEnvironment,
@@ -2396,7 +2380,6 @@ pub fn fn_17a1a4(
     rc
 }
 
-/// fn_2b94d8. Translate a normalized offset through the nearest source span.
 pub fn fn_2b94d8(m:&mut Memory<'_>,p:u32,value:u32,out:u32)->u32 {
     if p==0 || out==0{return 0x81102007;}
     m.put_word(out,value);
@@ -2421,8 +2404,7 @@ fn kernel_span(m:&mut Memory<'_>,event:u32,source:u32,source_len:u32,offset:u32,
 fn kernel_copy_span(m:&mut Memory<'_>,dst:u32,src:u32,kind:u32) {
     let a=[m.word(src+12),m.word(src+16),m.word(src+20),m.word(src+24)];kernel_span(m,dst,a[0],a[1],a[2],a[3],kind);
 }
-/// fn_253870. Replace text and reconcile marker/source spans.
-/// scratch is a disjoint, restored 256-byte frame.
+
 pub fn fn_253870(m:&mut Memory<'_>,a:[u32;7],constants:u32,scratch:u32,h:&mut impl crate::render_part_a2::RenderHost)->u32 {
     assert_eq!(m.base,0);
     let mut saved=[0u8;256];saved.copy_from_slice(&m.bytes[scratch as usize..scratch as usize+256]);
@@ -2512,9 +2494,6 @@ fn kernel_replace(m:&mut Memory<'_>,a:[u32;7],constants:u32,s:u32,h:&mut impl cr
     0
 }
 
-
-/// Kernel literals and a disjoint, restored 512-byte guest frame.
-/// constants is D_914b18, language is the regional D_254928 string.
 #[derive(Clone,Copy)]
 pub struct KernelData<'a> {
     pub constants:u32,
@@ -2546,8 +2525,7 @@ fn kernel_debug(m:&mut Memory<'_>,object:u32,k:&KernelData<'_>,event:usize,args:
     for (i,v) in args.iter().enumerate(){m.put_word(k.scratch+32+i as u32*4,*v);}
     crate::log_live::fn_1738e8(m,logger,k.category,5,0,k.formats[event],k.scratch+32,h);
 }
-/// fn_253fd0. Normalize token spans and apply accepted units to text/markers.
-/// The ROM swallows processing and allocation failures after cleanup.
+
 pub fn fn_253fd0(
     m:&mut Memory<'_>,a:[u32;15],k:&KernelData<'_>,
     h:&mut (impl crate::render_part_a2::RenderHost+crate::log_live::LogMethodsM+crate::boot_part_b::FormatHost),
@@ -2663,8 +2641,6 @@ fn kernel_parse(m:&mut Memory<'_>,object:u32,unit:u32,flag:u32,parsed:u32,k:&Ker
  crate::render_part_a2::parse_first_unit(m.bytes,a[0],a[1],a[2],unit,flag,a[3],a[4],parsed,k.constants+24,h)
 }
 
-/// Composes the existing region ports with the live normalization kernel.
-/// The 128-byte outer frame and the kernel's 512-byte frame must be disjoint.
 pub struct KernelRegions<'a,'b,H> {
     pub host:&'a mut H,
     pub data:&'a KernelData<'b>,

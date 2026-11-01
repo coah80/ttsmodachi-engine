@@ -1,4 +1,4 @@
-/// fn_1f1430, EU fn_1f15ec, KR fn_1f1698.
+
 pub fn compare_priority(left: u16, right: u16) -> i32 {
     i32::from(right) - i32::from(left)
 }
@@ -12,32 +12,26 @@ fn validate(check: impl FnOnce(u32, u32) -> u32, tag: u32, size: u32, error: u32
     }
 }
 
-/// fn_1f13f8, EU fn_1f15b4, KR fn_1f1660.
 pub fn reset_pos(check: impl FnOnce(u32, u32) -> u32) -> u32 {
     validate(check, 0xf385, 32, 0x89e02008)
 }
 
-/// fn_1f1414, EU fn_1f15d0, KR fn_1f167c.
 pub fn prepare_pos(check: impl FnOnce(u32, u32) -> u32) -> u32 {
     validate(check, 0xf385, 32, 0x89e02008)
 }
 
-/// fn_1f27ec, EU fn_1f29a8, KR fn_1f2a54.
 pub fn finish_pos(check: impl FnOnce(u32, u32) -> u32) -> u32 {
     validate(check, 0xf385, 32, 0x89e02008)
 }
 
-/// fn_1f2bf0, EU fn_1f2dac, KR fn_1f2e58.
 pub fn prepare_homographs(check: impl FnOnce(u32, u32) -> u32) -> u32 {
     validate(check, 0xf386, 48, 0x89f02008)
 }
 
-/// fn_1f3a8c, EU fn_1f3c48, KR fn_1f3cf4.
 pub fn finish_homographs(check: impl FnOnce(u32, u32) -> u32) -> u32 {
     validate(check, 0xf386, 48, 0x89f02008)
 }
 
-/// fn_1f2808, EU fn_1f29c4, KR fn_1f2a70.
 pub fn pos_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     if selector <= 1 {
         Ok(table)
@@ -46,7 +40,6 @@ pub fn pos_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     }
 }
 
-/// fn_1f3aa8, EU fn_1f3c64, KR fn_1f3d10.
 pub fn homograph_interface(selector: u32, table: &[u8]) -> Result<&[u8], u32> {
     if selector <= 1 {
         Ok(table)
@@ -106,8 +99,6 @@ pub struct HomographState {
     pub preserve: bool,
 }
 
-/// Caller-owned FE_POS / FE_HMOGRPH environment view, resolved through
-/// `fn_19611c`. `id` is the opaque address the original stored in its objects.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PosEnv {
     pub id: u32,
@@ -117,22 +108,18 @@ pub struct PosEnv {
     pub resources: u32,
 }
 
-/// One acquired component: its interface pointer and two-word handle.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PosResource {
     pub interface: u32,
     pub handle: [u32; 2],
 }
 
-/// Two-word component handle published by an open entry point.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PosHandle {
     pub module: u32,
     pub tag: u32,
 }
 
-/// FE_POS module instance (`fn_1f1224`), 32 bytes in the original. `id` is the
-/// caller-owned object address and is not part of the original field layout.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PosModule {
     pub id: u32,
@@ -146,7 +133,7 @@ pub struct PosModule {
 }
 
 impl PosModule {
-    /// Original 32-byte field order, for differential comparison.
+
     pub fn words(&self) -> [u32; 8] {
         [
             self.env.id,
@@ -161,8 +148,6 @@ impl PosModule {
     }
 }
 
-/// FE_HMOGRPH module instance (`fn_1f2830`), 48 bytes in the original. `id` is
-/// the caller-owned object address and is not part of the original layout.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct HomographModule {
     pub id: u32,
@@ -178,7 +163,7 @@ pub struct HomographModule {
 }
 
 impl HomographModule {
-    /// Original 48-byte field order, for differential comparison.
+
     pub fn words(&self) -> [u32; 12] {
         [
             self.env.id,
@@ -197,43 +182,35 @@ impl HomographModule {
     }
 }
 
-/// Engine services the FE_POS and FE_HMOGRPH components borrow from their host.
-///
-/// The host owns every allocation, every loaded resource and the engine
-/// context, so these components keep only the opaque addresses the original
-/// stored in their objects. Logging is host work and is modelled here only so
-/// the differential adapters can compare the call.
 pub trait PosHost {
-    /// fn_19611c: resolve the engine context a component request names.
+
     fn resolve_env(&mut self, a: u32, b: u32) -> (u32, Option<PosEnv>);
-    /// fn_17b058: acquire the named resource and fill its interface and handle.
+
     fn acquire(&mut self, resources: u32, name: &[u8]) -> (u32, Option<PosResource>);
-    /// fn_17b1c4: release the named resource.
+
     fn release(&mut self, resources: u32, name: &[u8]);
-    /// fn_1963b8: `count` items of `size` bytes. Zero when the allocator refuses.
+
     fn allocate(&mut self, heap: u32, count: u32, size: u32) -> u32;
-    /// fn_196394: `size` bytes. Zero when the allocator refuses.
+
     fn allocate_block(&mut self, heap: u32, size: u32) -> u32;
-    /// fn_196428: release an allocation.
+
     fn free(&mut self, heap: u32, address: u32);
-    /// fn_173dc0: report a component error.
+
     fn log_error(&mut self, log: u32, tag: &[u8], line: u32);
-    /// fn_1756d0: read the named configuration string. `None` is a null result.
+
     fn get_string(&mut self, params: u32, key: &[u8]) -> (u32, Option<u32>);
-    /// fn_17c550: parse the decimal value of a configuration string.
+
     fn parse_number(&mut self, string: u32) -> u32;
-    /// fn_195d90: the length of a NUL-terminated string.
+
     fn string_length(&mut self, string: u32) -> u32;
-    /// fn_176f94: validate a component handle against `expected` and `size`.
+
     fn validate(&mut self, object: u32, tag: u32, expected: u32, size: u32) -> u32;
-    /// Publish a freshly built FE_POS module into the caller-owned object.
+
     fn install_pos(&mut self, object: u32, module: PosModule);
-    /// Publish a freshly built FE_HMOGRPH module into the caller-owned object.
+
     fn install_homographs(&mut self, object: u32, module: HomographModule);
 }
 
-/// The `numberoutputtranscriptions` and `mlset` reads `fn_1f2830` and
-/// `fn_1f2b3c` share. Returns the status the original returns.
 fn read_homograph_config(env: PosEnv, host: &mut impl PosHost, state: &mut HomographState) -> u32 {
     let (status, string) = host.get_string(env.params, b"numberoutputtranscriptions");
     state.limit = if status < 0x80000000 {
@@ -251,7 +228,6 @@ fn read_homograph_config(env: PosEnv, host: &mut impl PosHost, state: &mut Homog
     }
 }
 
-/// fn_1f1224 / EU fn_1f13e0 / KR fn_1f148c.
 pub fn open_pos(a: u32, b: u32, host: &mut impl PosHost, out: Option<&mut PosHandle>) -> u32 {
     let Some(out) = out else {
         return 0x89e02007;
@@ -291,7 +267,6 @@ pub fn open_pos(a: u32, b: u32, host: &mut impl PosHost, out: Option<&mut PosHan
     status
 }
 
-/// fn_1f1398 / EU fn_1f1554 / KR fn_1f1600.
 pub fn close_pos(module: Option<&PosModule>, tag: u32, host: &mut impl PosHost) -> u32 {
     let object = module.map_or(0, |module| module.id);
     if host.validate(object, tag, 0xf385, 32) >= 0x80000000 {
@@ -304,7 +279,6 @@ pub fn close_pos(module: Option<&PosModule>, tag: u32, host: &mut impl PosHost) 
     0
 }
 
-/// fn_1f2830 / EU fn_1f29ec / KR fn_1f2a98.
 pub fn open_homographs(
     a: u32,
     b: u32,
@@ -355,7 +329,6 @@ pub fn open_homographs(
     status
 }
 
-/// fn_1f2acc / EU fn_1f2c88 / KR fn_1f2d34.
 pub fn close_homographs(
     module: Option<&HomographModule>,
     tag: u32,
@@ -373,7 +346,6 @@ pub fn close_homographs(
     0
 }
 
-/// fn_1f2b3c / EU fn_1f2cf8 / KR fn_1f2da4.
 pub fn reset_homographs(
     module: Option<&mut HomographModule>,
     tag: u32,
@@ -494,7 +466,6 @@ fn set_rule(io: &mut impl StageIo, line: u32, buffer: &[u8]) -> Result<u32, Erro
     .map(|r| r.status)
 }
 
-/// fn_1f2c0c, EU fn_1f2dc8, KR fn_1f2e74.
 pub fn validate_homograph(
     io: &mut impl StageIo,
     state: &mut HomographState,
@@ -623,7 +594,6 @@ fn whitespace(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | b'_')
 }
 
-/// fn_1f3248, EU fn_1f3404, KR fn_1f34b0.
 pub fn process_homographs(
     io: &mut impl StageIo,
     state: &mut HomographState,
@@ -901,8 +871,7 @@ fn next_rule_token(bytes: &mut [u8], cursor: &mut usize) -> (usize, usize) {
     }
     let end = *cursor;
     if *cursor < bytes.len() && bytes[*cursor] != 0 {
-        // The ROM NUL-terminates the token in the rule buffer (the
-        // `*current = 0` / `outputRight[-1] = 0` stores of fn_1f1440).
+
         bytes[*cursor] = 0;
         *cursor += 1;
     }
@@ -938,7 +907,6 @@ fn flush_pending(
     Ok(status)
 }
 
-/// fn_1f1440, EU fn_1f15fc, KR fn_1f16a8.
 pub fn process_pos(
     io: &mut impl StageIo,
     applied: &mut u8,

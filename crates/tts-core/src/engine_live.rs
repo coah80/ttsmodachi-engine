@@ -1,46 +1,27 @@
-//! Live request bindings. All callbacks use the current caller-owned arena.
+
 use crate::{boot::Memory, db_live::{DbHooksM, PoolHooksM}, engine};
-/// One live call, logged in order in caller-owned storage. `caller` is the
-/// parent entry (0 at the top); `depth` nests like the ARM lr chain so a
-/// live sequence aligns with the ARM call log by call site.
+
 #[derive(Clone, Copy, Debug)]
 pub struct CallTrace { pub entry: u32, pub caller: u32, pub args: [u32; 4], pub nargs: usize, pub r0: u32, pub depth: u32 }
-/// Caller-owned sink for the live call log. The Vec lives in the test
-/// (std); the live lib only pushes through this trait, never naming Vec.
-/// Entries log in call order (parent before child); the return value is
-/// filled in when the call completes, so each row carries entry order
-/// plus r0 for ARM alignment.
-pub trait CallTraceSink { fn record_entry(&mut self, t: CallTrace) -> usize; fn record_return(&mut self, idx: usize, r0: u32); }
-struct Host<'a> { boot: engine::SpeechBootHost<'a>, boundary:Option<engine::VoiceBoundary>, runtime:Option<&'a mut dyn RuntimeServicesM>, snap:&'a [u8], trace:Option<&'a mut dyn CallTraceSink>, until:Option<u32>, depth:u32, stack:[u32;64], stack_len:usize }
 
-/// Forward component_live_a2::Calls to the main live Host so drain-path
-/// stream/map destroys run through the certified ports (same entries the
-/// chain path binds in LiveCalls). 1:1 with the ARM drain (fn_1561b8
-/// subtree frees ride fn_39f5b8 -> fn_19b78c -> fn_184f84; the live
-/// equivalents are release_stream_state_m / destroy_array_m).
+pub trait CallTraceSink { fn record_entry(&mut self, t: CallTrace) -> usize; fn record_return(&mut self, idx: usize, r0: u32); }
+struct Host<'a> { boot: engine::SpeechBootHost<'a>, boundary:Option<engine::VoiceBoundary>, runtime:Option<&'a mut dyn RuntimeServicesM>, snap:&'a [u8], trace:Option<&'a mut dyn CallTraceSink>, until:Option<u32>, depth:u32, stack:[u32;64], stack_len:usize, rom:crate::rom_region::Rom }
+
 struct ReleaseCalls<'a, 'b>(&'a mut Host<'b>);
 impl crate::component_live_a2::Calls for ReleaseCalls<'_, '_> {
     fn call(&mut self, m: &mut crate::boot::Memory<'_>, entry: u32, args: &[u32]) -> u32 {
         self.0.call(m, entry, args)
     }
 }
-/// Bridge from the component-processor dispatchers to this live Host.
-/// The listed entries ride the Host (full ports); everything else keeps
-/// the shared read bindings. Single-region views only; the caller-owned
-/// arena is never aliased.
+
 struct ParamBridge<'a, 'b> {
     host: &'a mut Host<'b>,
 }
-/// Bridge from the depes-root port to this live Host. Every guest call
-/// the ARM made inside 0x2031b0 (validate, logger, trace flag, streams,
-/// heap, depes fetch) rides the Host dispatcher; the ROM is the US one
-/// and lives in this caller-owned host. No state is kept here.
+
 struct DepesBridge<'a, 'b> {
     host: &'a mut Host<'b>,
 }
-/// Bridge from the dictionary engine to this live Host. Heap, logger and
-/// format calls ride the Host; the dictionary table reads fault loudly so
-/// a request that needs them stops at an exact entry instead of drifting.
+
 struct DictBridge<'a, 'b> {
     host: &'a mut Host<'b>,
 }
@@ -77,9 +58,7 @@ impl crate::speech_part_5::Host for DictBridge<'_, '_> {
         0x80002001
     }
     fn entries(&mut self, m: &mut Memory<'_>, a: u32, b: u32, c: u32, array: &mut u32, count: &mut u32) -> u32 {
-        // fn_2f88d4: transcription-alternative expansion (1:1 port in
-        // speech_part_5). Runs over the caller's arena through the guest
-        // heap; empty results come back zeroed with status 0, as before.
+
         *array = 0;
         *count = 0;
         crate::speech_part_5::fn_2f88d4_m(m, a, b, c, array, count, self) as u32
@@ -91,7 +70,7 @@ impl crate::component_live_c2::C2DepesHost for DepesBridge<'_, '_> {
         self.host.call(m, entry, args)
     }
     fn rom(&self) -> crate::rom_region::Rom {
-        crate::rom_region::Rom::Us
+        self.host.rom
     }
 }
 impl crate::engine_components::InternalCalls for ParamBridge<'_, '_> {
@@ -101,40 +80,24 @@ impl crate::engine_components::InternalCalls for ParamBridge<'_, '_> {
         entry: u32,
         a: &[u32],
     ) -> Result<u32, engine::Error> {
-        // Round 19: the entries the scheduler path reaches ride this same
-        // Host dispatcher (the full ports, not the copy/destroy-blind
-        // guest leaves).
-        // Round 21: the round-20 premise was wrong. The extended ARM
-        // capture (wire-a-r21, 20000 calls to 0x1a18c4) shows the ARM
-        // calls 0x2031b0 right after the 0x1d3314 return (via 0x15daa8)
-        // and runs its whole depes/dictionary subtree. The bindings
-        // removed in round 20 are restored below.
+
+        let entry = crate::rom_region::to_us_guest(self.host.rom, entry);
         if (entry == 0x175a1c || entry == 0x1795f0 || entry == 0x1ecf68 || entry == 0x14e440 || entry == 0x150878 || entry == 0x150c0c || entry == 0x1516c8 || entry == 0x15017c || entry == 0x1503b0 || entry == 0x1ea4e0 || entry == 0x17a1a4 || entry == 0x1963e0 || entry == 0x2409d4 || entry == 0x21a1fc) && m.regions.len() == 1 {
             let base = m.regions[0].base;
             let bytes = &mut *m.regions[0].bytes;
             let mut bm = Memory { base, bytes };
             let r0 = self.host.call(&mut bm, entry, a);
-            // A test-only until-stop aborts the bridged port at the
-            // exact stop point instead of letting it continue on the
-            // stop code (round 23: the 1ea4e0 boundary image).
+
             if self.host.stop_is_until() {
                 return Err(engine::Error::UnsupportedStage { entry });
             }
             return Ok(r0);
         }
-        // Round 23: a test-only until-stop is a hard stop. Once the
-        // Host has recorded the boundary, no bridged call may mutate
-        // the arena behind it (the until contract leaves the live
-        // image at that entry). Without this, the mapped heap path
-        // keeps carving and freeing after the stop and the boundary
-        // image is contaminated.
+
         if self.host.stop_is_until() {
             return Err(engine::Error::UnsupportedStage { entry });
         }
-        // Round 23: log heap alloc/free traffic that rides the shared
-        // mapped path (observation only; the call itself is unchanged).
-        // This exposes the sizes live requests next to the ARM log so
-        // the first divergence is visible in the test trace.
+
         let heap_logged = matches!(entry, 0x196394 | 0x1963b8 | 0x1963e0 | 0x196428);
         let rc = crate::engine_components::InternalCalls::call(
             &mut engine::LiveComponentCalls,
@@ -150,13 +113,9 @@ impl crate::engine_components::InternalCalls for ParamBridge<'_, '_> {
         rc
     }
 }
-/// Test-only helpers (round 23): whether a test-only until-stop has
-/// fired, and a heap-call log row through the caller-owned trace sink.
-/// No state is kept; a missing sink is a no-op.
+
 impl Host<'_> {
-    /// True only when the recorded boundary is the test-only until-stop
-    /// (not an unbound-entry stop). Bridged ports abort at that exact
-    /// point so the boundary image gains no post-stop writes.
+
     pub(crate) fn stop_is_until(&self) -> bool {
         match (&self.boundary, self.until) {
             (Some(b), Some(u)) => b.entry == u,
@@ -176,8 +135,7 @@ impl Host<'_> {
 }
 impl Host<'_> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
-        // Caller-owned depth guard (no statics): the live chain never
-        // nests past a few dozen; deeper means a loop through this host.
+
         if self.depth > 60 {
             panic!("live call loop at {f:#x}");
         }
@@ -203,42 +161,32 @@ impl Host<'_> {
         r
     }
     fn call_inner(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        let f = if self.rom == crate::rom_region::Rom::Us { f } else { crate::rom_region::to_us(self.rom, f) };
         if self.boundary.is_some(){return 0x80002001;}
-        // Test-only stop (round 22): halt before `until` is entered and
-        // report it as the boundary, leaving the arena as the live image
-        // at that entry. Observation only; no byte is changed.
+
         if self.until==Some(f){
             let mut args=[0;7];let n=a.len().min(7);args[..n].copy_from_slice(&a[..n]);
             self.boundary=Some(engine::VoiceBoundary{entry:f,args,event:None});return 0x80002001;
         }
         match f {
             0x2645b4 => {
-                // fn_2645b4: the backend progress call. The render chain
-                // runs over the caller's arena and reaches the engine's own
-                // entries - the text stream's methods, the guest heap's
-                // methods and the property table - through this dispatcher.
+
                 let snap = self.snap;
                 crate::engine_live_render::run_block(self, m, a[0], a[1], a[2], snap)
             }
             0x26a3e4 => {
-                // fn_26a3e4: the render writer. The own request takes the
-                // write-text branch (state+119 == 0); the byte-text branch
-                // panics naming fn_268cbc. Reached from process_1e5bbc
-                // after the progress call returns.
+
                 let snap = self.snap;
                 crate::engine_live_render::run_writer(
                     self, m, a[0], a[1], a[2], [a[3], a[4]], [a[5], a[6]], snap,
                 )
             }
             0x252f88 => {
-                // fn_252f88: the sequence fetch. The block function reaches
-                // it through block_call_m; process_1e5bbc calls it after
-                // the writer returns, so it is bound here too, with the
-                // same live fetch host over the caller's arena.
+
                 let mut p = 0;
                 let env = crate::render_part_c::Environment {
-                    cached_handle: core::array::from_fn(|i| m.byte(0x8d7660 + i as u32)),
-                    default_context: 0x8d7640,
+                    cached_handle: core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom,0x8d7660) + i as u32)),
+                    default_context: crate::rom_region::addr(self.rom,0x8d7640),
                 };
                 let rc = crate::normalization::fetch_entry(
                     m.bytes,
@@ -253,48 +201,64 @@ impl Host<'_> {
                 }
                 rc
             }
-            // The logger's variadic argument service (a pseudo-entry, not
-            // a ROM function): every lane answers it with 0 (round 22).
-            0xffff0001=>0,
+            0xffff0001=>{self.boot.fault=Some(engine::Error::MissingStreamAdapter{entry:f});0x80002001},
             0x1738e8|0x173dc0=>{
-                // The logger and the error log take six registers. A caller
-                // whose format takes no varargs leaves the last one
-                // undefined in the ARM, so it is zero here.
+
                 if self.boot.fault.is_some(){return 0x80002001;}
                 let mut args=[0u32;6];let n=a.len().min(6);args[..n].copy_from_slice(&a[..n]);
                 if f==0x1738e8 {crate::log_live::fn_1738e8(m,args[0],args[1],args[2],args[3],args[4],args[5],self)}
                 else {crate::render_part_a::error_log(m,self,args[0],args[1],args[2],args[3],args[4],args[5])}
             }
             0x1a18c4|0x166054|0x183258=>{
+                if f == 0x1a18c4 && a.len() >= 2 && m.word(a[1] + 0x19c) == 0 {
+                    let scratch = 0x0e0f7f00;
+                    let saved = [m.word(scratch), m.word(scratch + 4)];
+                    let rc = self.call(m, 0x19611c, &[m.word(a[1] + 8), m.word(a[1] + 12), scratch]);
+                    let rc = if rc < 0x80000000 {
+                        self.call(m, 0x17b058, &[m.word(m.word(scratch) + 24), crate::rom_region::addr(self.rom, 0x19592c), scratch + 4])
+                    } else { rc };
+                    if rc < 0x80000000 {
+                        let entry = m.word(scratch + 4);
+                        m.put_word(a[1] + 0x19c, m.word(entry + 4));
+                        m.put_word(a[1] + 0x1a0, m.word(entry + 8));
+                        m.put_word(a[1] + 0x1a4, m.word(entry + 12));
+                    }
+                    m.put_word(scratch, saved[0]);m.put_word(scratch + 4, saved[1]);
+                    if rc >= 0x80000000 { return rc; }
+                }
                 let result=if let Some(runtime)=self.runtime.as_deref_mut(){runtime.invoke_m(m,f,a)}else{Err(engine::Error::UnsupportedStage{entry:f})};
                 match result{Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
             }
             0xc72018=>{
-                let env=crate::speech_part_4::CaptureRuntime{slot:m.word(0xc72688),fill_flag:m.byte(0xa7b8e8)as u32,append_result:m.word(0xc7268c)};
+
+                if self.runtime.as_deref().is_none_or(|r|r.guest_capture()) {
+                let slot=crate::rom_region::capture_slot(self.rom);
+                let env=crate::speech_part_4::CaptureRuntime{slot:m.word(slot),fill_flag:m.byte(crate::rom_region::addr(self.rom,0xa7b8e8))as u32,append_result:m.word(slot+4)};
                 crate::speech_part_4::fn_c72018(m,self,env,a[0],a[1]);
+                }
                 if self.boot.fault.is_some(){return 0x80002001;}
                 let result=if let Some(runtime)=self.runtime.as_deref_mut(){runtime.invoke_m(m,f,a)}else{Err(engine::Error::UnsupportedStage{entry:f})};
                 match result{Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
             }
             0x230e1c => {
-                let e=speech_environment(m);
-                let t=crate::speech_part_2::XcoderLiterals{input_key:0x2311b8,native_key:0x2311e8,utf16:0x231244,sync:0x2312cc,category:0x8fa93c,format:0x231238,content_type:0x23122c};
-                let classes=core::array::from_fn(|i| m.half(0x8dc30c+i as u32*2));
+                let e=speech_environment(m,self.rom);
+                let t=crate::speech_part_2::XcoderLiterals{input_key:crate::rom_region::addr(self.rom,0x2311b8),native_key:crate::rom_region::addr(self.rom,0x2311e8),utf16:crate::rom_region::addr(self.rom,0x231244),sync:crate::rom_region::addr(self.rom,0x2312cc),category:crate::rom_region::addr(self.rom,0x8fa93c),format:crate::rom_region::addr(self.rom,0x231238),content_type:crate::rom_region::addr(self.rom,0x23122c)};
+                let classes=core::array::from_fn(|i| m.half(crate::rom_region::addr(self.rom,0x8dc30c)+i as u32*2));
                 crate::speech_part_2::fn_230e1c(m,a[0],a[1],[a[2],a[3]],&e,&t,&classes,0x800,self)
             }
             0x22d460 => open_audio_m(&mut AudioHost{h:self,p:a[0],index:0},m.bytes,(a[0]!=0).then_some(a[0]),a[1],a[2],a[3]),
             0x22d6dc => pump_insertion_at_m(&mut BufferHost{h:self,p:a[0]},m.bytes,a[0],a[1],a[4]),
             0x227d64 => {
                 let mut args=[0;7];args[..a.len()].copy_from_slice(a);
-                match selection_root_m(m,args,self.boot.platform){Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
+                match selection_root_m(m,args,self.boot.platform,self.rom){Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
             }
             0x1e57d0 => {
-                let env=stream_environment(m);
+                let env=stream_environment(m,self.rom);
                 let n=m.bytes.len().min(0x10000);
                 let clean=m.bytes[..n].iter().all(|b|*b==0);
                 let (rc,fault);
                 {
-                    let mut lh=crate::component_live_b::LiveHost{platform:&mut *self.boot.platform,fault:None,scratch:0x500};
+                    let mut lh=crate::component_live_b::LiveHost{platform:&mut *self.boot.platform,fault:None,scratch:0x500,rom:self.rom};
                     rc=crate::component_live_b::fn_1e57d0_m(m,[a[0],a[1],a[2],a[3]],&env,0x600,&mut lh);
                     fault=lh.fault;
                 }
@@ -303,12 +267,12 @@ impl Host<'_> {
                 rc
             }
             0x1d135c => {
-                let env=language_environment(m);
+                let env=language_environment(m,self.rom);
                 let n=m.bytes.len().min(0x10000);
                 let clean=m.bytes[..n].iter().all(|b|*b==0);
                 let (rc,fault);
                 {
-                    let mut lh=crate::component_live_b::LiveHost{platform:&mut *self.boot.platform,fault:None,scratch:0x500};
+                    let mut lh=crate::component_live_b::LiveHost{platform:&mut *self.boot.platform,fault:None,scratch:0x500,rom:self.rom};
                     rc=crate::component_live_b::fn_1d135c_m(m,[a[0],a[1],a[2],a[3]],&env,0x600,&mut lh);
                     fault=lh.fault;
                 }
@@ -321,7 +285,7 @@ impl Host<'_> {
                 let clean=m.bytes[..n].iter().all(|b|*b==0);
                 let (rc,fault);
                 {
-                    let mut lh=crate::component_live_b::LiveHost{platform:&mut *self.boot.platform,fault:None,scratch:0x500};
+                    let mut lh=crate::component_live_b::LiveHost{platform:&mut *self.boot.platform,fault:None,scratch:0x500,rom:self.rom};
                     rc=crate::component_live_b::fn_1f3ea0_m(m,[a[0],a[1],a[2],a[3],a[4]],0xd00,&mut lh);
                     fault=lh.fault;
                 }
@@ -330,23 +294,24 @@ impl Host<'_> {
                 rc
             }
             0x202f9c => {
-                let r={let p=&mut *self.boot.platform;fn_202f9c_m(m,a[0],a[1],a[2],a[3],p)};
+
+                let r={let p=&mut *self.boot.platform;let rom=self.rom;fn_202f9c_m(m,a[0],a[1],a[2],a[3],p,rom)};
                 match r{Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
             }
             0x1f4724 => {
-                let r={let p=&mut *self.boot.platform;fn_1f4724_m(m,a[0],a[1],a[2],a[3],p)};
+                let r={let p=&mut *self.boot.platform;let rom=self.rom;fn_1f4724_m(m,a[0],a[1],a[2],a[3],p,rom)};
                 match r{Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
             }
             0x1ef464 => {
-                let e=speech_types_environment(m);
+                let e=speech_types_environment(m,self.rom);
                 crate::speech_part_2::fn_1ef464(m,a[0],a[1],[a[2],a[3]],&e,self)
             }
             0x219c8c => {
-                let e=spelling_environment(m);
+                let e=spelling_environment(m,self.rom);
                 crate::component_live_c::fn_219c8c_m(m,a[0],a[1],[a[2],a[3]],&e,self)
             }
             0x1d513c => {
-                let e=component_environment(m);
+                let e=component_environment(m,self.rom);
                 crate::speech_part_1::fn_1d513c(m,a[0],a[1],[a[2],a[3]],&e,self)
             }
             0x200e2c => crate::component_live_c::fn_200e2c_m(m,a[0],a[1],0x1e80,self),
@@ -354,7 +319,7 @@ impl Host<'_> {
             0x163a98 => callback_m(m,a[..5].try_into().unwrap(),0x1c00,0x989680,self),
             0x132124 => callback_m(m,[a[4],a[0],a[1],a[2],a[3]],0x1c00,0x989680,self),
             0x22c5f0 => {
-                // fn_22c5f0: the inserter's parameter check.
+
                 let p=crate::prosody_rules::InserterParameters{
                     input_active:m.word(a[0]+0x10),output_active:m.word(a[0]+0x18),..Default::default()};
                 let mut valid=1u8;
@@ -362,8 +327,7 @@ impl Host<'_> {
                 m.put_byte(a[3],valid);rc
             }
             0x22c6dc => {
-                // fn_22c6dc: the inserter's parameter change. Only the field
-                // the name selects is written back.
+
                 let mut p=crate::prosody_rules::InserterParameters{
                     input_active:m.word(a[0]+0x10),output_active:m.word(a[0]+0x18),
                     frequency:m.word(a[0]+0x3c),buffer_samples:m.word(a[0]+0x40),
@@ -379,23 +343,22 @@ impl Host<'_> {
                 rc
             }
             0x2289b0 => {
-                // fn_2289b0: the parameter check the global callbacks run.
+
                 let mut valid=0u8;
                 let rc=crate::frontend_output::validate_parameter(terminated(m.bytes,a[1]),terminated(m.bytes,a[2]),&mut valid);
                 m.put_byte(a[3],valid);rc
             }
             0x151840 => {
-                // fn_151840: the parameter check the value callbacks run.
-                let table=core::array::from_fn(|i| m.half(0x8dc30c+i as u32*2));
-                let pair=core::array::from_fn(|i| m.byte(0x8d7660+i as u32));
+
+                let table=core::array::from_fn(|i| m.half(crate::rom_region::addr(self.rom,0x8dc30c)+i as u32*2));
+                let pair=core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom,0x8d7660)+i as u32));
                 let mut valid=0u8;
                 let rc=crate::frontend::validate_param(m.bytes,&table,(a[0]!=0).then_some(a[0]),
-                    terminated(m.bytes,a[1]),(a[2]!=0).then_some(a[2]),&mut valid,&pair,0x8d7640);
+                    terminated(m.bytes,a[1]),(a[2]!=0).then_some(a[2]),&mut valid,&pair,crate::rom_region::addr(self.rom,0x8d7640));
                 m.put_byte(a[3],valid);rc
             }
             0x151df8=>{
-                // fn_151df8: the parameter change callback. It logs the change
-                // and stores the parsed number in the field the name selects.
+
                 let p=a[0];let name=a[1];let value=a[2];
                 if value==0||m.byte(value)==0||p==0 {return 0;}
                 let saved=m.word(OUT_CTX);
@@ -406,15 +369,14 @@ impl Host<'_> {
                     let logger=m.word(ctx.wrapping_add(16));
                     let values=[name,value];
                     self.log_m(logger,0x8d7994,4,0x151f0c,&values,m);
-                    if self.call(m,0x195d58,&[name,0x151f24])==0 {
+                    if self.call(m,0x195d58,&[name,crate::rom_region::addr(self.rom,0x151f24)])==0 {
                         m.put_word(p+0x38,crate::normalization::atoi_scan(m.bytes,value));
-                    } else if self.call(m,0x195d58,&[name,0x151f3c])==0 {
+                    } else if self.call(m,0x195d58,&[name,crate::rom_region::addr(self.rom,0x151f3c)])==0 {
                         m.put_word(p+0x34,crate::normalization::atoi_scan(m.bytes,value));
-                    } else if self.call(m,0x195d58,&[name,0x151f48])==0 {
+                    } else if self.call(m,0x195d58,&[name,crate::rom_region::addr(self.rom,0x151f48)])==0 {
                         m.put_word(p+0xe8,crate::normalization::atoi_scan(m.bytes,value));
-                    } else if self.call(m,0x195d58,&[name,0x151f60])==0 {
-                        // fn_15af9c: the alternative escape sequence handler is
-                        // not bound in the live path.
+                    } else if self.call(m,0x195d58,&[name,crate::rom_region::addr(self.rom,0x151f60)])==0 {
+
                         self.boot.fault=Some(engine::Error::MissingStreamAdapter{entry:0x15af9c});
                         m.put_word(OUT_CTX,saved);
                         return 0x80002001;
@@ -424,16 +386,13 @@ impl Host<'_> {
                 rc
             }
             0x228aac=>{
-                // fn_228aac: the synth parameter change callback. The buffer
-                // size branch is the one this request reaches; the rate and
-                // pitch branches need overlay literals the arena does not
-                // carry and the engine entries that are not bound.
+
                 let p=a[0];let name=a[1];let value=a[2];
-                if self.call(m,0x195d58,&[name,0x151f48])!=0 {
+                if self.call(m,0x195d58,&[name,crate::rom_region::addr(self.rom,0x151f48)])!=0 {
                     self.boot.fault=Some(engine::Error::MissingStreamAdapter{entry:0x2a9608});
                     return 0x80002001;
                 }
-                let table=core::array::from_fn(|i|m.half(0x8dc30c+i as u32*2));
+                let table=core::array::from_fn(|i|m.half(crate::rom_region::addr(self.rom,0x8dc30c)+i as u32*2));
                 let parsed=crate::frontend::parse_int(&table,m.bytes,value) as u32;
                 let frame=m.word(p+0x18);
                 let mut buffer=if parsed>1 {parsed}else{1};
@@ -445,8 +404,7 @@ impl Host<'_> {
                 0
             }
             0x18f490=>{
-                // fn_18f490: the marker tag map. The tag records and the
-                // output records live in the caller's memory.
+
                 match fn_18f490_m(m,a[0],a[1],a[2],a[3]) {
                     Ok(rc)=>rc,
                     Err(e)=>{self.boot.fault=Some(e);0x80002001}
@@ -454,15 +412,14 @@ impl Host<'_> {
             }
             0x183398 => {if finish_checked_m(m,a[0],a[1],a[2],0x1c40,self){0}else{0x80002001}}
             0x84c160 => fn_84c160_m(m,a[0],a[1],self),
-            0x11da30 => {fn_11da30_m(m,a[0],self);0},
+            0x11da30 => {let rom=self.rom;fn_11da30_m(m,a[0],self,rom);0},
             0x1959dc => {
-                // seg7 r13: locked user-state byte store (teardown).
+
                 if a.len() < 2 {self.boot.fault=Some(engine::Error::InvalidSnapshot);0x80002001}
                 else {fn_1959dc_m(m,a[0],a[1],self)}
             },
             0x196fbc|0x174b14|0x19665c|0x19869c|0x198fb4|0x196428|0x196964 => {
-                // seg7 r14: teardown destructor cascade (array remove +
-                // object destroy + tree release + allocator release).
+
                 if a.is_empty() {self.boot.fault=Some(engine::Error::InvalidSnapshot);0x80002001}
                 else {
                     match f {
@@ -477,22 +434,14 @@ impl Host<'_> {
                 }
             },
             0x129778 => {
-                // seg7 r11: game tmalloc (src/fn_129778.c: fn_11db30
-                // through the live guest heap). One arg: size. The fill
-                // flag is the active regional global byte, like the
-                // capture runtime's.
+
                 if a.is_empty() {self.boot.fault=Some(engine::Error::InvalidSnapshot);0x80002001}
-                else {crate::speech_part_4::fn_129778(m,self,a[0],m.byte(0xa7b8e8)as u32)}
+                else {
+                {let obj=m.word(crate::rom_region::addr(self.rom,0xb6f4ec));let mut b=m.word(obj.wrapping_add(0x3c));let mut k=0;while k<5{if b==0{break;}b=m.word(b.wrapping_add(12));k+=1;}}
+                crate::speech_part_4::fn_129778(m,self,a[0],m.byte(crate::rom_region::addr(self.rom,0xa7b8e8))as u32)}
             },
             0x18f6b8 => {
-                // seg7 r6: the app output pump, bound to the back-lane
-                // port (trimmed to the ARM call-site behavior: no nested
-                // render). Seven args: regs plus tags, tag count, and the
-                // ARM stack pointer for the port's frame.
-                // seg7 r12: the app path (user buffer null) runs through
-                // the seg7 composition (real nested render + notify +
-                // hooks, callback-1 only for flags&2); buffer-path shapes
-                // keep the back-lane port.
+
                 if a.len() >= 6 && m.word(a[0].wrapping_add(0x160)) == 0 {
                     seg7_flush_arm(self, m, f, a)
                 }
@@ -500,18 +449,22 @@ impl Host<'_> {
                 else if self.runtime.is_none() {self.boot.fault=Some(engine::Error::UnsupportedStage{entry:f});0x80002001}
                 else {
                     let rt = self.runtime.as_deref_mut().unwrap();
-                    let mut hooks = crate::engine_live_back::Hooks{platform:self.boot.platform,runtime:rt,snap:self.snap,fault:None};
+                    let mut hooks = crate::engine_live_back::Hooks{platform:self.boot.platform,runtime:rt,snap:self.snap,fault:None,rom:self.rom};
                     let rc = crate::engine_live_back::fn_18f6b8_m(m,a[0],a[1],a[2],a[3],a[4],a[5],a[6],&mut hooks);
                     if let Some(e) = hooks.fault {self.boot.fault=Some(e);0x80002001}else{rc}
                 }
             }
             0x1fe094 => clear_text_items_m(m,a[0],a[1],0x1c80,self),
             0x22b518|0x22a0a8|0x22b3bc|0x229de4|0x14f010|0x14f918|0x151610|0x1516c8|0x151744|0x196830|0x19690c|0x14df44|0x1749ac|0x174a04|0x15017c|0x150878|0x150c0c|0x174b38|0x175170|0x19668c|0x1966ac|0x176054|0x176104|0x175850|0x196980 => {
-                // Round 10 (lane us): bind the parameter family 1:1 through
-                // the live dispatcher. The port is the certified
-                // speech_part_1::parameter_call_m (same arm the component
-                // lanes dispatch); LiveCalls carries rom + scratch.
-                match component_a2_m(m,f,a,self.boot.platform){Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
+
+                if f == 0x14f010 {
+
+                    let mut si = 0; while si < self.stack_len {  si += 1; }
+                }
+                if f == 0x22b3bc {
+
+                }
+                match component_a2_m(m,f,a,self.boot.platform,self.rom){Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
             }
             0x15140c|0x14fe9c|0x151294 => {
                 let mut regions=[engine::Region{base:m.base,bytes:m.bytes}];
@@ -544,27 +497,21 @@ impl Host<'_> {
             0x1e4a3c|0x1f48cc|0x1503b0=>{
                 match component_b_m(m,f,a,self.boot.platform){Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
             }
-            0x18cae8=>{let mut regions=[engine::Region{base:m.base,bytes:m.bytes}];let mut sparse=engine::Memory::new(&mut regions).expect("current arena");match engine::reset_synthesis_live(&mut sparse,a[0]){Ok(())=>0,Err(e)=>{self.boot.fault=Some(e);0x80002001}}},
+            0x18cae8=>{let mut regions=[engine::Region{base:m.base,bytes:m.bytes}];let mut sparse=engine::Memory::new(&mut regions).expect("current arena");match engine::reset_synthesis_live(&mut sparse,a[0],self.rom){Ok(())=>0,Err(e)=>{self.boot.fault=Some(e);0x80002001}}},
             0x7f6820=>crate::speech_part_3::fn_7f6820(m,a[0]),
             0x18cc30=>crate::boot_part_b::fn_18cc30(m,a[0],self),
-            0x18ac58=>crate::boot_part_b2::fn_18ac58(m,0xa7bf6c,0xb84078,self),
-            0x1858e4=>crate::boot_part_b2::fn_1858e4(m,0xa7c90c,0xb9be08),
+            0x18ac58=>crate::boot_part_b2::fn_18ac58(m,crate::rom_region::addr(self.rom,0xa7bf6c),crate::rom_region::addr(self.rom,0xb84078),self),
+            0x1858e4=>crate::boot_part_b2::fn_1858e4(m,crate::rom_region::addr(self.rom,0xa7c90c),crate::rom_region::addr(self.rom,0xb9be08)),
             0x1840e8=>{crate::boot_part_b::fn_1840e8(m,self);0},
             0x185d40=>{crate::boot_part_b::fn_185d40(m,self);0},
             0x1b5b8c=>{notify_output_m(m,a[0],a[1],self);0},
-            0x1a1b68=>{match publish_output_m(m,a[0],self){Ok(())=>0,Err(e)=>{self.boot.fault=Some(e);0}}},
+            0x1a1b68=>{match publish_output_m(m,a[0],self.rom,self){Ok(())=>0,Err(e)=>{self.boot.fault=Some(e);0}}},
             0x19703c=>{
                 if a[0]==0 || m.word(a[0]+12)==0 || m.word(a[0]+20)==0 {crate::normalization::run_dtors(m.bytes,a[0])}
                 else {self.boot.fault=Some(engine::Error::MissingStreamAdapter{entry:f});0x80002001}
             }
             0x19869c=>{clear_tree_m(m,a[0],self);0}
-            // Drain destroy closure (1:1 with the ARM drain frees: the
-            // per-pass map/tree destroys release stream states, keys and
-            // reader arrays via these entries). 0x14e0b4 releases stream
-            // states (certified port, same as the chain path's LiveCalls
-            // arm); 0x14dfc0 frees map keys (head block then self, 1:1 with
-            // src/fn_14df44_merged.c fn_14dfc0); 0x196c7c destroys reader
-            // arrays (certified reentrant2 port).
+
             0x14e0b4=>{let mut h=ReleaseCalls(self);crate::component_live_a2::release_stream_state_m(m,a[0],a.get(1).copied().unwrap_or(0),&mut h);0},
             0x14dfc0=>{let p=a[0];let hp=a.get(1).copied().unwrap_or(0);if p!=0{let h=m.word(p);if h!=0{self.call(m,0x196428,&[hp,h]);}self.call(m,0x196428,&[hp,p]);}0},
             0x196c7c=>crate::reentrant2::destroy_array_m(m,a[0],self),
@@ -580,75 +527,58 @@ impl Host<'_> {
             0x23ffd4 => pcre_deinit_m(m,a[0],a[1],0x1d00,self),
             0x264578 => fn_264578(m,a[0],self),
             0x1e5af0 => crate::speech_part_2::fn_1e5af0(m,a[0],a[1],self),
-            // Component processEnd releases (drain teardown, fn_154108):
-            // landed (p, tag) ports, 1:1 with their C. Nested releases ride
-            // this dispatcher.
+
             0x205e58 => crate::speech_part_2::fn_205e58(m,a[0],a[1],self),
             0x1f1138 => crate::speech_part_2::fn_1f1138(m,a[0],a[1],self),
             0x21cd54 => crate::speech_part_2::fn_21cd54(m,a[0],a[1],self),
             0x1d7544 => crate::speech_part_1::fn_1d7544(m,a[0],a[1],self),
-            // fn_1f4cb0 (drain teardown): component processEnd release above.
+
             0x1f4cb0 => fn_1f4cb0_m(m,a[0],a[1],self),
-            // fn_1fd6d0 (drain teardown): fixed-slot reset above.
+
             0x1fd6d0 => fn_1fd6d0_m(m,a[0],a[1],self),
-            // Validate-only component processEnds (drain teardown, above).
+
             0x1f27ec => fn_1f27ec_m(m,a[0],a[1],self),
             0x1f3a8c => fn_1f3a8c_m(m,a[0],a[1],self),
             0x1e03ac => fn_1e03ac_m(m,a[0],a[1],self),
             0x1ea328 => fn_1ea328_m(m,a[0],a[1],self),
             0x1f7e8c => fn_1f7e8c_m(m,a[0],a[1],self),
-            // fn_1f43f0 (drain teardown): two-handle close above.
+
             0x1f43f0 => fn_1f43f0_m(m,a[0],a[1],self),
-            // fn_211348 (drain teardown): three-slot release above.
+
             0x211348 => fn_211348_m(m,a[0],a[1],self),
-            // fn_1e3e28 (drain teardown): landed speech_part_1 port; the
-            // reset copies the null pair, matching fn_176fd4 in the C.
+
             0x1e3e28 => {
-                let e=component_environment(m);
+                let e=component_environment(m,self.rom);
                 crate::speech_part_1::fn_1e3e28(m,a[0],a[1],&e,self)
             },
-            // fn_2276dc (drain teardown): landed speech_part_2 port; the
-            // selection-state words are zero on this path, so only the
-            // slot releases run. Nested releases ride this dispatcher.
+
             0x2276dc => {
-                let e=speech_environment(m);
+                let e=speech_environment(m,self.rom);
                 crate::speech_part_2::fn_2276dc(m,a[0],a[1],&e,self)
             },
-            // fn_229cc0 (drain teardown): four-pair release above.
+
             0x229cc0 => fn_229cc0_m(m,a[0],a[1],self),
-            // fn_19672c (drain teardown): map key remove above.
+
             0x19672c => fn_19672c_m(m,a[0],a[1],self),
-            // fn_23220c (drain teardown): landed speech_part_2 port.
+
             0x23220c => {
-                let e=speech_environment(m);
+                let e=speech_environment(m,self.rom);
                 crate::speech_part_2::fn_23220c(m,a[0],a[1],&e,self)
             },
-            // fn_207130 (drain teardown): validate-only processEnd above.
+
             0x207130 => fn_207130_m(m,a[0],a[1],self),
-            // fn_1de844 (drain teardown): validate-only processEnd above.
+
             0x1de844 => fn_1de844_m(m,a[0],a[1],self),
-            // fn_1d453c (drain teardown): a component processEnd release.
-            // Landed speech_part_1 port; the ARM calls processEnd with two
-            // args (p, arg), and the C names the flag param D_1d170c, so
-            // the port's key slot takes that ROM constant. Nested pair
-            // releases ride this dispatcher.
+
             0x1d453c => crate::speech_part_1::fn_1d453c(m,a[0],a[1],0x1d170c,self),
-            // fn_2318f0 (round 23): the pipe stream's vtable release
-            // (vt+0x14, called with the [pair] by release_stream_m in the
-            // synthesis drain). 1:1 with src/fn_2318f0.c via the landed
-            // speech_part_2 port; speech_environment (0x8d7660/0x8d7640)
-            // is the xc-family environment the context resolve needs.
+
             0x2318f0 => {
-                let e=speech_environment(m);
+                let e=speech_environment(m,self.rom);
                 crate::speech_part_2::fn_2318f0(m,a[0],a[1],&e,self)
             },
-            // fn_22b238 (drain teardown): the pipe release's per-pair
-            // vt+0x24. 1:1 port above; nested release rides this dispatcher.
+
             0x22b238 => fn_22b238_m(m,a[0],a[1],self),
-            // fn_2fdc84 segment formatter (c3 round 25): 1:1 port of
-            // src/fn_2fdc84.c over this Host (the 'p' path needs the host
-            // for 0x2fddec). Replaces the round-24 contract port; every
-            // path is real, no panic stub remains.
+
             0x2fdc84 => {
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -661,9 +591,7 @@ impl Host<'_> {
             0x22e084 => reset_ctx_m(&mut ResetHost{h:self,p:a[0]},m.bytes,(a[0]!=0).then_some(a[0]),a[1]),
             0x175a1c => fetch_param_m(self,m,a[0],a[1],a[2]),
             0x1758ac=>{
-                // fn_1758ac: render the value as decimal and set the named
-                // parameter. The number buffer and the parameter scratch are
-                // caller-owned and restored.
+
                 let s=OUT_PARAM;
                 let at=m.offset(s);
                 let mut saved=[0u8;36];
@@ -676,15 +604,14 @@ impl Host<'_> {
             }
             0x1deb04 => crate::engine_live2::fn_1deb04_m(m,a[0],a[1]),
             0x1e772c => crate::engine_live2::fn_1e772c_m(m,a[0],a[1]),
-            0x1f3dc0 => crate::engine_live2::fn_1f3dc0_m(m,a[0],a[1],[a[2],a[3]],self),
+            0x1f3dc0 => crate::engine_live2::fn_1f3dc0_m(m,a[0],a[1],[a[2],a[3]],self.rom,self),
             0x1f51dc => crate::engine_live2::fn_1f51dc_m(m,a[0],a[1]),
-            0x210398 => crate::engine_live2::fn_210398_m(m,a[0],a[1],a[2],a[3],self),
-            0x2279b4 => crate::engine_live2::fn_2279b4_m(m,a[0],a[1],[a[2],a[3]],0x5000,self),
-            0x1e3938 => crate::engine_live2::fn_1e3938_m(m,a[0],a[1],[a[2],a[3]],0x5100,self),
-            0x2319f0 => crate::engine_live2::fn_2319f0_m(m,a[0],a[1],[a[2],a[3]],0x5200,self),
+            0x210398 => crate::engine_live2::fn_210398_m(m,a[0],a[1],a[2],a[3],self.rom,self),
+            0x2279b4 => crate::engine_live2::fn_2279b4_m(m,a[0],a[1],[a[2],a[3]],0x5000,self,self.rom),
+            0x1e3938 => crate::engine_live2::fn_1e3938_m(m,a[0],a[1],[a[2],a[3]],0x5100,self,self.rom),
+            0x2319f0 => crate::engine_live2::fn_2319f0_m(m,a[0],a[1],[a[2],a[3]],0x5200,self,self.rom),
             0x1e5bbc => {
-                // fn_1e5bbc: the voice process entry. The existing port runs
-                // over the live arena; the frame is 16 disjoint guest bytes.
+
                 let mut args=[0u32;5];let n=a.len().min(5);args[..n].copy_from_slice(&a[..n]);
                 match crate::component_live_b::fn_1e5bbc_m(m,args,0x5300,self) {
                     Ok(rc)=>rc,
@@ -692,19 +619,10 @@ impl Host<'_> {
                 }
             }
             0x1d3314 => {
-                // fn_1d3314: the voice-component processor. The full engine
-                // serves it through the component boundary; the gate
-                // harness has no boundary server, so the existing lane-c2
-                // port runs here over the caller's arena. The frame is
-                // caller-owned and restored. The port's property fetch
-                // (0x175a1c) is served by the live Host's own arm through
-                // the single-region view; everything else rides the
-                // component lane's live calls.
+
                 let mut args = [0; 5];
                 args[..a.len().min(5)].copy_from_slice(a);
-                // Round 23: the frame lives in the excluded stack
-                // window below the caller's SP (never compared), so no
-                // save/restore is kept.
+
                 let s = PORT_FRAME_1D3314;
                 let mut bridge = ParamBridge { host: self };
                 let rc = {
@@ -727,45 +645,34 @@ impl Host<'_> {
                 }
             }
             0x1795f0 => {
-                // fn_1795f0: the broker's DataOpen for the lid dictionary
-                // query (args [broker, 0x1ecf64 "lid", 1, scratch]). The
-                // certified wiring is component_live_c2.rs:139 via
-                // engine_components2::fn_1795f0_live: US DataOpenGlobals,
-                // live_fs::FilePlatform (dot 0x8cd208/parent 0x8cd20c/
-                // locale 0, rb 0x1730f8) over the archive the cartridge
-                // filled (c3's linear window 0x14F3D148 is already in the
-                // arena), with LiveFileGlobals-style stack-window scratch.
-                // The DataHost carries real_log_args()==true and every
-                // dictionary/query/logger service rides this same Host
-                // dispatcher; no second dispatcher is built. The Rom lives
-                // in the caller-owned host; guest-sourced code addresses
-                // translate via to_us_guest, Rust US literals need none.
+
                 let broker = a.first().copied().unwrap_or(0);
                 let name = a.get(1).copied().unwrap_or(0);
                 let flags = a.get(2).copied().unwrap_or(0);
                 let out = a.get(3).copied().unwrap_or(0);
                 let globals = crate::boot_port_2c::BrokerGlobals {
-                    module: 0x8d7668,
-                    brokerstring_key: 0x177264,
-                    add_item_format: 0x177278,
-                    broker_label: 0x17729c,
-                    fullpath_key: 0x17823c,
-                    ctype_table: 0x8dc30c,
-                    parameters_desc: 0x8d7614,
-                    linguistic_desc: 0x8d773c,
+                    module: crate::rom_region::addr(self.rom,0x8d7668),
+                    brokerstring_key: crate::rom_region::addr(self.rom,0x177264),
+                    add_item_format: crate::rom_region::addr(self.rom,0x177278),
+                    broker_label: crate::rom_region::addr(self.rom,0x17729c),
+                    fullpath_key: crate::rom_region::addr(self.rom,0x17823c),
+                    ctype_table: crate::rom_region::addr(self.rom,0x8dc30c),
+                    parameters_desc: crate::rom_region::addr(self.rom,0x8d7614),
+                    linguistic_desc: crate::rom_region::addr(self.rom,0x8d773c),
                 }.data_open(BROKER_DATA_SCRATCH);
                 let mut files = crate::engine_components2::live_fs::FilePlatform {
                     env: crate::speech_part_1::ArchiveEnvironment {
-                        dot: 0x8cd208,
-                        parent: 0x8cd20c,
+                        dot: crate::rom_region::addr(self.rom,0x8cd208),
+                        parent: crate::rom_region::addr(self.rom,0x8cd20c),
                         locale: 0,
                     },
                     scratch: BROKER_FILE_SCRATCH,
-                    rb: 0x1730f8,
+                    rb: crate::engine_components2::rb_literal(self.rom),
                 };
+                let rom = self.rom;
                 let mut host = BrokerDataHost {
                     host: self,
-                    rom: crate::rom_region::Rom::Us,
+                    rom,
                     lit_cursor: BROKER_LIT_BASE,
                 };
                 crate::engine_components2::fn_1795f0_live(
@@ -773,12 +680,7 @@ impl Host<'_> {
                 )
             }
             0x1ecf68 => {
-                // fn_1ecf68: the lid dictionary query. Runs the certified
-                // lid_query flow with this same Host dispatcher, so the
-                // broker open (0x1795f0, bound above) rides the live path
-                // and the mapped lookup (0x26b718) names the next unbound
-                // entry. US literals need no translation; the Rom lives in
-                // the caller (Us here) for guest-sourced translates.
+
                 let p = a.first().copied().unwrap_or(0);
                 let a1 = a.get(1).copied().unwrap_or(0);
                 let a2 = a.get(2).copied().unwrap_or(0);
@@ -812,10 +714,7 @@ impl Host<'_> {
                     m.bytes[at..at + 4].copy_from_slice(b"lid\0");
                     self.call(m, 0x1795f0, &[broker, s + 8, 1, s])
                 } else {
-                    // C src/fn_1ecf68.c takes the 0x179f30 path when C-a4
-                    // (port-a3) is 0 (name at env+0x9e, handle out to s).
-                    // Rides the top-level 0x179f30 arm like the a3!=0 branch
-                    // rides 0x1795f0.
+
                     self.call(m, 0x179f30, &[broker, env.wrapping_add(0x9e), s])
                 };
                 if rc >= 0x8000_0000 {
@@ -835,12 +734,7 @@ impl Host<'_> {
                 self.call(m, 0x179f3c, &[broker, handle])
             }
             0x26b718 => {
-                // fn_26b718: the broker's mapped key lookup. The ARM
-                // succeeds (r0 0, wire-a-r19). The port reads the resource
-                // pair from p+0x10/0x14 itself, so the ARM's handle word is
-                // dropped and only `found` rides along. Services ride the
-                // lane-c2 OpenHost dispatch (allocator, archive range,
-                // logger, string helpers); the Rom lives in the caller.
+
                 let mut inner = crate::component_live_c2::OpenHost {
                     query: BROKER_QUERY_SCRATCH,
                     pending_release: None,
@@ -852,21 +746,19 @@ impl Host<'_> {
                 )
             }
             0x179f30 => {
-                // fn_179f30: the broker's DataOpen with flags 0. Top-level
-                // arm so every caller binds (1ecf68 a3==0 branch, c2's
-                // lid path, c4's table). Args [broker, name, out].
+
                 let broker = a.first().copied().unwrap_or(0);
                 let name = a.get(1).copied().unwrap_or(0);
                 let out = a.get(2).copied().unwrap_or(0);
                 let globals = crate::boot_port_2c::BrokerGlobals {
-                    module: 0x8d7668,
-                    brokerstring_key: 0x177264,
-                    add_item_format: 0x177278,
-                    broker_label: 0x17729c,
-                    fullpath_key: 0x17823c,
-                    ctype_table: 0x8dc30c,
-                    parameters_desc: 0x8d7614,
-                    linguistic_desc: 0x8d773c,
+                    module: crate::rom_region::addr(self.rom,0x8d7668),
+                    brokerstring_key: crate::rom_region::addr(self.rom,0x177264),
+                    add_item_format: crate::rom_region::addr(self.rom,0x177278),
+                    broker_label: crate::rom_region::addr(self.rom,0x17729c),
+                    fullpath_key: crate::rom_region::addr(self.rom,0x17823c),
+                    ctype_table: crate::rom_region::addr(self.rom,0x8dc30c),
+                    parameters_desc: crate::rom_region::addr(self.rom,0x8d7614),
+                    linguistic_desc: crate::rom_region::addr(self.rom,0x8d773c),
                 }.data_open(BROKER_DATA_SCRATCH);
                 let mut inner = crate::component_live_c2::OpenHost {
                     query: BROKER_QUERY_SCRATCH,
@@ -875,12 +767,7 @@ impl Host<'_> {
                 crate::leftovers_1::fn_179f30(m, broker, name, out, &globals, &mut inner)
             }
             0x179f3c => {
-                // fn_179f3c: the broker's DataClose. The ARM succeeds
-                // (r0 0, wire-a-r19). Round 20: the memory-passing form
-                // releases the block through boot_part_e::release on the
-                // arena in place (locks 0x1840fc/0x18423c inside the
-                // close, before the end log, as the ARM does). No
-                // recorded or deferred side effects.
+
                 let mut inner = crate::component_live_c2::OpenHost {
                     query: BROKER_QUERY_SCRATCH,
                     pending_release: None,
@@ -893,16 +780,10 @@ impl Host<'_> {
                 0
             }
             0x2031b0 => {
-                // fn_2031b0: the FE_DEPES fetch. The ARM calls it right
-                // after the 0x1d3314 return (wire-a-r21); the existing
-                // lane-c2 port runs here over the caller's arena with a
-                // caller-owned frame. Every guest call inside rides this
-                // same Host dispatcher through DepesBridge.
+
                 let mut args = [0; 5];
                 args[..a.len().min(5)].copy_from_slice(&a[..a.len().min(5)]);
-                // Round 23: the frame lives in the excluded stack
-                // window below the caller's SP (never compared), so no
-                // save/restore is kept.
+
                 let mut bridge = DepesBridge { host: self };
                 let rc = crate::component_live_c2::fn_2031b0_m(
                     m, DEPES_FRAME, args[0], args[1], args[4], &mut bridge,
@@ -913,10 +794,7 @@ impl Host<'_> {
                 rc
             }
             0x176f94 => crate::boot_port_1::fn_176f94(m, a[0], a[1], a[2], a[3]),
-            // fn_176fd4 (lane us r16): the null-pair copy. ARM is
-            // ldm r2,{r1,r2} / stm r0,{r1,r2} with r2 = D_8d7660, so
-            // this copies the live 8 bytes at 0x8d7660 to a[0].
-            // Reuses the certified boot_part_d port (1:1 with ROM).
+
             0x176fd4 => {
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::InvalidSnapshot);
@@ -925,36 +803,30 @@ impl Host<'_> {
                     crate::boot_part_d::fn_176fd4(
                         m,
                         a[0],
-                        [m.word(0x8d7660), m.word(0x8d7664)],
+                        [m.word(crate::rom_region::addr(self.rom,0x8d7660)), m.word(crate::rom_region::addr(self.rom,0x8d7664))],
                     );
                     0
                 }
             }
             0x17486c => {
-                // fn_17486c: the depes logger. The port needs 160 disjoint
-                // scratch bytes plus the heap host; both ride this Host.
+
                 crate::boot_port_1::fn_17486c(m, a[0], a[1], a[2], a[3], DEPES_LOG_SCRATCH, self)
             }
             0x17497c => crate::component_live_c2::fn_17497c(m, a[0]) as u32,
             0x2fbe50 => {
-                // fn_2fbe50: transcription-needed predicate. The ROM is a
-                // bare `MOV r0, #0; BX lr` stub (never format).
+
                 crate::speech_part_3::fn_2fbe50_m()
             }
-            // Round 20 removed these; round 21 restores them in ARM order
-            // (wire-a-r21 capture).
+
             0x17c8c0 => crate::fe_text::fold_17c8c0(a[0]),
             0x1960a8 => crate::frontend::find_substr(m.bytes, a[0], a[1]),
             0x2b331c => {
-                // fn_2b331c: the dictionary's language getter. Trivial
-                // read of the word at +0x44 into the out slot.
+
                 m.put_word(a[1], m.word(a[0].wrapping_add(0x44)));
                 0
             }
             0x2b3608 => {
-                // fn_2b3608: the dictionary engine. The port runs here
-                // with 0x7a00 scratch; heap/logger/format ride this Host
-                // through DictBridge, whose table reads fault loudly.
+
                 let mut bridge = DictBridge { host: self };
                 let rc = crate::speech_part_3::fn_2b3608(m, a[0], a[1], a[2], a[3], 0x7a00, &mut bridge);
                 if bridge.host.boot.fault.is_some() {
@@ -963,10 +835,7 @@ impl Host<'_> {
                 rc
             }
             0x300a10 => {
-                // fn_300a10: release the transcription entry list
-                // (C src/fn_300a10.c; 32-byte entries). Reached from
-                // fn_2e3f2c on speech_2 numbers; seg6 r5, restored r7
-                // (wire-a's round-20 rewrite dropped the arm).
+
                 if a.len() < 3 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -979,9 +848,7 @@ impl Host<'_> {
                 0
             }
             0x17bfc0 => {
-                // fn_17bfc0: narrow strlen with terminator included
-                // (C src/fn_17bfc0.c). The 282af0 case-4 capacity check
-                // rides it; seg6 r5, restored r7.
+
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -989,9 +856,7 @@ impl Host<'_> {
                 crate::component_live_c2::fn_17bfc0_m(m, a[0])
             }
             0x17bd74 => {
-                // fn_17bd74: narrow-to-UTF16 decode (C src/fn_17bd74.c
-                // calls fn_17bb44). Same decoder tables as the certified
-                // a2 0x17bb44 arm; seg6 r5, restored r7.
+
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -999,15 +864,14 @@ impl Host<'_> {
                 crate::component_live_c2::fn_17bd74_m(m, a[0], a[1])
             }
             0x17bb44 => {
-                // fn_17bb44: the narrow decoder. Inline tables mirroring
-                // the certified component_live_a2 arm; seg6 r5, restored r7.
+
                 if a.len() < 7 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                let extra: [u8; 256] = core::array::from_fn(|i| m.byte(0x8dc1f3 + i as u32));
-                let mask: [u8; 16] = core::array::from_fn(|i| m.byte(0x8dc1e0 + i as u32));
-                let base: [u8; 1024] = core::array::from_fn(|i| m.byte(0x8dc2f4 + i as u32));
+                let extra: [u8; 256] = core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom, 0x8dc1f3) + i as u32));
+                let mask: [u8; 16] = core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom, 0x8dc1e0) + i as u32));
+                let base: [u8; 1024] = core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom, 0x8dc2f4) + i as u32));
                 let t = crate::normalization::DecoderTables {
                     extra: &extra,
                     mask: &mask,
@@ -1020,9 +884,7 @@ impl Host<'_> {
                 )
             }
             0x2b4004 => {
-                // fn_2b4004: release a transcription item list
-                // (C src/fn_2b4004.c tail-calls 0x2e453c). Reached from
-                // fn_2e3f2c; seg6 r5, restored r7.
+
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1039,13 +901,10 @@ impl Host<'_> {
                 (a[0] != 0).then(|| (m.byte(m.word(a[0]) + 4), m.byte(m.word(a[0]) + 0x10c))),
             ),
             0x18f488 => crate::frontend::finish_request(),
-            // Round 20 removed these; round 21 restores them in ARM order.
+
             0x219554 => crate::component_live_c::fn_219554_m(m, a[0], a[1], a[2], a[3]),
             0x1ea4e0 => {
-                // fn_1ea4e0: the dictionary prefix lookup. The ARM runs
-                // the expansion (26bb54/26bb6c/26c1c0/17a1a4); the
-                // certified lane-b4 port implements that flow over this
-                // Host (round 22, src/fn_1ea4e0.c).
+
                 if a.len() < 7 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1058,16 +917,11 @@ impl Host<'_> {
                 }
                 rc
             }
-            // fn_17a1a4 and the broker range family: the archive range
-            // map read and its map/unmap/stream/file callees. The
-            // lookup's expansion walk reaches them with live state; the
-            // certified lane-c range port runs them over this Host with
-            // caller-owned stack-window scratch (round 22).
+
             0x17a1a4|0x179374|0x17c9d8|0x179208|0x1b2760|0x1b254c|0x1b2974|0x172de0|0x172d30 => {
                 crate::component_live_c::broker_range_live_m(m, f, a, RANGE17_SCRATCH, self)
             }
-            // The broker file methods the range ports use directly (round
-            // 22): pure over the arena, same call as the lane-c wrapper.
+
             0x4a794c => {
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1082,9 +936,7 @@ impl Host<'_> {
                 }
                 crate::speech_part_3::fn_4a78f0(m, a[0], a[1], a[2], a[3])
             }
-            // fn_26bb44: the mapped-section maximum read the 1ea4e0
-            // expansion path needs after 0x26b7ec (seg6 round 14).
-            // Pure over the arena, same binding as the lane hosts.
+
             0x26bb44 => {
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1092,9 +944,7 @@ impl Host<'_> {
                 }
                 crate::component_live_b3::fn_26bb44_m(m, a[0])
             }
-            // fn_1769d0/fn_195d90: the case-insensitive compare and the
-            // strlen the 0x26b7ec section scan needs (seg6 round 14).
-            // Certified fe_text ports, same binding as the lane hosts.
+
             0x1769d0 => {
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1109,8 +959,7 @@ impl Host<'_> {
                 }
                 crate::fe_text::strlen_195d90(m.bytes, a[0]) as u32
             }
-            // fn_196394: the heap alloc the sentence-match PCRE spill
-            // needs (pause r1). Same shape as calloc below (src/fn_196394.c).
+
             0x196394 => {
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1118,9 +967,7 @@ impl Host<'_> {
                 }
                 crate::boot_part_e::alloc(m, a[0], a[1], self)
             }
-            // fn_1963b8: the heap calloc the g2p table growth needs
-            // (seg6 round 14). Same shape as the lane hosts' binding:
-            // vtable fn1 dispatch, 0 on null args (src/fn_1963b8.c).
+
             0x1963b8 => {
                 if a.len() < 3 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1128,9 +975,7 @@ impl Host<'_> {
                 }
                 crate::boot_part_e::calloc(m, a[0], a[1], a[2], self)
             }
-            // fn_1963e0: the heap realloc the spelling records growth
-            // needs (round 22). The component bridge has no mapped
-            // realloc, so it rides this Host into the live heap port.
+
             0x1963e0 => {
                 if a.len() < 3 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1138,10 +983,7 @@ impl Host<'_> {
                 }
                 crate::boot_part_e::fn_1963e0(m, a[0], a[1], a[2], self)
             }
-            // fn_26b7ec: the mapped dictionary section load the acronym
-            // expansion's 1ea4e0 needs (c3 round 25). The certified
-            // lane-b3 port (src/fn_26b7ec.c 1:1); every nested call
-            // rides this Host. Same arm as the lane-b3 BrokerAdapter.
+
             0x26b7ec => {
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1149,10 +991,7 @@ impl Host<'_> {
                 }
                 crate::component_live_b3::fn_26b7ec_m(m, self, a[0], a[1], a[2], a[3])
             }
-            // fn_275204: the morphology config for a new 275928 mode
-            // (pause r4, src/fn_275204.c 1:1). The certified lane-b3 port
-            // runs over this Host; its key/getString scratch rides the
-            // caller-owned excluded window, saved/restored by the port.
+
             0x275204 => {
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1166,8 +1005,7 @@ impl Host<'_> {
                     crate::component_live_b3::FE275204_SCRATCH,
                 )
             }
-            // fn_2409d4/fn_21a1fc: the marker qsort and its comparator
-            // (round 22). The certified lane-b3 ports run over this Host.
+
             0x2409d4 => {
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1183,17 +1021,11 @@ impl Host<'_> {
                 crate::component_live_b3::fn_21a1fc_m(m, a[0], a[1])
             }
             0x1f0a90 => {
-                // fn_1f0a90: the voice/language component processor. Same
-                // bridge shape as 0x1d3314: the existing engine port runs
-                // here with a caller-owned frame over the arena. Takes
-                // the ARM's real arity: callers may pass 7 words, the
-                // port reads the first 5 (never panics on longer vectors).
+
                 let mut args = [0; 5];
                 let n = a.len().min(5);
                 args[..n].copy_from_slice(&a[..n]);
-                // Round 23: the frame lives in the excluded stack
-                // window below the caller's SP (never compared), so no
-                // save/restore is kept.
+
                 let s = PORT_FRAME_1F0A90;
                 let mut bridge = ParamBridge { host: self };
                 let rc = {
@@ -1216,27 +1048,20 @@ impl Host<'_> {
                 }
             }
             0x281aa4 => {
-                // fn_281aa4: the arena dictionary walk. Short and pure:
-                // advance the cursor at a[1] and return the next tag.
+
                 let current = m.word(a[1]);
                 let next = if current == 0 { m.word(a[0] + 4) } else { m.word(current + 8) };
                 m.put_word(a[1], next);
                 if next == 0 { 0 } else { m.word(next + 4) }
             }
             0x17bff4 => crate::component_live_c2::fn_17bff4_m(m, a[0]),
-            0x17bf70 => crate::component_live_c2::fn_17bf70_m(m, a[0], a[1]),
+            0x17bf70 => crate::component_live_c2::fn_17bf70_m(m, a[0], a[1], self.rom),
             0x176314 => {
                 crate::component_live_c2::fn_176314_m(m, a[0], a[1]);
                 0
             }
             0x202348 => {
-                // fn_202348: the dictionary lookup. The vtable-resolved
-                // lookup inside fn_282af0_m lands here with positional
-                // args (p, tag, text, len, out, arg5, lang). Tables are
-                // built live: type/disabled bytes via c2_dict_tables plus
-                // the class table at 0x8dc30c, US literals, 128 scratch
-                // bytes at 0x7900 (saved/restored by the port), and this
-                // Host as the Round3Host.
+
                 if a.len() < 7 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1251,9 +1076,9 @@ impl Host<'_> {
                     type_lens: [0; 3],
                     disabled: [0u8; 32],
                     disabled_len: 0,
-                    classes: core::array::from_fn(|i| m.half(0x8dc30c + i as u32 * 2)),
+                    classes: core::array::from_fn(|i| m.half(crate::rom_region::addr(self.rom,0x8dc30c) + i as u32 * 2)),
                 };
-                crate::component_live_c2::c2_dict_tables(m, &mut tables, crate::rom_region::Rom::Us);
+                crate::component_live_c2::c2_dict_tables(m, &mut tables, self.rom);
                 let t = crate::speech_part_2::DictionaryLiterals {
                     types: [
                         &tables.types[0][..tables.type_lens[0]],
@@ -1261,27 +1086,27 @@ impl Host<'_> {
                         &tables.types[2][..tables.type_lens[2]],
                     ],
                     disabled_mode: &tables.disabled[..tables.disabled_len],
-                    langcode: crate::rom_region::addr(crate::rom_region::Rom::Us, C2_LANGCODE_KEY),
-                    mlset: crate::rom_region::addr(crate::rom_region::Rom::Us, C2_MLSET_KEY),
-                    category: crate::rom_region::addr(crate::rom_region::Rom::Us, 0x8f9734),
-                    invalid_format: crate::rom_region::addr(crate::rom_region::Rom::Us, 0x155ec0),
-                    name: crate::rom_region::addr(crate::rom_region::Rom::Us, 0x14db07),
-                    empty: crate::rom_region::addr(crate::rom_region::Rom::Us, 0x8f972c),
-                    type_label: crate::rom_region::addr(crate::rom_region::Rom::Us, 0x201500),
+                    langcode: crate::rom_region::addr(self.rom, C2_LANGCODE_KEY),
+                    mlset: crate::rom_region::addr(self.rom, C2_MLSET_KEY),
+                    category: crate::rom_region::addr(self.rom, 0x8f9734),
+                    invalid_format: crate::rom_region::addr(self.rom, 0x155ec0),
+                    name: crate::rom_region::addr(self.rom, 0x14db07),
+                    empty: crate::rom_region::addr(self.rom, 0x8f972c),
+                    type_label: crate::rom_region::addr(self.rom, 0x201500),
                     trace_formats: [
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x202778),
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x2027a0),
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x2027a5),
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x1feedc),
+                        crate::rom_region::addr(self.rom, 0x202778),
+                        crate::rom_region::addr(self.rom, 0x2027a0),
+                        crate::rom_region::addr(self.rom, 0x2027a5),
+                        crate::rom_region::addr(self.rom, 0x1feedc),
                     ],
                     labels: [
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x1fee78),
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x14daf4),
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x1cd7e8),
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x1feed8),
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x155ea0),
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x1feed0),
-                        crate::rom_region::addr(crate::rom_region::Rom::Us, 0x14da60),
+                        crate::rom_region::addr(self.rom, 0x1fee78),
+                        crate::rom_region::addr(self.rom, 0x14daf4),
+                        crate::rom_region::addr(self.rom, 0x1cd7e8),
+                        crate::rom_region::addr(self.rom, 0x1feed8),
+                        crate::rom_region::addr(self.rom, 0x155ea0),
+                        crate::rom_region::addr(self.rom, 0x1feed0),
+                        crate::rom_region::addr(self.rom, 0x14da60),
                     ],
                 };
                 crate::speech_part_2::fn_202348(
@@ -1290,16 +1115,9 @@ impl Host<'_> {
                 )
             }
             0x195ae8 => crate::frontend::move_bytes(&mut *m.bytes, a[0], a[1], a[2]),
-            // Round 20 removed these; round 21 restores them in ARM order
-            // (wire-a-r21 capture): 0x17486c/0x17497c are back above.
-            // Still unbound: 0x17a1a4.
+
             0x21a25c => {
-                // fn_21a25c: the spelling processor. Same bridge shape
-                // as 0x1d3314: the existing lane-c2 port runs here with
-                // a caller-owned frame over the arena. The frame is fully
-                // Round 23: the frame lives in the excluded stack
-                // window below the caller's SP (never compared), so no
-                // save/restore is kept. The port's locals reach s+450.
+
                 let mut args = [0; 5];
                 let n = a.len().min(5);
                 args[..n].copy_from_slice(&a[..n]);
@@ -1325,11 +1143,7 @@ impl Host<'_> {
                 }
             }
             0x1756d0 => {
-                // fn_1756d0: the raw registry lookup. Replicates the
-                // lane-c2 dispatch: zero the out words, then
-                // lookup_param_m with the 176f2c/176f5c lock flavor and
-                // a NUL-bounded byte compare. Pure over the arena plus
-                // the lock calls, which ride this Host.
+
                 struct ParamLock<'a, 'b> { host: &'a mut Host<'b>, word: u32 }
                 impl crate::reentrant2::StateLockM for ParamLock<'_, '_> {
                     fn acquire_m(&mut self, bytes: &mut [u8]) -> u32 {
@@ -1383,10 +1197,7 @@ impl Host<'_> {
                 rc
             }
             0x21958c => {
-                // fn_21958c: the depes option fetch. Mirror of the
-                // certified engine_components2::read_call logic: validate
-                // the handle, then read first/second at +56/+60 and write
-                // the selected word to a[2]. Pure over the arena.
+
                 struct Validator { object: u32, key: u32 }
                 impl crate::depes::HandleValidator for Validator {
                     fn validate(&mut self, _: u32, tag: u32, size: u32) -> u32 {
@@ -1410,14 +1221,7 @@ impl Host<'_> {
                 }
             }
             0x206be4 => {
-                // Round 24 (seg2): word expansion. The certified
-                // lane-c4 port runs here over C4Calls, exactly like
-                // engine_live_seg2::run_206be4: p, key and the node
-                // handle ride the register args, and the scheduler
-                // passes the per-component changed byte as the fifth
-                // arg (direct replays read it from the guest stack).
-                // Scratch is the excluded-stack window below (zeroed
-                // on entry like the tests' fresh arenas).
+
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1430,8 +1234,8 @@ impl Host<'_> {
                     Ok(v) => v,
                     Err(e) => { self.boot.fault = Some(e); return 0x80002001; }
                 };
-                let (rc, unbound) = crate::engine_live_seg2::run_206be4(
-                    &mut sparse, a[0], a[1], [a[2], a[3]], changed, SEG2_C4_SCRATCH, &mut plat,
+                let (rc, unbound) = crate::engine_live_seg2::run_206be4_rom(
+                    &mut sparse, a[0], a[1], [a[2], a[3]], changed, SEG2_C4_SCRATCH, &mut plat, self.rom,
                 );
                 match rc {
                     Ok(rc) => {
@@ -1445,16 +1249,14 @@ impl Host<'_> {
                 }
             }
             0x1dd914 => {
-                // Round 24 (seg2): punctuation. The certified lane-c
-                // port runs here over FeTextLive, exactly like
-                // engine_live_seg2::run_1dd914.
+
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
                 let changed = if a.len() > 4 { a[4] } else { m.word(0xe0ff938) };
                 let mut plat = HostPlat(&mut *self.boot.platform);
-                let (rc, unbound) = crate::engine_live_seg2::run_1dd914(m, a, changed, &mut plat);
+                let (rc, unbound) = crate::engine_live_seg2::run_1dd914_rom(m, a, changed, &mut plat, self.rom);
                 if let Some(e) = unbound {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: e });
                     return 0x80002001;
@@ -1465,14 +1267,12 @@ impl Host<'_> {
             0x1f1440 | 0x1f3248 => seg3_pos_arm(self, m, f, a),
             0x1df780 => seg3_phrasing_arm(self, m, f, a),
             0x1e7908 => {
-                // Round 24 (seg4): normout root. The certified lane-b
-                // port runs here over its certified host, exactly
-                // like engine_live_seg4::run_1e7908.
+
                 if a.len() < 5 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                let (rc, unbound) = crate::engine_live_seg4::run_1e7908(m, a, &mut *self.boot.platform);
+                let (rc, unbound) = crate::engine_live_seg4::run_1e7908_rom(m, a, &mut *self.boot.platform, self.rom);
                 if let Some(e) = unbound {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: e });
                     return 0x80002001;
@@ -1480,18 +1280,12 @@ impl Host<'_> {
                 rc
             }
             0x1f51f8 => {
-                // Round 24 (seg4): global stage root. The certified
-                // prosody port runs here over the live global host,
-                // exactly like engine_live_seg4::run_1f51f8 (guest NUL
-                // and staging writes included). The fold of those
-                // writes into the port needs prosody.rs signature
-                // surgery plus seg4-file edits, both outside lane
-                // rights; see the round-24 progress file.
+
                 if a.len() < 5 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                let (rc, unbound) = crate::engine_live_seg4::run_1f51f8(m, a, &mut *self.boot.platform);
+                let (rc, unbound) = crate::engine_live_seg4::run_1f51f8_rom(m, a, &mut *self.boot.platform, self.rom);
                 if let Some(e) = unbound {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: e });
                     return 0x80002001;
@@ -1499,9 +1293,7 @@ impl Host<'_> {
                 rc
             }
             0x1e3b14 => seg7_marker_arm(self, m, f, a),
-            // Lane us r23: SET PARAM marker parser and its property
-            // helpers. The 1:1 ports live in component_live_b; the scratch
-            // word 0x500 is saved and restored around the call.
+
             0x2c1e2c => {
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1513,7 +1305,7 @@ impl Host<'_> {
                 rc
             }
             0x1759a0 => {
-                // fn_1759a0: set the named string parameter (lane us r23).
+
                 if a.len() < 3 || a[0] == 0 || a[1] == 0 || a[2] == 0 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1528,7 +1320,7 @@ impl Host<'_> {
                 rc
             }
             0x175a24 => {
-                // fn_175a24: clear the named parameter (lane us r23).
+
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1539,15 +1331,12 @@ impl Host<'_> {
                 rc
             }
             0x1966ac => {
-                // Map lookup for the property helpers (lane us r23).
+
                 return crate::speech_part_1::parameter_call_m(m, f, a, 0x1800, self);
             }
             0x1530d0 => seg7_pump_arm(self, m, f, a),
             0x84c160 => {
-                // fn_84c160: the owned range predicate on the back-half
-                // chunk path. The certified lane-back port runs here over
-                // this Host (which already satisfies boot_part_b::Host),
-                // exactly like BackHost's own 0x84c160 arm.
+
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1555,23 +1344,12 @@ impl Host<'_> {
                 crate::speech_part_3::fn_84c160(m, a[0], a[1], self)
             }
             0x2104b0 => {
-                // Round 27b (seg5 r2): selection pre-processing. The
-                // certified lane-c port runs here over Rust-local
-                // workspace plus the disjoint guest window 0xe000000
-                // (seg5 convention, compare-excluded), exactly like
-                // engine_live_seg5::Seg5Host::call_root. Nested calls
-                // ride this Host (the same dispatcher the port was
-                // certified against through call_live_m); a nested
-                // first-unbound lands in self.boundary and propagates
-                // as the gate stop. seg5 6/6 + stretch certified.
+
                 if a.len() < 5 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                // c3 r29: size the saved frame to the largest generatable
-                // rewrite datum (ARM passes heap pointers with no staging
-                // cap; 4096 was just enough for speech_1 but 182 stages
-                // 4152 event bytes in one append).
+
                 let mut saved = [0u8; 65536];
                 let mut events = [crate::frontend::TextEvent::default(); 512];
                 let mut event_bytes = [0u8; 512 * 24];
@@ -1585,10 +1363,7 @@ impl Host<'_> {
                 }
             }
             0x2a762c => {
-                // fn_2a762c: the end-of-synthesis wrap-up (round 27b).
-                // The port runs here over the caller's disjoint scratch
-                // (saved/restored); nested pool/log calls ride this
-                // Host. A nested first-unbound lands in self.boundary.
+
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1614,19 +1389,7 @@ impl Host<'_> {
                 self.boundary=Some(engine::VoiceBoundary{entry:f,args,event:None});0x80002001
             }
             0x741e8c => {
-                // fn_741e8c: pre-scheduler song-note generator (sing
-                // only; round 27d, c3 r16). The certified engine_sing
-                // port runs here; the 14 integer stack words ride
-                // a[4..18] (same convention as scheduler-root stack
-                // args: tail_pause .. capacity). The two floats are not
-                // visible to the dispatcher (hardfp s0/s1), so derive
-                // them the way the sole caller fn_7414e0 fills them
-                // (verified word-for-word on 5 ARM runs: s0 ==
-                // (float)(s16 @ r1+0x20c), s1 == f32 @ r1+0x210).
-                // r0 is the output end pointer, not the start. No host
-                // services: song_notes allocates nothing and calls no
-                // Host method. Certified 0-diff on 5 songs
-                // (tests/engine_live_wl_sing_1.rs).
+
                 if a.len() < 18 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1645,10 +1408,7 @@ impl Host<'_> {
                 })
             }
             0x24ac00 => {
-                // fn_24ac00: the token diagnostic pass inside the 1e4b7c
-                // subtree. The certified speech_part_1 port runs here
-                // over this Host with stack-window scratch 0x4800
-                // (round 23, same wiring as component_live_b.rs).
+
                 if a.len() < 3 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1656,8 +1416,7 @@ impl Host<'_> {
                 crate::speech_part_1::fn_24ac00(m, a[0], a[1], a[2], 0x4800, self)
             }
             0x24c470 => {
-                // fn_24c470: the token diagnostic. Same wiring as
-                // component_live_b.rs (round 23).
+
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1666,11 +1425,7 @@ impl Host<'_> {
                 crate::speech_part_2::fn_24c470(m, a[0], &literals, 0x5800, self)
             }
             0x24bbc8 => {
-                // fn_24bbc8: the token diagnostic inside the 1e4b7c
-                // subtree. The certified speech_part_2 port runs here
-                // over this Host (which already satisfies Round3Host),
-                // with US literals and stack-window scratch 0x5000,
-                // exactly like component_live_b.rs (round 23).
+
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1680,11 +1435,7 @@ impl Host<'_> {
                 crate::speech_part_2::fn_24bbc8(m, a[0], &shared, &literals, 0x5000, self)
             }
             0x249cec => {
-                // fn_249cec: the rule diagnostic inside the 1e4b7c
-                // subtree. The certified speech_part_1 port runs here
-                // over this Host with scratch 0x4200 (round 23, same
-                // wiring as component_live_b2::TokenHost, which supplies
-                // the scratch constant: the guest passes only [p]).
+
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1692,10 +1443,7 @@ impl Host<'_> {
                 crate::speech_part_1::fn_249cec(m, a[0], 0x4200, self)
             }
             0x1ff4fc => {
-                // fn_1ff4fc: the prompt insertion inside the 200e64
-                // subtree. The certified lane-c port runs here over this
-                // Host with stack-window scratch 0xe0ff600, exactly like
-                // tests/component_live_c.rs (round 23).
+
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1703,17 +1451,7 @@ impl Host<'_> {
                 crate::component_live_c::insert_prompt_live_m(m, args, 0xe0ff600, self)
             }
             0x1e4b7c => {
-                // fn_1e4b7c: the token root. The certified lane-b2 port
-                // runs here over its own TokenHost (round 23), exactly
-                // like tests/component_live_b2.rs: p, tag and the db
-                // pair ride the register args, and the scheduler passes
-                // the per-component active byte (act+i) as the fifth
-                // arg, exactly as fn_15429c pushes it for the ARM. The
-                // TokenHost owns the token/rule/diagnostic subtree;
-                // shared heap/stream calls use the same guest heap.
-                // Four register args (direct replay: fifth arg rides
-                // the entry image's guest stack) or five (scheduler:
-                // fifth arg already computed).
+
                 let mut args5 = [0u32; 5];
                 if a.len() >= 5 {
                     args5.copy_from_slice(&a[..5]);
@@ -1729,9 +1467,9 @@ impl Host<'_> {
                     platform: self.boot.platform,
                     fault: None,
                     scratch: 0x600,
+                    rom: self.rom,
                 };
-                // seg6 r21: p->context->allocator (src/fn_1e4b7c.c):
-                // handle r0 -> process [r0] -> context [process] -> heap [context+4].
+
                 let heap = m.word(m.word(m.word(args5[0])) + 4);
                 let mut host = crate::component_live_b2::TokenHost { inner: live, heap };
                 let rc = crate::component_live_b2::fn_1e4b7c_live(m, args5, end, 0x600, &mut host);
@@ -1742,14 +1480,7 @@ impl Host<'_> {
                 rc
             }
             0x200e64 => {
-                // fn_200e64: the prompt-orthography component. The
-                // certified lane-c port runs here over this Host (round
-                // 23): p, tag and the db pair ride the register args,
-                // and the scheduler passes the per-component active
-                // byte (act+i) as the fifth arg, exactly as fn_15429c
-                // pushes it for the ARM. Scratch is the lane-c stack
-                // window 0xe0ff700, exactly like
-                // tests/component_live_c.rs.
+
                 let active = if a.len() > 4 {
                     a[4]
                 } else if a.len() == 4 {
@@ -1773,19 +1504,7 @@ impl Host<'_> {
                 rc
             }
             0x1d5ba8 => {
-                // fn_1d5ba8: the component after the spelling processor.
-                // The certified lane-c port runs here over this Host
-                // (round 23): p, tag and the db pair ride the register
-                // args, and the scheduler passes the per-component
-                // active byte (act+i) as the fifth arg, exactly as
-                // fn_15429c pushes it for the ARM. Scratch is the
-                // lane-c stack window 0xe0ff080, exactly like
-                // tests/component_live_c.rs.
-                // The scheduler passes the per-component active byte
-                // (act+i) as the fifth arg, exactly as fn_15429c pushes
-                // it for the ARM. Direct replays pass four register
-                // args; their entry image carries the ARM stack, so the
-                // fifth arg is read there.
+
                 let pending = if a.len() > 4 {
                     a[4]
                 } else if a.len() == 4 {
@@ -1794,9 +1513,14 @@ impl Host<'_> {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 };
+                let env = match self.rom {
+                    crate::rom_region::Rom::Eu => crate::component_live_c::process_environment_eu(),
+                    crate::rom_region::Rom::Kr => crate::component_live_c::process_environment_kr(),
+                    crate::rom_region::Rom::Us => crate::component_live_c::process_environment_us(),
+                };
                 let rc = crate::component_live_c::fn_1d5ba8_m(
                     m, a[0], a[1], [a[2], a[3]], pending,
-                    &crate::component_live_c::process_environment_us(),
+                    &env,
                     0xe0ff080, self,
                 );
                 if self.boot.fault.is_some() {
@@ -1805,10 +1529,7 @@ impl Host<'_> {
                 rc
             }
             0x15bab0 => {
-                // fn_15bab0: the database reset the 1d5ba8 component
-                // runs (round 23). The certified lane-c port runs here
-                // over this Host with its stack-window scratch
-                // 0xe0fef00, exactly like tests/component_live_c.rs.
+
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1820,13 +1541,11 @@ impl Host<'_> {
                 rc
             }
             0x15c544 => {
-                // fn_15c544: the child-record binding the 1d5ba8 reset
-                // runs. Served by the existing engine CoreCalls over a
-                // single-region view (round 23).
+
                 let mut regions = [engine::Region { base: m.base, bytes: m.bytes }];
                 let mut sparse = engine::Memory::new(&mut regions).expect("current arena");
                 match crate::engine_components::InternalCalls::call(
-                    &mut crate::engine_components::CoreCalls,
+                    &mut crate::engine_components::RegionalCalls { rom: self.rom },
                     &mut sparse,
                     f,
                     a,
@@ -1839,9 +1558,7 @@ impl Host<'_> {
                 }
             }
             0x15cdcc => {
-                // fn_15cdcc: the field write the 1d5ba8 component runs.
-                // The certified lane-c port runs here over this Host,
-                // exactly like tests/component_live_c.rs (round 23).
+
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1849,11 +1566,7 @@ impl Host<'_> {
                 crate::component_live_c::write_field_live_m(m, args, self)
             }
             0x1ede44 => {
-                // fn_1ede44: the annotation the 1d5ba8 component runs.
-                // The certified lane-c port runs here over this Host
-                // with the US speech literals and stack-window scratch
-                // 0xe0fed00, exactly like tests/component_live_c.rs.
-                // (Round 23: binding in place, no port change.)
+
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1867,13 +1580,12 @@ impl Host<'_> {
                 )
             }
             0x15d378 => {
-                // fn_15d378: the field-data read inside the 1d5ba8
-                // subtree. Served by the existing lane-c port (round 23).
+
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 };
-                match crate::component_live_c::field_data_m(m, args, 0x8d7ca0) {
+                match crate::component_live_c::field_data_m(m, args, crate::rom_region::addr(self.rom, 0x8d7ca0)) {
                     Ok(rc) => rc,
                     Err(e) => {
                         self.boot.fault = Some(e);
@@ -1882,10 +1594,7 @@ impl Host<'_> {
                 }
             }
             0x15bf74 => {
-                // fn_15bf74: the child creation inside the 1d5ba8
-                // subtree. The certified lane-c port runs here over this
-                // Host with stack-window scratch 0xe0fef80, exactly like
-                // tests/component_live_c.rs (round 23).
+
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1893,10 +1602,7 @@ impl Host<'_> {
                 crate::component_live_c::create_child_live_m(m, args, 0xe0fef80, self)
             }
             0x15c1e4 => {
-                // fn_15c1e4: the record clone inside the 1d5ba8 subtree.
-                // The certified lane-c port runs here over this Host
-                // with stack-window scratch 0xe0fef80, exactly like
-                // tests/component_live_c.rs (round 23).
+
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1904,13 +1610,12 @@ impl Host<'_> {
                 crate::component_live_c::clone_record_live_m(m, args, 0xe0fef80, self)
             }
             0x15db2c => {
-                // fn_15db2c: the property read. Inline port matching
-                // component_live_b's Host arm (round 23).
+
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                let at = crate::rom_region::addr(crate::rom_region::Rom::Us, 0x8d7bb8) + a[2] * 8;
+                let at = crate::rom_region::addr(self.rom, 0x8d7bb8) + a[2] * 8;
                 let table = [[m.word(at), m.word(at + 4)]];
                 let mut out = 0u32;
                 let rc = crate::linguistic::field_property(&table, 0, &mut out);
@@ -1918,10 +1623,7 @@ impl Host<'_> {
                 rc
             }
             0x15d594 => {
-                // fn_15d594: the field-state read. Served by the existing
-                // lane-c core dispatcher, which owns this family (round 23).
-                // The scheduler passes five register args; direct replays
-                // pass the entry image's stack slot as needed.
+
                 let mut args5 = [0u32; 5];
                 if a.len() >= 5 {
                     args5.copy_from_slice(&a[..5]);
@@ -1932,7 +1634,7 @@ impl Host<'_> {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                match crate::component_live_c::core_call_m(m, f, &args5) {
+                match crate::component_live_c::core_call_m_rom(m, f, &args5, self.rom) {
                     Ok(rc) => rc,
                     Err(e) => {
                         self.boot.fault = Some(e);
@@ -1941,10 +1643,7 @@ impl Host<'_> {
                 }
             }
             0x15b518 => {
-                // fn_15b518: the db clear inside the 2104b0 subtree.
-                // Served by the existing lane-c port (seg5 round 1 gap
-                // fill: scratch 0xe0fed00 matches the certified
-                // component_live_c test convention).
+
                 let ab: [u32; 2] = match a.try_into() {
                     Ok(ab) => ab,
                     Err(_) => {
@@ -1955,10 +1654,8 @@ impl Host<'_> {
                 crate::component_live_c::clear_db_live_m(m, ab, 0xe0fed00, self)
             }
             0x15d6c4 => {
-                // fn_15d6c4: the enquire-child read. Served by the
-                // existing lane-c core dispatcher (seg5 round 2 gap
-                // fill: the field-state family core_call_m owns).
-                match crate::component_live_c::core_call_m(m, f, a) {
+
+                match crate::component_live_c::core_call_m_rom(m, f, a, self.rom) {
                     Ok(rc) => rc,
                     Err(e) => {
                         self.boot.fault = Some(e);
@@ -1967,9 +1664,7 @@ impl Host<'_> {
                 }
             }
             0x15c7d8 => {
-                // fn_15c7d8: the record link inside the 1d5ba8 subtree.
-                // Served by the existing lane-c core dispatcher, which
-                // owns this record-link family (round 23).
+
                 match crate::component_live_c::core_call_m(m, f, a) {
                     Ok(rc) => rc,
                     Err(e) => {
@@ -1979,18 +1674,7 @@ impl Host<'_> {
                 }
             }
             0x1cca64 => {
-                // fn_1cca64: the sentence dump the scheduler runs. The
-                // ARM takes the below-verbosity early return on this
-                // request (template copy, validate, level, return 0; no
-                // dump: 8 entries, no 1cc6c8/15daa8). The linguistic
-                // port runs here (round 23): the validate and level
-                // calls ride this Host exactly like the ARM's, the
-                // 66-byte template is read from D_8d7b56 and the dirty
-                // byte from owner+52 like fn_15daa8. The dump tables
-                // and walk callbacks below are provably dead on this
-                // request (the return cert 0-diffs every persistent
-                // byte); they early-exit so a future request that
-                // reaches the dump fails its cert instead of crashing.
+
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -2000,15 +1684,11 @@ impl Host<'_> {
                     return 0x89202008;
                 }
                 let level = self.call(m, 0x173fd8, &[m.word(m.word(a[0]) + 16)]);
-                // An error level is not below verbosity: like the C it
-                // falls through to the dump path (and its cert).
+
                 if level < 100 {
                     return 0;
                 }
-                // The scheduler passes the flag as the fifth arg,
-                // exactly as fn_15429c pushes it for the ARM (1 on this
-                // request). Only reached when level is >= 100, which
-                // never happens here.
+
                 let flag = if a.len() > 4 {
                     a[4]
                 } else if a.len() == 4 {
@@ -2046,11 +1726,7 @@ impl Host<'_> {
                 )
             }
             0x15d0c4 => {
-                // fn_15d0c4: the field read inside the 1d5ba8 subtree.
-                // The certified lane-c port runs here with descriptor
-                // table 0x8d7ca0, frame 0xe0feb00 and a caller-owned
-                // 64-byte workspace, exactly like
-                // tests/component_live_c.rs (round 23).
+
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -2058,7 +1734,7 @@ impl Host<'_> {
                 match crate::component_live_c::read_field_m(
                     m,
                     args,
-                    0x8d7ca0,
+                    crate::rom_region::addr(self.rom, 0x8d7ca0),
                     0xe0feb00,
                     &mut [0u8; 64],
                 ) {
@@ -2086,17 +1762,17 @@ impl Host<'_> {
                 m.put_word(0x380,saved);
                 crate::frontend::set_pipeline_pos(m.bytes,Some(a[0]),a[1],a[2],&scripts)
             }
+            0x17b058 => m.boot_parameter_call(self, f, a, 0x0e0f7e00).expect("registry lookup"),
             0x19611c => {
                 let mut pair = [0;8];
-                for i in 0..8 { pair[i] = m.byte(0x8d7660+i as u32); }
+                for i in 0..8 { pair[i] = m.byte(crate::rom_region::addr(self.rom,0x8d7660)+i as u32); }
                 let half = if a[0] == 0 { None } else { Some(m.half(a[0])) };
                 let mut ctx=0;
-                let rc=crate::frontend::resolve_engine_context(a[0],half,a[1],&pair,0x8d7640,&mut ctx);
+                let rc=crate::frontend::resolve_engine_context(a[0],half,a[1],&pair,crate::rom_region::addr(self.rom,0x8d7640),&mut ctx);
                 m.put_word(a[2],ctx); rc
             }
             0x176f2c | 0x176f5c => {
-                // Legacy lock entries only call with the scalar lock target.
-                // Capture that target, end the immutable borrow, then reenter.
+
                 let mut target = None;
                 let p=(a[0]!=0).then_some(a[0]);
                 let rc=if f==0x176f2c {
@@ -2112,63 +1788,51 @@ impl Host<'_> {
             }
             0x195d58 => crate::frontend::compare_str(&m.bytes[a[0] as usize..],&m.bytes[a[1] as usize..]) as u32,
             0x2c322c => {
-                // fn_2c322c: pronunciation conversion. Bound through
-                // run_block's block_call_m pronounce arm
-                // (engine_live_render::LiveRender::pronounce), which runs
-                // render_part_c2::fn_2c322c_m with the guest heap on the
-                // arena. A direct dispatch here names the entry, like the
-                // other unbound entries below.
+
                 let mut args = [0; 7];
                 args[..a.len().min(7)].copy_from_slice(&a[..a.len().min(7)]);
                 self.boundary = Some(engine::VoiceBoundary { entry: f, args, event: None });
                 0x80002001
             }
             0x2be984 => {
-                // fn_2be984: sentence-pattern match + span insert. Every
-                // address is PC-relative ROM proven from the image: labels
-                // "using LIST"/"using ENDLIST" (0x2beeb4/0x2beec0), the
-                // regex format (0x2beed0), nfa words/format (0x2bf128/0x2bf12c
-                // over 0x2bf130), the "neosnbs" name (0x2bf120) and the
-                // parser category/formats (D_9c5650/D_9c577c/D_9c57c4).
-                // The PCRE tables are borrowed from the key snapshot;
-                // property keys are immutable, so this holds no borrow of
-                // the live arena the match mutates.
+
                 let snap = self.snap;
+                let eu = |us: u32| crate::rom_region::addr(self.rom, us) as usize;
                 let mut escapes = [0i16; 75];
                 for (i, slot) in escapes.iter_mut().enumerate() {
-                    let at = 0x9140e4 + i * 2;
+                    let at = eu(0x9140e4) + i * 2;
                     *slot = i16::from_le_bytes(snap[at..at + 2].try_into().unwrap());
                 }
                 let mut utf8_limits = [0i32; 6];
                 for (i, slot) in utf8_limits.iter_mut().enumerate() {
-                    let at = 0x9147ac + i * 4;
+                    let at = eu(0x9147ac) + i * 4;
                     *slot = i32::from_le_bytes(snap[at..at + 4].try_into().unwrap());
                 }
                 let mut utf8_first = [0i32; 6];
                 for (i, slot) in utf8_first.iter_mut().enumerate() {
-                    let at = 0x9147c4 + i * 4;
+                    let at = eu(0x9147c4) + i * 4;
                     *slot = i32::from_le_bytes(snap[at..at + 4].try_into().unwrap());
                 }
                 let mut utf8_mask = [0u32; 6];
                 for (i, slot) in utf8_mask.iter_mut().enumerate() {
-                    let at = 0x9147dc + i * 4;
+                    let at = eu(0x9147dc) + i * 4;
                     *slot = u32::from_le_bytes(snap[at..at + 4].try_into().unwrap());
                 }
                 let tables = crate::regex::PcreTables {
-                    op_lengths: snap[0x914092..0x914192].try_into().unwrap(),
-                    ctypes: snap[0x91426c..0x91436c].try_into().unwrap(),
-                    default_tables: snap[0x91436c..0x9147ac].try_into().unwrap(),
+                    op_lengths: snap[eu(0x914092)..eu(0x914092) + 0x100].try_into().unwrap(),
+                    ctypes: snap[eu(0x91426c)..eu(0x91426c) + 0x100].try_into().unwrap(),
+                    default_tables: snap[eu(0x91436c)..eu(0x91436c) + 0x440].try_into().unwrap(),
                     escapes: &escapes,
                     utf8_limits: &utf8_limits,
                     utf8_first: &utf8_first,
-                    utf8_cont: snap[0x9147f4..0x914834].try_into().unwrap(),
+                    utf8_cont: snap[eu(0x9147f4)..eu(0x9147f4) + 0x40].try_into().unwrap(),
                     utf8_mask: &utf8_mask,
-                    rep_min: snap[0x914044..0x91404a].try_into().unwrap(),
-                    rep_max: snap[0x91404a..0x914050].try_into().unwrap(),
+                    rep_min: snap[eu(0x914044)..eu(0x914044) + 6].try_into().unwrap(),
+                    rep_max: snap[eu(0x91404a)..eu(0x91404a) + 6].try_into().unwrap(),
                     posix_lengths: &[],
                     posix_names: &[],
                     posix_maps: &[],
-                    ctypes_overspill: &snap[0x9147ac..0x9147ac + 4096],
+                    ctypes_overspill: &snap[eu(0x9147ac)..eu(0x9147ac) + 4096],
                 };
                 let mut program = [0u8; 2048];
                 let mut subject = [0u8; 2048];
@@ -2191,10 +1855,10 @@ impl Host<'_> {
                 };
                 let mut eos = [0u8; 40];
                 eos.copy_from_slice(&snap[0x9c56f4..0x9c56f4 + 40]);
-                let separators = crate::engine_live_render::separators_of(m);
+                let separators = crate::engine_live_render::separators_of(m,self.rom);
                 let engine = crate::render_part_c::Environment {
-                    cached_handle: core::array::from_fn(|i| m.byte(0x8d7660 + i as u32)),
-                    default_context: 0x8d7640,
+                    cached_handle: core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom,0x8d7660) + i as u32)),
+                    default_context: crate::rom_region::addr(self.rom,0x8d7640),
                 };
                 let parser = crate::render_part_c::ParserData {
                     eos: &eos,
@@ -2214,10 +1878,7 @@ impl Host<'_> {
                 crate::render_part_c::fn_2be984(m, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8] as i32, &engine, &sentence, &mut regex, self)
             }
             0x1748a0 => {
-                // fn_1748a0: the log fan-out. The ARM reports zero without
-                // touching the arena when the object is null or subscribes
-                // nothing; otherwise it calls each subscriber and the
-                // object's own sink, keeping the last error.
+
                 if a[0] == 0 || m.byte(a[0] + 64) == 0 {
                     0
                 } else {
@@ -2247,10 +1908,7 @@ impl Host<'_> {
                     r
                 }
             }
-            // The guest heap's method table. fn_4a779c/fn_4a7758 read the
-            // raw entry from the object's own vtable and reenter with the
-            // alignment the ARM passes; the locked ops run the same ports
-            // the component lanes use, over this same arena.
+
             0x4a779c => {
                 let target = m.word(m.word(a[0]) + 8);
                 self.call(m, target, &[a[0], a[1], 4])
@@ -2270,6 +1928,7 @@ impl Host<'_> {
             0x1852e8 => crate::boot_port_1::fn_1852e8(m, a[0], a[1], a[2]),
             0x19b814 => crate::boot_port_1::fn_19b814(m, a[0], a[1], a[2], a[3], a[4]),
             0x183edc => {
+                if m.word(a[0]) == 0 { self.boot.fault=Some(engine::Error::InvalidSnapshot); return 0x80002001; }
                 let handle = self.boot.platform.arbiter_address();
                 crate::boot_part_b2::fn_183edc(m, a[0], handle, self); 0
             }
@@ -2282,21 +1941,20 @@ impl Host<'_> {
                 };
                 m.fn_165d00(self, &g, a[0]); 0
             }
-            0x15b758 => crate::db_live::create_record_m(self,m,a[0],a[1],a[2],0x8d8274,0x8d7ca0),
+            0x15b758 => crate::db_live::create_record_m(self,m,a[0],a[1],a[2],crate::rom_region::addr(self.rom,0x8d8274),crate::rom_region::addr(self.rom,0x8d7ca0)),
             0x174aac => {
-                let ticket=core::array::from_fn(|i|m.word(0x8d7614+i as u32*4));
+                let ticket=core::array::from_fn(|i|m.word(crate::rom_region::addr(self.rom,0x8d7614)+i as u32*4));
                 crate::db_live::fn_174aac_m(self,m,a[0],a[1],a[2],ticket)
             }
             0x175c40 => crate::db_live::append_owner_m(self,m,a[0],a[1],0x340),
-            // fn_15b5f0 LingDb ObjClose (c3 round 23, 1:1 with src/fn_15b5f0.c
-            // via the certified db_live::close_db_m: validate 0xb2c2/0x38,
-            // LD_clear, ObjClose frees). The drain's pcm/mk close resolves
-            // this address from the output vtable slot (vt+0x24 == the
-            // TtsStreamVt.close slot per src/fn_151914.c) and dispatches it
-            // here; same for any scheduler-path hit. Zeroed DbData matches
-            // the db lane's strict-arena cert config and the drain aux path.
+
             0x15b5f0 => crate::db_live::close_db_m(self,m,a[0],a[1],&crate::db_live::DbData{module:0,open_begin:0,open_end:0,open_detail:0,reset_begin:0,reset_end:0,pool_name_word:0,keys:[0;5]}),
-            _ => self.boot.invoke(m,f,a),
+            _ => {
+                if self.rom == crate::rom_region::Rom::Eu && f == 0x14e084 {
+                    return self.call(m, 0x14dfc0, a);
+                }
+                self.boot.invoke(m,f,a)
+            }
         }
     }
 }
@@ -2307,6 +1965,7 @@ impl PoolHooksM for Host<'_> {
     }
 }
 impl DbHooksM for Host<'_> {
+    fn literal_m(&self,us:u32)->u32 {crate::rom_region::addr(self.rom,us)}
     fn call_m(&mut self,f:u32,a:&[u32],m:&mut Memory<'_>)->u32 {
         if f==0x1738e8 {
             let mut saved=[0u32;12];
@@ -2324,29 +1983,30 @@ impl crate::bridge::Platform for ViewOnly {
     fn arbiter_address(&self)->u32 {unreachable!()}
     fn arbitrate(&mut self,_:&mut Memory<'_>,_:&[u32])->u32 {unreachable!()}
 }
-/// Continue our own auxiliary entry through database creation. No captured output is consumed.
+
 pub fn database_return(
     m:&mut engine::Memory<'_,'_>,boundary:engine::VoiceBoundary,
     request_sp:u32, workspace:&mut [u8],platform:&mut dyn engine::HeapPlatform,
+    rom:crate::rom_region::Rom,
 )->Result<engine::VoiceBoundary,engine::Error> {
     if boundary.entry!=0x15bc18 {return Err(engine::Error::UnsupportedStage{entry:boundary.entry});}
     let mut os=ViewOnly;
     let mut flat=crate::bridge::Flat::new(m,workspace,&mut os,0)?;
     let mut arena=flat.memory();
-    let mut host=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:None,snap:&[],trace:None,until:None,depth:0,stack:[0;64],stack_len:0};
+    let mut host=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:None,snap:&[],trace:None,until:None,depth:0,stack:[0;64],stack_len:0,rom};
+    let r=rom;
     let data=crate::db_live::DbData {
-        module:arena.word(0x15b5d0),open_begin:0x15be18,open_end:0x15beb0,
-        open_detail:arena.word(0x15bea8),reset_begin:0x15bbdc,reset_end:0x15bbfc,
-        pool_name_word:arena.word(0x15beac),keys:[0x15be30,0x15be48,0x15be60,0x15be74,0x15be90],
+        module:arena.word(crate::rom_region::addr(r,0x15b5d0)),open_begin:crate::rom_region::addr(r,0x15be18),open_end:crate::rom_region::addr(r,0x15beb0),
+        open_detail:arena.word(crate::rom_region::addr(r,0x15bea8)),reset_begin:crate::rom_region::addr(r,0x15bbdc),reset_end:crate::rom_region::addr(r,0x15bbfc),
+        pool_name_word:arena.word(crate::rom_region::addr(r,0x15beac)),keys:[crate::rom_region::addr(r,0x15be30),crate::rom_region::addr(r,0x15be48),crate::rom_region::addr(r,0x15be60),crate::rom_region::addr(r,0x15be74),crate::rom_region::addr(r,0x15be90)],
     };
     let caller_pipe=arena.word(boundary.args[4]-12);
     let rc=crate::db_live::open_db_m(&mut host,&mut arena,boundary.args[..5].try_into().unwrap(),&data,0x300);
-    // Publish saved-frame words that overwrite our earlier formatter outputs.
-    // open_db pushes LR at caller SP-4, then logger saves sl/LR at SP-72/-68.
+
     let sp=request_sp-0x1f8;
-    arena.put_word(sp-4,0x156bf0);
+    arena.put_word(sp-4,crate::rom_region::addr(r,0x156bf0));
     arena.put_word(sp-72,caller_pipe);
-    arena.put_word(sp-68,0x15bde8);
+    arena.put_word(sp-68,crate::rom_region::addr(r,0x15bde8));
     arena.put_word(sp-64,data.open_end);
     flat.finish()?;
     if let Some(e)=host.boot.fault {return Err(e);}
@@ -2354,15 +2014,14 @@ pub fn database_return(
     Ok(engine::VoiceBoundary{entry:0x156bf0,args:[rc,0,0,0,0,0,0],event:None})
 }
 
-/// Continue fn_15668c from the real database return to component startup.
 pub fn component_boundary(m:&mut engine::Memory<'_,'_>,synthesis:engine::VoiceBoundary,
-    request_sp:u32, workspace:&mut [u8],platform:&mut dyn engine::HeapPlatform)->Result<engine::VoiceBoundary,engine::Error> {
+    request_sp:u32, workspace:&mut [u8],platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<engine::VoiceBoundary,engine::Error> {
     let mut os=ViewOnly;
     let mut flat=crate::bridge::Flat::new(m,workspace,&mut os,0)?;
     let mut arena=flat.memory();
-    let mut host=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:None,snap:&[],trace:None,until:None,depth:0,stack:[0;64],stack_len:0};
+    let mut host=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:None,snap:&[],trace:None,until:None,depth:0,stack:[0;64],stack_len:0,rom};
     let synth=synthesis.args[1];let ctx=synthesis.args[0];let out=synth+0x84;
-    // This continuation has only been certified for the own-request null MIME/source path.
+
     if synthesis.args[4]!=0 || arena.word(out+52)!=0 {
         return Err(engine::Error::UnsupportedStage{entry:0x15668c});
     }
@@ -2371,12 +2030,12 @@ pub fn component_boundary(m:&mut engine::Memory<'_,'_>,synthesis:engine::VoiceBo
     let rc=host.call(&mut arena,0x175c40,&[props,out+48]);
     let count=arena.half(arena.word(synth+0x7c)+12) as u32;
     let sp=request_sp-0x1f8;
-    arena.put_word(sp-4,0x156a78);
+    arena.put_word(sp-4,crate::rom_region::addr(rom,0x156a78));
     arena.put_word(sp,count);
     arena.put_word(sp-72,arena.word(ctx+4));
-    arena.put_word(sp-68,0x174b00);
-    arena.put_word(sp-64,arena.word(0x8d7614+8));
-    arena.put_word(sp-60,arena.word(0x8d7614+12));
+    arena.put_word(sp-68,crate::rom_region::addr(rom,0x174b00));
+    arena.put_word(sp-64,arena.word(crate::rom_region::addr(rom,0x8d7614)+8));
+    arena.put_word(sp-60,arena.word(crate::rom_region::addr(rom,0x8d7614)+12));
     flat.finish()?;
     if let Some(e)=host.boot.fault {return Err(e);}
     if rc>=0x80000000 {return Err(engine::Error::EngineStatus(rc));}
@@ -2389,7 +2048,7 @@ fn mem_half(m:&[u8],p:u32)->u16 {u16::from_le_bytes(m[p as usize..p as usize+2].
 fn mem_store(m:&mut [u8],p:u32,v:u32) {m[p as usize..p as usize+4].copy_from_slice(&v.to_le_bytes());}
 fn mem_store16(m:&mut [u8],p:u32,v:u16) {m[p as usize..p as usize+2].copy_from_slice(&v.to_le_bytes());}
 fn terminated(m:&[u8],p:u32)->&[u8] {let s=&m[p as usize..];&s[..s.iter().position(|v|*v==0).unwrap()+1]}
-/// Memory-passing version of frontend::start_components. Legacy entry unchanged.
+
 pub fn start_components_m(
     mem: &mut [u8],
     synth: u32,
@@ -2449,8 +2108,7 @@ pub fn start_components_m(
     let mut s = start;
     while rc < 0x80000000 && s < end {
         let next = s.wrapping_add(1);
-        // Both verdicts are discarded, matching the C; the
-        // signatures still carry them for the row's slots.
+
         let _ = set_stage(pipe_a, pipe_b, next & 0xffff, mem);
         let comp = mem_word(mem, comps.wrapping_add(s.wrapping_mul(4)));
         let name = mem_word(mem, comp + 4);
@@ -2482,7 +2140,7 @@ pub fn start_components_m(
         }
         rc = r2;
         if r2 >= 0x80000000 {
-            // Error log dropped (unobserved).
+
         } else {
             mem_store16(mem, out + 78, next as u16);
             if let Some(cb) = cb.as_mut() {
@@ -2503,15 +2161,13 @@ pub fn start_components_m(
     rc
 }
 
-
-/// Drive the converted component starter to its first real processStart entry.
 pub fn first_component(m:&mut engine::Memory<'_,'_>,b:engine::VoiceBoundary,request_sp:u32,
-    workspace:&mut [u8],platform:&mut dyn engine::HeapPlatform)->Result<engine::VoiceBoundary,engine::Error> {
+    workspace:&mut [u8],platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<engine::VoiceBoundary,engine::Error> {
     let mut os=ViewOnly;
     let mut flat=crate::bridge::Flat::new(m,workspace,&mut os,0)?;
     let mut arena=flat.memory();
     let mut queue=QueueRuntime{registers:engine::NotificationRegisters{s16:0x47dd,s17:0}};
-    let host=core::cell::RefCell::new(Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:Some(&mut queue),snap:&[],trace:None,until:None,depth:0,stack:[0;64],stack_len:0});
+    let host=core::cell::RefCell::new(Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:Some(&mut queue),snap:&[],trace:None,until:None,depth:0,stack:[0;64],stack_len:0,rom});
     let synth=b.args[0];
     if arena.byte(synth+0x80)==2 || b.args[1]!=0 {
         return Err(engine::Error::UnsupportedStage{entry:0x153c5c});
@@ -2523,7 +2179,7 @@ pub fn first_component(m:&mut engine::Memory<'_,'_>,b:engine::VoiceBoundary,requ
         |a,b,c,bytes| {let mut m=Memory{base:0,bytes};host.borrow_mut().call(&mut m,0x1985fc,&[a,b,c]);},
         |_,_,_,_,_,_,_| unreachable!("status-2 opens need live list allocation"),
         |a,b,c,d,bytes| {let mut m=Memory{base:0,bytes};
-            // Component handle owners carry the same processStart vtable.
+
             let cs=m.word(synth+0x7c);let comps=m.word(cs+8);let comp=(0..m.half(cs+12) as u32).map(|i|m.word(comps+i*4)).find(|p|m.word(*p+12)==a && m.word(*p+16)==b).expect("component owner");let table=m.word(comp+8);
             let entry=m.word(table+48);
             host.borrow_mut().call(&mut m,entry,&[a,b,c,d])},
@@ -2540,16 +2196,14 @@ pub fn first_component(m:&mut engine::Memory<'_,'_>,b:engine::VoiceBoundary,requ
         let vt=arena.word(synth+0x40);
         let slot=0x2a00u32;
         arena.put_word(slot,0);
-        // fn_15668c's tail, as the ARM runs it: ttseg_OpenOutput, then the
-        // done: block that calls the output pump under the ARM's guards.
+
         let mut rc=0u32;
         if arena.word(synth+0x18)!=0 {
-            // ttseg_OpenOutput: set the stage, read the output MIME type and
-            // open the PCM and marker streams.
+
             let set_entry=arena.word(vt+0x1c);
             rc=host.borrow_mut().call(&mut arena,set_entry,&[pipe[0],pipe[1],count+1]);
             if rc<0x80000000 {
-                let found=host.borrow_mut().call(&mut arena,0x175a1c,&[params,0x155ecc,slot]);
+                let found=host.borrow_mut().call(&mut arena,0x175a1c,&[params,crate::rom_region::addr(rom,0x155ecc),slot]);
                 let mime=arena.word(slot);
                 if found<0x80000000 {
                     if mime!=0 {
@@ -2557,7 +2211,7 @@ pub fn first_component(m:&mut engine::Memory<'_,'_>,b:engine::VoiceBoundary,requ
                             let open=arena.word(vt+0x20);
                             let opened=host.borrow_mut().call(&mut arena,open,&[pipe[0],pipe[1],18,mime,0,0,out+0x3c]);
                             if opened<0x80000000 {
-                                host.borrow_mut().call(&mut arena,open,&[pipe[0],pipe[1],18,0x154094,0,0,out+0x44]);
+                                host.borrow_mut().call(&mut arena,open,&[pipe[0],pipe[1],18,crate::rom_region::addr(rom,0x154094),0,0,out+0x44]);
                             }
                         }
                         host.borrow_mut().call(&mut arena,0x1757a8,&[params,mime]);
@@ -2566,15 +2220,14 @@ pub fn first_component(m:&mut engine::Memory<'_,'_>,b:engine::VoiceBoundary,requ
             }
         }
         arena.put_word(slot,0);
-        // The ARM's done: block runs the pump only for a live synthesis with
-        // an open PCM stream.
+
         if arena.byte(synth+0x80)!=2 {
             if rc>=0x80000000 { return Err(engine::Error::EngineStatus(rc)); }
             if arena.word(out+0x3c)!=0 {
-                // fn_1530d0: the output pump at the end of fn_15668c.
+
                 let mut side=OutputSide{host:&host,synth};
                 rc=emit_output_m(&mut *arena.bytes,synth,None,&mut side);
-                // the guest scratch the application side used is not a guest page
+
                 for i in 0..0x1c0 { arena.put_byte(OUT_LOCAL+i,0); }
                 if rc>=0x80000000 { return Err(engine::Error::EngineStatus(rc)); }
             }
@@ -2585,9 +2238,9 @@ pub fn first_component(m:&mut engine::Memory<'_,'_>,b:engine::VoiceBoundary,requ
     }
     let owner=host.borrow().boundary.map(|b|b.args[0]);
     let comp=(0..arena.half(cs+12) as u32).map(|i|arena.word(comps+i*4)).find(|p|Some(arena.word(*p+12))==owner).unwrap_or(arena.word(comps));
-    arena.put_word(sp-4,0x156e10);
-    arena.put_word(sp-76,0x153d94);
-    arena.put_word(sp-72,0x154074);
+    arena.put_word(sp-4,crate::rom_region::addr(rom,0x156e10));
+    arena.put_word(sp-76,crate::rom_region::addr(rom,0x153d94));
+    arena.put_word(sp-72,crate::rom_region::addr(rom,0x154074));
     arena.put_word(sp-68,arena.word(comp+4));
     flat.finish()?;
     let mut host=host.into_inner();
@@ -2595,64 +2248,67 @@ pub fn first_component(m:&mut engine::Memory<'_,'_>,b:engine::VoiceBoundary,requ
     host.boundary.take().ok_or(engine::Error::EngineStatus(0x80002001))
 }
 
-fn speech_environment(m:&Memory<'_>)->crate::speech_part_2::Environment {
-    crate::speech_part_2::Environment{cached_handle:core::array::from_fn(|i|m.byte(0x8d7660+i as u32)),default_context:0x8d7640,input_types:[0;2],output_types:[0;2]}
+fn speech_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speech_part_2::Environment {
+    crate::speech_part_2::Environment{cached_handle:core::array::from_fn(|i|m.byte(crate::rom_region::addr(rom,0x8d7660)+i as u32)),default_context:crate::rom_region::addr(rom,0x8d7640),input_types:[0;2],output_types:[0;2]}
 }
-/// Mapped literal address, searched only inside the mapped source pages.
+
 fn source_literal(m:&Memory<'_>,text:&[u8])->u32 {
     let end=m.bytes.len().min(0x500000);
     if end<=0x100000{return 0;}
     (0x100000+m.bytes[0x100000..end].windows(text.len()+1)
         .position(|w|&w[..text.len()]==text&&w[text.len()]==0).expect("mapped source literal")) as u32
 }
-/// fn_1ef464 environment: the component's two input and two output MIME
-/// entries come from the mapped tables, not from the transcoder defaults.
-fn speech_types_environment(m:&Memory<'_>)->crate::speech_part_2::Environment {
+
+fn speech_types_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speech_part_2::Environment {
+    use crate::rom_region::addr;
     crate::speech_part_2::Environment{
-        cached_handle:core::array::from_fn(|i|m.byte(0x8d7660+i as u32)),
-        default_context:0x8d7640,
-        input_types:[m.word(0x8f902c),m.word(0x8f902c+4)],
-        output_types:[m.word(0x8f9038),m.word(0x8f9038+4)],
+        cached_handle:core::array::from_fn(|i|m.byte(addr(rom,0x8d7660)+i as u32)),
+        default_context:addr(rom,0x8d7640),
+        input_types:[m.word(addr(rom,0x8f902c)),m.word(addr(rom,0x8f902c)+4)],
+        output_types:[m.word(addr(rom,0x8f9038)),m.word(addr(rom,0x8f9038)+4)],
     }
 }
-/// fn_219c8c environment: the spelling component's own input and output
-/// MIME tables, taken from the mapped regional tables.
-fn spelling_environment(m:&Memory<'_>)->crate::speech_part_2::Environment {
+
+fn spelling_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speech_part_2::Environment {
+    use crate::rom_region::addr;
     crate::speech_part_2::Environment{
-        cached_handle:core::array::from_fn(|i|m.byte(0x8d7660+i as u32)),
-        default_context:0x8d7640,
-        input_types:[m.word(0x8fa1f4),m.word(0x8fa1f8)],
-        output_types:[m.word(0x8fa200),m.word(0x8fa204)],
+        cached_handle:core::array::from_fn(|i|m.byte(addr(rom,0x8d7660)+i as u32)),
+        default_context:addr(rom,0x8d7640),
+        input_types:[m.word(addr(rom,0x8fa1f4)),m.word(addr(rom,0x8fa1f4)+4)],
+        output_types:[m.word(addr(rom,0x8fa200)),m.word(addr(rom,0x8fa200)+4)],
     }
 }
-/// fn_1d513c environment: the resource component's own input MIME table.
-fn component_environment(m:&Memory<'_>)->crate::speech_part_1::ComponentEnvironment {
+
+fn component_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speech_part_1::ComponentEnvironment {
+    use crate::rom_region::addr;
     crate::speech_part_1::ComponentEnvironment{
-        cached_handle:core::array::from_fn(|i|m.byte(0x8d7660+i as u32)),
-        input_types:[m.word(0x8f8860),m.word(0x8f8864)],
+        cached_handle:core::array::from_fn(|i|m.byte(addr(rom,0x8d7660)+i as u32)),
+        input_types:[m.word(addr(rom,0x8f8860)),m.word(addr(rom,0x8f8860)+4)],
     }
 }
-fn stream_environment(m:&Memory<'_>)->crate::speech_part_1::StreamEnvironment {
+fn stream_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speech_part_1::StreamEnvironment {
+    use crate::rom_region::addr;
     crate::speech_part_1::StreamEnvironment{
-        cached_handle:core::array::from_fn(|i|m.byte(0x8d7660+i as u32)),
-        default_context:0x8d7640,
+        cached_handle:core::array::from_fn(|i|m.byte(addr(rom,0x8d7660)+i as u32)),
+        default_context:addr(rom,0x8d7640),
         utf16:source_literal(m,b"text/plain;charset=utf-16"),
         depes:source_literal(m,b"text/plain;charset=depes"),
         markers:source_literal(m,b"application/x-realspeak-markers-pp;version=4.0"),
         input_mime:source_literal(m,b"inputmimetype"),
-        category:0x8f8c6c,
+        category:addr(rom,0x8f8c6c),
         format:source_literal(m,b"%s%s"),
         content_name:source_literal(m,b"mimeContentType"),
         mime_name:source_literal(m,b"mimeType"),
-        ids:core::array::from_fn(|i|m.half(0x8f8cae+i as u32*6)),
+        ids:core::array::from_fn(|i|m.half(addr(rom,0x8f8cae)+i as u32*6)),
     }
 }
-fn language_environment(m:&Memory<'_>)->crate::speech_part_1::LanguageEnvironment {    crate::speech_part_1::LanguageEnvironment{
-        cached_handle:core::array::from_fn(|i|m.byte(0x8d7660+i as u32)),
+fn language_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speech_part_1::LanguageEnvironment {    use crate::rom_region::addr;
+    crate::speech_part_1::LanguageEnvironment{
+        cached_handle:core::array::from_fn(|i|m.byte(addr(rom,0x8d7660)+i as u32)),
         depes:source_literal(m,b"text/plain;charset=depes"),
-        languages:[m.word(0x8f87a4),m.word(0x8f87a8)],
-        voices:[m.word(0x8f87b0),m.word(0x8f87b4)],
-        category:0x8f87bc,
+        languages:[m.word(addr(rom,0x8f87a4)),m.word(addr(rom,0x8f87a8))],
+        voices:[m.word(addr(rom,0x8f87b0)),m.word(addr(rom,0x8f87b4))],
+        category:addr(rom,0x8f87bc),
         text_analysis:source_literal(m,b"textanalysison"),
         yes:source_literal(m,b"yes"),
         bias:source_literal(m,b"initcommonbiasvalue"),
@@ -2665,6 +2321,11 @@ impl crate::speech_part_2::Host for Host<'_> {
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.call(m,f,a)}
 }
 impl crate::boot_part_b::Host for Host<'_> {
+    fn real_log_args(&mut self)->bool { true }
+    fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool {
+        crate::log_live::variadic_m(m,entry,a,format,varargs,0x0e0f7d00,|m,f,a|self.call(m,f,a))
+    }
+
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.call(m,f,a)}
     fn thread_id(&mut self)->u32 {self.boot.platform.thread_id()}
 }
@@ -2675,9 +2336,7 @@ impl crate::boot_part_b::FormatHost for Host<'_> {}
 impl crate::log_live::LogMethodsM for Host<'_> {
     fn log_m(&mut self,f:u32,o:u32,c:u32,l:u32,a:u32,t:u32,v:u32,m:&mut Memory<'_>)->u32 {self.call(m,f,&[o,c,l,a,t,v])}
 }
-/// Covered by the blanket `impl<T: Calls> reentrant::HooksM for T` now
-/// that `Host` implements `boot::Calls` (identical `call_m` forwarding).
-/// Live property lookup with callbacks using the current caller-owned arena.
+
 pub fn fetch_param_m(h:&mut impl DbHooksM,m:&mut Memory<'_>,obj:u32,key:u32,out:u32)->u32 {
     assert_eq!(m.base,0);
     if obj==0 || key==0 || out==0 {return 0x8b702007;}
@@ -2696,11 +2355,10 @@ pub fn fetch_param_m(h:&mut impl DbHooksM,m:&mut Memory<'_>,obj:u32,key:u32,out:
     if rc>=0x80000000 && result<0x80000000 {result=rc;}result
 }
 
-// Additive memory-passing versions of the existing frontend bodies.
 use crate::frontend::{validate_handle,render_unsigned,divmod_u32,INSERT_EVENT_LEN,filter_markers,copy_bytes};
 use core::cell::RefCell;
 pub trait AudioOpenHooksM {
-    /// Interface `open`: open the named stream into `out`.
+
     fn stream_open_m(
         &mut self,
         h0: u32,
@@ -2709,39 +2367,39 @@ pub trait AudioOpenHooksM {
         x: u32,
         y: u32,
         out: &mut (u32, u32), mem: &mut [u8]) -> u32;
-    /// Interface `markerMode`.
+
     fn query_marker_mode_m(&mut self, mem: &mut [u8]) -> u32;
-    /// Audio-open failure trace.
+
     fn audio_open_failed_m(&mut self, logger: u32, mem: &mut [u8]);
-    /// Content-open failure trace with `code`.
+
     fn content_open_failed_m(&mut self, logger: u32, code: u32, mem: &mut [u8]);
 }
 pub trait CtxResetHooksM {
-    /// Outer `release` of `(a, b)` with `flag`.
+
     fn release_pair_m(&mut self, a: u32, b: u32, flag: u32, mem: &mut [u8]) -> u32;
-    /// Inner `free` of `(a, b)`.
+
     fn free_pair_m(&mut self, a: u32, b: u32, mem: &mut [u8]) -> u32;
-    /// Outer `detach` of `(a, b)`.
+
     fn detach_pair_m(&mut self, a: u32, b: u32, mem: &mut [u8]) -> u32;
-    /// `fn_176fd4`: a fresh null pair.
+
     fn null_pair_m(&mut self, mem: &mut [u8]) -> (u32, u32);
 }
 pub trait VMethodHooksM {
-    /// Call the method with `(c, d)`.
+
     fn call_method_m(&mut self, c: u32, d: u32, mem: &mut [u8]) -> u32;
 }
 pub trait InserterPumpHooksM {
-    /// Buffer `available`: report `count` bytes with end flag `end`.
+
     fn buf_available_m(&mut self, h0: u32, h1: u32, count: &mut u32, end: &mut u8, mem: &mut [u8]) -> u32;
-    /// Buffer `read`: expose `*count` input bytes at `*data`.
+
     fn buf_read_m(&mut self, h0: u32, h1: u32, data: &mut u32, count: &mut u32, mem: &mut [u8]) -> u32;
-    /// Buffer `write`: expose the output events at `*data`.
+
     fn buf_write_m(&mut self, h0: u32, h1: u32, data: &mut u32, count: u32, mem: &mut [u8]) -> u32;
-    /// Buffer `consume`: release `n` input bytes.
+
     fn buf_consume_m(&mut self, h0: u32, h1: u32, n: u32, mem: &mut [u8]) -> u32;
-    /// Buffer `close`.
+
     fn buf_close_m(&mut self, h0: u32, h1: u32, mem: &mut [u8]) -> u32;
-    /// Buffer `copy`: move `n` bytes, reporting `moved`.
+
     fn buf_copy_m(
         &mut self,
         d0: u32,
@@ -2750,11 +2408,11 @@ pub trait InserterPumpHooksM {
         s1: u32,
         n: u32,
         moved: &mut u32, mem: &mut [u8]) -> u32;
-    /// Buffer `position`: report the read position.
+
     fn buf_position_m(&mut self, h0: u32, h1: u32, pos: &mut u32, mem: &mut [u8]) -> u32;
-    /// Buffer `commit`: publish `n` output bytes.
+
     fn buf_commit_m(&mut self, h0: u32, h1: u32, n: u32, mem: &mut [u8]) -> u32;
-    /// Inserter `resolve`: map `uri` to a name.
+
     fn ins_resolve_m(
         &mut self,
         s0: u32,
@@ -2763,8 +2421,7 @@ pub trait InserterPumpHooksM {
         n0: u32,
         n1: u32,
         out: &mut u32, mem: &mut [u8]) -> u32;
-    /// Inserter `open`: start an insertion, writing position,
-    /// remaining and handle.
+
     fn ins_open_m(
         &mut self,
         s0: u32,
@@ -2773,18 +2430,15 @@ pub trait InserterPumpHooksM {
         pos: &mut u32,
         rem: &mut u32,
         ins: &mut (u32, u32), mem: &mut [u8]) -> u32;
-    /// Inserter `close`.
+
     fn ins_close_m(&mut self, h0: u32, h1: u32, flag: u32, mem: &mut [u8]) -> u32;
-    /// `fn_22c85c`: run one insertion step (stubbed in the row:
-    /// the render never reaches it).
+
     fn pump_remote_m(&mut self, mem: &mut [u8], base: u32) -> u32;
-    /// `fn_176fd4`: a fresh null pair.
+
     fn null_pair_m(&mut self, mem: &mut [u8]) -> (u32, u32);
 }
 pub trait EmitHooksM {
-    /// `p->putOutput(user, msg, &buf, &len, arr, &nmark)`: deliver one
-    /// buffer. `markers` holds the `n_in` entries at `arr` (empty when
-    /// `arr` is null). Reports `(status, buf, len, nmark)`.
+
     fn put_output_m(
         &mut self,
         user: u32,
@@ -2792,49 +2446,24 @@ pub trait EmitHooksM {
         len_in: u32,
         n_in: u32,
         markers: (u32,u32), mem: &mut [u8]) -> (u32, Option<u32>, u32, u32);
-    /// `p->vt->getAvail`: reports `(status, avail, eos)`.
+
     fn get_avail_m(&mut self, a: u32, b: u32, mem: &mut [u8]) -> (u32, u32, u8);
-    /// `p->vt->getBuf`: reports `(status, buf, len)`.
+
     fn get_buf_m(&mut self, a: u32, b: u32, mem: &mut [u8]) -> (u32, Option<u32>, u32);
-    /// `p->vt->getPos`: reports `(status, pos)`.
+
     fn get_pos_m(&mut self, a: u32, b: u32, mem: &mut [u8]) -> (u32, u32);
-    /// `p->vt->consume`: consume `n` units; reports its status.
+
     fn consume_m(&mut self, a: u32, b: u32, n: u32, mem: &mut [u8]) -> u32;
-    /// `fn_1963e0`: grow the marker array; reports the new block, if any.
+
     fn realloc_markers_m(&mut self, mem: &mut [u8]) -> Option<u32>;
 }
 
-// ---------------------------------------------------------------------------
-// The application's output side: fn_18f6b8 (putOutput) and the engine's
-// stream methods, over the live guest memory.
-//
-// fn_1530d0 reaches the application through p->putOutput. The application
-// answers with a buffer of its own, and the engine then records the
-// delivered length in "audiooutputbufsamples" and logs both steps. The
-// arena port of fn_1530d0 has no context of its own, so the engine's
-// bookkeeping after the sink answers runs here as well.
-//
-// The guest scratch the application side uses:
-//   0x1f00  fn_18f6b8's local audio buffer (20 bytes)
-//   0x1f20  fn_18f6b8's request (12 bytes)
-//   0x1f40  the stream out-parameters (20 bytes)
-//   0x1f60  fn_1758ac's number buffer and its parameter scratch (76 bytes)
 const OUT_LOCAL: u32 = 0x1f00;
 const OUT_REQUEST: u32 = 0x1f20;
 const OUT_SCRATCH: u32 = 0x1f40;
 const OUT_CTX: u32 = 0x1f54;
 const OUT_PARAM: u32 = 0x1f60;
 
-/// fn_183258: append one event to the application's event queue.
-///
-/// The ARM copies the caller's VFP registers into the record: ROM
-/// 0x183368 is VSTR S16 -> [R0,#4] (the +4 word), and the sibling store
-/// carries S17 into +28. Round-22 wire bytes prove the values for the own
-/// request: the type-8 record at 0x8673f80 carries s16 0x47dd / s17 0
-/// (the scheduler's RuntimeM already supplies the same NotificationRegisters
-/// and matches everywhere else). The stale-slot model (first/tail) is wrong:
-/// it left 0x8673f84 as 0. The host clock comes from the last notification
-/// the queue holds; growth still needs the unbound application allocator.
 fn fn_183258_m(m:&mut Memory<'_>,p:u32,kind:u32,vfp:engine::NotificationRegisters)->u32 {
     let vector=p.wrapping_add(0x61cc);
     let begin=m.word(vector.wrapping_add(4));
@@ -2842,8 +2471,7 @@ fn fn_183258_m(m:&mut Memory<'_>,p:u32,kind:u32,vfp:engine::NotificationRegister
     let capacity=m.word(vector.wrapping_add(12));
     let count=end.wrapping_sub(begin) as i32>>5;
     let reserved=capacity&0x3fffffff;
-    // The last record's tick rides the queue; the at-capacity drop below
-    // needs it too, so derive it before the growth check.
+
     let tick=if end!=0 {
         let last=end.wrapping_sub(32);
         if last>=begin {
@@ -2853,9 +2481,7 @@ fn fn_183258_m(m:&mut Memory<'_>,p:u32,kind:u32,vfp:engine::NotificationRegister
     if (reserved as i32)<=count {
         let grown=if reserved==0 {1} else {reserved.wrapping_mul(2)};
         if (reserved as i32)<(grown as i32) {
-            // At capacity the ARM silently drops the notify and returns to
-            // its void caller (seg7 r4, tests/engine_live_seg7_cap.rs):
-            // one shared implementation in boot_part_b2.
+
             return crate::boot_part_b2::fn_183258_live(m,p,kind,vfp.s16,vfp.s17,tick);
         }
     }
@@ -2870,7 +2496,6 @@ fn fn_183258_m(m:&mut Memory<'_>,p:u32,kind:u32,vfp:engine::NotificationRegister
     0
 }
 
-/// The frontend types' error, as the engine's error.
 fn frontend_error(e:crate::frontend_types::Error)->engine::Error {
     match e {
         crate::frontend_types::Error::Engine(rc)=>engine::Error::EngineStatus(rc),
@@ -2879,18 +2504,13 @@ fn frontend_error(e:crate::frontend_types::Error)->engine::Error {
     }
 }
 
-/// fn_18f490. Maps the input tag records into the output records of the
-/// fn_84c160: shutdown range check under the object's lock (sub at +88).
-/// Delegates to the certified fn_7e715c port.
 pub fn fn_84c160_m(m:&mut Memory<'_>,p:u32,v:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     h.call_m(0x1840fc,&[p+88],m);
     let r=crate::speech_part_3::fn_7e715c(m,p,v);
     h.call_m(0x18423c,&[p+88],m);
     r
 }
-/// fn_1959dc: locked user-state byte store (state at p+0x28). Value 0 is
-/// a no-op return; otherwise lock p+0x24, store the byte, unlock (tail).
-/// Used for the teardown user-state write (user+0x28 = 1).
+
 pub fn fn_1959dc_m(m:&mut Memory<'_>,p:u32,v:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     if v==0 {return p;}
     let rc=h.call_m(0x176f2c,&[m.word(p.wrapping_add(0x24))],m);
@@ -2898,15 +2518,13 @@ pub fn fn_1959dc_m(m:&mut Memory<'_>,p:u32,v:u32,h:&mut impl crate::reentrant::H
     m.put_byte(p.wrapping_add(0x28),v as u8);
     h.call_m(0x176f5c,&[m.word(p.wrapping_add(0x24))],m)
 }
-/// fn_196428: allocator release via vtable (release(context, object)).
-/// Both null is a no-op return.
+
 pub fn fn_196428_m(m:&mut Memory<'_>,a:u32,o:u32,h:&mut impl crate::reentrant::HooksM) {
     if a==0||o==0 {return;}
     let tgt=m.word(m.word(a).wrapping_add(0xc));
     h.call_m(tgt,&[m.word(a.wrapping_add(4)),o],m);
 }
-/// fn_198fb4: post-order tree walk releasing node payloads via the
-/// context vtable (f4/f10), then fn_196428 on the node. Stops at `end`.
+
 pub fn fn_198fb4_m(m:&mut Memory<'_>,c:u32,n:u32,e:u32,h:&mut impl crate::reentrant::HooksM) {
     if n==e {return;}
     fn_198fb4_m(m,c,m.word(n),e,h);
@@ -2917,9 +2535,7 @@ pub fn fn_198fb4_m(m:&mut Memory<'_>,c:u32,n:u32,e:u32,h:&mut impl crate::reentr
     if bv!=0 {let t=m.word(m.word(c.wrapping_add(0x24)).wrapping_add(0x10));h.call_m(t,&[bv,m.word(c.wrapping_add(0x20))],m);}
     fn_196428_m(m,m.word(c.wrapping_add(0x20)),n,h);
 }
-/// fn_19869c: release all tree nodes via fn_198fb4, release the head
-/// payloads via vtable fn[1]/fn[4], then fn_196428 on the head. Resets
-/// count/head/tail to empty.
+
 pub fn fn_19869c_m(m:&mut Memory<'_>,t:u32,h:&mut impl crate::reentrant::HooksM) {
     let n=m.word(t);
     if n!=t {
@@ -2935,22 +2551,19 @@ pub fn fn_19869c_m(m:&mut Memory<'_>,t:u32,h:&mut impl crate::reentrant::HooksM)
     m.put_word(t, t);
     m.put_word(t.wrapping_add(4), t);
 }
-/// fn_19665c: destroy object (tree release via fn_19869c, then
-/// allocator release via fn_196428). Null returns the ARM error.
+
 pub fn fn_19665c_m(m:&mut Memory<'_>,p:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     if p==0 {return 0x89002007;}
     fn_19869c_m(m,p.wrapping_add(0x18),h);
     fn_196428_m(m,m.word(p.wrapping_add(0x14)),p,h);
     0
 }
-/// fn_174b14: element destructor (destroys the +4 object via
-/// fn_19665c, then nulls +4). Extra ctx arg ignored per disasm.
+
 pub fn fn_174b14_m(m:&mut Memory<'_>,s:u32,h:&mut impl crate::reentrant::HooksM) {
     let q=m.word(s.wrapping_add(4));
     if q!=0 {fn_19665c_m(m,q,h);m.put_word(s.wrapping_add(4),0);}
 }
-/// fn_196fbc: array element removal (dtor, memmove tail, count--).
-/// Returns 1 on removal, 0 on null/out-of-range per disasm.
+
 pub fn fn_196fbc_m(m:&mut Memory<'_>,a:u32,e:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     if a==0 {return 0;}
     let data=m.word(a);let sz=m.word(a.wrapping_add(4)) as u16 as u32;let cnt=m.word(a.wrapping_add(0x14));
@@ -2963,13 +2576,11 @@ pub fn fn_196fbc_m(m:&mut Memory<'_>,a:u32,e:u32,h:&mut impl crate::reentrant::H
     m.put_word(a.wrapping_add(0x14),cnt.wrapping_sub(1));
     1
 }
-/// fn_11da30: shutdown dispatch over the D_b6f4ec objects. Tries each
-/// object's vtable accepts; on acceptance locks, releases via the
-/// certified fn_19b78c port, and unlocks. Third object needs a7b8e8[1].
-pub fn fn_11da30_m(m:&mut Memory<'_>,x:u32,h:&mut impl crate::reentrant::HooksM) {
+
+pub fn fn_11da30_m(m:&mut Memory<'_>,x:u32,h:&mut impl crate::reentrant::HooksM,rom:crate::rom_region::Rom) {
     for i in 0..3 {
-        if i == 2 && m.byte(0xa7b8e9) == 0 {break;}
-        let o=m.word(0xb6f4ec+i*4);
+        if i == 2 && m.byte(crate::rom_region::addr(rom,0xa7b8e8)+1) == 0 {break;}
+        let o=m.word(crate::rom_region::addr(rom,0xb6f4ec)+i*4);
         if o == 0 {continue;}
         let accepts=m.word(m.word(o)+0x18);
         if h.call_m(accepts,&[o,x],m) == 0 {continue;}
@@ -2980,9 +2591,7 @@ pub fn fn_11da30_m(m:&mut Memory<'_>,x:u32,h:&mut impl crate::reentrant::HooksM)
         break;
     }
 }
-/// application's buffer and reports how many were written. The 0x28 tag's
-/// text is converted to ASCII in place and the 0x1d tag's text is parsed in
-/// place, as the ARM does. The state's mode and limit are at 0x35 and 0x14c.
+
 pub fn fn_18f490_m(m:&mut Memory<'_>,st:u32,ob:u32,tags:u32,ntags:u32)->Result<u32,engine::Error> {
     let mode=m.byte(st+0x35);
     let limit=m.word(st+0x14c);
@@ -3000,7 +2609,7 @@ pub fn fn_18f490_m(m:&mut Memory<'_>,st:u32,ob:u32,tags:u32,ntags:u32)->Result<u
         let f0c=m.word(base+0xc);
         let f10=m.word(base+0x10);
         let f14=m.word(base+0x14);
-        // resetOutput: the four fields the ARM clears before the switch.
+
         m.put_half(at+0x18,0);
         m.put_word(at+0x20,0);
         m.put_word(at+0x1c,0);
@@ -3036,10 +2645,7 @@ pub fn fn_18f490_m(m:&mut Memory<'_>,st:u32,ob:u32,tags:u32,ntags:u32)->Result<u
         if mode==2 {
             let mut value08=m.word(at+8);
             let mut value0c=m.word(at+0xc);
-            // The ARM loads f08 as a whole word here (ldr sb,[r2,r1] at
-            // 0x18f62c, encoding 0xe7929001) and keeps the word load for the
-            // subtraction below (ldr r2,[r0,r1] at 0x18f658). The byte load
-            // in this function is the mode at 0x18f610.
+
             if flags==1&&value08<limit {
                 let distance=limit-value08;
                 value0c=if distance<value0c {value0c-distance} else {0};
@@ -3056,9 +2662,6 @@ pub fn fn_18f490_m(m:&mut Memory<'_>,st:u32,ob:u32,tags:u32,ntags:u32)->Result<u
     Ok(0)
 }
 
-/// The live event queue: the application's own re-queue entry. Carries the
-/// own request's VFP inputs (round 22: s16 0x47dd / s17 0, proven by the
-/// 0x8673f80 wire record), the same values the scheduler's RuntimeM uses.
 struct QueueRuntime{registers:engine::NotificationRegisters}
 impl RuntimeServicesM for QueueRuntime {
     fn invoke_m(&mut self,m:&mut Memory<'_>,entry:u32,a:&[u32])->Result<u32,engine::Error>{
@@ -3069,28 +2672,27 @@ impl RuntimeServicesM for QueueRuntime {
     }
 }
 
-/// The application's output side over the live guest.
 struct OutputSide<'a,'h> {
     host: &'a core::cell::RefCell<Host<'h>>,
     synth: u32,
 }
 
 impl OutputSide<'_, '_> {
-    /// The context of the synthesis, and the parameters it carries.
+
     fn context(&self,m:&Memory<'_>)->u32 { m.word(self.synth.wrapping_add(0x84)) }
-    /// fn_1738e8 with the engine's module and level.
+
     fn log(&mut self,m:&mut Memory<'_>,fmt:u32,values:&[u32]) {
         let logger=m.word(self.context(m).wrapping_add(16));
         self.host.borrow_mut().log_m(logger,0x8d7994,4,fmt,values,m);
     }
-    /// The engine's stream table entry.
+
     fn vt_entry(&self,m:&Memory<'_>,off:u32)->u32 {
         m.word(m.word(self.synth.wrapping_add(0x40)).wrapping_add(off))
     }
 }
 
 impl EmitHooksM for OutputSide<'_, '_> {
-    /// fn_18f6b8.
+
     fn put_output_m(&mut self,user:u32,msg:u32,len_in:u32,n_in:u32,markers:(u32,u32),mem:&mut [u8])->(u32,Option<u32>,u32,u32) {
         let mut m=Memory{base:0,bytes:mem};
         let o=self.synth.wrapping_add(0x84);
@@ -3102,8 +2704,7 @@ impl EmitHooksM for OutputSide<'_, '_> {
         let buffer=m.word(user.wrapping_add(0x160));
         if buffer!=0 {
             if count!=0||tag_count!=0 {
-                // fn_18f490 maps the tag records into the application's
-                // buffer; the ARM sets the command first.
+
                 m.put_word(user.wrapping_add(0x15c),16);
                 m.put_word(buffer.wrapping_add(4),count.wrapping_mul(2));
                 m.put_word(buffer.wrapping_add(0xc),tag_count);
@@ -3121,17 +2722,14 @@ impl EmitHooksM for OutputSide<'_, '_> {
             m.put_word(user.wrapping_add(0x188),tags);
             return (0,Some(buf),bytes/2,tags);
         }
-        // p->buffer is null. The application answers through its own callback.
-        // fn_176f2c/fn_176f5c take and release the state lock; the pair
-        // leaves the lock object unchanged, and its owner entry is not bound
-        // in the live path, so the state word is read without it.
+
         let stopped=m.byte(user.wrapping_add(0x28))==6;
         if stopped {
             m.put_word(user.wrapping_add(0x18c),0);
             m.put_word(user.wrapping_add(0x188),0);
             samples=0;count=0;tag_count=0;
         } else {
-            // the local buffer and the request
+
             for i in 0..20 { m.put_byte(OUT_LOCAL+i,0); }
             m.put_word(OUT_REQUEST,8);
             m.put_word(OUT_REQUEST+4,0);
@@ -3161,10 +2759,10 @@ impl EmitHooksM for OutputSide<'_, '_> {
             if samples==0||count==0 {
                 self.log(&mut m,0x153540,&[]);
             } else {
-                // fn_1758ac records the delivered length in
-                // "audiooutputbufsamples" before the pump logs the buffer.
+
                 let params=m.word(self.context(&m).wrapping_add(0x14));
-                let rc=self.host.borrow_mut().call(&mut m,0x1758ac,&[params,0x151f48,count]);
+                let name=crate::rom_region::addr(self.host.borrow().rom,0x151f48);
+                let rc=self.host.borrow_mut().call(&mut m,0x1758ac,&[params,name,count]);
                 if rc>=0x80000000 {
                     return (rc,Some(samples),count,tag_count);
                 }
@@ -3203,30 +2801,27 @@ impl EmitHooksM for OutputSide<'_, '_> {
         self.host.borrow_mut().call(&mut m,entry,&[a,b,n])
     }
     fn realloc_markers_m(&mut self,_mem:&mut [u8])->Option<u32> {
-        // fn_1963e0 is not bound in the live path; the pump reports the
-        // growth refusal the C reports when the marker array cannot grow.
+
         None
     }
 }
 
 pub trait SynthTeardownHooksM {
-    /// `p->vt->close`: closes one stream; reports its status. Serves
-    /// the pp/pcm/marker closes and the marker-stream close inside
-    /// `fn_154108` (which ignores the status).
+
     fn close_stream_m(&mut self, a: u32, b: u32, mem: &mut [u8]) -> u32;
-    /// `c->vt->processEnd`: ends one component; reports its status.
+
     fn process_end_m(&mut self, h0: u32, h1: u32, mem: &mut [u8]) -> u32;
-    /// `p->vt->release` / `p->vt2->release`: reports its status.
+
     fn release_stream_m(&mut self, a: u32, b: u32, mem: &mut [u8]) -> u32;
-    /// `fn_176fd4`: the null pair (`D_8d7660`).
+
     fn null_pair_m(&mut self, mem: &mut [u8]) -> (u32, u32);
-    /// `fn_175ce0`: reports its status.
+
     fn lex_close_m(&mut self, params: u32, lex: u32, mem: &mut [u8]) -> u32;
-    /// `fn_175ef0`: reports its status.
+
     fn lex_free_m(&mut self, params: u32, lex: u32, mem: &mut [u8]) -> u32;
-    /// `fn_17ec38`: tears down the outgoing pipeline; reports its status.
+
     fn retire_pipeline_m(&mut self, cs: u32, mem: &mut [u8]) -> u32;
-    /// `fn_1805f0`: reopens the incoming pipeline; reports its status.
+
     fn reopen_pipeline_cs_m(&mut self, cs: u32, mem: &mut [u8]) -> u32;
 }
 pub fn open_audio_m<H: AudioOpenHooksM>(
@@ -3341,7 +2936,7 @@ impl StatusM for GuestStatus{fn set_m(&mut self,v:u8,m:&mut [u8]){m[self.0 as us
 pub fn pump_insertion_m<H:InserterPumpHooksM>(h:&mut H,mem:&mut [u8],p:u32,key:u32,status:&mut u8)->u32 {
     pump_insertion_impl(h,mem,p,key,&mut LocalStatus(status))
 }
-/// Guest output form: each status write precedes the next live callback.
+
 pub fn pump_insertion_at_m<H:InserterPumpHooksM>(h:&mut H,mem:&mut [u8],p:u32,key:u32,status:u32)->u32 {
     pump_insertion_impl(h,mem,p,key,&mut GuestStatus(status))
 }
@@ -3835,8 +3430,7 @@ pub fn emit_output_m<H: EmitHooksM>(
         }
         if let Some(mk) = mk_buf {
             let mut j = first;
-            // Scan to &markers[markerAvail] (src/fn_151914.c:1093
-            // matches the ROM since 300e7b8).
+
             let stop = mk.wrapping_add(marker_avail.wrapping_mul(24));
             while j != stop {
                 let ty = u16::from_le_bytes(mem[j as usize..j as usize + 2].try_into().unwrap());
@@ -3870,7 +3464,7 @@ pub fn emit_output_m<H: EmitHooksM>(
         mem_store(mem, o.wrapping_add(0x68), nmark);
         out_buf = buf.unwrap_or(0);
         if rc >= 0x80000000 {
-            // Error is only logged; fall through to the state update.
+
         } else if out_buf == 0 || mem_word(mem, o.wrapping_add(0x64)) == 0 {
             rc = 0x81202807;
         }
@@ -4080,31 +3674,6 @@ pub fn close_components_m(
     rc
 }
 
-/// fn_1561b8 end-of-render drain over the live guest (round 17).
-///
-/// Runs the 15b404-tail drain exactly where ARM does: after the scheduler
-/// loop returns success, before the fn_15961c/fn_191e40 state tails.
-/// `synth` is the 0x15429c boundary's synth (the TtsSynth); `runtime` is
-/// the caller's PCM sink (the CloseOutStreams pump appends any residue).
-/// Returns the drain rc: 0 on the speech_1 path. A failing drain
-/// propagates like ARM (15b404 folds it into the render result).
-///
-/// Port notes (all 1:1 with src/fn_151914.c fn_1561b8):
-/// - close_components(0..curComp): only the cursor stamp + processEnd
-///   calls fire on this path (status != 2, obj == 0 on speech_1).
-/// - pp close is skipped when pp.a == 0 (speech_1).
-/// - CloseOutStreams runs the final 0x1530d0 pump through `runtime`, then
-///   getPos/posOffset, closes pcm/mk and restamps the pairs.
-/// - SendDone zeroes len/nmark; putOutput with an empty DONE payload is a
-///   pure ack (the ARM bot acknowledges without touching guest memory;
-///   routing it through the app callback could re-enter the voice).
-/// - arr/extra are freed via 0x196428 (unlike teardown_synth_m, which only
-///   clears arr and never frees extra: frees matter for session reuse).
-/// - newCs swap only fires when newCs != 0 (0 on speech_1).
-/// - pipe/aux release only fire when pipeOpen/auxOpen != 0.
-/// Validate-only component processEnd releases (drain teardown, 1:1 with
-/// their src/fn_*.c): each validates its handle tag and size, mapping a
-/// validation failure to its own status.
 macro_rules! drain_validate_end {
     ($name:ident, $tag:expr, $size:expr, $err:expr) => {
         fn $name(m: &mut Memory<'_>, p: u32, tag: u32, _host: &mut Host<'_>) -> u32 {
@@ -4122,8 +3691,6 @@ drain_validate_end!(fn_1e03ac_m, 0xf387, 40, 0x8a002008);
 drain_validate_end!(fn_1ea328_m, 0xf3b3, 60, 0x8b802008);
 drain_validate_end!(fn_1f7e8c_m, 0xf388, 64, 0x8a102008);
 
-/// fn_207130 (drain teardown, 1:1 with src/fn_207130.c): validate-only
-/// processEnd.
 fn fn_207130_m(m: &mut Memory<'_>, p: u32, tag: u32, _host: &mut Host<'_>) -> u32 {
     let r = crate::frontend::validate_handle(p != 0, tag, 0xf382, 0x2c);
     if r >= 0x80000000 {
@@ -4132,8 +3699,6 @@ fn fn_207130_m(m: &mut Memory<'_>, p: u32, tag: u32, _host: &mut Host<'_>) -> u3
     r
 }
 
-/// fn_1de844 (drain teardown, 1:1 with src/fn_1de844.c): validate-only
-/// processEnd.
 fn fn_1de844_m(m: &mut Memory<'_>, p: u32, tag: u32, _host: &mut Host<'_>) -> u32 {
     let r = crate::frontend::validate_handle(p != 0, tag, 0xf383, 56);
     if r >= 0x80000000 {
@@ -4142,25 +3707,18 @@ fn fn_1de844_m(m: &mut Memory<'_>, p: u32, tag: u32, _host: &mut Host<'_>) -> u3
     r
 }
 
-/// fn_1fd6d0 (drain teardown, 1:1 with src/fn_1fd6d0.c): processEnd for
-/// the 0xf384 component. Validate the handle, then reset the fixed slot
-/// at the second handle word to its ROM default (D_8f9590, a null word).
-/// The r0 > 1 arm is unreachable (fn_176f94 returns only 0 or an error).
 fn fn_1fd6d0_m(m: &mut Memory<'_>, p: u32, slot: u32, host: &mut Host<'_>) -> u32 {
     let r = host.call(m, 0x176f94, &[p, slot, 0xf384, 0x4c8]);
     if r >= 0x80000000 {
         return 0x89b02008;
     }
     if r <= 1 {
-        m.put_word(slot, m.word(0x8f9590));
+        m.put_word(slot, m.word(crate::rom_region::addr(host.rom, 0x8f9590)));
         return 0;
     }
     0x89b02001
 }
 
-/// fn_1f4cb0 (drain teardown, 1:1 with src/fn_1f4cb0.c): release the two
-/// input pairs at p+32 and the two output pairs at p+48 through the
-/// method table at p+4 (release at methods+0x24), zeroing each pair.
 fn fn_1f4cb0_m(m: &mut Memory<'_>, p: u32, tag: u32, host: &mut Host<'_>) -> u32 {
     let rc = crate::frontend::validate_handle(p != 0, tag, 0xf424, 0x40);
     if rc >= 0x80000000 {
@@ -4181,19 +3739,14 @@ fn fn_1f4cb0_m(m: &mut Memory<'_>, p: u32, tag: u32, host: &mut Host<'_>) -> u32
     rc
 }
 
-/// fn_22b238 (drain teardown, 1:1 with src/fn_22b238.c): release the two
-/// handle pairs at p+0x24/p+0x2c through the method table at p+0x20
-/// (release at methods+0x24), then stamp both pairs with the null pair
-/// (fn_176fd4 copies D_8d7660, no advance). A pair already null is left
-/// alone. Reached from the pipe release (fn_2318f0's vt+0x24 per pair).
 fn fn_22b238_m(m: &mut Memory<'_>, p: u32, arg: u32, host: &mut Host<'_>) -> u32 {
     let result = host.call(m, 0x176f94, &[p, arg, 0x10d, 0x38]);
     if result >= 0x80000000 {
         return result;
     }
     let mut result = result;
-    let e0 = m.word(0x8d7660);
-    let e1 = m.word(0x8d7664);
+    let e0 = m.word(crate::rom_region::addr(host.rom,0x8d7660));
+    let e1 = m.word(crate::rom_region::addr(host.rom,0x8d7664));
     let f0 = m.word(p.wrapping_add(0x24));
     let f1 = m.word(p.wrapping_add(0x28));
     if crate::frontend::match_halves(f0, f1, e0, e1) == 0 {
@@ -4219,17 +3772,14 @@ fn fn_22b238_m(m: &mut Memory<'_>, p: u32, arg: u32, host: &mut Host<'_>) -> u32
     result
 }
 
-/// fn_1f43f0 (drain teardown, 1:1 with src/fn_1f43f0.c): close the two
-/// handles at p+0x24 through the method table at p+8 (close at
-/// methods+0x24), resetting each to the null pair (fn_176fd4).
 fn fn_1f43f0_m(m: &mut Memory<'_>, p: u32, tag: u32, host: &mut Host<'_>) -> u32 {
     let rc = crate::frontend::validate_handle(p != 0, tag, 0xf382, 0x34);
     if rc >= 0x80000000 {
         return 0x8ba02008;
     }
     let mut rc = rc;
-    let e0 = m.word(0x8d7660);
-    let e1 = m.word(0x8d7664);
+    let e0 = m.word(crate::rom_region::addr(host.rom,0x8d7660));
+    let e1 = m.word(crate::rom_region::addr(host.rom,0x8d7664));
     for i in 0..2u32 {
         let at = p.wrapping_add(0x24).wrapping_add(i * 8);
         if m.word(at) != 0 {
@@ -4242,9 +3792,6 @@ fn fn_1f43f0_m(m: &mut Memory<'_>, p: u32, tag: u32, host: &mut Host<'_>) -> u32
     rc
 }
 
-/// fn_211348 (drain teardown, 1:1 with src/fn_211348.c): release the
-/// three slots at p+24 through the method table at p+8 (release at
-/// methods+0x24), zeroing each released slot.
 fn fn_211348_m(m: &mut Memory<'_>, p: u32, tag: u32, host: &mut Host<'_>) -> u32 {
     let rc = crate::frontend::validate_handle(p != 0, tag, 0xf381, 52);
     if rc >= 0x80000000 {
@@ -4263,12 +3810,6 @@ fn fn_211348_m(m: &mut Memory<'_>, p: u32, tag: u32, host: &mut Host<'_>) -> u32
     rc
 }
 
-/// fn_229cc0 (drain teardown, 1:1 with src/fn_229cc0.c): processEnd for
-/// the 0x4e7 component. Validate, clear the words at +0x68/+0x6c, then
-/// release the pairs at +0x40, +0x50, +0x48, +0x58 (in that order) through
-/// the method table at +0x10 (release at methods+0x24), stamping each
-/// with the null pair. The first slot folds unconditionally, the rest
-/// only on error while the status is still success.
 fn fn_229cc0_m(m: &mut Memory<'_>, p: u32, tag: u32, host: &mut Host<'_>) -> u32 {
     let r = host.call(m, 0x176f94, &[p, tag, 0x4e7, 0x70]);
     if r >= 0x80000000 {
@@ -4277,8 +3818,8 @@ fn fn_229cc0_m(m: &mut Memory<'_>, p: u32, tag: u32, host: &mut Host<'_>) -> u32
     let mut r = r;
     m.put_word(p.wrapping_add(0x68), 0);
     m.put_word(p.wrapping_add(0x6c), 0);
-    let e0 = m.word(0x8d7660);
-    let e1 = m.word(0x8d7664);
+    let e0 = m.word(crate::rom_region::addr(host.rom,0x8d7660));
+    let e1 = m.word(crate::rom_region::addr(host.rom,0x8d7664));
     for at in [0x40u32, 0x50, 0x48, 0x58] {
         let s = p.wrapping_add(at);
         if m.word(s) != 0 {
@@ -4296,11 +3837,6 @@ fn fn_229cc0_m(m: &mut Memory<'_>, p: u32, tag: u32, host: &mut Host<'_>) -> u32
     r
 }
 
-/// fn_19672c (drain teardown, 1:1 with src/fn_19672c.c): remove `key`
-/// from the map at `p`. Find via fn_198760's walk (the map's own compare
-/// callback, key at node+16), erase via rb_erase (fn_198ae0), run the
-/// key/value destructors (vtable at o+0x24, slots +4/+10), then release
-/// the node through the heap (fn_196428).
 fn fn_19672c_m(m: &mut Memory<'_>, p: u32, key: u32, host: &mut Host<'_>) -> u32 {
     if p == 0 || key == 0 {
         return 0x89002007;
@@ -4326,7 +3862,7 @@ fn fn_19672c_m(m: &mut Memory<'_>, p: u32, key: u32, host: &mut Host<'_>) -> u32
     if found == 0 {
         return 0x89002014;
     }
-    // Flag walk (fn_198760): the last node that still compares equal.
+
     if m.byte(o.wrapping_add(40)) != 0 {
         let mut last = found;
         loop {
@@ -4359,9 +3895,6 @@ fn fn_19672c_m(m: &mut Memory<'_>, p: u32, key: u32, host: &mut Host<'_>) -> u32
     0
 }
 
-/// - lex close walks the pending queue (empty on speech_1: open + close
-///   iterator only), lex free releases the lex object.
-/// - No log calls (port convention); no state is reset that ARM keeps.
 pub fn synthesis_drain_m(
     m: &mut engine::Memory<'_, '_>,
     synth: u32,
@@ -4369,11 +3902,12 @@ pub fn synthesis_drain_m(
     platform: &mut dyn engine::HeapPlatform,
     runtime: &mut dyn RuntimeServicesM,
     snap: &[u8],
+    rom: crate::rom_region::Rom,
 ) -> Result<u32, engine::Error> {
     let mut os = ViewOnly;
     let mut flat = crate::bridge::Flat::new(m, workspace, &mut os, 0)?;
     let mut arena = flat.memory();
-    // Snapshot drain inputs teardown_synth_m clears before the frees run.
+
     let out = synth.wrapping_add(0x84);
     let ctx = arena.word(out);
     let ctx_heap = if ctx == 0 { 0 } else { arena.word(ctx.wrapping_add(4)) };
@@ -4389,6 +3923,7 @@ pub fn synthesis_drain_m(
         depth: 0,
         stack: [0; 64],
         stack_len: 0,
+        rom,
     });
     let rc = {
         let output = OutputSide { host: &host, synth };
@@ -4396,12 +3931,7 @@ pub fn synthesis_drain_m(
         teardown_synth_m(&mut arena.bytes, synth, 0, 0, 0, &mut hooks)
     };
     let rc = rc;
-    // fn_1561b8 arr/extra frees (1:1 with src/fn_151914.c: the C frees arr,
-    // then extra last, via fn_196428). The teardown leaves both allocated;
-    // without this every speak leaks ~200 B and long sessions exhaust the
-    // heap (0x88F0200A once the best free run drops below the need).
-    // boot_part_e::release is the certified 0x196428 port the main Host
-    // already binds; the drain Host satisfies its trait.
+
     {
         let mut arena = flat.memory();
         let mut host_ref = host.borrow_mut();
@@ -4412,11 +3942,7 @@ pub fn synthesis_drain_m(
         if extra != 0 {
             crate::boot_part_e::release(&mut arena, ctx_heap, extra, &mut *host_ref);
         }
-        // fn_1561b8 stream-map destroy (1:1 with the ARM drain: per
-        // pass map_close on the pipe stream map frees states, keys, nodes
-        // and the map shell; setup recreates it per pass like the ARM).
-        // Without this every speak leaks ~190 blocks on the voice heap
-        // and sessions cliff around speak 25 (0x88F0200A wedge).
+
         {
             let pipe = arena.word(out.wrapping_add(0x10));
             if pipe != 0 {
@@ -4434,9 +3960,6 @@ pub fn synthesis_drain_m(
     Ok(rc)
 }
 
-/// Live db hooks over the drain Host: guest calls dispatch through the
-/// same live dispatcher the scheduler pump uses; logs are dropped (port
-/// convention: trace output never affects verified state).
 struct DrainDb<'a, 'h> {
     host: &'a core::cell::RefCell<Host<'h>>,
 }
@@ -4445,7 +3968,7 @@ impl crate::boot::Calls for DrainDb<'_, '_> {
         self.host.borrow_mut().call(memory, address, args)
     }
     fn call_wide(&mut self, _memory: &mut crate::boot::Memory<'_>, _address: u32, _args: &[u32]) -> u64 {
-        // Unused on the drain path (iterator/lex helpers are narrow-only).
+
         0
     }
 }
@@ -4458,9 +3981,6 @@ impl crate::db_live::DbHooksM for DrainDb<'_, '_> {
     }
 }
 
-/// Live fn_1561b8 hooks: vtable/process calls dispatch through the guest
-/// (same bindings the scheduler pump path uses); putOutput with an empty
-/// DONE payload is a pure ack (see synthesis_drain_m).
 struct DrainHooks<'a, 'h> {
     output: OutputSide<'a, 'h>,
     synth: u32,
@@ -4470,8 +3990,7 @@ impl DrainHooks<'_, '_> {
     fn mem_word(mem: &[u8], at: u32) -> u32 {
         u32::from_le_bytes(mem[at as usize..at as usize + 4].try_into().unwrap())
     }
-    /// Last attempted guest dispatch, for session-test forensics on a
-    /// failed drain (OUT_SCRATCH is transient post-pump scratch).
+
     fn mark(_mem: &mut [u8], _site: u32, _entry: u32) {}
     fn out(&self) -> u32 {
         self.synth.wrapping_add(0x84)
@@ -4496,8 +4015,7 @@ impl EmitHooksM for DrainHooks<'_, '_> {
         markers: (u32, u32),
         mem: &mut [u8],
     ) -> (u32, Option<u32>, u32, u32) {
-        // Empty DONE notification: ack without touching guest memory.
-        // (msg == 1 first-pump output keeps the certified app emulation.)
+
         if msg == 2 && len_in == 0 && n_in == 0 {
             return (0, Some(Self::mem_word(mem, self.out().wrapping_add(0x60))), 0, 0);
         }
@@ -4527,8 +4045,7 @@ impl SynthTeardownHooksM for DrainHooks<'_, '_> {
         self.call(mem, entry, &[a, b])
     }
     fn process_end_m(&mut self, h0: u32, h1: u32, mem: &mut [u8]) -> u32 {
-        // TtsCompVt2.processEnd at vt+0x38; the owner is the comp whose
-        // handle pair matches (the same resolution first_component uses).
+
         let cs = Self::mem_word(mem, self.synth.wrapping_add(0x7c));
         let comps = Self::mem_word(mem, cs.wrapping_add(8));
         let count = u16::from_le_bytes(
@@ -4563,9 +4080,7 @@ impl SynthTeardownHooksM for DrainHooks<'_, '_> {
         let vt = if (a, b) == pipe {
             Self::mem_word(mem, self.synth.wrapping_add(0x40))
         } else if (a, b) == aux {
-            // aux is a lingdb object: vt2->release is fn_15b5f0 ObjClose,
-            // unbound in the live dispatcher, so call its port directly
-            // (== dispatching 0x15b5f0 to db_live::close_db_m).
+
             let mut bm = Memory { base: 0, bytes: mem };
             let mut db = DrainDb { host: self.output.host };
             let data = crate::db_live::DbData {
@@ -4587,38 +4102,25 @@ impl SynthTeardownHooksM for DrainHooks<'_, '_> {
         self.call(mem, entry, &[a, b])
     }
     fn null_pair_m(&mut self, mem: &mut [u8]) -> (u32, u32) {
-        // fn_176fd4 copies D_8d7660 (no advance); US literals, like the
-        // voice-start timestamp path. The drain is US-only.
-        (Self::mem_word(mem, 0x8d7660), Self::mem_word(mem, 0x8d7664))
+        let rom = self.output.host.borrow().rom;
+        (
+            Self::mem_word(mem, crate::rom_region::addr(rom, 0x8d7660)),
+            Self::mem_word(mem, crate::rom_region::addr(rom, 0x8d7664)),
+        )
     }
     fn lex_close_m(&mut self, params: u32, lex: u32, mem: &mut [u8]) -> u32 {
-        // fn_175ce0(params, lex): flush the pending queue. Pending is
-        // { parameters, queue }. A null queue means no map was ever
-        // established for this lex object: there is nothing to flush, so
-        // skip (the C port would return 0x89002007 for a null map; that
-        // error path is unreachable on ARM because ARM always establishes
-        // the queue. Establishing it here is params-lane follow-up; the
-        // flush itself is PCM-neutral on these workloads since nothing
-        // queues edits). Save/restore the iterator scratch we borrow.
+
         if params == 0 || lex == 0 {
             return 0x8b702007;
         }
         let queue = Self::mem_word(mem, lex.wrapping_add(4));
         if queue == 0 {
-            // No queue map was ever established for this lex object: no
-            // pending edits can exist, so there is nothing to flush.
+
             return 0;
         }
         let parameters = Self::mem_word(mem, lex);
         let mut rc = 0u32;
-        // Iterator slots live in the app scratch (transient; the pump is
-        // done, so OUT_SCRATCH is free). Save/restore. The open/next/close
-        // ports are called directly: 0x196794/0x196860 are unbound in the
-        // live Host dispatcher (the component lanes bind them in theirs).
-        // Open mirrors alloc_handle_for_key_m's key==0 path with the
-        // fn_1963b8 shape inlined (vtable fn1 dispatch): the pending queue
-        // holds no edits on speech_1, so open + immediate end + close is
-        // the whole effect. Close mirrors boot_live::release_iterator_m.
+
         const SCR: usize = OUT_SCRATCH as usize;
         let mut saved = [0u8; 12];
         saved.copy_from_slice(&mem[SCR..SCR + 12]);
@@ -4642,9 +4144,7 @@ impl SynthTeardownHooksM for DrainHooks<'_, '_> {
             mem[object as usize..object as usize + 4].copy_from_slice(&queue.to_le_bytes());
             mem[object as usize + 4..object as usize + 8].copy_from_slice(&0u32.to_le_bytes());
             mem[object as usize + 8..object as usize + 12].copy_from_slice(&node.to_le_bytes());
-            // 1:1 with src/fn_175ce0.c: the open status (0 here) is the
-            // result; a nonzero first step (incl. exhausted 0x89002017 on
-            // an empty queue) only skips the loop, never fails the flush.
+
             let first = {
                 let mut bm = Memory { base: 0, bytes: &mut *mem };
                 crate::engine_components2::fn_196860(&mut bm, object, key_at, entry_at)
@@ -4691,8 +4191,7 @@ impl SynthTeardownHooksM for DrainHooks<'_, '_> {
         rc
     }
     fn lex_free_m(&mut self, params: u32, lex: u32, mem: &mut [u8]) -> u32 {
-        // fn_175ef0(params, lex): lock params+4, 196fbc(params+16, lex),
-        // unlock. Mirrors boot_live::remove_guarded_m's shape.
+
         if params == 0 || lex == 0 {
             return 0x8b702007;
         }
@@ -4719,15 +4218,12 @@ impl SynthTeardownHooksM for DrainHooks<'_, '_> {
 }
 
 impl DrainHooks<'_, '_> {
-    /// remove_parameter shape inside lex_close_m (fn_175ce0's helper).
-    /// Value layout is { data, size, object } (src/fn_175ce0.c). Control
-    /// flow mirrors the C gotos: kBusy and 174b38 failures return raw
-    /// (done:), everything else reaching the bottom is masked.
+
     fn lex_remove_m(&mut self, params: u32, key: u32, mem: &mut [u8]) -> u32 {
         if params == 0 || key == 0 {
             return 0x8b702007;
         }
-        // Value out-word + iterator scratch live in OUT_SCRATCH
+
         let lock = Self::mem_word(mem, params.wrapping_add(4));
         let values = Self::mem_word(mem, params.wrapping_add(8));
         Self::mark(mem, 50, 0x176f2c);
@@ -4735,8 +4231,7 @@ impl DrainHooks<'_, '_> {
         if r >= 0x80000000 {
             return r;
         }
-        // Value out-word + iterator scratch live in OUT_SCRATCH
-        // (transient; the pump is done). Save/restore what we borrow.
+
         const SCR: usize = OUT_SCRATCH as usize;
         let mut saved = [0u8; 16];
         saved.copy_from_slice(&mem[SCR..SCR + 16]);
@@ -4774,7 +4269,7 @@ impl DrainHooks<'_, '_> {
                     Self::mark(mem, 54, 0x19672c);
                     r = self.call(mem, 0x19672c, &[values, key]);
                     if r < 0x80000000 {
-                        // done: fall through to unlock with r intact.
+
                     } else {
                         r = (r & 0x1fff) | 0x8b702000;
                     }
@@ -4793,22 +4288,20 @@ impl DrainHooks<'_, '_> {
     }
 }
 
-/// Semantic voice-switch operations from the existing scheduler port.
-/// Implementations must execute ports, not refill state from captures.
 pub trait SchedulerHooksM: crate::reentrant::HooksM {
     fn switch_m(&mut self, call: crate::frontend::PipelineCall, synth: u32,
         mem: &mut Memory<'_>) -> crate::frontend::PipelineReply;
-    /// False once a test-only until-stop has fired: the run is over,
-    /// so the dispatcher must not publish further state. Defaults to
-    /// true; the live Host overrides it. No behaviour change when no
-    /// until-stop is armed.
+
     fn checkpoint_allowed(&mut self) -> bool {
         true
     }
 
+    fn rom(&self) -> crate::rom_region::Rom {
+        crate::rom_region::Rom::Us
+    }
+
 }
-/// fn_15429c. Local scheduler state is published before, then reloaded after,
-/// every live callback. Activity storage is disjoint caller-owned workspace.
+
 pub fn process_text_m(
     m: &mut Memory<'_>, p:u32, flush:u32, activity:&mut [u8], scratch:u32,
     hooks:&mut impl SchedulerHooksM,
@@ -4838,9 +4331,7 @@ pub fn process_text_m(
     impl<H:SchedulerHooksM> PipelineStages for Dispatch<'_, '_, H> {
         fn call(&mut self,call:C,state:&mut FrontendState<'_>,_:&mut impl SynthesisSink)->PipelineReply {
             let p=self.p;let m=&mut *self.m;
-            // A fired until-stop ends the run: report the stop status
-            // without publishing further state (round 23). Pre-stop
-            // behaviour is unchanged.
+
             if !self.h.checkpoint_allowed() {
                 return crate::frontend::PipelineReply { status: 0x80002001, value: 0, data: 0 };
             }
@@ -4886,7 +4377,7 @@ pub fn process_text_m(
                 }
                 C::CloseInput=>{
                     r.status=self.h.call_m(m.word(vt+0x24),&[m.word(p+0xac),m.word(p+0xb0)],m);
-                    m.put_word(p+0xac,m.word(0x8d7660));m.put_word(p+0xb0,m.word(0x8d7664));
+                    m.put_word(p+0xac,m.word(crate::rom_region::addr(self.h.rom(),0x8d7660)));m.put_word(p+0xb0,m.word(crate::rom_region::addr(self.h.rom(),0x8d7664)));
                 }
                 C::PrepareVoiceSwitch(_)|C::ExecuteVoiceSwitch(_)=>{r=self.h.switch_m(call,p,m);}
             }
@@ -4901,9 +4392,7 @@ pub fn process_text_m(
     load(&mut state,m,p);
     let saved=[m.word(scratch),m.word(scratch+4)];
     let mut d=Dispatch{m,p,h:hooks,scratch};let rc=crate::frontend::process_text(&mut state,flush,&mut d,&mut NoSink);
-    // A fired until-stop ends the run at its entry image: skip the
-    // final publish so post-stop unwinding cannot pollute the
-    // boundary (round 23). Pre-stop behaviour is unchanged.
+
     if d.h.checkpoint_allowed() {
         store(&state,d.m,p);
     }
@@ -4928,10 +4417,10 @@ impl CtxResetHooksM for ResetHost<'_,'_> {
         let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.p+48)+28);self.h.call(&mut m,f,&[a,b])
     }
     fn null_pair_m(&mut self,bytes:&mut [u8])->(u32,u32) {
-        (mem_word(bytes,0x8d7660),mem_word(bytes,0x8d7664))
+        (mem_word(bytes,crate::rom_region::addr(self.h.rom,0x8d7660)),mem_word(bytes,crate::rom_region::addr(self.h.rom,0x8d7664)))
     }
 }
-/// fn_1e502c with no arena borrow retained by its deinit callback.
+
 pub fn end_token_processing_m(m:&mut Memory<'_>,p:u32,tag:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     if validate_handle(p!=0,tag,0xe58c,8)>=0x80000000 {return 0x89602008;}
     let inner=m.word(p);let key=m.word(p+4);
@@ -4939,20 +4428,13 @@ pub fn end_token_processing_m(m:&mut Memory<'_>,p:u32,tag:u32,h:&mut impl crate:
     h.call_m(0x23ffd4,&[m.word(inner+48),m.word(inner+52)],m);0
 }
 
-/// Invoke a live entry on caller-owned memory. No captured output is accepted.
-/// Round 24: forward the live `dyn` platform to the generic seg2 hosts.
-/// C4Calls and FeTextLive are generic over `P: HeapPlatform`; the live
-/// Host owns a trait object, so this caller-owned adapter bridges them.
 struct HostPlat<'a>(&'a mut dyn engine::HeapPlatform);
 impl engine::HeapPlatform for HostPlat<'_> {
     fn thread_id(&mut self) -> u32 { self.0.thread_id() }
     fn arbiter_address(&self) -> u32 { self.0.arbiter_address() }
     fn arbitrate(&mut self, m: &mut crate::boot::Memory<'_>, a: &[u32]) -> u32 { self.0.arbitrate(m, a) }
 }
-/// Round 24: seg3 one-word root in its own frame. The segment host
-/// carries the 108 KiB depes workspace; it must not sit in
-/// `call_inner`'s frame (which nests dozens deep), so this stays
-/// `#[inline(never)]`. Wiring matches tests/engine_live_seg3.rs.
+
 #[inline(never)]
 fn seg3_oneword_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     if a.len() < 4 {
@@ -4960,7 +4442,7 @@ fn seg3_oneword_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
         return 0x80002001;
     }
     let done = if a.len() > 4 { a[4] } else { m.word(0xe0ff938) };
-    let mut shost = crate::engine_live_seg3::Host::new(&mut *h.boot.platform, crate::engine_live_seg3::SEG_SCRATCH);
+    let mut shost = crate::engine_live_seg3::Host::new(&mut *h.boot.platform, crate::engine_live_seg3::SEG_SCRATCH).with_rom(h.rom);
     let rc = crate::engine_live_seg3::root_oneword(&mut shost, m, a[0], a[1], a[2], a[3], done);
     if let Some(e) = shost.first_unbound {
         h.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: e });
@@ -4972,13 +4454,7 @@ fn seg3_oneword_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     }
     rc
 }
-/// Round 24: seg3 POS roots in their own frame. The 448 KiB stage
-/// scratch plus the segment host's workspace must not sit in
-/// `call_inner`'s frame; `#[inline(never)]` keeps them here. Wiring
-/// matches tests/engine_live_seg3.rs. `root_pos`/`root_homographs` tie
-/// the host and arena to one lifetime, so they get a reborrowed arena
-/// view (same bytes, same base) while the platform reborrow stays
-/// independent.
+
 #[inline(never)]
 fn seg3_pos_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     if a.len() < 5 {
@@ -4993,7 +4469,7 @@ fn seg3_pos_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     let mut r0 = [0u8; 65536];
     let mut r1 = [0u8; 65536];
     let mut scratch = crate::pos::StageScratch { text: &mut t[..], markers: &mut mk[..], lines: [&mut l0[..], &mut l1[..], &mut l2[..]], rule_output: [&mut r0[..], &mut r1[..]] };
-    let mut shost = crate::engine_live_seg3::Host::new(&mut *h.boot.platform, crate::engine_live_seg3::SEG_SCRATCH);
+    let mut shost = crate::engine_live_seg3::Host::new(&mut *h.boot.platform, crate::engine_live_seg3::SEG_SCRATCH).with_rom(h.rom);
     let mut view = crate::boot::Memory { base: m.base, bytes: &mut m.bytes[..] };
     let rc = if f == 0x1f1440 {
         crate::engine_live_seg3::root_pos(&mut shost, &mut view, a[0], a[1], a[2], a[3], a[4], &mut scratch)
@@ -5010,9 +4486,7 @@ fn seg3_pos_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     }
     rc
 }
-/// Round 24: seg3 phrasing root in its own frame. Caller-owned
-/// phrasing buffers plus the segment host's workspace stay here, out
-/// of `call_inner`'s frame. Wiring matches tests/engine_live_seg3.rs.
+
 #[inline(never)]
 fn seg3_phrasing_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     if a.len() < 5 {
@@ -5031,7 +4505,7 @@ fn seg3_phrasing_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     let mut flags = [0u8; 16384];
     let mut buffers = crate::prosody::PhrasingBuffers { text: &mut text[..], map: &mut map[..], input: &mut input[..], input_prefix: 0, marks: &mut marks[..], mode: &mut mode[..], next_mode: &mut next_mode[..], merge_next: &mut merge_next[..], merge_current: &mut merge_current[..], output: &mut output[..], flags: &mut flags[..] };
     let mut workspace = crate::component_live_c::VmWorkspace::default();
-    let mut shost = crate::engine_live_seg3::Host::new(&mut *h.boot.platform, crate::engine_live_seg3::SEG_SCRATCH);
+    let mut shost = crate::engine_live_seg3::Host::new(&mut *h.boot.platform, crate::engine_live_seg3::SEG_SCRATCH).with_rom(h.rom);
     let rc = crate::engine_live_seg3::root_phrasing(&mut shost, m, [a[0], a[1], a[2], a[3]], a[4], &mut buffers, &mut workspace);
     if let Some(e) = shost.first_unbound {
         h.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: e });
@@ -5043,11 +4517,7 @@ fn seg3_phrasing_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     }
     rc
 }
-/// Round 25 (seg7): the 0x1e3b14 marker processor in its own frame.
-/// Delegates to the certified seg7 composition
-/// (`engine_live_seg7::call_seg7`), with the caller's platform, runtime
-/// and snapshot: every nested call rides this same Host dispatcher, no
-/// second dispatcher is built. Wiring matches tests/engine_live_seg7.rs.
+
 #[inline(never)]
 fn seg7_marker_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     let Some(rt) = h.runtime.as_deref_mut() else {
@@ -5055,7 +4525,7 @@ fn seg7_marker_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
         return 0x80002001;
     };
     let snap = h.snap;
-    match crate::engine_live_seg7::call_seg7(m, f, a, &mut *h.boot.platform, rt, snap) {
+    match crate::engine_live_seg7::call_seg7_rom(m, f, a, &mut *h.boot.platform, rt, snap, h.rom) {
         Ok(rc) => rc,
         Err(engine::Error::UnsupportedStage { entry })
         | Err(engine::Error::MissingStreamAdapter { entry }) => {
@@ -5068,23 +4538,7 @@ fn seg7_marker_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
         }
     }
 }
-/// Round 25 (seg7): the 0x1530d0 output pump in its own frame. Delegates
-/// to the certified seg7 composition
-/// (`engine_live_seg7::call_seg7_with_render`), with the caller's
-/// platform, runtime and snapshot; the nested render's backend workspace
-/// and PCM sink are caller-owned locals with the certified sizes and
-/// certified inputs (tick 0x9abcdef0, VFP s16 0 / s17 0), exactly like
-/// tests/engine_live_seg7.rs. The ~2.6 MB frame stays here, out of
-/// `call_inner`'s frame. The nested render's PCM also threads out through
-/// the outer runtime (`RuntimeServicesM::emit_pcm_m`): runtimes without a
-/// caller sink keep the default, which reports unbound and drops the
-/// samples here, so the certified images are unchanged.
-/// Round 11 (seg7): the finish-path direct 18f6b8 flush in its own frame.
-/// Delegates to the seg7 composition's flush path (`flush_m`), with the
-/// caller's platform, runtime and snapshot; the nested render's backend
-/// workspace and PCM sink are caller-owned locals with the certified
-/// sizes and certified inputs (tick 0x9abcdef0, VFP s16 0 / s17 0). The
-/// ~2.6 MB frame stays here, out of `call_inner`'s frame.
+
 #[inline(never)]
 fn seg7_flush_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     let Some(rt) = h.runtime.as_deref_mut() else {
@@ -5117,6 +4571,7 @@ fn seg7_flush_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
         audio: (&mut audio[..]).try_into().unwrap(), samples: &mut samples,
         events: &mut events, first: &mut first, second: &mut second,
         parameter_values: None,
+        rom: h.rom,
     };
     let render = crate::engine_live_seg7::RenderCtx {
         workspace: &mut workspace, pcm: &mut pcm, written: 0,
@@ -5124,8 +4579,8 @@ fn seg7_flush_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
         registers: engine::NotificationRegisters { s16: 0, s17: 0 },
         stop_at_render: false,
     };
-    match crate::engine_live_seg7::call_seg7_with_render(
-        m, f, a, &mut *h.boot.platform, rt, snap, Some(render),
+    match crate::engine_live_seg7::call_seg7_with_render_rom(
+        m, f, a, &mut *h.boot.platform, rt, snap, Some(render), h.rom,
     ) {
         Ok(rc) => rc,
         Err(engine::Error::UnsupportedStage { entry })
@@ -5171,6 +4626,7 @@ fn seg7_pump_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
         audio: (&mut audio[..]).try_into().unwrap(), samples: &mut samples,
         events: &mut events, first: &mut first, second: &mut second,
         parameter_values: None,
+        rom: h.rom,
     };
     let render = crate::engine_live_seg7::RenderCtx {
         workspace: &mut workspace, pcm: &mut pcm, written: 0,
@@ -5178,8 +4634,8 @@ fn seg7_pump_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
         registers: engine::NotificationRegisters { s16: 0, s17: 0 },
         stop_at_render: false,
     };
-    match crate::engine_live_seg7::call_seg7_with_render(
-        m, f, a, &mut *h.boot.platform, rt, snap, Some(render),
+    match crate::engine_live_seg7::call_seg7_with_render_rom(
+        m, f, a, &mut *h.boot.platform, rt, snap, Some(render), h.rom,
     ) {
         Ok(rc) => rc,
         Err(engine::Error::UnsupportedStage { entry })
@@ -5194,10 +4650,13 @@ fn seg7_pump_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     }
 }
 pub fn call_live_m(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine::HeapPlatform)->Result<u32,engine::Error> {
-    let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:None,snap:&[],trace:None,until:None,depth:0,stack:[0;64],stack_len:0};
+    call_live_m_rom(m,f,a,platform,crate::rom_region::Rom::Us)
+}
+pub fn call_live_m_rom(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<u32,engine::Error> {
+    let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:None,snap:&[],trace:None,until:None,depth:0,stack:[0;64],stack_len:0,rom};
     let rc=h.call(m,f,a);
     if let Some(e)=h.boot.fault {return Err(e);}
-    if let Some(b)=h.boundary {return Err(engine::Error::UnsupportedStage{entry:b.entry});}
+    if let Some(b)=h.boundary { return Err(engine::Error::UnsupportedStage{entry:b.entry});}
     Ok(rc)
 }
 
@@ -5246,7 +4705,7 @@ impl InserterPumpHooksM for BufferHost<'_,'_> {
     }
     fn ins_close_m(&mut self,a:u32,b:u32,flag:u32,bytes:&mut [u8])->u32 {self.inserter(bytes,48,&[a,b,flag])}
     fn pump_remote_m(&mut self,bytes:&mut [u8],p:u32)->u32 {self.h.call(&mut Memory{base:0,bytes},0x22c85c,&[p])}
-    fn null_pair_m(&mut self,bytes:&mut [u8])->(u32,u32) {(mem_word(bytes,0x8d7660),mem_word(bytes,0x8d7664))}
+    fn null_pair_m(&mut self,bytes:&mut [u8])->(u32,u32) {(mem_word(bytes,crate::rom_region::addr(self.h.rom,0x8d7660)),mem_word(bytes,crate::rom_region::addr(self.h.rom,0x8d7664)))}
 }
 struct AudioHost<'h,'p>{h:&'h mut Host<'p>,p:u32,index:u32}
 impl AudioOpenHooksM for AudioHost<'_,'_> {
@@ -5261,7 +4720,7 @@ impl AudioOpenHooksM for AudioHost<'_,'_> {
         let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.p+12)+76);self.h.call(&mut m,f,&[])
     }
     fn audio_open_failed_m(&mut self,logger:u32,bytes:&mut [u8]) {
-        // The logger consumes a temporary live string, not a captured reply.
+
         let mut name=[0u8;64];name[..15].copy_from_slice(b"audio/L16;rate=");let _=render_unsigned(mem_word(bytes,self.p+60),&mut name[15..],10);
         let s=0x1a00usize;let mut saved=[0u8;64];saved.copy_from_slice(&bytes[s..s+64]);bytes[s..s+64].copy_from_slice(&name);
         let mut m=Memory{base:0,bytes};DbHooksM::call_m(self.h,0x1738e8,&[logger,0x8fa808,3,0,0x22d670,s as u32],&mut m);
@@ -5277,33 +4736,18 @@ impl AudioOpenHooksM for AudioHost<'_,'_> {
     }
 }
 
-/// fn_264578 from src/fn_263384.c. The optional backend reset is live.
 pub fn fn_264578(m:&mut Memory<'_>,p:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     if p==0 {return 0x81102007;}
     if m.byte(p+0x77)!=0 {return h.call_m(0x2ba6b4,&[m.word(p+0x3c)],m);}
     0
 }
 
-
-/// fn_163a98, memory-passing conversion of handoff::handle_callback.
-/// Every service, including publication and locking, sees the current arena.
-///
-/// seg5 r14: the nested-render capacities are C locals (`first`/`second`
-/// in renderSamples, src/fn_163a98.c). On the ARM they live in the 163a98
-/// frame: every observed run nests 1a18c4 at SP 0xe0ff800 (all six render
-/// drivers logs agree: s0 = SP+0x18, s1 = SP+0x14, result = SP+0x64), so
-/// the port stores them at those ARM stack slots. The old 0x1c00 scratch
-/// window has no ARM counterpart.
-///
-/// The nested 1a18c4 SP observed on the ARM at the chunk-1 nested call.
-/// All six workload drivers logs (scratch/seg7/render-*-drivers.json)
-/// agree on this SP and on the three slot addresses below.
 pub const NESTED_163A98_SP: u32 = 0xe0ff800;
-/// ARM stack slot of the first capacity word (C local `first`).
+
 pub const NESTED_CAP_S0: u32 = NESTED_163A98_SP + 0x18;
-/// ARM stack slot of the second capacity word (C local `second`).
+
 pub const NESTED_CAP_S1: u32 = NESTED_163A98_SP + 0x14;
-/// ARM stack slot of the nested SynthesisResult (20 bytes).
+
 pub const NESTED_RESULT: u32 = NESTED_163A98_SP + 0x64;
 pub fn callback_m(m:&mut Memory<'_>,a:[u32;5],_scratch:u32,tick:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     let p=a[0];let event=a[4];
@@ -5324,7 +4768,7 @@ pub fn callback_m(m:&mut Memory<'_>,a:[u32;5],_scratch:u32,tick:u32,h:&mut impl 
                 if m.byte(p+0x61a1)!=0 {return 0;}
                 h.call_m(0x166054,&[tick,0],m);
             }
-            // Capacities go to the ARM's own stack slots (see NESTED_CAP_S0).
+
             if !render_callback_m(m,p,a[1],a[2],m.word(event+8),NESTED_CAP_S0,false,h){return 0x80002001;}
             h.call_m(0x1840fc,&[p+0x110],m);
             let ready=h.call_m(m.word(m.word(p)+120),&[p],m);
@@ -5340,8 +4784,7 @@ pub fn callback_m(m:&mut Memory<'_>,a:[u32;5],_scratch:u32,tick:u32,h:&mut impl 
     }
     0
 }
-/// fn_183398, using the existing finish/padding algorithm on guest spans.
-/// scratch is 28 disjoint guest bytes, restored on return.
+
 pub fn finish_m(m:&mut Memory<'_>,p:u32,a:u32,b:u32,scratch:u32,h:&mut impl crate::reentrant::HooksM) {let _=finish_checked_m(m,p,a,b,scratch,h);}
 fn finish_checked_m(m:&mut Memory<'_>,p:u32,a:u32,b:u32,scratch:u32,h:&mut impl crate::reentrant::HooksM)->bool {
     let saved=core::array::from_fn::<_,7,_>(|i|m.word(scratch+i as u32*4));
@@ -5356,13 +4799,7 @@ fn render_callback_m(m:&mut Memory<'_>,p:u32,a:u32,b:u32,result:u32,s:u32,flush:
     let first=m.word(p+0x78).wrapping_add(offset);
     m.put_word(s,0x4b000u32.wrapping_sub(offset)>>1);
     m.put_word(s+4,if m.word(p+0x18)<2 {offset>>1}else{0x25800});
-    // The fallible live service uses this sentinel only for unavailable work
-    // or an invalid binding. Do not publish the unchanged capacity as PCM.
-    // seg5 r13: no restore on the 1a18c4-stop. The ARM has no stop path:
-    // at the nested entry its [s]/[s+4] hold this setup (the capacities the
-    // chunk re-drive reads). Every entry recomputes [s]/[s+4]
-    // unconditionally and the slots are excluded scratch, so leaving them
-    // set is harmless on genuine faults too.
+
     if h.call_m(0x1a18c4,&[m.word(p+0x61b8),a,b,result,first,s,m.word(p+0x7c),s+4,flush as u32],m)==0x80002001 {
         return false;
     }
@@ -5383,7 +4820,7 @@ fn render_callback_m(m:&mut Memory<'_>,p:u32,a:u32,b:u32,result:u32,s:u32,flush:
     h.call_m(0x1a1b68,&[p],m);
     m.put_word(s,saved[0]);m.put_word(s+4,saved[1]);true
 }
-/// fn_1fe094. The item destructor remains a live, separately owned dependency.
+
 pub fn clear_text_items_m(m:&mut Memory<'_>,p:u32,tag:u32,scratch:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     let rc=validate_handle(true,tag,0x11d,0x48);
     if rc>=0x80000000 {return rc;}
@@ -5394,12 +4831,11 @@ pub fn clear_text_items_m(m:&mut Memory<'_>,p:u32,tag:u32,scratch:u32,h:&mut imp
     h.call_m(0x19703c,&[m.word(p+0x2c)],m);rc
 }
 
-
 struct ReentrantBoot<'a,H>(&'a mut H);
 impl<H:crate::reentrant::HooksM> crate::boot_part_e::Host for ReentrantBoot<'_,H> {
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.0.call_m(f,a,m)}
 }
-/// Memory-passing conversion of render_part_c::fn_2581ac.
+
 pub fn fn_2581ac_m(m:&mut Memory<'_>,p:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     if p==0 {return 0x81102007;}
     let method=m.word(m.word(p+48)+48);
@@ -5413,16 +4849,14 @@ pub fn fn_2581ac_m(m:&mut Memory<'_>,p:u32,h:&mut impl crate::reentrant::HooksM)
     }
     rc
 }
-/// Memory-passing conversion of render_part_c::fn_2ba6b4.
+
 pub fn fn_2ba6b4_m(m:&mut Memory<'_>,p:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     if p==0 {return 0x81102007;}
     if m.word(p+64)!=0 {let _=crate::frontend::check_handle(m.word(m.word(p+8)+20)!=0);}
     let rc=fn_2581ac_m(m,m.word(p+12),h);
     if rc<0x80000000 {0}else{rc}
 }
-/// Live PCRE teardown, preserving the existing regex::pcre_deinit algorithm.
-/// The allocator receives the current arena for each release. The original
-/// frame-store entry and its host interface remain unchanged.
+
 pub fn pcre_deinit_m(m:&mut Memory<'_>,p:u32,key:u32,scratch:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     let rc=validate_handle(p!=0,key,0xdd57,0x18);
     if rc>=0x80000000 {return rc;}
@@ -5458,8 +4892,11 @@ fn pcre_free_entry_m(m:&mut Memory<'_>,p:u32,i:u32,head:bool,h:&mut impl crate::
 
 impl SchedulerHooksM for Host<'_> {
     fn switch_m(&mut self,_:crate::frontend::PipelineCall,_:u32,_:&mut Memory<'_>)->crate::frontend::PipelineReply {
-        self.boot.fault=Some(engine::Error::UnsupportedStage{entry:0x15429c});
+        self.boot.fault=Some(engine::Error::UnsupportedStage{entry:crate::rom_region::addr(self.rom,0x15429c)});
         crate::frontend::PipelineReply{status:0x80002001,value:0,data:0}
+    }
+    fn rom(&self) -> crate::rom_region::Rom {
+        self.rom
     }
     fn checkpoint_allowed(&mut self) -> bool {
         !self.stop_is_until()
@@ -5467,21 +4904,21 @@ impl SchedulerHooksM for Host<'_> {
 }
 
 #[inline(never)]
-fn selection_root_m(m:&mut Memory<'_>,args:[u32;7],platform:&mut dyn engine::HeapPlatform)->Result<u32,engine::Error> {
+fn selection_root_m(m:&mut Memory<'_>,args:[u32;7],platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<u32,engine::Error> {
                 let mut nodes=[crate::selection::DecisionNode{question:0,miss:0,hit:0};65536];
                 let mut features=crate::component_live_a::FeatureWorkspace{blob:[0;131072],bytes:[[0;2053];60],words:[[0;1025];60],ints:[[0;16384];6],pitch:[0;4096],contexts:[0;9216],modes:[0;16384],markers:[crate::prosody::ProsodyMarker{kind:0,active:0,position:0};1024],carrier:[0;4096]};
-                
-                crate::component_live_a::fn_227d64_m(m,args,crate::component_live_a::SCRATCH_227D64,&mut nodes,platform,&mut features)
+
+                crate::component_live_a::fn_227d64_m(m,args,crate::component_live_a::SCRATCH_227D64,&mut nodes,platform,&mut features,rom)
 }
-/// Completed group-a entries and their certified live stream dependencies.
-fn component_a2_m(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine::HeapPlatform)->Result<u32,engine::Error> {
+
+fn component_a2_m(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<u32,engine::Error> {
     let dependency=0x3000usize;let root=0x4000u32;
     let mut saved=[0u8;4352];saved.copy_from_slice(&m.bytes[dependency..dependency+4352]);
-    let mut h=crate::component_live_a2::LiveCalls::new(platform,dependency as u32);
+    let mut h=crate::component_live_a2::LiveCalls::new(platform,dependency as u32).with_rom(rom);
     let rc=match f {
-        0x22b3bc=>crate::component_live_a2::fn_22b3bc_m(m,a[0],a[1],a[2],a[3],0x22b228,0x14f8a8,root,&mut h),
-        0x229de4=>crate::component_live_a2::fn_229de4_m(m,a[0],a[1],[a[2],a[3]],0x22a024,0x22a074,root,&mut h),
-        0x22b518=>crate::component_live_a2::fn_22b518_m(m,a[0],a[1],a[4],0x15df6c,root,&mut h),
+        0x22b3bc=>{let (k,mi)=match rom{crate::rom_region::Rom::Eu=>(0x22b3e4,0x14f96c),_=>(0x22b228,0x14f8a8)};crate::component_live_a2::fn_22b3bc_m(m,a[0],a[1],a[2],a[3],k,mi,root,&mut h)},
+        0x229de4=>{let (b,mk)=match rom{crate::rom_region::Rom::Eu=>(0x22a1e0,0x22a230),_=>(0x22a024,0x22a074)};crate::component_live_a2::fn_229de4_m(m,a[0],a[1],[a[2],a[3]],b,mk,root,&mut h)},
+        0x22b518=>{let lt=match rom{crate::rom_region::Rom::Eu=>0x15e030,_=>0x15df6c};let dt=match rom{crate::rom_region::Rom::Eu=>0x8fb98c,_=>0x8fa74c};crate::component_live_a2::fn_22b518_m(m,a[0],a[1],a[4],lt,root,&mut h,dt)},
         0x22a0a8=>crate::component_live_a2::fn_22a0a8_m(m,a[0],a[1],a[4],root,&mut h),
         _=>crate::component_live_a2::Calls::call(&mut h,m,f,a),
     };
@@ -5489,8 +4926,6 @@ fn component_a2_m(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine::Hea
     if let Some(e)=fault{Err(e)}else{Ok(rc)}
 }
 
-
-/// Memory-passing conversion of frontend::destroy_subtree (198fb4).
 pub fn destroy_subtree_m(m:&mut Memory<'_>,tree:u32,node:u32,end:u32,h:&mut impl crate::reentrant::HooksM) {
     if node==end{return;}
     destroy_subtree_m(m,tree,m.word(node),end,h);
@@ -5504,7 +4939,7 @@ fn destroy_node_m(m:&mut Memory<'_>,tree:u32,node:u32,h:&mut impl crate::reentra
     if q!=0 {h.call_m(m.word(m.word(tree+36)+16),&[q,m.word(tree+32)],m);}
     crate::boot_part_e::release(m,m.word(tree+32),node,&mut ReentrantBoot(h));
 }
-/// Memory-passing conversion of frontend::clear_tree (19869c).
+
 pub fn clear_tree_m(m:&mut Memory<'_>,tree:u32,h:&mut impl crate::reentrant::HooksM) {
     let node=m.word(tree);
     if node!=tree {
@@ -5518,7 +4953,7 @@ pub trait SwitchHooksM {
     fn read_switch_m(&mut self,obj:u32,value:&mut u32,mem:&mut [u8])->u32;
     fn close_pipes_m(&mut self,p:u32,mem:&mut [u8])->u32;
 }
-/// Memory-passing conversion of frontend::pipeline_switch (230274).
+
 pub fn pipeline_switch_m(h:&mut impl SwitchHooksM,mem:&mut [u8],p:u32,key:u32)->u32 {
     let mut value=0;
     let mut rc=validate_handle(true,key,0x2be,44);
@@ -5542,8 +4977,7 @@ impl SwitchHooksM for SwitchHost<'_,'_> {
     }
     fn close_pipes_m(&mut self,p:u32,bytes:&mut [u8])->u32 {self.0.call(&mut Memory{base:0,bytes},0x196770,&[p])}
 }
-/// Memory-passing conversion of frontend::write_copy (150fbc).
-/// data/available are two disjoint caller-owned scratch words, as in the original.
+
 pub fn write_copy_m(bytes:&mut [u8],object:Option<u32>,tag:u32,source:Option<u32>,source_tag:u32,count:u32,written:u32,data:u32,available:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
     let a=[object.unwrap_or(0),tag,source.unwrap_or(0),source_tag,count,written];
     let m=&mut Memory{base:0,bytes};
@@ -5562,16 +4996,8 @@ pub fn write_copy_m(bytes:&mut [u8],object:Option<u32>,tag:u32,source:Option<u32
     rc
 }
 
-/// Group-b entries whose retained live returns have landed, plus their stream writer.
-/// Disjoint guest scratch for the 2a762c teardown env (24 bytes at the
-/// stack-page base): seg3's in-page slots start at +0x100, so +0..24 is
-/// disjoint; caller-owned and saved/restored around the arm anyway.
-/// (Round 27's T_MISC layout is not re-applied here: the audit
-/// conversions stay documented, not rebuilt, after the priv reset.)
 const SCRATCH_2A762C: u32 = 0xe0fe000;
-/// fn_2a3740: zero six words and release the pool (round 27b: tiny
-/// leaf of the end-of-synthesis 0x2a762c wrap-up; ARM offsets 0x2c..0x40
-/// verified in fn_2a3740.o; the certified fn_2db4a0 port releases).
+
 pub fn fn_2a3740_m(
     m: &mut Memory<'_>,
     s: u32,
@@ -5583,9 +5009,7 @@ pub fn fn_2a3740_m(
     }
     crate::boot_port_3b::fn_2db4a0(m, h, s, k)
 }
-/// fn_2a3414: zero nine words and release two pools (round 27b; ARM
-/// order 0x40,0x44,0x48,0x50,0x54,0x4c,0x38,0x34,0x3c verified in
-/// fn_2a3414.o, plus the +24 second release).
+
 pub fn fn_2a3414_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -5598,14 +5022,7 @@ pub fn fn_2a3414_m(
     crate::boot_port_3b::fn_2db4a0(m, h, p, k);
     crate::boot_port_3b::fn_2db4a0(m, h, p.wrapping_add(24), k)
 }
-/// fn_2a762c: the end-of-synthesis wrap-up (round 27b). Replicates
-/// src/fn_2a762c.c line for line (offsets 0x498/0x4e0/0x3d4 and the
-/// f2c gate verified in fn_2a762c.o) over the certified fn_2db4a0
-/// port. The ">>all done" log (ARM fmt 0x2a7694, category 0x8fa510)
-/// only fires when a->f2c > 1 (0 on speech_1; the live logger gates
-/// level 4 at threshold 1 anyway). The teardown env literals never
-/// reach the image while logging stays gated off; the caller's
-/// disjoint scratch carries the env.
+
 pub fn fn_2a762c_m(
     m: &mut Memory<'_>,
     o: u32,
@@ -5635,7 +5052,7 @@ pub fn fn_2a762c_m(
 fn component_b_m(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine::HeapPlatform)->Result<u32,engine::Error> {
     let dependency=0x6000usize;let root=0x7000;
     let mut saved=[0u8;8192];saved.copy_from_slice(&m.bytes[dependency..dependency+8192]);
-    let mut h=crate::component_live_b::LiveHost{platform,fault:None,scratch:dependency as u32};
+    let mut h=crate::component_live_b::LiveHost{platform,fault:None,scratch:dependency as u32,rom:crate::rom_region::Rom::Us};
     let rc=match f {
         0x1e4a3c=>crate::component_live_b::fn_1e4a3c_m(m,a[0],a[1],&mut h),
         0x1f48cc=>crate::component_live_b::fn_1f48cc_m(m,a[..5].try_into().unwrap(),root,&mut h),
@@ -5832,8 +5249,21 @@ pub fn store_state(s: &SynthesisState, bytes: &mut [u8], tracker: &mut [u8]) {
     }
     bytes[0x34..0x36].copy_from_slice(&s.history[0].to_le_bytes());
     bytes[0x36..0x38].copy_from_slice(&s.history[1].to_le_bytes());
-    let PitchTracker::Crossings(t) = s.tracker else {
-        panic!()
+    let t = match &s.tracker {
+        PitchTracker::Crossings(t) => t,
+        PitchTracker::Resonator(e) => {
+            let f = |v: f32| v.to_bits();
+            for (offset, value) in [
+                (28, f(e.previous)),
+                (32, f(e.older)),
+                (36, f(e.oldest)),
+                (40, f(e.coefficient)),
+                (44, f(e.sample_rate)),
+            ] {
+                put(tracker, offset, value);
+            }
+            &e.period
+        }
     };
     for (offset, value) in [
         (0, t.min_period),
@@ -6040,9 +5470,6 @@ pub fn encode(s: &SpeechFrame, b: &mut [u8]) {
 
 }
 
-
-/// Caller-owned typed buffers for the live US backend. Lengths are checked
-/// against the live allocation headers before reading or publishing anything.
 pub struct BackendWorkspace<'a> {
     pub input:&'a mut [i16],pub output:&'a mut [i32],pub grain:&'a mut [i32],
     pub window:&'a mut [f32],pub modulation:&'a mut [f32;1024],
@@ -6051,8 +5478,9 @@ pub struct BackendWorkspace<'a> {
     pub audio:&'a mut [i16;crate::queue::AUDIO_CAPACITY],
     pub samples:&'a mut [i16],pub events:&'a mut [crate::queue::SpeechEvent],
     pub first:&'a mut [i16],pub second:&'a mut [i16],
-    /// Optional standalone-stage parameter inputs. The live request uses None, reading its own tree.
+
     pub parameter_values:Option<[&'a [u8];2]>,
+    pub rom:crate::rom_region::Rom,
 }
 fn backend_capacity(required:usize,available:usize)->Result<(),engine::Error> {
     if required>available{Err(engine::Error::Capacity{required,available})}else{Ok(())}
@@ -6070,10 +5498,7 @@ fn parameter_span_m(m:&Memory<'_>,engine:u32,key:&[u8])->Result<(u32,usize),engi
     }
     Err(engine::Error::EngineStatus(0x8b702014))
 }
-/// Guest-memory binding of the existing engine_backend::render_backend.
-/// Only the current live arena, immutable ROM tables and caller-owned storage
-/// enter this function. No recorded stage reply or PCM is accepted.
-/// US English only here; other regional bindings remain in engine_backend.
+
 pub fn render_backend_m(m:&mut Memory<'_>,a:[u32;9],w:&mut BackendWorkspace<'_>)->Result<[usize;2],engine::Error> {
     use crate::{buffers::{RingBuffer,SampleFilter,VoiceFilter},effects::VoiceEffect,
         frames::{LipSync,PlannedSegments,TimingSegments},orchestration::Setup,
@@ -6097,15 +5522,16 @@ pub fn render_backend_m(m:&mut Memory<'_>,a:[u32;9],w:&mut BackendWorkspace<'_>)
     for i in 0..3{backend_capacity(ring_len[i],w.voice_delays[i].len())?;read_floats_m(m,ring_data[i],&mut w.voice_delays[i][..ring_len[i]]);}
     backend_capacity(ring_len[3],w.sample_delay.len())?;
     for(i,v)in w.sample_delay[..ring_len[3]].iter_mut().enumerate(){*v=m.half(ring_data[3]+i as u32*2);}
-    let audio_ptr=m.word(0xa7b794);read_shorts_m(m,audio_ptr,w.audio);
-    // The typed frame port uses sample indices; guest fields carry pointers.
+    let audio_ptr=m.word(crate::rom_region::addr(w.rom,0xa7b794));read_shorts_m(m,audio_ptr,w.audio);
+
     for i in 0..128 {
         let at=0x3c44+i*4;let value=backend_codec::word(&raw,at);
         if audio_ptr<=value && value<=audio_ptr+crate::queue::AUDIO_CAPACITY as u32*2 {
             backend_codec::put(&mut raw,at,(value-audio_ptr)/2);
         }
     }
-    read_shorts_m(m,m.word(p+0x31ec),w.wave);read_floats_m(m,0xa7b7f0,w.normalization);
+    read_shorts_m(m,m.word(p+0x31ec),w.wave);read_floats_m(m,crate::rom_region::addr(w.rom,0xa7b7f0),w.normalization);
+
     let samples=m.word(data+4)as usize/2;let events=m.word(data+12)as usize;
     backend_capacity(samples,w.samples.len())?;backend_capacity(events,w.events.len())?;
     read_shorts_m(m,m.word(data+8),&mut w.samples[..samples]);
@@ -6116,6 +5542,15 @@ pub fn render_backend_m(m:&mut Memory<'_>,a:[u32;9],w:&mut BackendWorkspace<'_>)
     let capacities=[m.word(a[5])as usize,m.word(a[7])as usize];
     backend_capacity(capacities[0],w.first.len())?;backend_capacity(capacities[1],w.second.len())?;
     let mut synth=backend_codec::synthesis_state(&raw,&tracker);let mut voice=synth.voice.clone();
+    if w.rom==crate::rom_region::Rom::Eu{
+        let g=|o:usize|f32::from_bits(u32::from_le_bytes(tracker[o..o+4].try_into().unwrap()));
+        synth.tracker=crate::pitch::PitchTracker::Resonator(crate::pitch::EuTracker{period:crate::pitch::PeriodTracker{
+            min_period:m.word(ptr[4])as i32,max_period:m.word(ptr[4]+4)as i32,
+            period:m.word(ptr[4]+8)as i32,period_delta:m.word(ptr[4]+12)as i32,
+            reset:tracker[16]as i8,stable_count:m.word(ptr[4]+20)as i32,
+            polarity:m.word(ptr[4]+24)as i32},
+            previous:g(28),older:g(32),oldest:g(36),coefficient:g(40),sample_rate:g(44)});
+    }
     let mut input_events=backend_codec::queue(&raw[0xe8..0x14f0]);let mut commands=backend_codec::queue(&raw[0x14f0..0x28f8]);
     let [r0,r1,r2]=&mut w.voice_delays;
     let mut voice_filter=VoiceFilter{rings:[
@@ -6146,18 +5581,29 @@ pub fn render_backend_m(m:&mut Memory<'_>,a:[u32;9],w:&mut BackendWorkspace<'_>)
     let rows=m.word(table+36);let row_len=(dims[0]as usize+dims[1]as usize)*dims[2]as usize;
     let made;
     let final_resource;
+    let lang=match w.rom{
+        crate::rom_region::Rom::Us=>crate::pitch::Language::UsEnglish,
+        crate::rom_region::Rom::Eu=>crate::pitch::Language::UkEnglish,
+        crate::rom_region::Rom::Kr=>crate::pitch::Language::Korean,
+    };
+    let mut pscratch=[0f32;1024];
+    let freqs:[f32;5]=if w.rom==crate::rom_region::Rom::Eu{
+        [f32::from_bits(m.word(0x8bf7dc)),f32::from_bits(m.word(0x8bf7e0)),
+         f32::from_bits(m.word(0x8bf7e4)),f32::from_bits(m.word(0x8bf7e8)),
+         f32::from_bits(m.word(0x8bf7ec))]
+    }else{[0.;5]};
     {
         let bytes=&*m.bytes;
         let values=if let Some(v)=w.parameter_values {v}else{let [(rate,rate_len),(ml,ml_len)]=parameter_spans.unwrap();[&bytes[rate as usize..rate as usize+rate_len],&bytes[ml as usize..ml as usize+ml_len]]};
         let parameters=[ParameterEntry{key:b"rate\0",value:values[0]},ParameterEntry{key:b"voiceml\0",value:values[1]}];
         let resource=VoiceResource{bytes:&bytes[rows as usize..rows as usize+row_len],count:dims[2],key_width:dims[0],value_width:dims[1],disabled:false};
-        let mut resources=EngineResources{valid:true,environment_status:0,parameters:Parameters{entries:&parameters},phonemes:PhonemeMaps{maps:[resource;4]},articulation:Articulation{symbols:&bytes[0x8d8458..0x8d8458+332*8],values:&bytes[0x8d8eb8..0x8d8eb8+332*18]},synth:resource_synth};
-        let tables=NumericTables::from_bytes(&bytes[0xa21fb0..0xa21fb0+NumericTables::CONSTANT_BYTES],&bytes[0x8cbfe0..0x8cbfe0+NumericTables::COSINE_BYTES]).ok_or(engine::Error::InvalidSnapshot)?;
-        let classification=bytes[0xb6b300..0xb6b400].try_into().unwrap();
+        let mut resources=EngineResources{valid:true,environment_status:0,parameters:Parameters{entries:&parameters},phonemes:PhonemeMaps{maps:[resource;4]},articulation:Articulation{symbols:&bytes[crate::rom_region::addr(w.rom,0x8d8458) as usize..crate::rom_region::addr(w.rom,0x8d8458) as usize+332*8],values:&bytes[crate::rom_region::addr(w.rom,0x8d8eb8) as usize..crate::rom_region::addr(w.rom,0x8d8eb8) as usize+332*18]},synth:resource_synth};
+        let tables=NumericTables::from_bytes(&bytes[crate::rom_region::addr(w.rom,0xa21fb0) as usize..crate::rom_region::addr(w.rom,0xa21fb0) as usize+NumericTables::CONSTANT_BYTES],&bytes[crate::rom_region::addr(w.rom,0x8cbfe0) as usize..crate::rom_region::addr(w.rom,0x8cbfe0) as usize+NumericTables::COSINE_BYTES]).ok_or(engine::Error::InvalidSnapshot)?;
+        let class_base=crate::rom_region::addr(w.rom,0xb6b300) as usize;let classification=bytes[class_base..class_base+256].try_into().unwrap();
         made=crate::engine_backend::render_backend(&mut setup,&mut synth,&mut frame,w.audio,&mut position,voice_boundary,classification,&mut timing,&mut segments,&mut lip,&mut resources,
             &mut w.input[..sizes[2]/2],&mut w.output[..sizes[3]/4],&mut w.grain[..sizes[5]/4],&w.window[..sizes[1]/4],w.modulation,w.normalization,&mut effect,w.wave,&tables,
             &w.samples[..samples],&w.events[..events],[&mut w.first[..capacities[0]],&mut w.second[..capacities[1]]],a[8]!=0,raw[0x4bd9]!=0,
-            &mut crate::engine_backend::BackendRegion{language:crate::pitch::Language::UsEnglish,scratch:&mut [],frequencies:&[0.;5],korean_timing:None});
+            &mut crate::engine_backend::BackendRegion{language:lang,scratch:&mut pscratch,frequencies:&freqs,korean_timing:None});
         final_resource=resources.synth;
     }
     backend_codec::write_setup(setup.state,&mut raw);backend_codec::write_state(setup.voice,&mut raw);
@@ -6171,7 +5617,7 @@ pub fn render_backend_m(m:&mut Memory<'_>,a:[u32;9],w:&mut BackendWorkspace<'_>)
     for(i,v)in lip.samples.iter().enumerate(){raw[0x321a+i*2..0x321c+i*2].copy_from_slice(&v.to_le_bytes());}
     backend_codec::put(&mut raw,0x381c,lip.count as u32);raw[0x4c38..0x4c3a].copy_from_slice(&timing.phoneme.to_le_bytes());backend_codec::put(&mut raw,0x4c3c,timing.pitch_duration as u32);
     backend_codec::encode(&frame,&mut raw[0x3828..0x4bc4]);
-    // Active audio slots were written as pointers by the ARM assembler.
+
     for i in 0..(frame.audio.count.max(0)as usize).min(128){backend_codec::put(&mut raw,0x3c44+i*4,audio_ptr+(frame.audio.offsets[i]as u32)*2);}
     backend_codec::put(&mut raw,0x4bc8,position as u32);backend_codec::put(&mut raw,0x31e4,effect.phase[0]as u32);backend_codec::put(&mut raw,0x31e8,effect.phase[1]as u32);
     backend_codec::put(&mut raw,0x31f0,setup.voice_filter.history.to_bits());
@@ -6194,9 +5640,6 @@ pub fn render_backend_m(m:&mut Memory<'_>,a:[u32;9],w:&mut BackendWorkspace<'_>)
     Ok(made)
 }
 
-
-/// Memory-passing OutputList::notify (fn_1b5b8c). The lock callback runs
-/// before projecting the head/state, so callback writes are never hidden.
 pub fn notify_output_m(m:&mut Memory<'_>,outer:u32,node:u32,h:&mut impl crate::reentrant::HooksM){
     let inner=m.word(outer+0x68);h.call_m(0x1840fc,&[inner+0x70],m);
     let mut cursor=m.word(inner+0x30);
@@ -6206,12 +5649,10 @@ pub fn notify_output_m(m:&mut Memory<'_>,outer:u32,node:u32,h:&mut impl crate::r
     }
     h.call_m(0x18423c,&[inner+0x70],m);
 }
-/// Memory-passing OutputState::publish (fn_1a1b68). Arithmetic and transition
-/// order are the original certified model; callbacks observe guest writes
-/// immediately rather than a deferred typed snapshot.
-pub fn publish_output_m(m:&mut Memory<'_>,p:u32,h:&mut impl crate::reentrant::HooksM)->Result<(),engine::Error>{
+
+pub fn publish_output_m(m:&mut Memory<'_>,p:u32,rom:crate::rom_region::Rom,h:&mut impl crate::reentrant::HooksM)->Result<(),engine::Error>{
     h.call_m(0x1840fc,&[p+100],m);
-    if m.byte(0xa7bf5c)!=0{h.call_m(0x1840e8,&[],m);}else{
+    if m.byte(crate::rom_region::addr(rom,0xa7bf5c))!=0{h.call_m(0x1840e8,&[],m);}else{
         let global=h.call_m(0x18ac58,&[],m);h.call_m(0x1840fc,&[global+0x1c4],m);
     }
     let size=m.word(p+0x84);
@@ -6237,35 +5678,34 @@ pub fn publish_output_m(m:&mut Memory<'_>,p:u32,h:&mut impl crate::reentrant::Ho
         h.call_m(0x1b5b8c,&[m.word(p+4),m.word(p+0x14)+m.word(p+0x1c)*24],m);
     }
     m.put_word(p+0x94,quotient);
-    if m.byte(0xa7bf5c)!=0{h.call_m(0x185d40,&[],m);}else{
+    if m.byte(crate::rom_region::addr(rom,0xa7bf5c))!=0{h.call_m(0x185d40,&[],m);}else{
         let global=h.call_m(0x18ac58,&[],m);h.call_m(0x18423c,&[global+0x1c4],m);
     }
     h.call_m(0x18423c,&[p+100],m);Ok(())
 }
 
-
-/// Entry-local machine services. These consume the current arena; no stage
-/// snapshots, replies or recorded PCM can be supplied through this interface.
 pub trait RuntimeServicesM {
+    fn guest_capture(&self)->bool {true}
     fn invoke_m(&mut self,m:&mut Memory<'_>,entry:u32,args:&[u32])->Result<u32,engine::Error>;
-    /// Deliver freshly rendered PCM to the caller's sink. The 0x1530d0 pump
-    /// arm calls this once per pump with the nested render's samples; the
-    /// call has no guest effect. The default reports the capture entry as
-    /// unbound: harnesses without a caller sink (segment-test runtimes)
-    /// keep the arena image as the certified output and the pump drops the
-    /// samples there. Runtimes with a caller sink append and report
-    /// Capacity when `out` is too small, never truncating silently.
+
     fn emit_pcm_m(&mut self,samples:&[i16])->Result<(),engine::Error>{
         let _=samples;
         Err(engine::Error::UnsupportedStage{entry:0xc72018})
     }
 }
+pub struct OutputRuntime<'a> {
+    pub inner: &'a mut dyn RuntimeServicesM,
+    pub guest_capture: bool,
+}
+impl RuntimeServicesM for OutputRuntime<'_> {
+    fn guest_capture(&self)->bool {self.guest_capture}
+    fn invoke_m(&mut self,m:&mut Memory<'_>,entry:u32,args:&[u32])->Result<u32,engine::Error> {self.inner.invoke_m(m,entry,args)}
+    fn emit_pcm_m(&mut self,samples:&[i16])->Result<(),engine::Error> {self.inner.emit_pcm_m(samples)}
+}
 pub trait SleepPlatform {
     fn sleep_ns(&mut self,nanoseconds:u64)->Result<(),engine::Error>;
 }
-/// Caller-owned backend, PCM sink and explicit first-stage clock/VFP inputs.
-/// For an independently tested callback the VFP inputs are its entry values.
-/// The full request's callback producer must carry its own ABI values.
+
 pub struct RuntimeM<'a,'w>{
     pub backend:Option<&'a mut BackendWorkspace<'w>>,
     pub pcm:&'a mut [i16],
@@ -6302,42 +5742,41 @@ impl RuntimeServicesM for RuntimeM<'_,'_>{
         self.written+=samples.len();Ok(())
     }
 }
-/// Test-only accessor: run the live scheduler until `until` is entered,
-/// then stop and report it, leaving the arena as the live image at that
-/// entry (like the boundary mechanism). Used to certify one boundary at a
-/// time (round 22). The run is unchanged when `until` is never entered.
+
 pub fn call_live_until_m(
     m:&mut Memory<'_>,entry:u32,args:&[u32],platform:&mut dyn engine::HeapPlatform,
     runtime:&mut dyn RuntimeServicesM,snap:&[u8],until:u32,
 )->Result<u32,engine::Error>{
-    let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:Some(runtime),snap,trace:None,until:Some(until),depth:0,stack:[0;64],stack_len:0};
-    let rc=h.call(m,entry,args);
-    if let Some(e)=h.boot.fault{return Err(e);}
-    if let Some(b)=h.boundary{return Err(engine::Error::UnsupportedStage{entry:b.entry});}
-    Ok(rc)
-}
-/// Same dispatcher with caller-owned runtime services. Backend work is never
-/// silently allocated inside the recursive component dispatcher.
-pub fn call_live_with_runtime_m(
-    m:&mut Memory<'_>,entry:u32,args:&[u32],platform:&mut dyn engine::HeapPlatform,
-    runtime:&mut dyn RuntimeServicesM,snap:&[u8],
-)->Result<u32,engine::Error>{
-    let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:Some(runtime),snap,trace:None,until:None,depth:0,stack:[0;64],stack_len:0};
+    let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:Some(runtime),snap,trace:None,until:Some(until),depth:0,stack:[0;64],stack_len:0,rom:crate::rom_region::Rom::Us};
     let rc=h.call(m,entry,args);
     if let Some(e)=h.boot.fault{return Err(e);}
     if let Some(b)=h.boundary{return Err(engine::Error::UnsupportedStage{entry:b.entry});}
     Ok(rc)
 }
 
-/// Same dispatcher with a caller-owned call trace (test-only accessor).
-/// Every Host call appends (entry, caller, args, r0, depth) in order; the
-/// storage lives in the caller, never in a static. Align by caller/depth
-/// against the ARM call log to find the first live-only call.
+pub fn call_live_with_runtime_m(
+    m:&mut Memory<'_>,entry:u32,args:&[u32],platform:&mut dyn engine::HeapPlatform,
+    runtime:&mut dyn RuntimeServicesM,snap:&[u8],
+)->Result<u32,engine::Error>{
+    call_live_with_runtime_m_rom(m,entry,args,platform,runtime,snap,crate::rom_region::Rom::Us)
+}
+
+pub fn call_live_with_runtime_m_rom(
+    m:&mut Memory<'_>,entry:u32,args:&[u32],platform:&mut dyn engine::HeapPlatform,
+    runtime:&mut dyn RuntimeServicesM,snap:&[u8],rom:crate::rom_region::Rom,
+)->Result<u32,engine::Error>{
+    let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:Some(runtime),snap,trace:None,until:None,depth:0,stack:[0;64],stack_len:0,rom};
+    let rc=h.call(m,entry,args);
+    if let Some(e)=h.boot.fault{return Err(e);}
+    if let Some(b)=h.boundary{return Err(engine::Error::UnsupportedStage{entry:b.entry});}
+    Ok(rc)
+}
+
 pub fn call_live_until_m_traced(
     m:&mut Memory<'_>,entry:u32,args:&[u32],platform:&mut dyn engine::HeapPlatform,
     runtime:&mut dyn RuntimeServicesM,snap:&[u8],until:u32,trace:&mut dyn CallTraceSink,
 )->Result<u32,engine::Error>{
-    let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:Some(runtime),snap,trace:Some(trace),until:Some(until),depth:0,stack:[0;64],stack_len:0};
+    let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:Some(runtime),snap,trace:Some(trace),until:Some(until),depth:0,stack:[0;64],stack_len:0,rom:crate::rom_region::Rom::Us};
     let rc=h.call(m,entry,args);
     if let Some(e)=h.boot.fault{return Err(e);}
     if let Some(b)=h.boundary{return Err(engine::Error::UnsupportedStage{entry:b.entry});}
@@ -6345,9 +5784,9 @@ pub fn call_live_until_m_traced(
 }
 pub fn call_live_with_runtime_m_traced(
     m:&mut Memory<'_>,entry:u32,args:&[u32],platform:&mut dyn engine::HeapPlatform,
-    runtime:&mut dyn RuntimeServicesM,snap:&[u8],trace:&mut dyn CallTraceSink,
+    runtime:&mut dyn RuntimeServicesM,snap:&[u8],trace:&mut dyn CallTraceSink,rom:crate::rom_region::Rom,
 )->Result<u32,engine::Error>{
-    let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:Some(runtime),snap,trace:Some(trace),until:None,depth:0,stack:[0;64],stack_len:0};
+    let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:Some(runtime),snap,trace:Some(trace),until:None,depth:0,stack:[0;64],stack_len:0,rom};
     let rc=h.call(m,entry,args);
     if let Some(e)=h.boot.fault{return Err(e);}
     if let Some(b)=h.boundary{return Err(engine::Error::UnsupportedStage{entry:b.entry});}
@@ -6355,8 +5794,8 @@ pub fn call_live_with_runtime_m_traced(
 }
 
 impl crate::speech_part_4::Host for Host<'_>{
- fn heap_table(&mut self,_:&mut Memory<'_>)->u32{0xb6f4ec}
- fn heap_optional_flag(&mut self,_:&mut Memory<'_>)->u32{0xa7b8e9}
+ fn heap_table(&mut self,_:&mut Memory<'_>)->u32{crate::rom_region::addr(self.rom,0xb6f4ec)}
+ fn heap_optional_flag(&mut self,_:&mut Memory<'_>)->u32{crate::rom_region::addr(self.rom,0xa7b8e8)+1}
  fn heap_thread_id(&mut self)->u32{self.boot.platform.thread_id()}
  fn heap_arbiter_address(&self)->u32{self.boot.platform.arbiter_address()}
  fn code_overwritten(&mut self,end:u32){self.boot.fault.get_or_insert(engine::Error::CodeOverwritten{end});}
@@ -6366,6 +5805,7 @@ impl crate::speech_part_4::Host for Host<'_>{
 impl crate::component_live_c::Host for Host<'_>{
  fn call_m(&mut self,entry:u32,args:&[u32],m:&mut Memory<'_>)->u32{self.call(m,entry,args)}
  fn thread_id_m(&mut self)->u32{self.boot.platform.thread_id()}
+ fn rom(&self)->crate::rom_region::Rom{self.rom}
 }
 impl crate::boot_port_3b::Host for Host<'_>{
  fn call(&mut self,m:&mut Memory<'_>,address:u32,args:&[u32])->u32{self.call(m,address,args)}
@@ -6373,8 +5813,7 @@ impl crate::boot_port_3b::Host for Host<'_>{
 impl crate::component_live_b::Host for Host<'_>{
  fn call_m(&mut self,entry:u32,args:&[u32],m:&mut Memory<'_>)->u32{self.call(m,entry,args)}
 }
-/// The render chain's live heap runs the same ports the component lanes
-/// use. Calls reenter this dispatcher; a 64-bit call faults the run.
+
 impl crate::boot::Calls for Host<'_> {
     fn call(&mut self, memory: &mut crate::boot::Memory<'_>, address: u32, args: &[u32]) -> u32 {
         self.call(memory, address, args)
@@ -6391,9 +5830,7 @@ impl crate::speech_part_3::Host for Host<'_> {
         self.call(memory, method, args)
     }
 }
-/// The sentence matcher reaches the guest heap only through the
-/// memory-passing ports; the arena-blind allocator/method entries are
-/// loud blockers if the match ever takes them.
+
 impl crate::frontend::HeapVtable for Host<'_> {
     fn alloc_at(&mut self, _o: u32, _n: u32) -> u32 {
         panic!("the live sentence match reached the arena-blind allocator");
@@ -6418,11 +5855,12 @@ impl crate::render_part_c::Host for Host<'_> {
         panic!("the live sentence match reached the output method {entry:#x}");
     }
 }
-/// The render chain's live dispatcher: the engine's own guest dispatcher,
-/// reached with the caller's arena.
+
 impl crate::engine_live_render::LiveDispatch for Host<'_>{
  fn dispatch(&mut self,m:&mut Memory<'_>,entry:u32,args:&[u32])->u32{self.call(m,entry,args)}
  fn thread_id(&mut self)->u32{self.boot.platform.thread_id()}
+ fn rom(&self)->crate::rom_region::Rom{self.rom}
+
 }
 impl crate::speech_part_1::Host for Host<'_>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.call(m,f,a)}
@@ -6451,8 +5889,7 @@ impl crate::speech_part_6::Host for Host<'_>{
  }
 }
 impl Host<'_>{
- /// The logger entry with its varargs in the guest, the way the ARM keeps
- /// them in the caller's frame.
+
  fn log_m(&mut self,logger:u32,category:u32,level:u32,fmt:u32,values:&[u32],m:&mut Memory<'_>){
   let s=0x500;
   let mut saved=[0u32;12];
@@ -6463,47 +5900,39 @@ impl Host<'_>{
  }
 }
 
-/// Shared shape of the component stream openers.
-///
-/// Every one of them validates its own handle, opens two input streams and
-/// two output streams through the component's interface table and closes
-/// whatever opened when a call fails. Only the table address, the stream
-/// type, the name tables and the slot offsets differ.
 struct StreamOpen {
-    /// Offset of the interface table inside the component object.
+
     iface: u32,
-    /// Handle tag the component requires.
+
     tag: u32,
-    /// Handle size the component requires.
+
     size: u32,
-    /// Stream type argument of the create call.
+
     id: u32,
-    /// Mapped name table of the two input streams.
+
     inputs: u32,
-    /// Mapped name table of the two output streams.
+
     outputs: u32,
-    /// Offset of the first input slot.
+
     in_slot: u32,
-    /// Offset of the first output slot.
+
     out_slot: u32,
-    /// Error code for a handle that fails validation.
+
     error: u32,
 }
 
-/// Open and close the component streams over the live arena.
-///
-/// The ARM re-reads the interface table and its create, release and
-/// get-mode entries on every use, so this does the same.
 fn open_streams_m(m:&mut Memory<'_>,p:u32,tag:u32,ha:u32,hb:u32,plan:StreamOpen,
-    platform:&mut dyn engine::HeapPlatform)->Result<u32,engine::Error>{
-    if crate::frontend::validate_handle(p!=0,tag,plan.tag,plan.size)>=0x80000000{return Ok(plan.error);}
+    platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<u32,engine::Error>{
+    { let v = crate::frontend::validate_handle(p!=0,tag,plan.tag,plan.size);     if v>=0x80000000{return Ok(plan.error);} }
     let dependency=0x3000usize;
     let mut saved=[0u8;4352];saved.copy_from_slice(&m.bytes[dependency..dependency+4352]);
-    let mut h=crate::component_live_a2::LiveCalls::new(platform,dependency as u32);
+    let mut h=crate::component_live_a2::LiveCalls::new(platform,dependency as u32).with_rom(rom);
+    let inputs=crate::rom_region::addr(rom,plan.inputs);
+    let outputs=crate::rom_region::addr(rom,plan.outputs);
     let mut rc=0u32;
     let mut i=0u32;
     while i<2 {
-        let name=m.word(plan.inputs+i*4);
+        let name=m.word(inputs+i*4);
         let out=p+plan.in_slot+i*8;
         let open=m.word(m.word(p+plan.iface)+0x20);
         rc=crate::component_live_a2::Calls::call(&mut h,m,open,&[ha,hb,plan.id,name,0,0,out]);
@@ -6513,7 +5942,7 @@ fn open_streams_m(m:&mut Memory<'_>,p:u32,tag:u32,ha:u32,hb:u32,plan:StreamOpen,
     let mut j=0u32;
     if rc<0x80000000 {
         while j<2 {
-            let name=m.word(plan.outputs+j*4);
+            let name=m.word(outputs+j*4);
             let out=p+plan.out_slot+j*8;
             let mode=if j!=1{0}else{
                 let f=m.word(m.word(p+plan.iface)+0x4c);
@@ -6559,62 +5988,30 @@ fn open_streams_m(m:&mut Memory<'_>,p:u32,tag:u32,ha:u32,hb:u32,plan:StreamOpen,
     Ok(rc)
 }
 
-/// fn_202f9c. Live stream open for the text component.
 pub fn fn_202f9c_m(m:&mut Memory<'_>,p:u32,tag:u32,ha:u32,hb:u32,
-    platform:&mut dyn engine::HeapPlatform)->Result<u32,engine::Error>{
+    platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<u32,engine::Error>{
     open_streams_m(m,p,tag,ha,hb,StreamOpen{iface:0x18,tag:0xf38a,size:0xb8,id:0xa8,
-        inputs:0x8f9860,outputs:0x8f986c,in_slot:0x1c,out_slot:0x2c,error:0x8a802008},platform)
+        inputs:0x8f9860,outputs:0x8f986c,in_slot:0x1c,out_slot:0x2c,error:0x8a802008},platform,rom)
 }
 
-/// The component processStart wrappers fn_206bc8, fn_1d8eac, fn_1f9310,
-/// fn_1f1414 and fn_1f2bf0. Each one validates its owner handle and its tag
-/// with fn_176f94 and reports its own error code.
 fn process_start_m(a:&[u32],tag:u32,size:u32,error:u32)->u32 {
     let rc=crate::frontend::validate_handle(a[0]!=0,a[1],tag,size);
     if rc>=0x80000000 {error} else {rc}
 }
 
-/// The broker DataOpen scratch areas, in the machine stack window.
-///
-/// The window is above the ROM's stack pointer and below every mapping the
-/// recorded stages carry, so the areas are disjoint from the arena, from the
-/// processor's own frame and from each other. They are scratch: the recorded
-/// comparison ignores the whole stack window. Caller-owned, no globals.
-/// Port frames in the excluded machine stack window (round 23). The
-/// scheduler components run one at a time, so each frame is a disjoint
-/// caller-owned window below the caller's SP: never compared (the whole
-/// 0x0e000000..0x0e100000 window is excluded from every boundary), never
-/// restored. The 0x2031b0 frame holds the depes-root port's locals
-/// (including its nested 0x282af0 frame at +0x280; +0x200 would alias the
-/// +0x210/0x214/0x218 out-param cells); the others hold the
-/// component ports' s-locals. The logger scratch stays where it was:
-/// fn_17486c runs inside the 0x2031b0 root and needs its 160 bytes disjoint
-/// from the root frame.
 const DEPES_FRAME: u32 = 0x0e0f_d600;
 const DEPES_FRAME_LEN: usize = 0x400;
 const PORT_FRAME_1D3314: u32 = 0x0e0f_da00;
 const PORT_FRAME_1F0A90: u32 = 0x0e0f_db40;
 const PORT_FRAME_21A25C: u32 = 0x0e0f_dc80;
 const DEPES_LOG_SCRATCH: u32 = 0x7800;
-/// Round 24: scratch for the merged seg2 word-expansion root (0x206be4).
-/// process_206be4's out-params ride the first 32 bytes; C4Calls.scratch
-/// rides the rest (tokenize at +0x100, match at +0x600, token host at
-/// +0x700, dict env at +0x800/0xA00). Excluded stack window, zeroed on
-/// entry like the tests' fresh arenas. Nothing else in the crate uses
-/// 0x0e0f8xxx, and it sits below every live stack frame.
+
 const SEG2_C4_SCRATCH: u32 = 0x0e0f_8000;
 const SEG2_C4_LEN: usize = 0x1000;
-/// The archive map-read word and the unmap environment's 64 bytes, in the
-/// machine stack window. Both are caller-owned; the map word is
-/// saved/restored by the port itself.
+
 const MAP_WORD: u32 = 0x0e0f_d500;
 const MAP_ENV: u32 = 0x0e0f_d540;
-/// The broker range family's caller-owned stack-window scratch (round 22).
-/// broker_range_live_m takes the log slot at S and builds its US unmap
-/// environment at S+16; the stream read path uses S+80 and the 1b254c
-/// slot sits at S+84, so 128 bytes stay disjoint from the broker scratch
-/// above and the map word below. In the excluded stack window, never
-/// compared.
+
 const RANGE17_SCRATCH: u32 = 0x0e0f_d400;
 const BROKER_DATA_SCRATCH: u32 = 0x0e0f_d000;
 const BROKER_QUERY_SCRATCH: u32 = 0x0e0f_d020;
@@ -6625,15 +6022,6 @@ const BROKER_LID_SCRATCH: u32 = 0x0e0f_d200;
 const BROKER_UNMAP_SCRATCH: u32 = 0x0e0f_d300;
 const BROKER_CLOSE_SCRATCH: u32 = 0x0e0f_d340;
 
-/// The live broker DataOpen host for 0x1795f0.
-///
-/// Wiring copied from component_live_c2.rs:139 (DataOpenGlobals +
-/// live_fs::FilePlatform with dot 0x8cd208/parent 0x8cd20c/rb 0x1730f8 over
-/// c3's archive window 0x14F3D148) with LiveFileGlobals-style stack-window
-/// scratch. real_log_args()==true so the heap compares byte for byte; every
-/// dictionary/query/logger service rides the same engine_live::Host
-/// dispatcher. The Rom lives in this caller-owned host; guest-sourced code
-/// addresses translate via to_us_guest, Rust US literals need none.
 struct BrokerDataHost<'a, 'b> {
     host: &'a mut Host<'b>,
     rom: crate::rom_region::Rom,
@@ -6651,18 +6039,15 @@ impl BrokerDataHost<'_, '_> {
 }
 
 impl crate::boot_part_b::Host for BrokerDataHost<'_, '_> {
+    fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool {
+        crate::log_live::variadic_m(m,entry,a,format,varargs,0x0e0f7c00,|m,f,a|self.forward(m,f,a))
+    }
+
     fn real_log_args(&mut self) -> bool {
         true
     }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
-        match f {
-            // The varargs chunks of the broker logs. Info logs are gated
-            // by the logger threshold (live threshold 1, levels 3-4), so
-            // they write no heap byte; error logs would need buffering,
-            // but the lid open succeeds with no error log.
-            0xffff0001 => 0,
-            _ => self.forward(m, f, a),
-        }
+        self.forward(m, f, a)
     }
     fn thread_id(&mut self) -> u32 {
         0x1ff82000
@@ -6679,8 +6064,8 @@ impl crate::boot_part_b::Host for BrokerDataHost<'_, '_> {
 }
 
 impl crate::boot_part_b::OutputHost for BrokerDataHost<'_, '_> {
-    fn output(&mut self, _m: &mut Memory<'_>, _f: u32, _a: &[u32]) -> (u32, u32) {
-        (0, 0)
+    fn output(&mut self, _m: &mut Memory<'_>, f: u32, _a: &[u32]) -> (u32, u32) {
+        panic!("broker output requires live binding {f:#x}");
     }
 }
 
@@ -6713,8 +6098,7 @@ impl crate::boot_part_b::QueryHost for BrokerDataHost<'_, '_> {
 
 impl crate::boot_part_b::DataHost for BrokerDataHost<'_, '_> {
     fn data_output(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32], out: u32) -> u32 {
-        // 0x173000 is served by the FilePlatform in fn_1795f0_live's
-        // DataOpenHost; other file services fail closed.
+
         let _ = (m, f, a, out);
         0x8060_2001
     }
@@ -6753,8 +6137,6 @@ impl crate::boot_port_2c::BrokerQuery for BrokerDataHost<'_, '_> {
     }
 }
 
-/// The lid lookup host for 0x26b718. Every service rides the same
-/// engine_live::Host dispatcher; the Rom lives in this caller-owned host.
 struct LidLookupHost<'a, 'b> {
     host: &'a mut Host<'b>,
     rom: crate::rom_region::Rom,
@@ -6809,15 +6191,6 @@ impl crate::reentrant::HooksM for LidLookupHost<'_, '_> {
     }
 }
 
-/// Round 20: the direct close host for fn_179f3c_m. Lookup, logs and
-/// indirect calls ride the lane-c2 OpenHost dispatch exactly as before
-/// (certified for the lid/close path); only heap block releases go
-/// through boot_part_e::release on the arena in place (inside the close,
-/// before the end log, as the ARM does), via the live Host. No recorded
-/// or deferred side effects. The HeapVtable below never fires: fn_179f3c_m
-/// performs every heap release through boot_part_e, and the lookup
-/// performs no heap release on the certified hit. Alloc failure returns
-/// 0, the documented graceful path that preserves the handle.
 struct BrokerCloseDirect<'a, 'b, 'c> {
     host: &'a mut Host<'b>,
     inner: &'c mut crate::component_live_c2::OpenHost,
@@ -6897,14 +6270,6 @@ impl crate::leftovers_1::CloseHost for BrokerCloseDirect<'_, '_, '_> {
     }
 }
 
-/// fn_14e440: the stream-buffer compaction, over the caller's arena.
-///
-/// Mirrors `frontend::compact_stream_buffer` (src/fn_14e440.c): drops
-/// consumed bytes ahead of the slowest reader, destroys discarded elements
-/// through this same live dispatcher, memmoves the tail, and shrinks or
-/// frees the buffer through the guest heap. The element destructor address
-/// is guest-sourced, so it is translated to US before the call. A null
-/// buffer or a kept buffer is a no-op.
 pub fn fn_14e440_m(m: &mut Memory<'_>, state: u32, required: u32, h: &mut Host) {
     assert_eq!(m.base, 0);
     let buffer = m.word(state + 60);
@@ -6997,8 +6362,6 @@ pub fn fn_14e440_m(m: &mut Memory<'_>, state: u32, required: u32, h: &mut Host) 
     }
 }
 
-/// The US broker close runtime for 0x179f3c: US literals, caller-owned
-/// scratch, no globals.
 fn close_runtime_us() -> crate::leftovers_1::CloseRuntime {
     fn hash_text(bytes: &[u8]) -> u32 {
         bytes
@@ -7023,25 +6386,18 @@ fn close_runtime_us() -> crate::leftovers_1::CloseRuntime {
     }
 }
 
-/// fn_206bc8. The ARM reads the tag 0xf382 and the size 44 from its literal
-/// pool and calls fn_176f94; it touches no memory.
 pub fn fn_206bc8_m(a:&[u32])->u32 {process_start_m(a,0xf382,44,0x89b02008)}
 
-/// fn_1d8eac. The ARM reads the tag 0xf383 and the size 56.
 pub fn fn_1d8eac_m(a:&[u32])->u32 {process_start_m(a,0xf383,56,0x89c02008)}
 
-/// fn_1f9310. The ARM reads the tag 0xf384 and the size 0x4c8.
 pub fn fn_1f9310_m(a:&[u32])->u32 {process_start_m(a,0xf384,0x4c8,0x89b02008)}
 
-/// fn_1f1414. The ARM reads the tag 0xf385 and the size 32.
 pub fn fn_1f1414_m(a:&[u32])->u32 {process_start_m(a,0xf385,32,0x89e02008)}
 
-/// fn_1f2bf0. The ARM reads the tag 0xf386 and the size 0x30.
 pub fn fn_1f2bf0_m(a:&[u32])->u32 {process_start_m(a,0xf386,0x30,0x89f02008)}
 
-/// fn_1f4724. Live prompt stream open.
 pub fn fn_1f4724_m(m:&mut Memory<'_>,p:u32,tag:u32,ha:u32,hb:u32,
-    platform:&mut dyn engine::HeapPlatform)->Result<u32,engine::Error>{
+    platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<u32,engine::Error>{
     open_streams_m(m,p,tag,ha,hb,StreamOpen{iface:0x04,tag:0xf424,size:0x40,id:0xc8,
-        inputs:0x8f940c,outputs:0x8f9418,in_slot:0x20,out_slot:0x30,error:0x8c802008},platform)
+        inputs:0x8f940c,outputs:0x8f9418,in_slot:0x20,out_slot:0x30,error:0x8c802008},platform,rom)
 }

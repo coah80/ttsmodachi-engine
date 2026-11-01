@@ -1,4 +1,4 @@
-//! Arena-based translation of the synthesis frame driver.
+
 
 use super::arena::{Arena, Host};
 
@@ -34,11 +34,6 @@ const POSITION: u32 = 0x14c;
 const CONVERTED_COEFFICIENTS: u32 = 0x19c;
 const SUPPRESS_OUTPUT: u32 = 0x1f0;
 
-/// fn_2a977c / EU fn_2a9938 / KR fn_2a99e4.
-///
-/// Drives one synthesis frame: pitch selection, coefficient blending, the
-/// excitation loop and the final lattice filter. The seven callees are host
-/// calls here; the frame's own state is written through the arena.
 #[allow(clippy::too_many_arguments)]
 pub fn render_frame(
     arena: &mut Arena<'_>,

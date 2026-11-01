@@ -1,8 +1,7 @@
-//! Live memory-passing hooks for component group a.
-//! Original typed entries remain unchanged. Every callback gets the live arena.
+
+
 use crate::{boot::Memory, boot_part_e, frontend};
 
-/// fn_17b654. Re-read the owner after releasing the extra block, as ARM does.
 pub fn release_handle_m(m: &mut Memory<'_>, p: u32, h: &mut impl boot_part_e::Host) -> u32 {
     if p == 0 { return 0x8a402007; }
     let extra = m.word(p + 12);
@@ -11,14 +10,12 @@ pub fn release_handle_m(m: &mut Memory<'_>, p: u32, h: &mut impl boot_part_e::Ho
     0
 }
 
-/// fn_196830. Resolve the owner through the object's vtable.
 pub fn release_owner_m(m: &mut Memory<'_>, p: u32, h: &mut impl boot_part_e::Host) -> u32 {
     if p == 0 { return 0x89002007; }
     boot_part_e::release(m, m.word(m.word(p) + 20), p, h);
     0
 }
 
-/// fn_19690c. The allocation callback may change source bytes before the copy.
 pub fn clone_str_m(m: &mut Memory<'_>, src: u32, heap: u32, out: u32, h: &mut impl boot_part_e::Host) -> u32 {
     if src == 0 || heap == 0 || out == 0 { return 0x89002007; }
     let size = frontend::strlen_bytes(&m.bytes[m.offset(src)..]).wrapping_add(1);
@@ -31,7 +28,6 @@ pub fn clone_str_m(m: &mut Memory<'_>, src: u32, heap: u32, out: u32, h: &mut im
     0
 }
 
-/// fn_14df44. No arena view remains borrowed across allocation or cleanup.
 pub fn clone_labeled_word_m(m: &mut Memory<'_>, input: u32, heap: u32, out: u32, h: &mut impl boot_part_e::Host) -> u32 {
     if input == 0 || heap == 0 || out == 0 { return 0x88f02007; }
     let object = boot_part_e::calloc(m, heap, 1, 8, h);
@@ -47,48 +43,17 @@ pub fn clone_labeled_word_m(m: &mut Memory<'_>, input: u32, heap: u32, out: u32,
     rc
 }
 
-struct LiveHost<'a> { boot: crate::engine::SpeechBootHost<'a>, features: Option<&'a mut FeatureWorkspace>, synth:u32 }
-/// Caller stack base for the 0x2a651c synthesis passes (round 3,
-/// seg5). The ARM caller keeps a single 64-byte frame
-/// (`push {r0-r3,r4-r11,lr}; sub sp,#12`) across the whole
-/// 2a8414/2a5578/2a7740 sequence, so its body SP is one constant:
-/// 0xe0ff888 (scratch/seg5/probe_2a8414.py measures it at the 2a8414
-/// entry; wire-a-r21c-entries.json logs the same 227d64 entry SP
-/// 0xe0ff938 on all three calls and the single 2a651c entry SP
-/// 0xe0ff8c8 in call #2's window, whose 64-byte frame leaves 0xe0ff888).
-/// 2a8414/2a5578/2a7740 execute once per speech_1 run, in call #2
-/// (state 1): calls #1/#3 enter 227d64 in states 0/3 (setup/emit) and
-/// never reach 0x2a651c, which has exactly one row in the 180k-entry
-/// log and one static caller (0x2a6604).
-/// The callee frames below land in the captured stack page the seg5
-/// test excludes from the image compare, exactly like the ARM's own
-/// dirty stack slots: nothing is zeroed or restored in the arms (the
-/// ARM never zeroes its frame; the shared ports init what the C inits
-/// and keep the fixture-pinned save/restore inside themselves).
-/// Frame base for fn_227d64_m's 284-byte port scratch (round 12, seg5).
-/// The ARM keeps these C-stack locals in its own frames below the
-/// scheduler's SP; the port threads them as one explicit window instead.
-/// Measured: the scheduler calls 227d64 (and every other root on every
-/// workload) with SP 0xe0ff938 (scratch/seg1+bounds-*.json; stack args at
-/// [sp] in all three seg5 entry captures), and the ARM's own frames reach
-/// down to 0xe0ff6e0 (deepest stack write across calls 1-3). 0xe0fe200 sits
-/// 0x1ae4 below the caller SP in the ARM's stack red zone: same excluded
-/// stack page, ARM-untouched zeros on entry and return (0 diffs, all three
-/// calls), clear of every fixed stack scratch in the tree (2a762c +0x0,
-/// seg3 slots +0x100, 0xe0feb00, 0xe0fed00, 0xe0fee00, 0xe0fef00/0xf20/0xf80).
-/// All slots are transient out-words/workspace; no guest pointer persists.
-/// Replaces the 0x1000 disjoint window, which had no ARM counterpart.
+struct LiveHost<'a> { boot: crate::engine::SpeechBootHost<'a>, features: Option<&'a mut FeatureWorkspace>, synth:u32, rom: crate::rom_region::Rom }
+
 pub const SCRATCH_227D64: u32 = 0xe0fe200;
 const SYN_CALLER_SP: u32 = 0xe0ff888;
 impl crate::selection::arena::Host for LiveHost<'_> {
     fn call(&mut self,a:&mut crate::selection::arena::Arena<'_>,f:u32,v:&[u32])->(u32,u32) {
+        let f=if f==crate::rom_region::addr(self.rom,0x15017c){0x15017c}else{f};
         let mut m=Memory{base:a.base,bytes:a.bytes};
-        // fn_176fd4 with no out-word (the selection stage's
-        // fresh-null-pair convention, c3 r30): return the live
-        // D_8d7660 words as the pair. 1:1 with src/fn_176fd4.c
-        // (ldm r2,{r1,r2} / stm r0,{r1,r2}).
+
         if f==0x176fd4 && v.is_empty() {
-            return (m.word(0x8d7660),m.word(0x8d7664));
+            return (m.word(crate::rom_region::addr(self.rom,0x8d7660)),m.word(crate::rom_region::addr(self.rom,0x8d7664)));
         }
         let rc=match f {
             0x176f94=>frontend::validate_handle(v[0]!=0,v[1],v[2],v[3]),
@@ -100,12 +65,8 @@ impl crate::selection::arena::Host for LiveHost<'_> {
             0x19860c=>frontend::end_stage_hook((v[0]!=0).then_some(v[0])),
             0x173fd8=>max_slot_level_m(&mut m,v[0],self),
             0x2db19c=>{
-                // The fixed callers above pass the C ROM name directly
-                // (round 1, seg5); otherwise resolve the heap name from
-                // the state offset, mirroring the certified
-                // speech_part_7 Engine map (0x24 is the model workspace;
-                // anything else keeps the VStream fallback).
-                let name=if v.len()>=3 && v[2]!=u32::MAX {v[2]} else {heap_name(self.synth,v[0])};
+
+                let name=if v.len()>=3 && v[2]!=u32::MAX {v[2]} else {heap_name(self.synth,v[0],self.rom)};
                 pool_binding(&mut m,f,&[v[0],v[1],name],&mut self.boot)},
             0x2db1d0|0x2db308|0x2db4a0|0x2db3c8=>pool_binding(&mut m,f,v,&mut self.boot),
             0x2f7f90=>duration_pair_binding(&mut m,v),
@@ -133,11 +94,7 @@ impl crate::selection::arena::Host for LiveHost<'_> {
                 m.put_word(v[2],n);if v[3]!=0 {m.put_byte(v[3],done);}rc
             },
             0x15017c=>{
-                // Stream close with the live heap (round 27c, wire-a):
-                // the destructor releases through the live dispatcher
-                // like component_live_b's stream_call_m, instead of
-                // panicking. Certified paths never reach the destructor,
-                // so their images are unchanged.
+
                 let state=m.word(v[0].wrapping_add(4));
                 let heap=m.word(m.word(state.wrapping_add(4)).wrapping_add(4));
                 let cell=core::cell::RefCell::new(&mut *self);
@@ -150,30 +107,18 @@ impl crate::selection::arena::Host for LiveHost<'_> {
                 crate::component_live_b::read_direct_end_m(m.bytes,Some(v[0]),v[1],v[2],&mut vt,&mut destroy)
             },
             0x14fe9c=>frontend::read_direct_start(m.bytes,Some(v[0]),v[1],Some(v[2]),Some(v[3])),
-            // fn_2d9dc0 (round 1, seg5): the decision-tree walk the
-            // synthesis passes run. Pure guest reads plus the
-            // caller-owned decision-node workspace; no host calls.
+
             0x2d9dc0=>{
                 let mut nodes=[crate::selection::DecisionNode{question:0,miss:0,hit:0};65536];
                 let mut w=crate::speech_part_3::FilterWorkspace{nodes:&mut nodes,coefficients:&mut [],input:&mut [],output:&mut []};
                 crate::speech_part_3::sp4_tree(&m,v[0],v[1],v[2],v[3],v[4],&mut w)
             },
-            // fn_2f7420 / fn_2f6f94 (round 1, seg5): the indexed and
-            // untimed acoustic-model reads. Views are built from the
-            // guest tables exactly like the speech_part_5 voice
-            // fixture; resident blocks serve without the loader, and
-            // the loader fails closed (a miss returns an error
-            // record, which the seg5 0-diff certifies never happens
-            // on these states).
+
             0x2f7420=>voice_indexed(&mut m,v),
             0x2f6f94=>voice_untimed(&mut m,v),
-            // fn_2f86e0 (round 1, seg5): the outer acoustic-table read.
-            // The table view mirrors sp4_acoustic; a cold table fails
-            // closed like the voice loader above.
+
             0x2f86e0=>voice_outer(&mut m,v),
-            // fn_2a38d8 (round 1, seg5): the wide smoother. Mirrors
-            // the speech_part_7 test adapter; Rust scratch mirrors the
-            // C's guest buffers exactly.
+
             0x2a38d8=>{
                 let p=v[1];
                 let mode=m.word(p+28) as i32;
@@ -200,42 +145,21 @@ impl crate::selection::arena::Host for LiveHost<'_> {
                 }
             },
             0x2a76a4=>{
-                // fn_2a76a4 (round 1, seg5): the workspace row-pointer
-                // fan-out. Heap traffic runs on v[0] through the heap
-                // adapter, like the C's fn_196394/fn_196428 calls.
-                // v[0] here is the allocator heap, not the synth
-                // struct, so it must not re-anchor the pool-name map.
+
                 let heap=v[0];
                 let mut hadapter=HeapAdapter(&mut self.boot,heap);
                 crate::speech_part_3::fn_2a76a4(&mut m,v[0],v[1],v[2],v[3],v[4],&mut hadapter)
             },
-            // fn_2a24f8 (round 1, seg5): the normal-equation assembly
-            // the synthesis passes run. Lattice hooks ride the pure
-            // ports below; the Cholesky/dictionary/logger paths fail
-            // closed and never fire on these states (certified by the
-            // seg5 0-diff).
+
             0x2a24f8=>{crate::speech_part_2::fn_2a24f8(&mut m,v[0],v[1],self);0},
             0x2a7740=>{
-                // fn_2a7740 (round 3, seg5): the paired spectral pass.
-                // output is the C's 12-byte ModelOutput frame at the
-                // ARM's own slot: `sub sp,#64` past the 48-byte push
-                // puts the frame base at own-sp+16, i.e. caller-SP-96
-                // (values at +4, variances at +8, exactly like the C).
-                // v[0] is the synth struct (pool-name anchor, see above).
+
                 self.synth=v[0];
-                let weights:[i32;14]=core::array::from_fn(|i|m.word(0x91728c+i as u32*4) as i32);
+                let weights:[i32;14]=core::array::from_fn(|i|m.word(crate::rom_region::addr(self.rom,0x91728c)+i as u32*4) as i32);
                 crate::speech_part_7::fn_2a7740(a,self,v[0],v[1],v[2],SYN_CALLER_SP-96,&weights)
             },
             0x2a5578=>{
-                // fn_2a5578 (round 3, seg5): pitch trajectory
-                // construction. Workspaces mirror the certified
-                // speech_part_3 fixture shape, sized up for the live
-                // voice data. The port addresses its 12-byte
-                // FrameParameters at scratch+256; the ARM's own slot
-                // is `sub sp,#120` past the 48-byte push, i.e.
-                // own-sp+60 = caller-SP-108, so scratch sits 256 below
-                // that, in the same captured stack page. v[0] is the
-                // synth struct (pool-name anchor, see above).
+
                 self.synth=v[0];
                 let scratch=SYN_CALLER_SP-108-256;
                 let mut nodes=[crate::selection::DecisionNode{question:0,miss:0,hit:0};65536];
@@ -246,95 +170,73 @@ impl crate::selection::arena::Host for LiveHost<'_> {
                     coefficients:&mut coef,input:&mut input,output:&mut output};
                 crate::speech_part_3::fn_2a5578(&mut m,v[0],v[1],v[2],scratch,&mut w,self)
             },
-            // fn_2a4104 (round 1, seg5): the row-pointer table build the
-            // gain/input table setup calls. The two 0x2db1d0 builds ride
-            // the pool arm above; no extra workspace is needed.
+
             0x2a4104=>crate::selection::arena_mid::allocate_table(a,self,v[0],v[1] as i32,v[2] as i32,v[3]),
             0x2a8414=>{
-                // fn_2a8414 (round 3, seg5): the forward synthesis pass.
-                // params is the C's 12-byte Parameters frame at the
-                // ARM's own slot: `sub sp,#112` past the 48-byte push
-                // puts the frame base at own-sp+80, i.e. caller-SP-80
-                // (values at +4, scales at +8; the C never reads ctx+4
-                // here, so no heap is allocated for the frame itself).
-                // Buffer allocs still go through the live guest heap
-                // (0x1963b8/0x196428 on the owner allocator), exactly
-                // like the ARM. weights are the eight D_91726c words
-                // (US ROM, mapped in the live arena).
+
                 self.synth=v[0];
-                let weights:[i32;8]=core::array::from_fn(|i|m.word(0x91726c+i as u32*4) as i32);
+                let weights:[i32;8]=core::array::from_fn(|i|m.word(crate::rom_region::addr(self.rom,0x91726c)+i as u32*4) as i32);
                 crate::speech_part_7::fn_2a8414(a,self,v[0],v[1],v[2],SYN_CALLER_SP-80,&weights)
             },
-            // Anything else rides the boot dispatcher first (round 1,
-            // seg5); what the boot dispatcher refuses rides the live
-            // engine dispatcher the way Seg5Host does. A live refusal
-            // still faults loudly with the entry and args below.
+
             _=>{
+                let g=crate::rom_region::to_us(crate::rom_region::Rom::from_entry(f),f);
                 let rc=self.boot.invoke(&mut m,f,v);
                 if self.boot.fault.is_none() {rc} else {
                     self.boot.fault=None;
-                    match crate::engine_live::call_live_m(&mut m,f,v,&mut *self.boot.platform) {
+                    match crate::engine_live::call_live_m_rom(&mut m,f,v,&mut *self.boot.platform,self.rom) {
                         Ok(rc)=>rc,
-                        Err(e)=>{self.boot.fault=Some(e);0x80002001}
+                        Err(e)=>{
+                            if g==f {self.boot.fault=Some(e);0x80002001}
+                            else {
+                                let rc=self.boot.invoke(&mut m,g,v);
+                                if self.boot.fault.is_none() {rc} else {
+                                    self.boot.fault=None;
+                                    match crate::engine_live::call_live_m_rom(&mut m,g,v,&mut *self.boot.platform,self.rom) {
+                                        Ok(rc)=>rc,
+                                        Err(e)=>{self.boot.fault=Some(e);0x80002001}
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             },
         };if let Some(ref e)=self.boot.fault {panic!("unwired call {f:x} args {v:x?}: {e:?}");}(rc,0)
     }
 }
-/// First live US SELECT_BET2 Process return, certified from component startup.
-/// Reuses selection::stage::process_stage without changing its body or Host API.
-/// Memory must be flat (base zero). `scratch` must be the SP-relative window
-/// [`SCRATCH_227D64`] (284 bytes: pipe out-words, model-step/frame flags,
-/// feature-setup, duration and mean/variance slots); the
-/// diagnostic adapter temporarily borrows and restores 24 bytes at 0x800.
-/// Nodes must cover the largest reachable duration tree. The live fixture uses
-/// 65536 slots. FeatureWorkspace is caller-owned and allocation-free.
-/// Cold duration loads, voice callbacks, active feature dumps and stream-buffer
-/// destruction are outside this startup capture and fail closed, never replay.
-/// This is not certification of later Process states or other regional literals.
+
 pub fn fn_227d64_m(m:&mut Memory<'_>,args:[u32;7],scratch:u32,nodes:&mut [crate::selection::DecisionNode],
-    platform:&mut dyn crate::engine::HeapPlatform,features:&mut FeatureWorkspace)->Result<u32,crate::engine::Error> {
+    platform:&mut dyn crate::engine::HeapPlatform,features:&mut FeatureWorkspace,rom:crate::rom_region::Rom)->Result<u32,crate::engine::Error> {
     assert_eq!(m.base,0,"flat live arena required");
-    // Anchor the pool-name map (round 1, seg5): the synth struct the
-    // roots work on persists across scheduler roots at engine+0x7d8
-    // (selection ENG_SYNTH); state 0 roots allocate it fresh and the
-    // arms below re-anchor as its children run. Without this, roots
-    // that create pools before any synth-root arm runs (227d64 #3)
-    // would resolve SENTINEL names against synth 0.
-    let mut h=LiveHost{boot:crate::engine::SpeechBootHost{platform,fault:None},features:Some(features),synth:m.word(args[0].wrapping_add(0x7d8))};
+
+    let mut h=LiveHost{boot:crate::engine::SpeechBootHost{platform,fault:None},features:Some(features),synth:m.word(args[0].wrapping_add(0x7d8)),rom};
     let mut a=crate::selection::arena::Arena::new(m.base,m.bytes);
-    let rc=crate::selection::stage::process_stage(&mut a,&mut h,args[0],args[1],args[2],args[3],args[4],scratch,nodes);
+    let rc=crate::selection::stage::process_stage(&mut a,&mut h,args[0],args[1],args[2],args[3],args[4],scratch,nodes,rom);
     if let Some(e)=h.boot.fault {Err(e)}else{Ok(rc)}
 }
-/// Live-dispatcher forwarding for the synthesis bridge (round 1,
-/// seg5). Inline-handled lattice entries never reach here; a nested
-/// boundary root is a real stop and fails loudly, everything else
-/// returns the live result or 0x80002001.
+
 fn live_forward_m(m:&mut Memory<'_>,f:u32,a:&[u32],h:&mut LiveHost<'_>)->u32 {
     let platform:&mut dyn crate::engine::HeapPlatform=&mut *h.boot.platform;
-    match crate::engine_live::call_live_m(m,f,a,platform) {
+    match crate::engine_live::call_live_m_rom(m,f,a,platform,h.rom) {
         Ok(rc)=>rc,
         Err(crate::engine::Error::UnsupportedStage{entry})=>panic!("synthesis reached boundary {entry:#x}"),
         Err(_)=>0x80002001,
     }
 }
-/// Heap-name resolution for SENTINEL-named 0x2db19c pool creation
-/// (round 1, seg5): the state offset within the synth struct selects
-/// the C ROM name, mirroring the certified speech_part_7 Engine map
-/// (0x24 is the model workspace; anything else keeps the VStream
-/// fallback). Both the live 0x2db19c arm and pool_name below share it.
-fn heap_name(synth: u32, state: u32) -> u32 {
+
+fn heap_name(synth: u32, state: u32, rom: crate::rom_region::Rom) -> u32 {
+    use crate::rom_region::addr;
     match state.wrapping_sub(synth) {
-        0x24=>0x2a0e30,0x26c=>0x91725b,0x2b4=>0x91724d,0x344=>0x917254,
-        0x3d4=>0x2a3340,0x3ec=>0x2a334c,0x498=>0x917246,0x4e0=>0x917240,
-        _=>0x917263
+        0x24=>addr(rom,0x2a0e30),0x26c=>addr(rom,0x91725b),0x2b4=>addr(rom,0x91724d),0x344=>addr(rom,0x917254),
+        0x3d4=>addr(rom,0x2a3340),0x3ec=>addr(rom,0x2a334c),0x498=>addr(rom,0x917246),0x4e0=>addr(rom,0x917240),
+        _=>addr(rom,0x917263)
     }
 }
 impl crate::reentrant::HooksM for LiveHost<'_> {
     fn call_m(&mut self,address:u32,args:&[u32],mem:&mut Memory<'_>)->u32 {
         match address {
-            // Pure lattice arithmetic; no host state.
+
             0x29b570=>crate::selection::prediction_square_root(args[0]) as u32,
             0x30209c=>crate::component_live_b::fn_30209c_m(args[0] as i32,args[1] as i32) as u32,
             _=>live_forward_m(mem,address,args,self),
@@ -358,7 +260,7 @@ impl crate::boot_part_f::Host for LiveHost<'_> {
         live_forward_m(m,method,args,self)
     }
     fn compare(&mut self,_:&mut Memory<'_>,_:u32,_:&mut crate::boot_part_f::Key,_:&mut u32)->u32 {
-        // Dictionary comparison never fires on the synthesis success path (round 1, seg5).
+
         0x80002001
     }
 }
@@ -376,9 +278,7 @@ impl crate::frontend::HeapVtableM for LiveHost<'_> {
         panic!("HeapVtableM needs a per-heap HeapAt wrapper (round 1, seg5)")
     }
     fn release_at_m(&mut self,obj:u32,object:u32,mem:&mut [u8]) {
-        // Slot 3 is the release method in the shared heap layout
-        // (round 1, seg5); unlike alloc, it is consistent across the
-        // heaps this path touches. A miss fails loudly below.
+
         let mut m=Memory{base:0,bytes:mem};
         let f=m.word(m.word(obj)+12);
         live_forward_m(&mut m,f,&[obj,object],self);
@@ -387,12 +287,11 @@ impl crate::frontend::HeapVtableM for LiveHost<'_> {
 impl crate::speech_part_3::SpeechHost for LiveHost<'_> {}
 impl crate::speech_part_3::SpeechRound4Host for LiveHost<'_> {
     type RegexHost=crate::component_live_b2::PcreGuest;
-    // The C passes ROM addresses and immediates directly; echo them back
-    // (round 1, seg5). This supplies filter pool names like D_91724d.
-    fn literal(&self,address:u32)->u32 {address}
-    fn pool_name(&self, p: u32) -> u32 { heap_name(self.synth, p) }
+
+    fn literal(&self,address:u32)->u32 {crate::rom_region::addr(self.rom,address)}
+    fn pool_name(&self, p: u32) -> u32 { heap_name(self.synth, p, self.rom) }
     fn regex_exec(&mut self,_:&mut Memory<'_>,_:&[u32],_:&mut [i32;100],_:crate::speech_part_3::RegexEntry<Self::RegexHost>,_:fn(&mut Memory<'_>,u32,&mut Self)->u32)->i32 {
-        // No synthesis path on these states reaches the regex engine (round 1, seg5).
+
         -1
     }
 }
@@ -404,9 +303,7 @@ impl crate::speech_part_5::Host for LiveHost<'_> {
     fn entries(&mut self,_:&mut Memory<'_>,_:u32,_:u32,_:u32,_:&mut u32,_:&mut u32)->u32 {0x80002001}
     fn thread_id(&mut self)->u32 {self.boot.platform.thread_id()}
 }
-/// fn_2f7420 for a live host: builds the quantized voice views from the
-/// guest tables (speech, codebook set) like the speech_part_5 voice
-/// fixture and serves the indexed pair. See the 0x2f7420 arm above.
+
 fn voice_indexed(m:&mut Memory<'_>,v:&[u32])->u32 {
     use crate::selection::{AcousticRecord,Codebook,PdfParameter,QuantizedPdfTable,VoiceBlock};
     let (sp,set)=(v[1],v[2]);
@@ -416,8 +313,7 @@ fn voice_indexed(m:&mut Memory<'_>,v:&[u32])->u32 {
     assert!(block<8,"live voice block window");
     let channels=m.half(sp+8) as u32;
     let stride=m.half(sp+12) as u32;
-    // The codebook array has no stored count; size the view to cover
-    // exactly what this call decodes (the ARM indexes the same range).
+
     let nbooks=(channels.wrapping_mul(stride).wrapping_add(stride.wrapping_mul(v[7]))
         .wrapping_add(v[5])+1) as usize;
     assert!(nbooks<=64,"live voice codebook window");
@@ -445,8 +341,7 @@ fn voice_indexed(m:&mut Memory<'_>,v:&[u32])->u32 {
     if rc==0 {m.put_word(v[8],out[0] as u32);m.put_word(v[9],out[1] as u32);}
     rc
 }
-/// fn_2f6f94 for a live host: the untimed acoustic-model read over the
-/// same guest views. See the 0x2f6f94 arm above.
+
 fn voice_untimed(m:&mut Memory<'_>,v:&[u32])->u32 {
     use crate::selection::{AcousticRecord,Codebook,PdfParameter,PdfTable,VoiceBlock};
     let sp=v[1];
@@ -470,8 +365,7 @@ fn voice_untimed(m:&mut Memory<'_>,v:&[u32])->u32 {
     if rc==0 {m.put_word(v[5],o0 as u32);if v[6]!=0 {m.put_word(v[6],o1 as u32);}}
     rc
 }
-/// fn_2f86e0 for a live host: the outer acoustic-table read over the
-/// guest engine table. See the 0x2f86e0 arm above.
+
 fn voice_outer(m:&mut Memory<'_>,v:&[u32])->u32 {
     use crate::selection::{AcousticRecord,AcousticTable};
     let t=v[1];
@@ -504,11 +398,7 @@ fn voice_outer(m:&mut Memory<'_>,v:&[u32])->u32 {
     if rc==0 {m.put_word(v[5],out[0] as u32);m.put_word(v[6],out[1] as u32);}
     rc
 }
-/// Live-heap vtable for the 0x15017c close (round 27c, wire-a): heap
-/// methods ride the live dispatcher through the arena host, the way
-/// component_live_b's StreamHeap does for its stream calls (the boot
-/// dispatcher cannot serve them). The destructor below resolves through
-/// the same host.
+
 struct LiveStreamHeap<'a, 'h, H> {
     cell: &'a core::cell::RefCell<&'h mut H>,
     heap: u32,
@@ -542,7 +432,7 @@ impl frontend::HeapVtableM for HeapAdapter<'_,'_> {
         let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.1)+12);self.0.invoke(&mut m,f,&[obj,p]);
     }
 }
-/// fn_17b500. Only the allocator callback interface changes.
+
 pub fn create_handle_m(m:&mut Memory<'_>,heap:u32,out:u32,h:&mut impl boot_part_e::Host)->u32 {
     if out==0 {return 0x8a402007;}
     let p=boot_part_e::calloc(m,heap,1,16,h);
@@ -576,7 +466,7 @@ fn pool_binding(m:&mut Memory<'_>,f:u32,a:&[u32],h:&mut crate::engine::SpeechBoo
     let p=a[0];
     if f==0x2db19c {
         let x=crate::selection::PrivateHeap::initialize(a[1],b"");
-        // Distinct names for feature storage and the model workspace.
+
         let name=a[2];
         for (i,v) in [x.owner,name,0,x.expected,x.pool,x.allocated].into_iter().enumerate(){m.put_word(p+i as u32*4,v);}
         return 0;
@@ -590,7 +480,6 @@ fn pool_binding(m:&mut Memory<'_>,f:u32,a:&[u32],h:&mut crate::engine::SpeechBoo
     rc
 }
 
-/// fn_173fd8. Re-read each slot and the clamp after live callbacks.
 pub fn max_slot_level_m(m:&mut Memory<'_>,p:u32,h:&mut impl boot_part_e::Host)->u32 {
     if p==0 {return 0;}
     let mut max=1;
@@ -605,10 +494,7 @@ impl boot_part_e::Host for LiveHost<'_> {
         match f {0x18f488=>frontend::finish_request(),0x1ce56c=>frontend::streaming_mode((a[0]!=0).then(|| (m.byte(m.word(a[0])+4),m.byte(m.word(a[0])+0x10c)))),_=>self.boot.invoke(m,f,a)}
     }
 }
-/// Caller-owned typed storage for the certified prosody port. Supports 1024
-/// phone records and 16 coefficients per record, with explicit bounds checks.
-/// (Lane us r23: the ARM handles 1500+ char requests; windows reach ~390
-/// phones / ~776 raw units, past the old 256/511 caps.)
+
 pub struct FeatureWorkspace {
     pub blob:[u8;131072],pub bytes:[[u8;2053];60],pub words:[[u16;1025];60],
     pub ints:[[i32;16384];6],pub pitch:[u16;4096],pub contexts:[u8;9216],
@@ -748,4 +634,3 @@ fn duration_pair_binding(m:&mut Memory<'_>,a:&[u32])->u32 {
     let mut out=[0;2];let rc=t.read_pair(a[2],a[3],a[6],&mut out,|_,_|unreachable!()).expect("duration table");
     m.put_word(a[4],out[0] as u32);m.put_word(a[5],out[1] as u32);rc
 }
-

@@ -1,15 +1,13 @@
-//! Arena-reentrant component-startup adapters. Legacy ports remain unchanged.
-//! Guest addresses are absolute; the host never retains a borrowed arena.
+
+
 use crate::boot::Memory;
 
-/// Indirect or external guest methods receive their caller's current arena.
 pub trait Host {
     fn call_m(&mut self, entry: u32, args: &[u32], memory: &mut Memory<'_>) -> u32;
     fn thread_id_m(&mut self)->u32{panic!("thread ID platform service is not bound")}
     fn rom(&self)->crate::rom_region::Rom{crate::rom_region::Rom::Us}
 }
 
-/// Use an existing memory-passing guest dispatcher without retaining its arena.
 pub struct Calls<'a, C: crate::boot::Calls>(pub &'a mut C);
 impl<C: crate::boot::Calls> Host for Calls<'_, C> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
@@ -17,15 +15,10 @@ impl<C: crate::boot::Calls> Host for Calls<'_, C> {
     }
 }
 
-/// Reuse the landed scalar/stream/LINGDB bindings on the same arena.
-/// Missing dependencies stay errors; this never supplies a recorded reply.
 pub fn core_call_m(m:&mut Memory<'_>,entry:u32,args:&[u32])->Result<u32,crate::engine::Error> {
     core_call_m_rom(m,entry,args,crate::rom_region::Rom::Us)
 }
-/// Region-aware `core_call_m`: the field-port descriptor-table base
-/// (`D_8d7ca0`, 272-byte entries) moves per region (EU 0x8d8ee0 direct
-/// table row; KR 0x8fb240 from kr d_map), so the 0x15d378/0x15d594 arms
-/// read the running region's table. All other arms are region-free.
+
 pub fn core_call_m_rom(m:&mut Memory<'_>,entry:u32,args:&[u32],rom:crate::rom_region::Rom)->Result<u32,crate::engine::Error> {
     let descriptors=crate::rom_region::addr(rom,0x8d7ca0);
     if entry==0x18f488{return Ok(crate::frontend::finish_request());}
@@ -43,7 +36,7 @@ pub fn core_call_m_rom(m:&mut Memory<'_>,entry:u32,args:&[u32],rom:crate::rom_re
         m.put_word(args[2],value as u32);return Ok(rc);
     }
     if [0x15c4b0,0x15c744,0x15c9a4,0x15c7d8,0x15ca38].contains(&entry){return record_link_m(m,entry,args.try_into().expect("record-link ABI"));}
-    if entry==0x15d6c4{return enquire_child_m(m,args.try_into().expect("enquire-child ABI"),crate::rom_region::Rom::Us);}
+    if entry==0x15d6c4{return enquire_child_m(m,args.try_into().expect("enquire-child ABI"),rom);}
     if entry==0x15d378 {return field_data_m(m,args.try_into().expect("field-data ABI"),descriptors);}
     let mut regions=[crate::engine::Region{base:m.base,bytes:m.bytes}];
     let mut sparse=crate::engine::Memory::new(&mut regions)?;
@@ -57,15 +50,12 @@ pub fn core_call_m_rom(m:&mut Memory<'_>,entry:u32,args:&[u32],rom:crate::rom_re
     crate::engine_components::CoreCalls.call(&mut sparse,entry,args)
 }
 
-/// Existing live heap/OS dispatcher, without making a second arena view or copy.
 pub fn heap_call_m(m:&mut Memory<'_>,entry:u32,args:&[u32],platform:&mut dyn crate::engine::HeapPlatform)->Result<u32,crate::engine::Error>{
     let mut host=crate::engine::SpeechBootHost{platform,fault:None};
     let result=HeapExtended(&mut host).dispatch(m,entry,args);
     if let Some(error)=host.fault{Err(error)}else{Ok(result)}
 }
-/// Region-aware heap call for FeTextLive (round-8): the guest vtable slots
-/// are regional twins, so normalize unambiguous ones to US before dispatch.
-/// The shared 4-arg path above stays bit-identical for certified callers.
+
 pub fn heap_call_m_rom(m:&mut Memory<'_>,entry:u32,args:&[u32],platform:&mut dyn crate::engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<u32,crate::engine::Error>{
     let mut host=crate::engine::SpeechBootHost{platform,fault:None};
     let result=HeapExtendedRom(&mut host,rom).dispatch(m,entry,args);
@@ -113,8 +103,6 @@ impl crate::boot_part_b::Host for HeapExtended<'_, '_>{
  fn thread_id(&mut self)->u32{crate::boot_part_b::Host::thread_id(self.0)}
 }
 
-/// Project one live record/field into the existing FieldDatabase::field_data.
-/// No arena copy is made. Error formatting remains an explicit dispatcher error.
 pub fn field_data_m(m:&mut Memory<'_>,a:[u32;6],descriptors:u32)->Result<u32,crate::engine::Error>{
     use crate::linguistic::{Field,FieldDatabase,Record};
     if crate::normalization::quad_check(a[0],a[1],0xb2c2,0x38)>=0x80000000{return Ok(0x89202008);}
@@ -156,9 +144,6 @@ impl<H: Host> crate::speech_part_2::Host for SpellingCalls<'_, H> {
     }
 }
 
-/// fn_219c8c, using the existing complete memory-passing startup port.
-/// Regional type tables are immutable first-stage inputs supplied by the caller.
-/// External stream methods dispatch live through Host, not recorded replies.
 pub fn fn_219c8c_m(
     m: &mut Memory<'_>, p: u32, tag: u32, input: [u32; 2],
     e: &crate::speech_part_2::Environment, h: &mut impl Host,
@@ -171,10 +156,8 @@ fn half_at(m: &Memory<'_>, at: u32) -> u16 {
     u16::from_le_bytes(m.bytes[o..o + 2].try_into().unwrap())
 }
 
-/// String-kind record types of fn_1516c8 and fn_151610.
 const STRING_KINDS: [u16; 12] = [6, 12, 21, 50, 36, 39, 37, 34, 22, 40, 26, 29];
 
-/// fn_196428 through the heap's fourth method, live.
 fn heap_release_m(m: &mut Memory<'_>, heap: u32, object: u32, h: &mut impl Host) {
     if heap == 0 || object == 0 {
         return;
@@ -184,7 +167,6 @@ fn heap_release_m(m: &mut Memory<'_>, heap: u32, object: u32, h: &mut impl Host)
     h.call_m(f, &[obj, object], m);
 }
 
-/// fn_1963e0 through the heap's third method, live.
 fn heap_realloc_m(m: &mut Memory<'_>, heap: u32, old: u32, size: u32, h: &mut impl Host) -> u32 {
     if heap == 0 || size == 0 {
         return 0;
@@ -199,8 +181,6 @@ fn heap_realloc_m(m: &mut Memory<'_>, heap: u32, old: u32, size: u32, h: &mut im
     }
 }
 
-/// fn_1516c8 / EU fn_15178c / KR fn_1516ac.
-/// Releases the string buffer of the record at `a[0]` from the heap `a[1]`.
 pub fn release_typed_buffer_m(m: &mut Memory<'_>, a: &[u32], h: &mut impl Host) {
     let (p, heap) = (a[0], a[1]);
     if p == 0 || !STRING_KINDS.contains(&half_at(m, p)) {
@@ -214,9 +194,6 @@ pub fn release_typed_buffer_m(m: &mut Memory<'_>, a: &[u32], h: &mut impl Host) 
     m.put_word(p + 20, 0);
 }
 
-/// fn_14e440, the compaction of fn_15017c.
-/// The discarded elements are destroyed through the guest destructor before the
-/// shrink decision, exactly as the original orders them.
 fn compact_stream_buffer_m(m: &mut Memory<'_>, state: u32, required: u32, h: &mut impl Host) {
     let buffer = m.word(state + 60);
     if buffer == 0 || m.byte(state + 40) != 0 {
@@ -291,10 +268,6 @@ fn compact_stream_buffer_m(m: &mut Memory<'_>, state: u32, required: u32, h: &mu
     }
 }
 
-/// fn_15017c / EU fn_150240 / KR fn_150160.
-/// Ends a direct stream read and compacts the stream buffer. The element
-/// destructor and the heap methods are dispatched live so the compaction can
-/// reenter the arena while it destroys discarded elements.
 pub fn fn_15017c_m(m: &mut Memory<'_>, a: &[u32], h: &mut impl Host) -> u32 {
     let rc = crate::frontend::validate_handle(a[0] != 0, a[1], 0x47de, 12);
     if rc >= 0x80000000 {
@@ -320,8 +293,6 @@ pub fn fn_15017c_m(m: &mut Memory<'_>, a: &[u32], h: &mut impl Host) -> u32 {
     rc
 }
 
-/// fn_1fe040. Four disjoint caller-owned scratch bytes hold the context output.
-/// The temporary slot is restored before return, including on failed resolution.
 pub fn fn_1fe040_m(
     m: &mut Memory<'_>, p: u32, tag: u32, scratch: u32, h: &mut impl Host,
 ) -> u32 {
@@ -337,22 +308,19 @@ pub fn fn_1fe040_m(
     rc
 }
 
-/// fn_200e2c. Dispatch method seven with its actual live target.
-/// The owned fn_1fe040 subtree is always invoked directly, never replayed.
 pub fn fn_200e2c_m(
     m: &mut Memory<'_>, p: u32, tag: u32, scratch: u32, h: &mut impl Host,
 ) -> u32 {
     if crate::normalization::quad_check(p, tag, 0xf383, 0x20) >= 0x80000000 {
         return 0x8bb02008;
     }
-    let target = m.word(m.word(p + 8) + 28);
+    let target = crate::rom_region::to_us_guest(h.rom(), m.word(m.word(p + 8) + 28));
     let a = m.word(p + 12);
     let b = m.word(p + 16);
     if target == 0x1fe040 { fn_1fe040_m(m, a, b, scratch, h) }
     else { h.call_m(target, &[a, b], m) }
 }
 
-/// fn_219554. The existing certified option setter owns validation and choice.
 pub fn fn_219554_m(m: &mut Memory<'_>, p: u32, tag: u32, value: u32, which: u32) -> u32 {
     struct Validator { p: u32 }
     impl crate::depes::HandleValidator for Validator {
@@ -368,18 +336,17 @@ pub fn fn_219554_m(m: &mut Memory<'_>, p: u32, tag: u32, value: u32, which: u32)
     rc
 }
 
-
 use crate::frontend::{strlen_bytes,copy_str,compare_str};
 fn mem_word(m:&[u8],p:u32)->u32{u32::from_le_bytes(m[p as usize..p as usize+4].try_into().unwrap())}
 fn mem_store(m:&mut[u8],p:u32,v:u32){m[p as usize..p as usize+4].copy_from_slice(&v.to_le_bytes());}
 fn mem_store16(m:&mut[u8],p:u32,v:u16){m[p as usize..p as usize+2].copy_from_slice(&v.to_le_bytes());}
 
 pub trait PromptOrthHooksM {
-    /// `fn_176f94`: validate the prompter.
+
     fn check_m(&mut self, p: u32, check: u32, f1: u32, f2: u32, memory: &mut [u8]) -> u32;
-    /// Data-table find call.
+
     fn find_m(&mut self, h0: u32, h1: u32, f1: u32, f2: u32, id: &mut u16, memory: &mut [u8]) -> u32;
-    /// Data-table type call.
+
     fn data_type_m(
         &mut self,
         h0: u32,
@@ -387,7 +354,7 @@ pub trait PromptOrthHooksM {
         id: u16,
         flag: u32,
         ty: &mut u16, memory: &mut [u8]) -> u32;
-    /// Data-table get call; `ptr` is an arena offset.
+
     fn get_m(
         &mut self,
         h0: u32,
@@ -396,7 +363,7 @@ pub trait PromptOrthHooksM {
         flag: u32,
         ptr: &mut u32,
         len: &mut u16, memory: &mut [u8]) -> u32;
-    /// Data-table set call; `ptr` is an arena offset.
+
     #[allow(clippy::too_many_arguments)]
     fn set_m(
         &mut self,
@@ -407,7 +374,7 @@ pub trait PromptOrthHooksM {
         count: u32,
         ptr: u32,
         written: &mut u16, memory: &mut [u8]) -> u32;
-    /// Transform-table process call; `None` is the null pointer.
+
     #[allow(clippy::too_many_arguments)]
     fn process_m(
         &mut self,
@@ -419,20 +386,19 @@ pub trait PromptOrthHooksM {
         h0: u32,
         h1: u32,
         delta: &mut i16, memory: &mut [u8]) -> u32;
-    /// Position-table get call.
+
     fn get_position_m(&mut self, h0: u32, h1: u32, pos: &mut u32, memory: &mut [u8]) -> u32;
-    /// Position-table set call.
+
     fn set_position_m(&mut self, h0: u32, h1: u32, pos: u32, memory: &mut [u8]) -> u32;
-    /// `fn_196394`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_orth_m(&mut self, heap: u32, size: u32, memory: &mut [u8]) -> Option<u32>;
-    /// `fn_1963b8`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_records_m(&mut self, heap: u32, size: u32, memory: &mut [u8]) -> Option<u32>;
-    /// `fn_196428`: free `ptr` back to `heap`.
+
     fn free_buf_m(&mut self, heap: u32, ptr: u32, memory: &mut [u8]);
-    /// `fn_173dc0`: allocation-failure trace.
+
     fn log_no_memory_m(&mut self, log: u32, code: u32, flag: u32, memory: &mut [u8]);
 }
-
 
 pub fn fn_200e64_m<H: PromptOrthHooksM>(
     hooks: &mut H,
@@ -483,8 +449,7 @@ pub fn fn_200e64_m<H: PromptOrthHooksM>(
         return result;
     }
     let mut count = length;
-    // The empty-source path copies the empty orthography instead of
-    // the fetched one; its record copy runs over the flag-1 source.
+
     let size = if have_source {
         strlen_bytes(&mem[source_orth as usize..]).wrapping_add(1)
     } else {
@@ -595,8 +560,6 @@ pub fn fn_200e64_m<H: PromptOrthHooksM>(
     result
 }
 
-/// Live guest-ABI adapter for fn_200e64. Scratch is 16 disjoint mapped bytes.
-/// All guest callbacks receive the current arena. Scratch is restored on return.
 pub fn prompt_orth_live_m(
     m: &mut Memory<'_>, p:u32, tag:u32, input:[u32;2], active:u32,
     scratch:u32, h:&mut impl Host,
@@ -653,29 +616,28 @@ impl<H:Host> PromptOrthHooksM for OrthLive<'_,H> {
  fn log_no_memory_m(&mut self,log:u32,code:u32,flag:u32,m:&mut[u8]){self.invoke(m,0x173dc0,&[log,0x8f96ac,code,flag]);}
 }
 
-
 use crate::frontend::u16_len;
 use crate::fe_text::narrow_176460 as recode_176460;
 fn mem_half(m:&[u8],p:u32)->u16{u16::from_le_bytes(m[p as usize..p as usize+2].try_into().unwrap())}
 
 pub trait InsertPromptHooksM {
-    /// `fn_176f94`: validate the domain handle.
+
     fn check_m(&mut self, handle: u32, start: u32, memory: &mut [u8]) -> u32;
-    /// `fn_19611c`: resolve the key pair into `manager`.
+
     fn resolve_m(&mut self, a: u32, b: u32, manager: &mut u32, memory: &mut [u8]) -> u32;
-    /// `fn_196394`: allocate `size` bytes from `heap`; `None` on failure.
+
     fn alloc_text_m(&mut self, heap: u32, size: u32, memory: &mut [u8]) -> Option<u32>;
-    /// `fn_1fe418`: build the prompt for `text` into `prompt`.
+
     fn build_prompt_m(
         &mut self,
         handle: u32,
         text: u32,
         prompt: &mut [u32; 9], memory: &mut [u8]) -> u32;
-    /// `fn_1738e8`: insertion trace.
+
     fn log_insert_m(&mut self, log: u32, memory: &mut [u8]);
-    /// `fn_196428`: free `text` back to `heap`.
+
     fn free_text_m(&mut self, heap: u32, text: u32, memory: &mut [u8]);
-    /// `fn_2784c8`: rewrite the prompt at `pos` into the out words.
+
     #[allow(clippy::too_many_arguments)]
     fn rewrite_prompt_m(
         &mut self,
@@ -689,12 +651,11 @@ pub trait InsertPromptHooksM {
         args_a: u32,
         args_b: u32,
         c: u32, memory: &mut [u8]) -> u32;
-    /// `fn_1738e8`: rewrite trace.
+
     fn log_rewrite_m(&mut self, log: u32, memory: &mut [u8]);
-    /// `fn_173dc0`: allocation-failure trace.
+
     fn log_no_memory_m(&mut self, log: u32, memory: &mut [u8]);
 }
-
 
 pub fn fn_1ff4fc_m<H: InsertPromptHooksM>(
     hooks: &mut H,
@@ -770,8 +731,6 @@ pub fn fn_1ff4fc_m<H: InsertPromptHooksM>(
     rc
 }
 
-/// Live fn_15cdcc binding. Only immutable layout metadata is copied locally;
-/// allocator callbacks borrow the original arena and call the real heap ports.
 pub fn write_field_live_m(m:&mut Memory<'_>,a:[u32;7],h:&mut impl Host)->u32{
  assert_eq!(m.base,0);
  let rom=h.rom();
@@ -781,7 +740,6 @@ pub fn write_field_live_m(m:&mut Memory<'_>,a:[u32;7],h:&mut impl Host)->u32{
   &mut |heap,size,bytes|h.call_m(0x1963b8,&[heap,1,size],&mut Memory{base:0,bytes}))
 }
 
-/// Guest-ABI adapter for fn_1ff4fc; 112 disjoint mapped scratch bytes, restored.
 pub fn insert_prompt_live_m(m:&mut Memory<'_>,a:[u32;8],scratch:u32,h:&mut impl Host)->u32{
  assert_eq!(m.base,0);let at=scratch as usize;let mut saved=[0;112];saved.copy_from_slice(&m.bytes[at..at+112]);
  let rc=fn_1ff4fc_m(&mut InsertLive{s:scratch,h,text:0,output:0},m.bytes,a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7]);
@@ -820,12 +778,10 @@ impl<H:Host> InsertPromptHooksM for InsertLive<'_,H>{
  fn log_no_memory_m(&mut self,log:u32,m:&mut[u8]){self.invoke(m,0x173dc0,&[log,0x8f95d4,0xb798,0]);}
 }
 
-
 use crate::frontend::{validate_handle,move_bytes,u16_copy};
 fn field_alloc_m(mem:&mut[u8],arena:u32,size:u32,alloc:&mut impl FnMut(u32,u32,&mut[u8])->u32)->u32{
  struct Allocator<'a,F>(&'a mut F);
- // Only arena_alloc_m is called through this private adapter. Its body
- // never invokes PoolHooksM; reset/log operations are outside this adapter.
+
  impl<F> crate::db_live::PoolHooksM for Allocator<'_,F>{
   fn log_pool_m(&mut self,_:u32,_:u32,_:&mut Memory<'_>){unreachable!("allocator-only adapter")}
  }
@@ -951,8 +907,6 @@ pub fn write_field_m(
     0
 }
 
-/// fn_1d5ba8's existing complete live-memory body, with guest ABI host calls.
-/// Reserve 768 bytes for its frame and 320 more for nonoverlapping log scratch.
 pub fn fn_1d5ba8_m(m:&mut Memory<'_>,p:u32,tag:u32,db:[u32;2],pending:u32,e:&crate::speech_part_1::ProcessEnvironment,scratch:u32,h:&mut impl Host)->u32{
  crate::speech_part_1::fn_1d5ba8(m,p,tag,db,pending,e,scratch,&mut ProcessCalls{h,log_s:scratch+768})
 }
@@ -990,24 +944,6 @@ impl<H:Host> crate::speech_part_6::Host for ProcessCalls<'_,H>{
  fn error(&mut self,m:&mut Memory<'_>,logger:u32,category:u32,code:u32){self.h.call_m(0x173dc0,&[logger,category,code,0,0,0],m);}
 }
 
-/// EU immutable addresses. Every field is the EU twin of the US loader
-/// that materializes it (US fn in parentheses), verified by disassembly
-/// of EU code.bin plus string-content match. EU fn_1d5ba8 is 0x1d5d64
-/// (eu/data/map.json 1d5ba8->1d5d64); the token-string owner fn_1d5234
-/// is EU 0x1d53f0 (1d5234->1d53f0). Pool words (0x8f9axx) also equal
-/// US+0x1240 (wire-b2 EU data rule); ADR targets were read from the EU
-/// twin instruction, never mapped. String contents verified byte-equal
-/// to US in EU code.bin; only NUL-trailing pool bytes differ.
-/// section uses fn_1d5ba8's own first 'fecfg' ADR copy (US 0x1d62a4 via
-/// 0x1d6120); the 0x1d4d4c copy belongs to the fn_1d49b4 family (its EU
-/// structural twin 0x1d4f08 also holds 'fecfg'). format2 uses fn_1d5ba8's
-/// local '%s%s' copy (US 0x1d6b4c via 0x1d6be4), not the 0x1791c4 copy
-/// owned by fn_0x1772b0 (EU content twin at 0x179274, loader unverified).
-/// token langcode/clm/user/end_format/lid/noclmset/no/yes/marker come
-/// from the fn_1d5234 twin (EU 0x1d53f0); the US struct's 0x1d4d1c /
-/// 0x1d5040 copies belong to the fn_1d49b4 family and hold the same text.
-/// None of those token fields is read on the 1d5ba8 path (only category
-/// is); they are carried for struct completeness.
 pub fn process_environment_eu()->crate::speech_part_1::ProcessEnvironment{
  crate::speech_part_1::ProcessEnvironment{
   normal:0x8f9a99,
@@ -1041,16 +977,7 @@ pub fn process_environment_eu()->crate::speech_part_1::ProcessEnvironment{
   },
  }
 }
-/// KR immutable addresses. Same derivation as the EU twin above via
-/// KR code.bin: KR fn_1d5ba8 is 0x1d5e10 (kr map 1d5ba8->1d5e10), the
-/// token-string owner fn_1d5234 is KR 0x1d549c (1d5234->1d549c). Pool
-/// words match kr/data/d_map.json (e.g. 0x8d8288->0x8fb828); ADR
-/// targets were read from the KR twin instruction, never mapped.
-/// section uses KR fn_1d5ba8's own first 'fecfg' copy (KR 0x1d650c via
-/// 0x1d6388); the 0x1d4d4c-copy structural twin KR 0x1d4fb4 also holds
-/// 'fecfg'. format2 uses the local '%s%s' copy (KR 0x1d6db4 via
-/// 0x1d6e4c); the 0x1791c4-family copy sits content-verified at KR
-/// 0x179220.
+
 pub fn process_environment_kr()->crate::speech_part_1::ProcessEnvironment{
  crate::speech_part_1::ProcessEnvironment{
   normal:0x91bdf9,
@@ -1084,16 +1011,7 @@ pub fn process_environment_kr()->crate::speech_part_1::ProcessEnvironment{
   },
  }
 }
-/// US immutable addresses verified against target literal references.
-/// 0x8f88xx pool words load in US fn_1d5ba8 (ldr from 0x1d6264/0x1d66b0/
-/// 0x1d66ec/0x1d66f0/0x1d7428/0x1d742c); 0x1d6xxx strings load via ADR
-/// (pipeline 0x1d5ee0, pause 0x1d61a4/0x1d61f8, esctn 0x1d6840, domain
-/// 0x1d6910/0x1d6ab8/0x1d6df0, extra 0x1d6968/0x1d6b9c/0x1d6e48, names
-/// 0x1d69a0/0x1d69a8, formats 0x1d69bc/0x1d6be4/0x1d6e90, esclang
-/// 0x1d707c). section 0x1d4d4c ('fecfg') is genuinely in the US ROM
-/// (code.bin holds the bytes; US fn_1d49b4-family ADR 0x1d4b9c); ARM
-/// fn_1d5ba8 uses its own local 'fecfg' copies (0x1d62a4/0x1d6af8/
-/// 0x1d7438, identical text), so the US value is correct by content.
+
 pub fn process_environment_us()->crate::speech_part_1::ProcessEnvironment{
  crate::speech_part_1::ProcessEnvironment{
   normal:0x8f8859,
@@ -1128,8 +1046,6 @@ pub fn process_environment_us()->crate::speech_part_1::ProcessEnvironment{
  }
 }
 
-/// The existing certified database reset with live logger dispatch.
-/// Reserve 96 disjoint guest scratch bytes, restored on return.
 pub fn ld_reset_live_m(m:&mut Memory<'_>,p:u32,tag:u32,scratch:u32,h:&mut impl Host)->u32{
  let at=m.offset(scratch);let mut saved=[0;96];saved.copy_from_slice(&m.bytes[at..at+96]);
  let rom=h.rom();
@@ -1147,8 +1063,7 @@ impl<H:Host> crate::db_live::DbHooksM for DbCalls<'_,H>{
   if f==0x173dc0 && a.len()==4{return self.h.call_m(f,&[a[0],a[1],a[2],a[3],0,0],m);}
   self.h.call_m(f,a,m)
  }
- /// Regional diagnostic literals: DbData addresses and log formats live
- /// in the running ROM, so map them through the host region.
+
  fn literal_m(&self,us:u32)->u32{crate::rom_region::addr(self.h.rom(),us)}
 }
 impl<H:Host> crate::db_live::PoolHooksM for DbCalls<'_,H>{
@@ -1159,7 +1074,6 @@ impl<H:Host> crate::db_live::PoolHooksM for DbCalls<'_,H>{
  }
 }
 
-/// US diagnostic literals used by the complete speech-two annotation port.
 pub fn speech_literals_us()->crate::speech_part_2::SpeechLiterals{
  crate::speech_part_2::SpeechLiterals{
 text:[0x24ed34,0x24ed18,0x24ed20,0x193c10,0x24ed4c,0x24ed64,0x24ed7c,0x24eda4,0x8f8f44,0x1ee188,0x1ee6bc,0x8f8fd8,0x24c858,0x24c880,0x24c8b8,0x914a38],
@@ -1172,6 +1086,11 @@ impl<H:Host> crate::speech_part_2::Host for ProcessCalls<'_,H>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.h.call_m(f,a,m)}
 }
 impl<H:Host> crate::boot_part_b::Host for ProcessCalls<'_,H>{
+ fn real_log_args(&mut self)->bool{true}
+ fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool{
+  crate::log_live::variadic_m(m,entry,a,format,varargs,self.log_s,|m,f,a|self.h.call_m(f,a,m))
+ }
+
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.h.call_m(f,a,m)}
  fn thread_id(&mut self)->u32{self.h.thread_id_m()}
 }
@@ -1181,7 +1100,7 @@ impl<H:Host> crate::log_live::LogMethodsM for ProcessCalls<'_,H>{
   self.h.call_m(f,&[p,category,level,arg,fmt,va],m)
  }
 }
-/// Existing complete annotation method. Scratch reserves 84 disjoint bytes.
+
 pub fn fn_1ede44_m(m:&mut Memory<'_>,a:[u32;6],t:&crate::speech_part_2::SpeechLiterals,scratch:u32,h:&mut impl Host)->u32{
  crate::speech_part_2::fn_1ede44(m,a[0],a[1],[a[2],a[3]],a[4],a[5],t,scratch,&mut ProcessCalls{h,log_s:scratch+84})
 }
@@ -1196,6 +1115,7 @@ pub fn create_child_record_m(
     scratch: u32,
     parent_table: &[u8],
     h: &mut impl Host,
+    rom: crate::rom_region::Rom,
 ) -> u32 {
     if validate_handle(object.is_some(), tag, 0xb2c2, 0x38) >= 0x80000000 {
         return 0x89202008;
@@ -1263,19 +1183,18 @@ pub fn create_child_record_m(
     rc
 }
 
-/// Existing certified record constructor, with scratch for variadic logger words.
 pub fn create_record_live_m(m:&mut Memory<'_>,a:[u32;3],scratch:u32,h:&mut impl Host)->u32{
  let at=m.offset(scratch);let mut saved=[0;96];saved.copy_from_slice(&m.bytes[at..at+96]);
  let rom=h.rom();
  let rc=crate::db_live::create_record_m(&mut DbCalls{h,s:scratch},m,a[0],a[1],a[2],crate::rom_region::addr(rom,0x8d8274),crate::rom_region::addr(rom,0x8d7ca0));
  m.bytes[at..at+96].copy_from_slice(&saved);rc
 }
-/// fn_15bf74 live ABI. Scratch is one restored word for the constructor's node.
+
 pub fn create_child_live_m(m:&mut Memory<'_>,a:[u32;5],scratch:u32,h:&mut impl Host)->u32{
  assert_eq!(m.base,0);let saved=m.word(scratch);
  let pa=crate::rom_region::addr(h.rom(),0x8d7b50) as usize;
  let mut parents=[0u8;32];parents.copy_from_slice(&m.bytes[pa..pa+32]);
- let rc=create_child_record_m(m.bytes,(a[0]!=0).then_some(a[0]),a[1],a[2],a[3],a[4],scratch,&parents,h);
+ let rc=create_child_record_m(m.bytes,(a[0]!=0).then_some(a[0]),a[1],a[2],a[3],a[4],scratch,&parents,h,h.rom());
  m.put_word(scratch,saved);rc
 }
 
@@ -1327,13 +1246,11 @@ struct OtherCalls<'a,H>(&'a mut H);
 impl<H:Host> crate::component_live_b::Host for OtherCalls<'_,H>{
  fn call_m(&mut self,f:u32,a:&[u32],m:&mut Memory<'_>)->u32{self.0.call_m(f,a,m)}
 }
-/// Use the landed memory-passing stream read/append implementation.
+
 pub fn stream_call_live_m(m:&mut Memory<'_>,f:u32,a:&[u32],h:&mut impl Host)->u32{
  crate::component_live_b::stream_call_m(m,f,a,&mut OtherCalls(h))
 }
 
-/// fn_2104b0 using the complete certified rewriter, with a live engine.
-/// The saved slice backs the disjoint guest frame; all workspace is caller-owned.
 #[allow(clippy::too_many_arguments)]
 pub fn fn_2104b0_m(
  m:&mut Memory<'_>,p:u32,tag:u32,input:[u32;2],active:u32,scratch:u32,saved:&mut[u8],
@@ -1435,8 +1352,6 @@ impl<H:Host> crate::frontend::RewriterPositions for RewriterLive<'_, '_,H>{
  fn set(&mut self,i:crate::frontend::RewriterHandle,value:i32,which:u32)->u32{self.method(20,56,&[i.first,i.second,value as u32,which])}
 }
 
-/// fn_15d0c4 projection into the certified typed field reader.
-/// Frame is eight disjoint restored guest bytes; workspace holds copied payload.
 pub fn read_field_m(m:&mut Memory<'_>,a:[u32;7],descriptors:u32,frame:u32,workspace:&mut[u8])->Result<u32,crate::engine::Error>{
  use crate::linguistic::{Field,FieldDatabase,Record};
  m.put_half(a[6],0);
@@ -1465,22 +1380,20 @@ pub fn read_field_m(m:&mut Memory<'_>,a:[u32;7],descriptors:u32,frame:u32,worksp
 impl<H:Host> crate::boot_part_e::Host for ProcessCalls<'_,H>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.h.call_m(f,a,m)}
 }
-/// The certified low-verbosity stream trace. Active formatted traces fail closed.
+
 pub fn trace_stream_write_m(m:&mut Memory<'_>,a:[u32;3],h:&mut impl Host)->Result<(),crate::engine::Error>{
  let logger=m.word(m.word(a[0]+4)+16);
  let level=crate::component_live_a::max_slot_level_m(m,logger,&mut ProcessCalls{h,log_s:0});
  if level>=6{return Err(crate::engine::Error::MissingStreamAdapter{entry:0x14e614});}
  crate::frontend::log_write(m.bytes,a[0],(a[1]!=0).then_some(a[1]),a[2],level);Ok(())
 }
-/// Live clone ABI, with one restored constructor-output word.
+
 pub fn clone_record_live_m(m:&mut Memory<'_>,a:[u32;4],scratch:u32,h:&mut impl Host)->u32{
  assert_eq!(m.base,0);let saved=m.word(scratch);
  let rc=clone_record_m(m.bytes,(a[0]!=0).then_some(a[0]),a[1],a[2],a[3],scratch,h);
  m.put_word(scratch,saved);rc
 }
 
-/// Project the live parent and its two child headers into the certified enquiry.
-/// Formatting on invalid-record/type paths remains an explicit dispatcher error.
 pub fn enquire_child_m(m:&mut Memory<'_>,a:[u32;5],rom:crate::rom_region::Rom)->Result<u32,crate::engine::Error>{
  use crate::linguistic::{Database,Record};
  if crate::normalization::quad_check(a[0],a[1],0xb2c2,0x38)>=0x80000000{return Ok(0x89202008);}
@@ -1506,7 +1419,6 @@ pub fn enquire_child_m(m:&mut Memory<'_>,a:[u32;5],rom:crate::rom_region::Rom)->
  m.put_half(a[4],output);Ok(rc)
 }
 
-/// Link getters use the existing read-only Database ports on two live headers.
 pub fn record_link_m(m:&mut Memory<'_>,f:u32,a:[u32;4])->Result<u32,crate::engine::Error>{
  use crate::linguistic::{Database,Record};
  if crate::normalization::quad_check(a[0],a[1],0xb2c2,0x38)>=0x80000000{return Ok(0x89202008);}
@@ -1541,7 +1453,7 @@ impl<H:Host> crate::frontend::HeapVtableM for HeapMethods<'_,H>{
   let f=mem_word(bytes,mem_word(bytes,self.heap)+12);self.h.call_m(f,&[obj,p],&mut Memory{base:0,bytes});
  }
 }
-/// Reuse the landed typed-element copy/destructor ports with the live heap.
+
 pub fn typed_stream_element_m(m:&mut Memory<'_>,f:u32,a:&[u32],h:&mut impl Host)->u32{
  let mut methods=HeapMethods{heap:a[1],h};
  match f{
@@ -1550,7 +1462,6 @@ pub fn typed_stream_element_m(m:&mut Memory<'_>,f:u32,a:&[u32],h:&mut impl Host)
   _=>panic!("typed-element ABI"),
  }
 }
-
 
 pub trait DbClearHooksM{
  fn log_begin_m(&mut self,log:u32,memory:&mut[u8]);
@@ -1593,13 +1504,12 @@ impl<H:Host> DbClearHooksM for ClearLive<'_,H>{
   crate::db_live::fn_180ea0(&mut DbCalls{h:self.h,s:self.s},&mut Memory{base:0,bytes},p);
  }
 }
-/// fn_15b518 live ABI, using 96 disjoint restored scratch bytes.
+
 pub fn clear_db_live_m(m:&mut Memory<'_>,a:[u32;2],scratch:u32,h:&mut impl Host)->u32{
  assert_eq!(m.base,0);let at=m.offset(scratch);let mut saved=[0;96];saved.copy_from_slice(&m.bytes[at..at+96]);
  let rc=clear_db_m(&mut ClearLive{h,s:scratch},m.bytes,(a[0]!=0).then_some(a[0]),a[1]);
  m.bytes[at..at+96].copy_from_slice(&saved);rc
 }
-
 
 use crate::heap::Heap;
 use crate::pronunciation::{LookupContext,LookupHost,LookupDictionary,LookupDictionaryState,terminated_len,append_terminated,read_offset,write_offset,text_at,string_differs,render_number};
@@ -1614,8 +1524,7 @@ fn lookup_store(ctx:&mut LookupContext,w:LookupWhich,d:LookupDictionary){
 fn lookup_prefix_differs(arena:&[u8],key:u32,prefix:&[u8],n:i32)->bool{
  crate::frontend::compare_str_n(text_at(arena,key),prefix,n)!=0
 }
-/// Dictionary callbacks borrow the current caller-owned heap, never a saved arena.
-/// Key/query arguments are guest offsets so no input slice survives a callback.
+
 pub trait LookupDictionariesM{
  fn load_m(&mut self,slot:u8,state:&mut LookupDictionaryState,key:u32,size:u32,resource:u32,heap:&mut impl Heap)->u32;
  fn unload_m(&mut self,slot:u8,state:&mut LookupDictionaryState,resource:u32,heap:&mut impl Heap)->u32;
@@ -1664,7 +1573,7 @@ impl LookupCleanupM {
                     let mut state = self.dictionary.state;
                     state.tables = read_offset(heap.arena(), ctx.tables + slot);
                     let resource = read_offset(heap.arena(), ctx.resources + slot);
-                    // The C writes through its `dictionary` pointer here.
+
                     let mut selected = lookup_selected(ctx,self.which);
                     selected.state.tables = state.tables;
                     lookup_store(ctx,self.which,selected);
@@ -1827,14 +1736,11 @@ pub fn lookup_dictionary_m(
         };
         write_offset(heap.arena(), ctx.tables + slot, pointer);
         dictionary.state.tables = pointer;
-        // The C holds `dictionary` as a pointer into `ctx`, so this store is
-        // visible on every later path, including the early returns below.
+
         lookup_store(ctx,which,dictionary);
         cleanup.dictionary = dictionary;
         rc = dictionaries.load_m(which as u8,&mut dictionary.state,key,dictionary.size,resource,heap);
-        // The seam may have advanced the bit cursor or relocated the buffer;
-        // the C sees that through its dictionary pointer, including on the
-        // early returns below.
+
         lookup_store(ctx,which,dictionary);
         cleanup.dictionary = dictionary;
         if rc >= 0x80000000 {
@@ -1856,8 +1762,7 @@ pub fn lookup_dictionary_m(
         let arena = heap.arena();
         write_offset(arena, ctx.keys + slot, 0);
         write_offset(arena, ctx.keys + slot + 4, 0);
-        // The C sizes and copies `lookup_key` (the `C`-suffixed key when
-        // `*count == 1`, otherwise `key`).
+
         let source = if lookup_key != 0 {lookup_key}else{key};
         let source_length = terminated_len(text_at(heap.arena(),source)) as usize + 1;
         let Some(pointer) = heap.allocate(source_length as u32) else {
@@ -2049,8 +1954,7 @@ impl<H:Host> LookupDictionariesM for LookupDictionaryLive<'_, '_,H>{
   if rc>1{self.fault=Some(0x26bb6c);false}else{rc!=0}
  }
 }
-/// Iterative native lookup binding. Caller supplies 512 disjoint saved scratch
-/// bytes. Missing dictionary implementations propagate UnsupportedStage.
+
 pub fn lookup_dictionary_live_m(m:&mut Memory<'_>,a:[u32;7],scratch:u32,h:&mut impl Host)->Result<u32,crate::engine::Error>{
  assert_eq!(m.base,0);
  if crate::normalization::quad_check(a[0],a[1],0xf37f,0x2a4)>=0x80000000{return Ok(0x89802008);}
@@ -2075,8 +1979,7 @@ pub fn lookup_dictionary_live_m(m:&mut Memory<'_>,a:[u32;7],scratch:u32,h:&mut i
 }
 
 const DICTIONARY_NODES:usize=512;
-/// Caller-owned immutable-table projections and transient query/output storage.
-/// Tables stay read-only during broker map/unmap calls.
+
 pub struct DictionaryWorkspace{
  trees:[[[u16;2];DICTIONARY_NODES];5],
  count_values:[u16;DICTIONARY_NODES],skip_values:[u16;DICTIONARY_NODES*2+2],offset_values:[u16;DICTIONARY_NODES*2+2],
@@ -2117,8 +2020,7 @@ impl<H:Host> crate::morphology::DictionaryPages for DictionaryBrokerPages<'_, '_
   let rc=self.h.call_m(0x179208,&args,self.m);if rc==0x80002001{self.fault=Some(0x179208);}
  }
 }
-/// Native fn_26bb6c ABI over the certified TrieCursor::lookup_entry algorithm.
-/// Metadata tables must remain immutable across broker callbacks.
+
 pub fn dictionary_lookup_entry_m(m:&mut Memory<'_>,a:[u32;6],w:&mut DictionaryWorkspace,h:&mut impl Host)->Result<u32,crate::engine::Error>{
  use crate::morphology::{BitCursor,TrieCursor,TrieTables,EntryTables,OffsetTable};
  assert_eq!(m.base,0);let p=a[0];let table=m.word(p+12);let header=m.word(table);
@@ -2170,14 +2072,12 @@ pub fn dictionary_lookup_entry_m(m:&mut Memory<'_>,a:[u32;6],w:&mut DictionaryWo
 pub fn unmap_environment_us(scratch:u32)->crate::boot_part_e::UnmapEnvironment{
  unmap_environment_rom(scratch,crate::rom_region::Rom::Us)
 }
-/// Region-aware unmap environment: the category address moves per region
-/// (the format-string addresses are unlisted, i.e. identical everywhere).
-/// The broker arms pass the running host's region through.
+
 pub fn unmap_environment_rom(scratch:u32,rom:crate::rom_region::Rom)->crate::boot_part_e::UnmapEnvironment{
  let addr=|us| crate::rom_region::addr(rom,us);
  crate::boot_part_e::UnmapEnvironment{category:addr(0x8d7668),begin_format:addr(0x179310),end_format:addr(0x17935c),error_format:addr(0x17934c),labels:[addr(0x179344),addr(0x17933c),addr(0x1791d8)],scratch}
 }
-/// Broker/stream wrappers use 88 disjoint restored scratch bytes.
+
 pub fn broker_range_live_m(m:&mut Memory<'_>,f:u32,a:&[u32],scratch:u32,h:&mut impl Host)->u32{
  let env=unmap_environment_rom(scratch+16,h.rom());
  let mut calls=ProcessCalls{h,log_s:scratch};
@@ -2208,12 +2108,6 @@ impl<H:Host> crate::speech_part_1::StreamHost for ProcessCalls<'_,H>{
  }
 }
 
-
-
-
-
-
-/// fn_240b28: CP437 lowercase of one code point.
 pub fn fn_240b28(c:u32)->u32{
  if c.wrapping_sub(0x41)<=0x19{return (c+0x20)&0xff;}
  match c{
@@ -2223,7 +2117,6 @@ pub fn fn_240b28(c:u32)->u32{
  }
 }
 
-/// fn_195dac: append at most `n` bytes of the C string at `src` to the C string at `dst`.
 pub fn fn_195dac_m(m:&mut Memory<'_>,dst:u32,mut src:u32,n:i32)->u32{
  let mut at=dst;
  while m.byte(at)!=0{at=at.wrapping_add(1);}
@@ -2238,7 +2131,6 @@ pub fn fn_195dac_m(m:&mut Memory<'_>,dst:u32,mut src:u32,n:i32)->u32{
  dst
 }
 
-/// fn_1852d8: replace the halfword at `p+0x34` and return the previous value.
 pub fn fn_1852d8_m(m:&mut Memory<'_>,p:u32,v:u16)->u16{
  let at=p+0x34;
  let old=u16::from_le_bytes(m.bytes[m.offset(at)..m.offset(at)+2].try_into().unwrap());
@@ -2246,7 +2138,6 @@ pub fn fn_1852d8_m(m:&mut Memory<'_>,p:u32,v:u16)->u16{
  old
 }
 
-/// fn_1853c4: replace the signed byte at `p+0x38` and return the previous value.
 pub fn fn_1853c4_m(m:&mut Memory<'_>,p:u32,v:i8)->i32{
  let at=p+0x38;
  let old=m.byte(at) as i8;
@@ -2254,7 +2145,6 @@ pub fn fn_1853c4_m(m:&mut Memory<'_>,p:u32,v:i8)->i32{
  old as i32
 }
 
-/// fn_26bb54: read the byte at `(*(*(p+0xc)))+9`.
 pub fn fn_26bb54_m(m:&mut Memory<'_>,p:u32)->u8{
  let inner=m.word(m.word(p+0xc));
  m.byte(inner+9)
@@ -2262,46 +2152,23 @@ pub fn fn_26bb54_m(m:&mut Memory<'_>,p:u32)->u8{
 
 use crate::depes;
 
-// ===== depes virtual machine, memory-passing port ===========================
-//
-// The FE_DEPES grammar object is 0x3c0 bytes.  src/fn_28920c.c's TextState and
-// src/fn_2865e8.c's MatchState describe the live layout; the ROM disassembly
-// settles the two places the C reconstruction is wrong (fn_287cd8 reads the
-// rule offsets as u32 and adds the +0x68 blob base).
-//
-// The slice port in depes.rs stores layer indices and code offsets where the
-// ROM stores row pointers and blob pointers, so the projection converts
-// pointer to index on the way in and back on the way out.
-
 pub const VM_LAYERS: usize = 5;
 pub const VM_CODE_MAX: usize = 65536;
 pub const VM_RULE_MAX: usize = 4096;
 pub const VM_MODULE_MAX: usize = 128;
-/// The class table is 162 entries; the EU/KR grammars use wider rows than
-/// the US one (KR needs width 197, US width 188), so the host buffer keeps
-/// headroom above the widest observed row.
+
 pub const VM_CLASS_MAX: usize = 162 * 256;
-/// The group/value tables are 162 entries; the EU grammar needs width 44
-/// (KR 38, US 26), so the host buffers keep headroom above that.
+
 pub const VM_GROUP_MAX: usize = 162 * 64;
 pub const VM_MATRIX_MAX: usize = 64 * 256;
 pub const VM_KIND_MAX: usize = 256;
 pub const VM_CAPTURE_TYPE_MAX: usize = 512;
 pub const VM_CAPTURE_MAX: usize = 256;
-/// Maximum depes row bytes. The ARM rows are heap buffers grown to
-/// `capacity = min(length, 10000) * 3` (src/fn_218ba4.c: `fn_1963e0`
-/// realloc), so 30000 covers every input the engine accepts. The port
-/// rows are caller-owned and fixed; anything smaller fails inputs whose
-/// transient rule growth passes the old 1024 (a 267-char text grows 344
-/// input bytes toward its 1032-byte capacity and needs byte 1030).
+
 pub const VM_ROW_MAX: usize = 30000;
 pub const VM_FRAME_MAX: usize = 50;
 pub const VM_SCANNER_MAX: usize = 64;
 
-/// Caller-owned scratch for the memory-passing depes VM port.
-///
-/// The grammar tables are copied in so the rules can borrow them while the
-/// expansion callback owns the arena.
 pub struct VmWorkspace {
     code: [u8; VM_CODE_MAX],
     rules: [usize; VM_RULE_MAX],
@@ -2354,17 +2221,8 @@ impl Default for VmWorkspace {
     }
 }
 
-/// The guest expansion method (TextMethods::expand in fn_28920c).
 pub trait VmExpansion {
-    /// Run the expansion and report `(status, separator)`: the status
-    /// the VM splices on (`1` applies the text) and the byte that
-    /// separates the expansion's layer segments in `out` (the
-    /// dictionary separator the lookup returns, e.g. `b'{'`).
-    ///
-    /// Mirror the VM-computed `ends` array to a caller-owned guest
-    /// buffer after the splice, then release it: the ROM keeps ends in
-    /// a heap buffer it frees, so ports that need those bytes in the
-    /// image mirror them here. The default is no mirror.
+
     fn post_expand(&mut self, _ends: &[i16], _m: &mut Memory<'_>) {}
     fn expand_m(
         &mut self,
@@ -2412,8 +2270,7 @@ impl<H: VmExpansion> depes::ExpansionCallback for VmExpansionCall<'_, '_, H> {
 }
 
 impl<H: VmExpansion> VmExpansionCall<'_, '_, H> {
-    /// Mirror the post-splice ends to the host's guest buffer, if any.
-    /// Called by `vm_run_m` after the dispatch, while the ends are final.
+
     fn expanded(&mut self) {
         let (host, ends, m) = (&mut self.host, &self.ends, &mut *self.m);
         host.post_expand(ends, m);
@@ -2448,7 +2305,6 @@ fn vm_put_u32(m: &mut Memory<'_>, p: u32, v: u32) {
     m.bytes[at..at + 4].copy_from_slice(&v.to_le_bytes());
 }
 
-/// The bytes between two consecutive grammar tables, as the ROM sees them.
 fn vm_span(
     m: &Memory<'_>,
     ctx: u32,
@@ -2516,11 +2372,6 @@ fn vm_layer_ptr(layers: &[u32; VM_LAYERS], index: Option<usize>, original: u32) 
     }
 }
 
-/// fn_287cd8: run the depes virtual machine over the live grammar object.
-///
-/// `ctx` is the FE_DEPES grammar object, `module` and `start` are the ROM
-/// arguments and `end_ptr` addresses the i16 text end.  The state is loaded
-/// from the object, run, and stored back exactly as the ROM writes it.
 pub fn vm_run_m(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -2530,6 +2381,7 @@ pub fn vm_run_m(
     w: &mut VmWorkspace,
     host: &mut impl VmExpansion,
 ) -> Result<u8, crate::frontend_types::Error> {
+    if vm_u8(m, ctx + 0x37b) != 0 { return Ok(0); }
     let layer_count = vm_u16(m, ctx + 0x0c) as usize;
     if layer_count == 0 || layer_count > VM_LAYERS {
         return Err(crate::frontend_types::Error::InvalidResource);
@@ -2604,11 +2456,7 @@ pub fn vm_run_m(
     for index in 0..layer_count {
         layers[index] = m.word(layer_array + 4 * index as u32);
     }
-    // The arena rows are exactly `capacity` bytes (engine+0x32; the
-    // allocator grows them to length*3, and `end_ptr` is engine+0x34 in
-    // every caller). The fixed rows are wider, so only this window
-    // mirrors the ARM heap buffers; copying the full width back would
-    // overflow the arena buffers.
+
     let cap = (vm_u16(m, end_ptr.wrapping_sub(2)) as usize).min(VM_ROW_MAX);
     for index in 0..layer_count {
         vm_copy(m, layers[index], &mut w.rows[index][..cap])?;
@@ -2640,9 +2488,6 @@ pub fn vm_run_m(
     }
 
     let cursor = m.word(ctx + 0x388);
-    if cursor < blob {
-        return Err(crate::frontend_types::Error::InvalidResource);
-    }
     let original_current = m.word(ctx + 0x380);
     let original_output = m.word(ctx + 0x384);
     let original_prefix = m.word(ctx + 0x368);
@@ -2652,7 +2497,7 @@ pub fn vm_run_m(
             predicate: depes::PredicateState {
                 current: vm_layer_index(&layers, original_current).unwrap_or(0),
                 saved: None,
-                cursor: (cursor - blob) as usize,
+                cursor: cursor.wrapping_sub(blob) as usize,
                 character: vm_u8(m, ctx + 0x371),
                 captured: vm_u8(m, ctx + 0x39a),
                 value: vm_u8(m, ctx + 0x39b),
@@ -2675,7 +2520,7 @@ pub fn vm_run_m(
             depth: vm_i16(m, ctx + 0x37c),
             changed: vm_u8(m, ctx + 0x37e),
             output: vm_layer_index(&layers, original_output).unwrap_or(0),
-            cursor: (cursor - blob) as usize,
+            cursor: cursor.wrapping_sub(blob) as usize,
             span: vm_i16(m, ctx + 0x396),
             distance: vm_i16(m, ctx + 0x398),
             variant: vm_u8(m, ctx + 0x39b),
@@ -2775,17 +2620,12 @@ pub fn vm_run_m(
             &mut scratch,
             &mut expansion,
         );
-        // Mirror the final ends to the host's guest buffer, if any.
-        // The ROM keeps ends in a heap buffer it frees; the mirror
-        // keeps those bytes in the image. Hosts without a mirror are
-        // unaffected (default no-op).
+
         expansion.expanded();
         result
     };
     let result = result?;
-    // The ROM returns 1 on the success path and 0 only on the two error exits,
-    // both of which leave ctx+0x37b set.  The slice port returns the work
-    // flag instead, so the ROM value is reconstructed here.
+
     let result = if state.replacement.error != 0 { 0 } else { 1 };
     vm_put_u16(m, end_ptr, end as u16);
 
@@ -2796,7 +2636,7 @@ pub fn vm_run_m(
         }
         layers
     };
-    let cursor = blob + state.sequence.predicate.cursor as u32;
+    let cursor = blob.wrapping_add(state.sequence.predicate.cursor as u32);
     vm_put_u8(m, ctx + 0x360, state.sequence.active);
     vm_put_u32(
         m,
@@ -2862,32 +2702,12 @@ pub fn vm_run_m(
     Ok(result)
 }
 
-// ===== live FE_PHRASING root (fn_1df780) ==================================
-//
-// fn_1df780 is the FE_PHRASING stage entry: it walks the LINGDB sentence
-// lattice, builds the phrasing text and the word map, hands both to the
-// FE_DEPES engine and writes the pause marks back into the lattice.
-//
-// The root reaches its guest functions through the method tables that the
-// live Phrasing object carries, so the port keeps those tables as arena
-// addresses and dispatches every guest call through the caller's dispatcher.
-// The FE_DEPES engine and the dictionary canonical-token prepare are reached
-// through the engine and dictionary tables as well; they have no arena port
-// yet, so this file runs them over the same arena.
-//
-// The log calls of fn_218ba4 and fn_1ed1d0 are not reproduced: they only
-// reach the log sinks, and in this capture the ROM's log writes are byte
-// idempotent, so the compared arena is the same either way.
-
-/// Guest out-parameters and pointer arguments live in the machine stack
-/// window, where the ROM keeps them.  That window is outside the compared
-/// arena, so the scratch never shows up in the byte comparison.
 const PHRASING_SCRATCH: u32 = 0x0e0ff700;
-/// Longest node word, mode string or root text the port copies out.
+
 const PHRASING_DATA_MAX: usize = 16384;
-/// The LINGDB mark record: type at +0x00, position at +0x0c, value at +0x14.
+
 const PHRASING_MARK_SIZE: usize = 24;
-/// The expansion method never runs in this root; the port fails closed.
+
 struct NoExpansion;
 impl VmExpansion for NoExpansion {
     fn expand_m(
@@ -2904,7 +2724,6 @@ impl VmExpansion for NoExpansion {
     }
 }
 
-/// Live `prosody::PhrasingProcessHost` over the caller's arena.
 pub struct PhrasingLive<'a, 'm, 'w, H> {
     pub m: &'a mut Memory<'m>,
     pub h: &'a mut H,
@@ -2918,14 +2737,12 @@ pub struct PhrasingLive<'a, 'm, 'w, H> {
     pub text_block: u32,
     pub map_block: u32,
     data: [u8; PHRASING_DATA_MAX],
-    /// Guest address of the root input text (field 0), cached by node_data
-    /// so the phrasing-mode question-mark rewrite can commit its byte back
-    /// to the arena the way the ARM writes the lattice text in place.
+
     pub input_addr: u32,
 }
 
 impl<'a, 'm, 'w, H: Host> PhrasingLive<'a, 'm, 'w, H> {
-    /// Dispatch one guest call over the caller's arena.
+
     fn call(&mut self, entry: u32, args: &[u32]) -> u32 {
         let m = &mut *self.m;
         let h = &mut *self.h;
@@ -2949,12 +2766,11 @@ impl<'a, 'm, 'w, H: Host> PhrasingLive<'a, 'm, 'w, H> {
         let o = self.m.offset(at);
         self.m.bytes[o..o + 2].copy_from_slice(&value.to_le_bytes());
     }
-    /// The method table entry at `table + offset`.
+
     fn method(&self, table: u32, offset: u32) -> u32 {
         self.word(table + offset)
     }
-    /// The LINGDB field descriptor of `record`.`field`: the data address, the
-    /// element count and the element size.
+
     fn field_info(&self, object: u32, record: u32, field: u32) -> (u32, u32, u32) {
         if record >= self.word(object + 32) {
             return (0, 0, 0);
@@ -2981,7 +2797,7 @@ impl<'a, 'm, 'w, H: Host> PhrasingLive<'a, 'm, 'w, H> {
         let size = u32::from(self.half(desc + 10));
         (address, count, size)
     }
-    /// Copy `len` bytes out of the arena into the host's scratch.
+
     fn copy_out(&mut self, from: u32, len: usize) -> usize {
         let mut copied = 0usize;
         while copied < len && copied < PHRASING_DATA_MAX {
@@ -2997,7 +2813,7 @@ impl<'a, 'm, 'w, H: Host> PhrasingLive<'a, 'm, 'w, H> {
 }
 
 impl<'a, 'm, 'w, H: Host> crate::prosody::PhrasingProcessHost for PhrasingLive<'a, 'm, 'w, H> {
-    /// fn_176f94: the handle check.
+
     fn validate(&mut self, object: [u32; 2], tag: u32, size: u32) -> u32 {
         if object[1] == tag && (size == 0 || object[0] != 0) {
             0
@@ -3051,12 +2867,7 @@ impl<'a, 'm, 'w, H: Host> crate::prosody::PhrasingProcessHost for PhrasingLive<'
             ],
         );
         let size = self.half(written);
-        // The guest `written` out-param counts ELEMENTS (1:1 with the C:
-        // `*written = length`), not bytes. Build the value from the full
-        // elements*size bytes (up to the u32 width); using the element
-        // count as a byte count truncates multi-byte fields whose value
-        // needs the high byte (positions >= 256 on long texts), which
-        // fails the phrasing span check with 0x8a003eb1.
+
         let (_, _, elem) = self.field_info(handle[0], u32::from(node), field as u32);
         let bytes = ((u32::from(size)).saturating_mul(elem.max(1))).min(4) as u16;
         let mut value = 0u32;
@@ -3124,7 +2935,11 @@ impl<'a, 'm, 'w, H: Host> crate::prosody::PhrasingProcessHost for PhrasingLive<'
             self.input_addr = address;
         }
         let (_, _, size) = self.field_info(handle[0], u32::from(node), field as u32);
-        let len = usize::from(elements) * size.max(1) as usize;
+        let mut len = usize::from(elements) * size.max(1) as usize;
+        if field == 5 {
+            let bytes = &self.m.bytes[self.m.offset(address)..];
+            len = bytes.iter().position(|b| *b == 0).expect("unterminated node word") + 1;
+        }
         let copied = self.copy_out(address, len);
         (rc, &self.data[..copied], elements)
     }
@@ -3278,8 +3093,7 @@ impl<'a, 'm, 'w, H: Host> crate::prosody::PhrasingProcessHost for PhrasingLive<'
             self.put_byte(block + at as u32, text[at]);
             at += 1;
         }
-        // The dictionary copies are NUL terminated: the terminator belongs to
-        // the block, and the bytes after it stay as they were.
+
         self.put_byte(block + at as u32, 0);
         let m = &mut *self.m;
         let h = &mut *self.h;
@@ -3312,7 +3126,7 @@ impl<'a, 'm, 'w, H: Host> crate::prosody::PhrasingProcessHost for PhrasingLive<'
             buf[copied] = self.byte(pointer + copied as u32);
             copied += 1;
         }
-        // The C terminates the engine output in place: output[length] = 0.
+
         self.put_byte(pointer + length as u32, 0);
         (rc, copied)
     }
@@ -3336,8 +3150,7 @@ impl<'a, 'm, 'w, H: Host> crate::prosody::PhrasingProcessHost for PhrasingLive<'
         if block == 0 {
             return 0x89802007;
         }
-        // The ROM copies the NUL terminated text, not the whole caller
-        // buffer: the block keeps the bytes that follow the terminator.
+
         let length = terminated_length(text);
         let mut index = 0usize;
         while index < length {
@@ -3408,12 +3221,6 @@ impl<'a, 'm, 'w, H: Host> crate::prosody::PhrasingProcessHost for PhrasingLive<'
     }
 }
 
-/// fn_218ba4: fe_depes_SetLayerEx, over the live arena.
-///
-/// The ROM's fifth argument (the length) arrives on the stack; the capacity
-/// is the unsigned half at engine+0x32 and the layer count the signed half
-/// at engine+0x30.  A layer row is grown through fn_1963e0 when the new
-/// capacity does not fit, and the new tail is padded with spaces.
 pub fn depes_set_layer_m(
     m: &mut Memory<'_>,
     engine: u32,
@@ -3509,11 +3316,6 @@ pub fn depes_set_layer_m(
     0
 }
 
-/// fn_2195e4: fe_depes_ExecModule, over the live arena.
-///
-/// The module table lives at ctx+0x08 with its size at ctx+0x04.  The walk
-/// compares the module name with fn_1769d0 and then reads the module bytes.
-/// Every byte of the module is one fn_287cd8 call.
 pub fn depes_execute_module_m(
     m: &mut Memory<'_>,
     key: u32,
@@ -3566,11 +3368,7 @@ pub fn depes_execute_module_m(
     let mut index = 0u32;
     let mut expansion = NoExpansion;
     while index < length {
-        // The C (fn_2195e4) ignores fn_287cd8's return and reads the
-        // status byte below, so a successful run keeps `let _ =` parity.
-        // But a port-only failure (fixed VmWorkspace rows, arena or blob
-        // limits the ARM heap absorbs) must never degrade silently the
-        // way r25's Capacity skip did: stop the speak loudly instead.
+
         if vm_run_m(
             m,
             ctx,
@@ -3596,10 +3394,6 @@ pub fn depes_execute_module_m(
     }
 }
 
-/// fn_2191c8: fe_depes_GetLayer, over the live arena.
-///
-/// The layer pointer comes from the array at engine+0x28 and the length from
-/// the engine's text length at engine+0x34.
 pub fn depes_get_layer_m(
     m: &mut Memory<'_>,
     engine: u32,
@@ -3621,7 +3415,6 @@ pub fn depes_get_layer_m(
     0
 }
 
-/// fn_2193a4: fe_depes_ExecModule, over the live arena.
 pub fn depes_exec_module_m(
     m: &mut Memory<'_>,
     engine: u32,
@@ -3644,13 +3437,6 @@ pub fn depes_exec_module_m(
     result
 }
 
-/// fn_1ed1d0: fe_dctlkp_ConvertToCanonicalToken, over the live arena.
-///
-/// 1:1 with src/fn_1ed1d0.c: handle check, the remember/last refresh gate
-/// (the refresh rides the host's 0x1eb978 like fn_1ed954_m), mode 0 via the
-/// replacement table (src/fn_1ed0c4.c inline: expand or fold per byte with
-/// the u16 capacity check), mode 1 (and any other non-2 mode) folded to
-/// lower case in place, mode 2 left alone.
 pub fn dctlkp_canonical_token_m(
     m: &mut Memory<'_>,
     object: u32,
@@ -3665,8 +3451,7 @@ pub fn dctlkp_canonical_token_m(
     if text == 0 {
         return 0x89802007;
     }
-    // Remember gate (C lines 33-37): refresh the canonical map when the
-    // key changed since the last call.
+
     if m.byte(object + 0x29e) != 0 && !guest_str_eq(m, input, object + 0x19e) {
         let rc = h.call_m(0x1eb978, &[object, tag, input], m);
         if rc >= 0x80000000 {
@@ -3692,7 +3477,6 @@ pub fn dctlkp_canonical_token_m(
     0
 }
 
-/// Byte compare of two NUL-terminated guest strings: true when equal.
 fn guest_str_eq(m: &Memory<'_>, a: u32, b: u32) -> bool {
     let mut off = 0u32;
     loop {
@@ -3708,7 +3492,6 @@ fn guest_str_eq(m: &Memory<'_>, a: u32, b: u32) -> bool {
     }
 }
 
-/// Copy the NUL-terminated guest string at `src` over `dst` (with NUL).
 fn guest_str_copy(m: &mut Memory<'_>, dst: u32, src: u32) {
     let mut off = 0u32;
     loop {
@@ -3721,8 +3504,6 @@ fn guest_str_copy(m: &mut Memory<'_>, dst: u32, src: u32) {
     }
 }
 
-/// src/fn_1ed0c4.c inline: replace each byte from the replacement table
-/// or fold it, with the C's u16 capacity check.
 fn canonical_replace_m(m: &mut Memory<'_>, table: u32, text: u32, cap: u32) -> u32 {
     let mut length = arena_strlen(m, text);
     let mut i = 0u32;
@@ -3762,7 +3543,6 @@ fn canonical_replace_m(m: &mut Memory<'_>, table: u32, text: u32, cap: u32) -> u
     0
 }
 
-/// The length of the NUL terminated string at `at`.
 fn arena_strlen(m: &Memory<'_>, at: u32) -> u32 {
     let mut length = 0u32;
     loop {
@@ -3782,11 +3562,6 @@ fn arena_strlen(m: &Memory<'_>, at: u32) -> u32 {
     }
 }
 
-/// fn_1df780: the FE_PHRASING stage entry, over the live arena.
-///
-/// `a` holds the two register argument pairs of the original call (the
-/// object handle and the LINGDB handle).  `active` is the original fifth
-/// argument: the flag byte the stage writes once the handle check passed.
 pub fn fn_1df780_m<'m>(
     m: &mut Memory<'m>,
     a: &[u32],
@@ -3859,10 +3634,6 @@ pub fn fn_1df780_m<'m>(
     result
 }
 
-// ===== live FE_PHRASING dispatcher and platform ===========================
-
-/// The platform services the shared live ports ask for.  The FE_PHRASING
-/// root needs none of them, so every service is inert.
 pub struct PhrasingPlatform;
 impl crate::engine::HeapPlatform for PhrasingPlatform {
     fn thread_id(&mut self) -> u32 {
@@ -3876,18 +3647,13 @@ impl crate::engine::HeapPlatform for PhrasingPlatform {
     }
 }
 
-/// Live dispatcher for the FE_PHRASING root.
-///
-/// The LINGDB node methods, the heap and the log come from the shared live
-/// ports; the module name compare comes from the fe_text port.  Every other
-/// address fails closed and is recorded, so a gap is never silent.
 pub struct PhrasingCalls<'a, P> {
     pub platform: &'a mut P,
     pub fault: Option<crate::engine::Error>,
     pub first_unbound: Option<u32>,
     pub calls: u32,
     pub trace: HeapTrace,
-    /// The ROM whose guest memory is live (round-8 recipe). US by default.
+
     pub live_rom: crate::rom_region::Rom,
 }
 
@@ -3907,9 +3673,7 @@ impl<'a, P: crate::engine::HeapPlatform> PhrasingCalls<'a, P> {
 impl<P: crate::engine::HeapPlatform> Host for PhrasingCalls<'_, P> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
         self.calls += 1;
-        // Regional entries name the same port: normalize region-first so EU
-        // 0x15cafc (US 0x15ca38) and the heap twins hit the US arms below.
-        // Follows the C3Calls round-8 recipe; US is bit-identical.
+
         let entry = crate::rom_region::to_us_guest(self.live_rom, entry);
         if matches!(entry, 0x196394 | 0x1963b8 | 0x1963e0 | 0x196428) {
             let rc = self.heap_call(entry, args, m);
@@ -3951,6 +3715,7 @@ impl<P: crate::engine::HeapPlatform> Host for PhrasingCalls<'_, P> {
             platform: &mut *self.platform,
             fault: None,
             scratch: 0x500,
+            rom: crate::rom_region::Rom::Us,
         };
         let rc = host.call_m_with(entry, args, m, rom);
         if host.fault.is_some() {
@@ -3967,22 +3732,17 @@ impl<P: crate::engine::HeapPlatform> Host for PhrasingCalls<'_, P> {
     }
 }
 
-// ===== heap call trace (round 5 diagnostic) =================================
-
-/// One recorded heap call: the guest entry, its arguments and its result.
 #[derive(Clone, Copy)]
 pub struct HeapCall {
     pub entry: u32,
     pub args: [u32; 4],
     pub ret: u32,
-    /// The heap list words after the call: free head, free tail, used head,
-    /// used tail.
+
     pub lists: [u32; 4],
-    /// The header of the block the call touched.
+
     pub block: [u32; 5],
 }
 
-/// A bounded, caller-owned record of the heap calls a live root made.
 pub struct HeapTrace {
     pub calls: [HeapCall; 32],
     pub len: usize,
@@ -4007,7 +3767,7 @@ fn heap_snapshot(m: &Memory<'_>, heap: u32, block: u32) -> ([u32; 4], [u32; 5]) 
 }
 
 impl<P: crate::engine::HeapPlatform> PhrasingCalls<'_, P> {
-    /// Run one heap call and record its arguments, result and list state.
+
     fn heap_call(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> Option<u32> {
         let wrapper = args[0];
         if wrapper == 0 || args.len() < 2 {
@@ -4035,14 +3795,13 @@ impl<P: crate::engine::HeapPlatform> PhrasingCalls<'_, P> {
         Some(rc)
     }
 
-    /// The heap dispatch itself: the same shared live host the untraced path
-    /// uses, so the traced call behaves exactly like the real one.
     fn dispatch_heap(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
         let rom = self.live_rom;
         let mut host = crate::component_live_b::LiveHost {
             platform: &mut *self.platform,
             fault: None,
             scratch: 0x500,
+            rom: crate::rom_region::Rom::Us,
         };
         let rc = host.call_m_with(entry, args, m, rom);
         if host.fault.is_some() {
@@ -4055,8 +3814,6 @@ impl<P: crate::engine::HeapPlatform> PhrasingCalls<'_, P> {
     }
 }
 
-/// The length of the NUL terminated prefix of `bytes`, plus its terminator.
-/// A buffer without a terminator is used whole; the caller keeps its bytes.
 fn terminated_length(bytes: &[u8]) -> usize {
     match bytes.iter().position(|byte| *byte == 0) {
         Some(at) => at + 1,
@@ -4064,15 +3821,6 @@ fn terminated_length(bytes: &[u8]) -> usize {
     }
 }
 
-// ===== FE_PUNCSPTN (fn_1dd914): the live fe_text::FeTextHost =============
-
-/// Scratch cells for the live FE_PUNCSPTN host.  They sit in the machine
-/// stack window above every regional entry SP (US 0xe0ffbf8, EU/KR
-/// 0xe0ffc00), which the byte comparison skips: the KR capture compares
-/// page 0, where the old 0x40/0x100 cells polluted the image, while the
-/// ARM keeps this scratch on its own stack (EU 1dd914 builds the rule key
-/// at 0xe0ff790).  The guest only ever writes these as call out-parameters,
-/// so stale window content is never observed.
 const FE_TEXT_SCRATCH: u32 = 0x0e0ffd00;
 const FE_TEXT_VALUE: u32 = FE_TEXT_SCRATCH + 0x00;
 const FE_TEXT_WRITTEN: u32 = FE_TEXT_SCRATCH + 0x04;
@@ -4080,10 +3828,9 @@ const FE_TEXT_POINTER: u32 = FE_TEXT_SCRATCH + 0x08;
 const FE_TEXT_LENGTH: u32 = FE_TEXT_SCRATCH + 0x0c;
 const FE_TEXT_HALF: u32 = FE_TEXT_SCRATCH + 0x10;
 const FE_TEXT_NAME: u32 = FE_TEXT_SCRATCH + 0x40;
-/// The rule set the punctuation disambiguation pass runs.
+
 const FE_TEXT_RULE: &[u8] = b"disambiguate_punctuation";
-/// The status a method without a live binding reports.  It is a failure
-/// status, never a panic.
+
 const FE_TEXT_UNBOUND: u32 = 0x8000_2001;
 
 fn fe_text_byte(arena: &[u8], at: u32) -> u8 {
@@ -4140,32 +3887,18 @@ fn fe_text_equal(arena: &[u8], at: u32, literal: &[u8]) -> bool {
     fe_text_byte(arena, at.wrapping_add(literal.len() as u32)) == 0
 }
 
-/// The live `fe_text::FeTextHost` of the FE_PUNCSPTN root.
-///
-/// The root body is the shared slice port `fe_text::fe_punctspat_1dd914`;
-/// this binding routes every method of its three vtables to the guest
-/// function the ROM calls, over the caller's arena:
-///
-/// * the nodes table `0x8d81f0`: first `0x15c544`, next `0x15c7d8`, count
-///   `0x15d6c4`, set `0x15cdcc`, get `0x15d0c4`, data `0x15d378`, size
-///   `0x15d594`, remove `0x15da64`;
-/// * the properties table `0x8fa1b0`: set `0x219554`, get `0x21958c`;
-/// * the characters table `0x8f8f88`: punctuation `0x1edd3c`.
-///
-/// The FE_DEPES families use the engine's own LINGDB handle, the same
-/// `0x14c597dc`/`0xf37e` pair the properties table uses.
 pub struct FeTextLive<'a, P> {
     pub platform: &'a mut P,
     pub fault: Option<crate::engine::Error>,
     pub first_unbound: Option<u32>,
     pub calls: u32,
-    /// The ROM whose guest memory is live (round-8 recipe). US by default.
+
     pub rom: crate::rom_region::Rom,
-    /// The depes VM workspace the rule module needs.
+
     pub workspace: Option<VmWorkspace>,
-    /// The field-4 string the root fetched last: the depes rule mode.
+
     pub mode: u32,
-    /// The rule name the disambiguation pass builds.
+
     pub rule: [u8; 132],
     pub rule_len: usize,
 }
@@ -4185,7 +3918,6 @@ impl<'a, P: crate::engine::HeapPlatform> FeTextLive<'a, P> {
         }
     }
 
-    /// Record an unbound dependency and return the failure status.
     fn unbound(&mut self, entry: u32) -> u32 {
         if self.first_unbound.is_none() {
             self.first_unbound = Some(entry);
@@ -4193,8 +3925,6 @@ impl<'a, P: crate::engine::HeapPlatform> FeTextLive<'a, P> {
         FE_TEXT_UNBOUND
     }
 
-    /// Build the depes rule name, as the guest's `fn_1dbcb0` does: the base
-    /// name, plus `"_"` and the mode when the mode is not `"normal"`.
     fn build_rule(&mut self, arena: &[u8], full: bool) -> u32 {
         let mut length = 0usize;
         for byte in FE_TEXT_RULE {
@@ -4224,7 +3954,6 @@ impl<'a, P: crate::engine::HeapPlatform> FeTextLive<'a, P> {
         length as u32
     }
 
-    /// Write the rule name into the arena and run the rule module.
     fn exec_rule(&mut self, arena: &mut [u8], engine: u32, tag: u32, length: u32) -> u32 {
         let mut index = 0u32;
         while index <= length {
@@ -4250,13 +3979,11 @@ impl<'a, P: crate::engine::HeapPlatform> FeTextLive<'a, P> {
         status
     }
 
-    /// `fn_219554`: the engine option setter.
     fn set_option(&mut self, arena: &mut [u8], handle: u32, tag: u32, value: u32, which: u32) -> u32 {
         let mut memory = Memory { base: 0, bytes: &mut *arena };
         fn_219554_m(&mut memory, handle, tag, value, which)
     }
 
-    /// `fn_21958c`: the engine option getter.
     fn get_option(
         &mut self,
         arena: &mut [u8],
@@ -4279,10 +4006,7 @@ impl<P: crate::engine::HeapPlatform> Host for FeTextLive<'_, P> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
         self.calls += 1;
         match entry {
-            // LINGDB record links (parent/next/previous): the speech_2
-            // numbers path inserts nodes, reaching the previous-link
-            // getter 0x15c9a4 that speech_1 never calls. Same 4-arg ABI
-            // as core_call_m.
+
             0x15c4b0 | 0x15c744 | 0x15c9a4 | 0x15c7d8 | 0x15ca38 => {
                 let Ok(quad) = <[u32; 4]>::try_from(args) else {
                     return self.unbound(entry);
@@ -4321,8 +4045,7 @@ impl<P: crate::engine::HeapPlatform> Host for FeTextLive<'_, P> {
                 depes_get_layer_m(m, args[0], args[1], args[2], args[3], args[4])
             }
             0x1963e0 => {
-                // The heap resize runs through the block-resize slot
-                // `0x4a79b8`, which the shared live host does not bind.
+
                 match heap_call_m_rom(m, entry, args, &mut *self.platform, self.rom) {
                     Ok(status) => status,
                     Err(error) => {
@@ -4353,6 +4076,7 @@ impl<P: crate::engine::HeapPlatform> Host for FeTextLive<'_, P> {
                     platform: &mut *self.platform,
                     fault: None,
                     scratch: 0x500,
+            rom: crate::rom_region::Rom::Us,
                 };
                 let status = host.call_m_with(entry, args, m, rom);
                 if host.fault.is_some() {
@@ -4372,7 +4096,7 @@ impl<P: crate::engine::HeapPlatform> Host for FeTextLive<'_, P> {
 }
 
 impl<P: crate::engine::HeapPlatform> crate::normalization::NormalizationHost for FeTextLive<'_, P> {
-    // ---- the normalization allocator family ---------------------------
+
     fn calloc(&mut self, arena: &mut [u8], heap: u32, count: u32, size: u32) -> Option<u32> {
         let mut memory = Memory { base: 0, bytes: &mut *arena };
         let status = self.call_m(0x1963b8, &[heap, count, size], &mut memory);
@@ -4410,11 +4134,7 @@ impl<P: crate::engine::HeapPlatform> crate::normalization::NormalizationHost for
 }
 
 impl<P: crate::engine::HeapPlatform> crate::depes::HandleValidator for FeTextLive<'_, P> {
-    // ---- the handle validator ----------------------------------------
-    /// The trait's `validate(handle, tag, size)` carries the caller's key
-    /// and the expected key, not the object: the guest's `fn_176f94` also
-    /// checks the object, which this signature cannot express.  The live
-    /// root always has a live object, so the key pair decides.
+
     fn validate(&mut self, handle: u32, tag: u32, _size: u32) -> u32 {
         if handle == tag {
             0
@@ -4425,7 +4145,7 @@ impl<P: crate::engine::HeapPlatform> crate::depes::HandleValidator for FeTextLiv
 }
 
 impl<P: crate::engine::HeapPlatform> crate::normalization::NormOutHost for FeTextLive<'_, P> {
-    // ---- the output resource family -----------------------------------
+
     fn acquire(&mut self, _arena: &mut [u8], _resources: u32, _name: u32) -> (u32, u32) {
         (self.unbound(0x17b058), 0)
     }
@@ -4444,7 +4164,7 @@ impl<P: crate::engine::HeapPlatform> crate::normalization::NormOutHost for FeTex
 }
 
 impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'_, P> {
-    // ---- the scripted helpers the live root never reaches --------------
+
     fn cmp_seq(&mut self, _arena: &mut [u8], _a: u32, _b: u32) -> i32 {
         0
     }
@@ -4452,7 +4172,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         self.unbound(0x176f2c)
     }
 
-    // ---- the LINGDB node family ---------------------------------------
     fn lat_first_node(
         &mut self,
         arena: &mut [u8],
@@ -4490,9 +4209,7 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         }
         status
     }
-    /// `fn_15d0c4`: the raw field bytes, clamped to the requested capacity.
-    /// The trait's documented `FE_GETINT` contract clamps the value into the
-    /// furnished span instead; the guest does not, and the guest wins here.
+
     fn lat_get_int(
         &mut self,
         arena: &mut [u8],
@@ -4604,10 +4321,7 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         data: &[u8],
         written: &mut u16,
     ) -> u32 {
-        // The ARM passes the address of its own stack slot; the live
-        // engine stages the caller-owned bytes in its uncompared stack
-        // window (FE_TEXT_VALUE, 4 bytes: the widest caller is the 4-byte
-        // "lid" literal) and hands the guest that address.
+
         assert!(
             data.len() <= 4,
             "lat_set_field_bytes: {0} bytes exceed the 4-byte stage",
@@ -4686,10 +4400,7 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         fe_text_store_half(arena, FE_TEXT_HALF, 0);
         let status = {
             let mut memory = Memory { base: 0, bytes: &mut *arena };
-            // The ARM inserts via 0x15c1e4 (LD_createNext: 0x15c24c calls
-            // 0x15b758 twice), never via the 0x15c9a4 previous-link getter.
-            // Same (db, tag, index, out) ABI; the new node id lands in
-            // FE_TEXT_HALF. Falls through to LiveHost's 0x15c1e4 arm.
+
             self.call_m(0x15c1e4, &[h0, h1, node, FE_TEXT_HALF], &mut memory)
         };
         if status < 0x8000_0000 {
@@ -4811,7 +4522,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         self.unbound(0x1756d0)
     }
 
-    // ---- the FE_DEPES engine family -----------------------------------
     fn depes_set_input(
         &mut self,
         arena: &mut [u8],
@@ -4849,12 +4559,7 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         }
         status
     }
-    /// `fn_2193a4`: run the rule module named `disambiguate_punctuation`.
-    /// The trait's `name` argument carries the rule name, but the port
-    /// passes a null name, so the host rebuilds the name the guest built:
-    /// the base name, plus the mode suffix when the mode is not `normal`.
-    /// The guest retries with the base name when the first attempt fails,
-    /// so the host does the retry itself.
+
     fn depes_set_rules(&mut self, arena: &mut [u8], h0: u32, h1: u32, _name: u32) -> u32 {
         let length = self.build_rule(arena, true);
         let status = self.exec_rule(arena, h0, h1, length);
@@ -4864,8 +4569,7 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         }
         status
     }
-    /// The engine's weight buffer: the guest copies the weights in and
-    /// zeroes the rest of the layer capacity.
+
     fn depes_set_weights(
         &mut self,
         arena: &mut [u8],
@@ -4915,7 +4619,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         0
     }
 
-    // ---- the properties and characters tables --------------------------
     fn prop_get(&mut self, arena: &mut [u8], h0: u32, h1: u32, pos: &mut i32, flag: u32) -> u32 {
         fe_text_store_word(arena, FE_TEXT_POINTER, 0);
         let status = self.get_option(arena, h0, h1, FE_TEXT_POINTER, flag);
@@ -4927,7 +4630,7 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     fn prop_set(&mut self, arena: &mut [u8], h0: u32, h1: u32, val: u32, flag: u32) -> u32 {
         self.set_option(arena, h0, h1, val, flag)
     }
-    /// `fn_1edd3c`: the character class lookup.
+
     fn char_punctuation(&mut self, arena: &mut [u8], h0: u32, h1: u32, c: u32) -> i32 {
         if h0 == 0 || h1 != 0xf37f || c > 0xff {
             return 0;
@@ -4953,7 +4656,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         self.call_m(0x173fd8, &[log], &mut memory)
     }
 
-    // ---- the FE_DEPES script database ----------------------------------
     fn dp_first_node(
         &mut self,
         _arena: &mut [u8],
@@ -5028,7 +4730,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         self.unbound(0x15da64)
     }
 
-    // ---- the FE_DEPES output object -----------------------------------
     fn out_get_pos(
         &mut self,
         _arena: &mut [u8],
@@ -5079,7 +4780,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         self.unbound(0x219554)
     }
 
-    // ---- the stream family --------------------------------------------
     fn st_open(
         &mut self,
         _arena: &mut [u8],
@@ -5178,22 +4878,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     }
 }
 
-/// `fn_1dd914` (FE_PUNCSPTN) over the live arena.
-///
-/// The root body is the shared slice port; the live `FeTextLive` binding
-/// supplies the three vtables over the caller's arena.  The arguments are
-/// the object's four words: the normalizer, the check key, the LINGDB
-/// object and the LINGDB tag.
-///
-/// The C keeps its temporaries (node, mark index/count, from/to/end, the
-/// `" _"` set test and every `setField` input) in stack locals.  The
-/// ports keep them in Rust locals too: `fe_punctspat_1dd914` passes
-/// `&mut` locals into `fe_disambig_1dbcb0` (the way the C passes
-/// `&node`/`&markIndex`/`&markCount`), tests the `" _"` set inline, and
-/// hands `setField` inputs through `lat_set_field_bytes`.  The old
-/// wrapper saved and restored guest `0x70-0x7b` and `object + 0x7c`;
-/// nothing in this call chain writes those addresses any more, so the
-/// save/restore is deleted rather than extended.
 pub fn fn_1dd914_m(
     m: &mut Memory<'_>,
     a: &[u32],

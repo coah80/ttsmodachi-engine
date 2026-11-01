@@ -5,7 +5,7 @@ pub struct PhonemeFrame<'a> {
 }
 
 impl PhonemeFrame<'_> {
-    /// fn_1b9050 / EU fn_1b9100 / KR fn_1b929c.
+
     pub fn leading_sample(&self) -> i32 {
         if self.count <= 1 {
             return 0;
@@ -30,7 +30,7 @@ pub struct TimingSegments<'a> {
 }
 
 impl TimingSegments<'_> {
-    /// fn_1b7dc8 / EU fn_1b7e78 / KR fn_1b8018.
+
     pub fn add_simple(
         &mut self,
         queue: &mut crate::voice::VoiceQueue,
@@ -63,7 +63,7 @@ pub struct PlannedSegments<'a> {
 }
 
 impl PlannedSegments<'_> {
-    /// fn_1b7944 / EU fn_1b79f4 / KR fn_1b7b94.
+
     pub fn plan(
         &mut self,
         queue: &mut crate::voice::VoiceQueue,
@@ -187,7 +187,7 @@ impl PlannedSegments<'_> {
 }
 
 impl LipSync<'_> {
-    /// fn_1b7824 / EU fn_1b78d4 / KR fn_1b7a74.
+
     pub fn add_duration(&mut self, mut delta: i32, mode: i32) {
         if mode <= 40 {
             delta = delta.wrapping_neg();

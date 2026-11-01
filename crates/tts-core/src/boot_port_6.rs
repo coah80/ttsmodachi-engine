@@ -1,10 +1,10 @@
-//! Boot-path ports for 11cc0c, lane 6.
+
 use crate::boot::Memory;
-/// Read the object's third word.
+
 pub fn fn_4a79b0(m: &mut Memory<'_>, p: u32) -> u32 {
     m.word(p + 8)
 }
-/// Copy the ROM's default pair from caller-mapped constant memory.
+
 pub fn fn_2d075c(m: &mut Memory<'_>, p: u32, template: u32) {
     let pair = [m.word(template), m.word(template + 4)];
     m.put_word(p, pair[0]);
@@ -70,8 +70,11 @@ pub fn fn_2d9b88(m: &mut Memory<'_>, owner: u32, state: u32) -> u32 {
     0
 }
 
-// Platform methods and explicitly unported dictionary callees receive the live arena.
 pub trait Host {
+    fn format_address_m(&mut self,_m:&Memory<'_>,_format:&[u8])->Option<u32> {None}
+    fn real_log_args(&mut self)->bool {false}
+    fn log_variadic(&mut self,_m:&mut Memory<'_>,_entry:u32,_a:[u32;4],_format:&[u8],_varargs:&[u32])->bool {false}
+
     fn thread_id(&mut self) -> u32 {
         panic!("unbound platform thread id")
     }
@@ -280,7 +283,7 @@ fn filter_indices(m: &mut Memory<'_>, p: u32) {
         i = i.wrapping_add(1);
     }
 }
-/// Auxiliary destructor reached by the owned constructor.
+
 pub fn fn_2cfc1c(m: &mut Memory<'_>, h: &mut impl Host, pp: u32) {
     if pp == 0 {
         return;
@@ -303,7 +306,7 @@ pub fn fn_2cfc1c(m: &mut Memory<'_>, h: &mut impl Host, pp: u32) {
     free(m, h, heap, m.word(pp));
     m.put_word(pp, 0);
 }
-/// Tables are caller-mapped ROM coefficient tables; scratch is a disjoint word, restored on return.
+
 pub fn fn_2cfd6c(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -363,8 +366,6 @@ pub fn fn_2dd064(m: &mut Memory<'_>, h: &mut impl Host, p: u32) -> u32 {
     0
 }
 
-/// Reuse the concrete block-resize port with the heap header staged at zero.
-/// Requires a zero-based arena and a heap disjoint from its first 88 bytes.
 pub fn fn_6bab68(m: &mut Memory<'_>, heap: u32, block: u32, size: u32) -> u32 {
     assert_eq!(m.base, 0);
     assert!(heap >= 88);
@@ -404,7 +405,7 @@ fn object_alloc(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, n: u32, err: &
 fn object_free(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, p: u32) {
     crate::boot_part_f::fn_1b2128(m, heap, p, &mut Platform(h));
 }
-/// Allocator slot 1 preserves both multiplicands, without implicit zero fill.
+
 fn calloc(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, n: u32, size: u32) -> u32 {
     struct Method<'a, 'b, H> {
         m: &'a mut Memory<'b>,
@@ -489,8 +490,7 @@ pub fn fn_30098c(
     object_free(m, h, heap, entries);
     0
 }
-/// The mutable-dictionary twin of fn_30098c: the ROM keeps a second copy of the
-/// same routine, so it releases the entry list through the same callback slot.
+
 pub fn fn_300974(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -502,7 +502,7 @@ pub fn fn_300974(
     object_free(m, h, heap, entries);
     0
 }
-/// Initialize the caller-owned private-heap record through the existing model.
+
 pub fn fn_2da9c0(m: &mut Memory<'_>, a: u32, p: u32, name: u32) {
     let v = crate::selection::PrivateHeap::initialize(a, &[]);
     let at = m.offset(p) as u32;
@@ -627,7 +627,7 @@ pub fn fn_2e4afc(
     }
     rc
 }
-/// US-only talkmodachi notification. Globals remain caller-owned.
+
 pub fn fn_c7233c(m: &mut Memory<'_>, handle: u32, state_pointer: u32, pair: u32) {
     let state = m.word(state_pointer);
     let first = m.word(handle);
@@ -645,7 +645,7 @@ pub fn fn_c7233c(m: &mut Memory<'_>, handle: u32, state_pointer: u32, pair: u32)
     let at = m.offset(state + 8);
     m.bytes[at] = 0;
 }
-/// Explicit ABI inputs represent incoming r0, r8 and the caller's sp word.
+
 pub fn fn_c72000(m: &mut Memory<'_>, r0: u32, r8: u32, sp: u32, state_pointer: u32, pair: u32) {
     fn_c7233c(m, r8, state_pointer, pair);
     m.put_word(sp, r0);
@@ -667,7 +667,7 @@ impl<H: Host> crate::log_live::LogMethodsM for Log<'_, H> {
         self.0.call(m, f, &[o, c, l, a, fmt, va])
     }
 }
-/// Caller-supplied ROM literals and a temporary vararg frame.
+
 pub struct Literals {
     pub category: u32,
     pub formats: [u32; 16],
@@ -811,8 +811,6 @@ pub fn fn_300714(m: &mut Memory<'_>, h: &mut impl Host, p: u32, out: u32, out_co
     err as u32
 }
 
-/// The non-read-only dictionary copy: its node keeps the kind and the flags
-/// inline instead of behind a record pointer.
 pub fn fn_300594(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -882,7 +880,6 @@ pub fn fn_300594(
     err as u32
 }
 
-/// The mutable-dictionary variants remain explicit unported foreign callees.
 pub fn fn_2e39ec(m: &mut Memory<'_>, h: &mut impl Host, p: u32, entries: u32, n: u32) -> u32 {
     if n == 0 {
         return 0;
@@ -907,7 +904,7 @@ pub fn fn_3010e8(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, input: u32, o
     if m.word(input) & 0xffffff != 6 || m.word(input + 8) != 0 {
         return 3;
     }
-    // The existing fn_1b20dc uses a guest status byte. Save its temporary frame.
+
     let mut err = 0;
     let p = zero_object(m, h, heap, 44, &mut err);
     if err != 0 {
@@ -960,7 +957,7 @@ pub fn fn_3010e8(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, input: u32, o
                     return err as u32;
                 }
             }
-            // ROM's negative span walk only reads the packed image.
+
             let c = m.word(m.word(cur) + 32);
             let mut j = 0i32;
             while j < (c as i32) {
@@ -989,14 +986,10 @@ pub fn fn_3010e8(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, input: u32, o
     err as u32
 }
 fn zero_object(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, n: u32, err: &mut u8) -> u32 {
-    // The ROM's fn_1b20dc reads the allocator method at heap+4 and the
-    // context at heap+0x10, calls the method with (context, 1, size) and
-    // writes the error flag through its own stack slot.  The error flag is
-    // the caller's byte here, so the port keeps it out of the arena.
+
     crate::boot_port_1::fn_1b20dc_flag(m, heap, 1, n, err, &mut Platform(h))
 }
 
-/// The writable dictionary image object. Its parser is the port below.
 pub fn fn_3014fc(m: &mut Memory<'_>, h: &mut impl Host, alloc: u32, arg: u32, out: u32) -> u32 {
     let mut err = 0u8;
     let o = zero_object(m, h, alloc, 0x30, &mut err);
@@ -1234,6 +1227,10 @@ fn pool_alloc(m: &mut Memory<'_>, h: &mut impl Host, p: u32, n: u32) -> u32 {
     result
 }
 impl<H: Host> crate::boot_part_b::Host for Platform<'_, H> {
+    fn format_address_m(&mut self,m:&Memory<'_>,format:&[u8])->Option<u32> {self.0.format_address_m(m,format)}
+    fn real_log_args(&mut self)->bool {self.0.real_log_args()}
+    fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool {self.0.log_variadic(m,entry,a,format,varargs)}
+
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.0.call(m, f, a)
     }
@@ -1266,7 +1263,7 @@ fn cache_read(
     if data != 0 {
         if m.word(p + 8) <= off && off.wrapping_add(n) <= m.word(p + 16).wrapping_add(m.word(p + 8))
         {
-            // The existing cache model performs containment and slice-offset arithmetic.
+
             let at = m.offset(data);
             let len = m.word(p + 16) as usize;
             let mut cache = crate::selection::BlockCache {
@@ -1420,8 +1417,7 @@ fn read_to(
     if count != 0 {
         let bytes = size.wrapping_mul(count);
         let start = m.word(st + 12).wrapping_sub(bytes);
-        // The original copies forward before re-reading and advancing pos.
-        // Keep that ordering even when destination aliases the stream record.
+
         m.put_word(st + 12, start);
         let src = m
             .word(st + 20)
@@ -1962,7 +1958,7 @@ fn decode_delta(m: &mut Memory<'_>, p: u32, dim: i16) {
         k -= 2;
     }
 }
-/// The caller reserves 128 bytes at frame, separate from ReaderRuntime scratch.
+
 pub fn fn_2dd148<H: Host + crate::render_part_a::ReaderHost>(
     m: &mut Memory<'_>,
     h: &mut H,
@@ -2273,14 +2269,6 @@ fn read_block(
     crate::boot_port_5::fn_2a9274(m, &mut PoolBridge { h, r }, arena, out, size, count, st, l)
 }
 
-/// fn_30c24c, fn_30c28c, fn_30c358, fn_30c3b8, fn_2fea84 and the map family
-/// of the dictionary image parser, reconstructed from the US ROM image at
-/// 0x30c24c..0x30c3f0 and 0x2fea84.
-///
-/// The reader block is the three word descriptor the ROM keeps in the frame:
-/// the current offset, the size limit and the base of the image blob.
-
-/// The reader block of the image parser.
 #[derive(Clone, Copy)]
 pub struct ImageBlock {
     pub offset: u32,
@@ -2288,7 +2276,6 @@ pub struct ImageBlock {
     pub base: u32,
 }
 
-/// fn_30c24c. Start a reader over the image blob at base.
 pub fn fn_30c24c(block: &mut ImageBlock, size: u32, base: u32) -> u32 {
     block.offset = 0;
     block.limit = size;
@@ -2296,7 +2283,6 @@ pub fn fn_30c24c(block: &mut ImageBlock, size: u32, base: u32) -> u32 {
     0
 }
 
-/// fn_30c28c. Move the reader to the next multiple of align.
 pub fn fn_30c28c(block: &mut ImageBlock, align: u32) -> u32 {
     let offset = block.offset;
     let mut pad = 0u32;
@@ -2316,7 +2302,6 @@ pub fn fn_30c28c(block: &mut ImageBlock, align: u32) -> u32 {
     0
 }
 
-/// fn_30c358. Read size bytes from the image and hand back their address.
 pub fn fn_30c358(
     m: &mut Memory<'_>,
     block: &mut ImageBlock,
@@ -2337,13 +2322,11 @@ pub fn fn_30c358(
     0
 }
 
-/// fn_30c3b8. Hand back the current reader offset.
 pub fn fn_30c3b8(block: &mut ImageBlock, out: &mut u32) -> u32 {
     *out = block.offset;
     0
 }
 
-/// fn_2fa994, fn_2e2764. The length of a wide string in code units.
 pub fn fn_2fa994(m: &mut Memory<'_>, s: u32) -> u32 {
     let at = m.offset(s) as usize;
     let mut n = 0u32;
@@ -2360,7 +2343,6 @@ pub fn fn_2fa994(m: &mut Memory<'_>, s: u32) -> u32 {
     }
 }
 
-/// fn_2e2764. The UTF-8 length of a wide string, -1 for a surrogate.
 pub fn fn_2e2764(m: &mut Memory<'_>, s: u32) -> i32 {
     let at = m.offset(s) as usize;
     let mut n = 0i32;
@@ -2387,7 +2369,6 @@ pub fn fn_2e2764(m: &mut Memory<'_>, s: u32) -> i32 {
     }
 }
 
-/// fn_2e2654. Convert wide characters into UTF-8.
 pub fn fn_2e2654(
     m: &mut Memory<'_>,
     src: u32,
@@ -2443,7 +2424,6 @@ pub fn fn_2e2654(
     err
 }
 
-/// fn_2e2298. Convert a wide string into a held UTF-8 buffer.
 pub fn fn_2e2298(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2497,7 +2477,6 @@ pub fn fn_2e2298(
     }
 }
 
-/// The record buffer of a map object, held in the map at +0xc.
 struct MapRecords {
     count: u32,
     data: u32,
@@ -2527,7 +2506,6 @@ fn put_map_records(m: &mut Memory<'_>, map: u32, r: MapRecords) {
     m.put_word(map + 0x20, r.heap);
 }
 
-/// fn_308c28. Prepare the record buffer of a map.
 pub fn fn_308c28(m: &mut Memory<'_>, map: u32, heap: u32, unit: u32, grow: u32) {
     for off in [0x0c, 0x10, 0x14, 0x18, 0x1c, 0x20] {
         m.put_word(map + off, 0);
@@ -2537,7 +2515,6 @@ pub fn fn_308c28(m: &mut Memory<'_>, map: u32, heap: u32, unit: u32, grow: u32) 
     m.put_word(map + 0x20, heap);
 }
 
-/// fn_308d58. Append one unit of src to the record buffer.
 pub fn fn_308d58(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2548,13 +2525,11 @@ pub fn fn_308d58(
     if r.end <= r.count {
         let end = r.end.wrapping_add(r.grow);
         r.end = end;
-        // The ROM writes the new end into the record buffer before the resize,
-        // so the grown end survives a failed allocation.
+
         m.put_word(map + 0x18, end);
         let mut err = 0u8;
         r.data = object_resize(m, h, r.heap, r.data, end.wrapping_mul(r.unit), &mut err);
-        // The ROM writes the new buffer into the record buffer before it looks
-        // at the error flag, so a failed allocation leaves the zero pointer.
+
         m.put_word(map + 0x10, r.data);
         if err != 0 {
             return 0xffff_ffff;
@@ -2567,7 +2542,6 @@ pub fn fn_308d58(
     index
 }
 
-/// fn_308ddc. Append n units of src to the record buffer.
 pub fn fn_308ddc(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2594,8 +2568,7 @@ pub fn fn_308ddc(
         }
         let mut err = 0u8;
         r.data = object_resize(m, h, r.heap, r.data, newend.wrapping_mul(r.unit), &mut err);
-        // The ROM writes the new buffer into the record buffer before it looks
-        // at the error flag, so a failed allocation leaves the zero pointer.
+
         m.put_word(map + 0x10, r.data);
         if err != 0 {
             return 0xffff_ffff;
@@ -2613,7 +2586,6 @@ pub fn fn_308ddc(
     index
 }
 
-/// fn_309048. Grow the node array of a map tree.
 pub fn fn_309048(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2621,11 +2593,7 @@ pub fn fn_309048(
     count: u32,
     size: u32,
 ) -> u32 {
-    // The ROM's fn_1b20dc reads the allocator method at heap+4 and the context
-    // at heap+0x10, calls it with (context, 1, 20) and writes its error flag
-    // through its own stack slot.  The shared port keeps that flag out of the
-    // arena, so the call is the port of fn_1b20dc with the three arguments the
-    // ROM passes; the flag is set when the allocation failed.
+
     let mut err = 0u8;
     let node = crate::boot_port_1::fn_1b20dc_flag(m, heap, 1, 20, &mut err, &mut Platform(h));
     if err != 0 {
@@ -2658,7 +2626,6 @@ pub fn fn_309048(
     grown
 }
 
-/// fn_30a2d4. Create the map object of a node.
 pub fn fn_30a2d4(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2684,13 +2651,6 @@ pub fn fn_30a2d4(
     0
 }
 
-/// fn_309210. Insert the record key into the tree of a map.
-///
-/// The ROM's tree is an AVL tree: the node carries a balance byte, the insert
-/// walks down to the deepest ancestor that already had a balance, marks the
-/// path below it and rotates.  The function returns 0 when the key was
-/// inserted, the record index of the entry that already held the key when it
-/// was already there, and -1 when the tree cannot grow.
 pub fn fn_309210(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2905,7 +2865,6 @@ pub fn fn_309210(
     0
 }
 
-/// The record compare the ROM reaches through the map's compare entry.
 fn map_compare(m: &mut Memory<'_>, map: u32, a: u32, b: u32) -> i32 {
     let base = m.word(map + 0x10);
     let unit = m.word(map + 0x1c);
@@ -2930,7 +2889,6 @@ fn map_compare(m: &mut Memory<'_>, map: u32, a: u32, b: u32) -> i32 {
     }
 }
 
-/// fn_30a3a4. Add the record to the map under the key.
 pub fn fn_30a3a4(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2978,7 +2936,6 @@ pub fn fn_30a3a4(
     0
 }
 
-/// Copy n bytes from src to dst inside the arena.
 fn copy_bytes(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) {
     let d = m.offset(dst) as usize;
     let s = m.offset(src) as usize;
@@ -2989,7 +2946,6 @@ fn copy_bytes(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) {
     m.bytes.copy_within(s..s + count, d);
 }
 
-/// The allocator resize entry, fn_1b218c.
 fn object_resize(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -3001,7 +2957,6 @@ fn object_resize(
     crate::boot_part_f::fn_1b218c(m, heap, old, size, err, &mut Platform(h))
 }
 
-/// fn_300c2c. Append a node to the image object.
 fn fn_300c2c(m: &mut Memory<'_>, h: &mut impl Host, obj: u32, out: &mut u32) -> u8 {
     let mut err = 0u8;
     let mut last = m.word(obj + 40);
@@ -3028,7 +2983,6 @@ fn fn_300c2c(m: &mut Memory<'_>, h: &mut impl Host, obj: u32, out: &mut u32) -> 
     err
 }
 
-/// fn_2fea84. Read the dictionary image at arg into the image object obj.
 pub fn fn_2fea84(m: &mut Memory<'_>, h: &mut impl Host, obj: u32, arg: u32) -> u32 {
     let alloc = m.word(obj + 36);
     let mut block = ImageBlock {

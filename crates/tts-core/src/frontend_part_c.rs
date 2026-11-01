@@ -1,5 +1,4 @@
-//! Prompt, audio request, and database operations. Addresses are arena-relative.
-//! Callers own both memory and service state; no allocator or global state is used.
+
 
 fn word(m: &[u8], p: u32) -> u32 {
     u32::from_le_bytes(m[p as usize..p as usize + 4].try_into().unwrap())
@@ -69,7 +68,6 @@ fn parse_decimal(s: &[u8]) -> u32 {
     }
 }
 
-/// External services used by the audio and linguistic database lifecycle.
 pub trait PromptServices {
     fn validate(&mut self, object: u32, tag: u32, expected: u32, size: u32) -> u32;
     fn resolve(&mut self, handle: [u32; 2], context: &mut u32) -> u32;
@@ -82,7 +80,6 @@ pub trait PromptServices {
     fn audio_log(&mut self, log: u32, url: u32, fields: [u32; 5]);
 }
 
-/// fn_21037c / EU fn_210538 / KR fn_2105e4.
 pub fn check_linguistic_database(object: u32, tag: u32, api: &mut impl PromptServices) -> u32 {
     let rc = api.validate(object, tag, 0xf381, 52);
     if rc >= 0x80000000 {
@@ -92,7 +89,6 @@ pub fn check_linguistic_database(object: u32, tag: u32, api: &mut impl PromptSer
     }
 }
 
-/// fn_21030c / EU fn_2104c8 / KR fn_210574.
 pub fn close_linguistic_database(
     mem: &[u8],
     object: u32,
@@ -111,8 +107,6 @@ pub fn close_linguistic_database(
     0
 }
 
-/// fn_23077c / EU fn_230938 / KR fn_2309e4.
-/// Parse the case-sensitive MIME grammar, preserving the ROM's default channels.
 pub fn parse_audio_type(
     input: &[u8],
     kind: &mut u8,
@@ -172,7 +166,6 @@ pub fn parse_audio_type(
     u32::from(*kind != 0)
 }
 
-/// fn_230508 / EU fn_2306c4 / KR fn_230770.
 pub fn name_audio_request(
     mem: &mut [u8],
     session: u32,
@@ -231,7 +224,6 @@ pub fn name_audio_request(
     rc
 }
 
-/// fn_2aeb24 / EU fn_2aece0 / KR fn_2aed8c.
 pub fn parse_nist_integer(
     mem: &mut [u8],
     resource: u32,
@@ -272,8 +264,6 @@ pub fn parse_nist_integer(
     0x87402004
 }
 
-/// fn_2b0674 / EU fn_2b0830 / KR fn_2b08dc.
-/// Decode AU headers and copy the payload, or treat a non-AU buffer as mu-law.
 pub fn load_au_audio(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -379,8 +369,6 @@ pub fn load_au_audio(
     rc
 }
 
-/// Caller-owned component methods. Output slots are full-width words unless
-/// the interface explicitly specifies a halfword.
 pub trait PromptMethods: PromptServices {
     fn release_interface(&mut self, registry: u32, interface: u32) -> u32;
     fn close_payload(&mut self, mem: &mut [u8], interface: u32, slot: u32);
@@ -395,7 +383,6 @@ pub trait PromptMethods: PromptServices {
     fn remove_key(&mut self, map: u32, key: u32) -> u32;
 }
 
-/// fn_230498 / EU fn_230654 / KR fn_230700.
 pub fn release_speechbase(mem: &mut [u8], object: u32, heap: u32, api: &mut impl PromptMethods) {
     if object == 0 {
         return;
@@ -410,7 +397,6 @@ pub fn release_speechbase(mem: &mut [u8], object: u32, heap: u32, api: &mut impl
     api.free(heap, object);
 }
 
-/// fn_23032c / EU fn_2304e8 / KR fn_230594.
 pub fn copy_speechbase(
     mem: &mut [u8],
     source: u32,
@@ -459,7 +445,6 @@ pub fn copy_speechbase(
     rc
 }
 
-/// fn_27dcf8 / EU fn_27deb4 / KR fn_27df60.
 pub fn release_prompt_domain(mem: &mut [u8], object: u32, api: &mut impl PromptMethods) -> u32 {
     if object == 0 {
         return 0x88e02007;
@@ -505,7 +490,6 @@ pub fn release_prompt_domain(mem: &mut [u8], object: u32, api: &mut impl PromptM
     rc
 }
 
-/// fn_22fb50 / EU fn_22fd0c / KR fn_22fdb8.
 pub fn close_audio_decoder(
     mem: &mut [u8],
     object: u32,
@@ -552,7 +536,6 @@ pub fn close_audio_decoder(
     err
 }
 
-/// Iterator and insertion methods owned by the caller.
 pub trait AudioPromptOperations: PromptServices {
     fn frequency(&mut self, properties: u32, value: &mut u32) -> u32;
     fn iterator(&mut self, map: u32, value: &mut u32) -> u32;
@@ -579,7 +562,6 @@ pub trait AudioPromptOperations: PromptServices {
     );
 }
 
-/// fn_22e6c0 / EU fn_22e87c / KR fn_22e928.
 pub fn reopen_audio_fetch(
     mem: &mut [u8],
     object: u32,
@@ -632,7 +614,6 @@ pub fn reopen_audio_fetch(
     }
 }
 
-/// fn_22c85c / EU fn_22ca18 / KR fn_22cac4.
 pub fn insert_audio_samples(
     mem: &mut [u8],
     object: u32,
@@ -718,15 +699,13 @@ pub fn insert_audio_samples(
     rc
 }
 
-/// Audio insertion registration and resource ownership.
 pub trait AudioInsertionClose: PromptServices {
-    /// Restore the interface's default check/changed callbacks for this key.
+
     fn reset_parameter(&mut self, parameters: u32, name: &[u8], object: u32);
     fn release_audio_resource(&mut self, registry: u32, name: &[u8]) -> u32;
     fn destroy_converter(&mut self, slot: u32);
 }
 
-/// fn_22cb4c / EU fn_22cd08 / KR fn_22cdb4.
 pub fn close_audio_insertion(
     mem: &mut [u8],
     object: u32,
@@ -769,7 +748,6 @@ pub fn close_audio_insertion(
     rc
 }
 
-/// Decoder callbacks for caller-owned audio buffers.
 pub trait AudioDecoderTransfer: PromptServices {
     fn read_audio_sink(&mut self, mem: &mut [u8], sink: u32, count: &mut u32, dst: u32) -> u32;
     fn decode_audio(
@@ -784,8 +762,6 @@ pub trait AudioDecoderTransfer: PromptServices {
     ) -> u32;
 }
 
-/// fn_230028 / EU fn_2301e4 / KR fn_230290.
-/// Follows the ROM's ten-argument decoder call and count-checked loop.
 pub fn read_audio_decoder(
     mem: &mut [u8],
     object: u32,
@@ -870,10 +846,9 @@ pub fn read_audio_decoder(
     rc
 }
 
-/// Map construction and INET resource operations owned by the caller.
 pub trait AudioFetchConstructor: PromptServices {
     fn inet_resource(&mut self, registry: u32, resource: &mut u32) -> u32;
-    /// Create either the request map or the speechbase map with its fixed ROM callbacks.
+
     fn create_audio_map(
         &mut self,
         mem: &mut [u8],
@@ -884,7 +859,6 @@ pub trait AudioFetchConstructor: PromptServices {
     fn close_audio_map(&mut self, map: u32);
 }
 
-/// fn_22e378 / EU fn_22e534 / KR fn_22e5e0.
 pub fn open_audio_fetch(
     mem: &mut [u8],
     component: u32,
@@ -968,7 +942,6 @@ pub fn open_audio_fetch(
     rc
 }
 
-/// RIFF chunk operations supplied by the caller.
 pub trait RiffServices: PromptServices {
     fn open_riff(
         &mut self,
@@ -1001,7 +974,6 @@ fn append_signed(mem: &mut [u8], dst: u32, value: i32) {
     append_text(mem, dst, decimal(value.unsigned_abs(), &mut buf));
 }
 
-/// fn_2afdc4 / EU fn_2aff80 / KR fn_2b002c.
 pub fn load_wave_audio(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -1169,7 +1141,7 @@ fn nist_value(mem: &[u8], mut line: u32, end: u32, dst: &mut [u8; 64]) -> Result
     if end < line + n {
         return Err(126);
     }
-    // fn_195e38 is strncpy, including padding when a value contains a NUL.
+
     let mut nul = false;
     for i in 0..n as usize {
         nul |= mem[line as usize + i] == 0;
@@ -1179,8 +1151,6 @@ fn nist_value(mem: &[u8], mut line: u32, end: u32, dst: &mut [u8; 64]) -> Result
     Ok(())
 }
 
-/// fn_2aec6c / EU fn_2aee28 / KR fn_2aeed4.
-/// Decode a caller-provided NIST header and copy its payload using caller services.
 pub fn load_nist_audio(
     mem: &mut [u8],
     handle: [u32; 2],
@@ -1272,7 +1242,7 @@ pub fn load_nist_audio(
                 if i == 0 {
                     state = 3;
                 } else if i < 6 {
-                    // Reuse the parser without exposing its temporary output in the arena.
+
                     let mut q = line;
                     while q < p && !matches!(mem[q as usize], b' ' | b'\t') {
                         q += 1;
@@ -1383,7 +1353,6 @@ pub fn load_nist_audio(
     rc
 }
 
-/// Caller-owned audio insertion construction services.
 pub trait AudioInsertionConstructor: AudioInsertionClose {
     fn resource(&mut self, registry: u32, name: &[u8], resource: &mut u32) -> u32;
     fn parameter(&mut self, properties: u32, name: &[u8], value: &mut u32) -> u32;
@@ -1395,7 +1364,6 @@ pub trait AudioInsertionConstructor: AudioInsertionClose {
     fn register_parameter(&mut self, properties: u32, name: &[u8], object: u32) -> u32;
 }
 
-/// fn_22cd30 / EU fn_22ceec / KR fn_22cf98.
 pub fn open_audio_insertion(
     mem: &mut [u8],
     session: [u32; 2],
@@ -1521,7 +1489,6 @@ pub fn open_audio_insertion(
     rc
 }
 
-/// Caller-supplied request lookup and decoder construction.
 pub trait AudioDecoderConstructor: PromptMethods {
     fn audio_request(&mut self, map: u32, key: u32, request: &mut u32) -> u32;
     fn prepare_audio(&mut self, interface: u32, payload: u32, state: u32, data: u32) -> u32;
@@ -1535,8 +1502,6 @@ pub trait AudioDecoderConstructor: PromptMethods {
     ) -> u32;
 }
 
-/// fn_22fcb8 / EU fn_22fe74 / KR fn_22ff20.
-/// The format flag is supplied by the owner's hardware configuration.
 pub fn open_audio_decoder(
     mem: &mut [u8],
     object: u32,
@@ -1643,7 +1608,6 @@ pub fn open_audio_decoder(
     rc
 }
 
-/// A decoded APDB record. Addresses refer to the caller's arena.
 #[derive(Clone, Copy, Default)]
 pub struct ExpansionRecord {
     pub domain: u32,
@@ -1656,11 +1620,11 @@ pub struct ExpansionRecord {
     pub count: u16,
     pub suffix: u32,
 }
-/// Expansion leaves and optional diagnostics owned by the caller.
+
 pub trait PromptExpansionServices {
     fn initialize(&mut self, mem: &mut [u8], context: u32);
     fn trace_enabled(&mut self, logger: u32) -> bool;
-    /// Begin/unsupported diagnostics have no status; the final diagnostic carries the exact return code.
+
     fn diagnostic(
         &mut self,
         mem: &[u8],
@@ -1923,7 +1887,7 @@ fn expand_prompt_records(
     api.diagnostic(mem, context, logger, event, Some(rc));
     rc
 }
-/// fn_27f7cc / EU fn_27f988 / KR fn_27fa34.
+
 pub fn expand_original_prompts(
     mem: &mut [u8],
     context: u32,
@@ -1935,7 +1899,7 @@ pub fn expand_original_prompts(
 ) -> u32 {
     expand_prompt_records(mem, context, text, entries, count, head, None, api)
 }
-/// fn_27feb4 / EU fn_280070 / KR fn_28011c.
+
 pub fn expand_normalized_prompts(
     mem: &mut [u8],
     context: u32,
@@ -1949,7 +1913,6 @@ pub fn expand_normalized_prompts(
     expand_prompt_records(mem, context, text, entries, count, head, Some(mode), api)
 }
 
-/// String construction and diagnostics for prompt database inspection.
 pub trait PromptInspectionServices: PromptExpansionServices {
     fn create_string(&mut self, heap: u32) -> u32;
     fn append_name(&mut self, string: u32, name: u32);
@@ -1988,8 +1951,7 @@ fn inspect_expansion_record(
         (record.count as u32) * 4,
     );
 }
-/// fn_2807c0 / EU fn_28097c / KR fn_280a28.
-/// Inspect paired records first, then all remaining entries, starting at zero when unpaired.
+
 pub fn inspect_prompt_database(
     mem: &mut [u8],
     context: u32,
@@ -2067,7 +2029,6 @@ pub fn inspect_prompt_database(
     api.diagnostic(mem, context, logger, 203, None);
 }
 
-/// Host operations used by the APDB resource loader. All addresses are caller-relative.
 pub trait ApdbServices {
     fn resolve_apdb(&mut self, handle: [u32; 2], context: &mut u32) -> u32;
     fn open_apdb(
@@ -2171,8 +2132,6 @@ fn apdb_uri_value(
     (result, rc)
 }
 
-/// fn_27e4a4 / EU fn_27e660 / KR fn_27e70c.
-/// Load an APDB resource into caller-owned memory, including attributes and recipe aliases.
 pub fn load_prompt_database(
     mem: &mut [u8],
     owner: u32,
@@ -2544,9 +2503,6 @@ pub fn load_prompt_database(
     rc
 }
 
-/// Caller-owned prompt tree and heap services. Node operations use the original
-/// interface slot numbers: 9=create, 10=after, 11=before, 13=first, 15=next,
-/// 19=count. Field sizes count elements, not bytes.
 pub trait PromptInsertionServices {
     fn allocate(&mut self, heap: u32, size: u32) -> u32;
     fn resize(&mut self, heap: u32, old: u32, size: u32) -> u32;
@@ -2561,7 +2517,7 @@ pub trait PromptInsertionServices {
 }
 
 fn find_byte(m: &[u8], p: u32, c: u8) -> Option<u32> {
-    // strchr also finds the terminating zero.
+
     let n = text(m, p).len();
     m[p as usize..=p as usize + n]
         .iter()
@@ -2577,8 +2533,6 @@ fn boundary_token(m: &mut [u8], p: u32, position: u32) {
     store(m, p + 12, position);
 }
 
-/// fn_2784c8 / EU fn_278684 / KR fn_278730.
-/// Inserts prompt text, boundary tokens, and tree spans into caller-owned memory.
 pub fn insert_prompt_text(
     mem: &mut [u8],
     prompt: u32,
@@ -2805,7 +2759,7 @@ pub fn insert_prompt_text(
         let mut lo = 0u16;
         let mut hi = 0u16;
         let mut kind = 5u8;
-        // First pass shifts all existing spans.
+
         node!(13, 1, 0, &mut root);
         let rc = api.node(19, handle, 3, root as u32, &mut total);
         if rc < 0x80000000 && total != 0 {
@@ -2973,7 +2927,6 @@ pub fn insert_prompt_text(
     rc
 }
 
-/// Services needed when applying a prompt's orthography and pronunciation.
 pub trait PromptApplicationServices: PromptInsertionServices {
     fn voice_text(&mut self, handle: [u32; 2], wide: u32, condition: u32, out: &mut u32) -> u32;
     fn remember(&mut self, map: u32, value: u32) -> u32;
@@ -2998,8 +2951,7 @@ pub trait PromptApplicationServices: PromptInsertionServices {
         count: u32,
         items: u32,
     ) -> u32;
-    /// Builds and logs owner-name + "::" + prompt-name, retaining the builder's
-    /// return/error handling. Its result does not replace the prompt operation's result.
+
     fn application_log(
         &mut self,
         mem: &[u8],
@@ -3037,9 +2989,6 @@ fn widen_text(m: &mut [u8], dst: u32, src: u32) {
     }
 }
 
-/// fn_276c50 / EU fn_276e0c / KR fn_276eb8.
-/// Applies one prompt and adjusts text, domain entries, span nodes, and tree
-/// pronunciation records without owning an allocator.
 pub fn apply_prompt(
     mem: &mut [u8],
     prompt: u32,
@@ -3261,7 +3210,7 @@ pub fn apply_prompt(
                     nomem!();
                 }
                 mem[temp as usize] = 0;
-                // Each inserted separator is the ROM's two-byte "\x15 " string.
+
                 let mut k = 0u16;
                 while k < phonemes - words {
                     let n = text(mem, temp).len() as u32;
@@ -3544,11 +3493,9 @@ pub fn apply_prompt(
     rc
 }
 
-/// INET's 24-byte tagged value. The tag occupies the low halfword.
 #[derive(Clone, Copy, Default)]
 pub struct FetchValue(pub [u32; 6]);
 
-/// Caller-provided heap, resource, speechbase, and INET operations.
 pub trait AudioFetchServices {
     fn validate(&mut self, object: u32, tag: u32) -> u32;
     fn allocate(&mut self, mem: &mut [u8], heap: u32, bytes: u32, zero: bool) -> u32;
@@ -3655,9 +3602,6 @@ fn fetch_copy_uri(mem: &mut [u8], dest: u32, src: u32) {
     mem.copy_within(src as usize..src as usize + n, dest as usize);
 }
 
-/// fn_22e8b4 / EU fn_22ea70 / KR fn_22eb1c.
-/// Fetch speechbase or INET audio, decode containers, and submit a request.
-/// Arena addresses and callback state belong to the caller.
 pub fn fetch_audio(
     mem: &mut [u8],
     object: u32,
@@ -3691,7 +3635,7 @@ pub fn fetch_audio(
         api.error(log, 100);
         return OOM;
     }
-    // fn_176460 substitutes '?' for code units outside the byte range.
+
     for i in 0..=len {
         let c = half(mem, wide_uri + i * 2);
         mem[(uri + i) as usize] = if c > 255 { b'?' } else { c as u8 };

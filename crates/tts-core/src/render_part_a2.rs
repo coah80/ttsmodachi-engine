@@ -1,5 +1,4 @@
-//! Render helpers on caller-owned memory. Pointers are byte offsets, with zero null.
-//! This module uses the normalization and frontend ports for engine callees.
+
 
 use crate::{frontend, normalization};
 
@@ -33,9 +32,6 @@ fn entry(m: &[u8], obj: u32, requested: u32) -> Result<u32, u32> {
     }
 }
 
-/// fn_255a54 / EU fn_255c10 / KR fn_255cbc.
-/// Removes the current token's byte range and adjusts following token spans.
-/// The unused first and fourth arguments are still checked, as in the ROM.
 pub fn remove_token_span(m: &mut [u8], a: u32, b: u32, c: u32, d: u32) -> u32 {
     if a == 0 || b == 0 || c == 0 || d == 0 {
         return 0x8110_2007;
@@ -100,23 +96,18 @@ pub fn remove_token_span(m: &mut [u8], a: u32, b: u32, c: u32, d: u32) -> u32 {
     0
 }
 
-/// Caller-owned equivalents of the context resolver's two read-only globals.
 pub struct ContextGlobals {
-    /// D_8d7660, cached handle pair in little-endian byte order.
+
     pub pair: [u8; 8],
-    /// Address token of D_8d7640.
+
     pub default_context: u32,
 }
 
-/// Native object methods remain at the host boundary. Heap release uses the
-/// existing frontend HeapVtable, not a scripted engine routine.
 pub trait ObjectHost: frontend::HeapVtable {
-    /// Calls the method pointer with the two original integer bit patterns.
+
     fn destroy(&mut self, memory: &mut [u8], method: u32, first: u32, second: u32) -> u32;
 }
 
-/// fn_258018 / EU fn_2581d4 / KR fn_258280.
-/// Resolves the environment, destroys the plugin instance, then releases it.
 pub fn destroy_object(
     m: &mut [u8],
     obj: u32,
@@ -130,7 +121,7 @@ pub fn destroy_object(
     let tag = word(m, obj.wrapping_add(4));
     let cached =
         frontend::match_halves(handle, tag, word(&globals.pair, 0), word(&globals.pair, 4)) != 0;
-    // The cache and tag checks precede the handle dereference in the ROM.
+
     let handle_word = if handle == 0 {
         None
     } else if cached || tag != 0x1e61 {
@@ -172,14 +163,8 @@ fn put_half(m: &mut [u8], p: u32, v: u16) {
     m[p as usize..p as usize + 2].copy_from_slice(&v.to_le_bytes());
 }
 
-/// The two words the ROM reloads from `D_914b18 + 0x20` into its stack
-/// argument for [`PREDICATE_KIND_SEVEN`]. Callers copy them from the constants
-/// blob; the predicate only reads them.
 pub const PREDICATE_KIND_SEVEN: u32 = 0x2b9414;
 
-/// The eight arguments the processor behind `fn_2535cc` receives. `b1` and
-/// `b2` are addresses of the two scratch buffers, `h2` the address of the
-/// halfword count field, and `out` the caller's status cell.
 pub struct ProcessCall {
     pub x: u32,
     pub y: u32,
@@ -190,21 +175,16 @@ pub struct ProcessCall {
     pub out: u32,
 }
 
-/// Native boundaries reached by the render processors.
 pub trait RenderHost:
     frontend::HeapVtable
     + frontend::MethodTable
     + normalization::NormalizationHost
     + crate::selection::arena::Host
 {
-    /// Calls the unit processor at `vto + 0x40` with the eight ROM arguments.
-    /// Returns `(one, status)`: the processor's `one` cell and its result.
+
     fn process(&mut self, memory: &mut [u8], vto: u32, call: &ProcessCall) -> (u32, u32);
 }
 
-/// Runs `fn_252948` against an arena-held cursor cell and restores it. The ROM
-/// keeps the index on its stack; this port borrows a spare arena cell so the
-/// crate's own forward search stays in use, then puts the cell back.
 fn search_at(
     m: &mut [u8],
     host: &mut impl RenderHost,
@@ -230,10 +210,6 @@ fn search_at(
     (rc, index)
 }
 
-/// fn_253204.
-/// Deletes the token run starting at index `n` and folds its trailing records
-/// into the entry list. `argument` points at the predicate's word pair and
-/// `scratch` is the spare halfword cell used for the search cursor.
 pub fn remove_native_blanks(
     m: &mut [u8],
     context: u32,
@@ -404,8 +380,6 @@ fn finish(m: &mut [u8], stream: u32, n: u32, count: u16) -> u32 {
     0
 }
 
-/// fn_2535cc / EU fn_253788 / KR fn_253834. Recovered from the target: eight
-/// arguments, `r0` a vtable, `r3` the unit state.
 pub fn parse_first_unit(
     m: &mut [u8],
     vtable: u32,
@@ -490,8 +464,6 @@ pub fn parse_first_unit(
     0
 }
 
-/// fn_253768 / EU fn_253924 / KR fn_2539d0. Recovers a unit's index in a
-/// terminated 16-bit string array, appending it when absent.
 pub fn intern_string(
     m: &mut [u8],
     mut list: u32,
@@ -539,7 +511,6 @@ pub fn intern_string(
     rc
 }
 
-/// A record table entry (`E152`) is 40 bytes wide.
 fn record(base: u32, index: u32) -> u32 {
     base.wrapping_add(index.wrapping_mul(40))
 }
@@ -563,10 +534,6 @@ fn set_stream_index(m: &mut [u8], stream: u32, index: i32) -> u32 {
     0
 }
 
-/// fn_2571e0 / EU fn_25739c / KR fn_257448. Merges the records between equal
-/// marker runs, then rewrites or drops the boundary records. `staging` is a
-/// caller-owned 40-byte cell standing in for the ROM's stack copy of the
-/// constants block at `constants + 0x528`.
 pub fn merge_marker_runs(
     m: &mut [u8],
     a: u32,
@@ -746,7 +713,7 @@ pub fn merge_marker_runs(
                         put_word(m, e5.wrapping_add(4), grown);
                         put_half(m, e5.wrapping_add(8), r6v.wrapping_add(fpv));
                     }
-                    // Elements are eight bytes wide: two words copied in order.
+
                     let c8 = half(m, e4.wrapping_add(8)) as u32;
                     let s4 = word(m, e4.wrapping_add(4));
                     let s5 = word(m, e5.wrapping_add(4));
@@ -854,10 +821,6 @@ pub fn merge_marker_runs(
     }
 }
 
-/// fn_2551ac / EU fn_255368 / KR fn_255414.
-/// Replaces the current token's text, then shifts later token spans.
-/// `scratch` is a caller-owned 64-byte frame; its original bytes are restored.
-/// `constants` points at D_914b18.
 pub fn replace_token_text(
     m: &mut [u8],
     a: u32,
@@ -900,7 +863,7 @@ fn replace_token_text_inner(
     let old_len = word(m, current + 24) as u16;
     let offset = word(m, current + 20).wrapping_sub(word(m, first + 20)) as u16;
     if d != 0 && text != 0 {
-        // fn_176354 widens at most three bytes, then the caller terminates.
+
         crate::render_part_b::fn_176354(
             &mut crate::boot::Memory { base: 0, bytes: m },
             frame,
@@ -1020,9 +983,6 @@ fn replace_token_text_inner(
     0
 }
 
-// These frontend wrappers read only heap+4 before dispatching. Snapshot that
-// eight-byte header into a base-zero view so the platform callback can mutate
-// the original caller arena without aliasing a shared and mutable Rust slice.
 struct HeapCall<'a, H> {
     memory: &'a mut [u8],
     host: &'a mut H,
@@ -1122,8 +1082,6 @@ fn release_bytes(m: &mut [u8], heap: u32, object: u32, host: &mut impl RenderHos
     );
 }
 
-/// fn_256360 / EU fn_25651c / KR fn_2565c8.
-/// Appends the two fixed UTF-16 markers before replacing the token span.
 pub fn append_marker_text(
     m: &mut [u8],
     a: u32,
@@ -1147,9 +1105,6 @@ pub fn append_marker_text(
     replace_token_text(m, b, c, d, 0, 0, constants, scratch, host)
 }
 
-/// fn_25552c / EU fn_2556e8 / KR fn_255794.
-/// Runs the unit processor and replaces the selected token span.
-/// Scratch is 120 disjoint caller-owned bytes, restored before returning.
 pub fn process_token_span<H: RenderHost + crate::boot_part_b::FormatHost>(
     m: &mut [u8],
     a: u32,
@@ -1269,8 +1224,6 @@ fn process_token_span_inner<H: RenderHost + crate::boot_part_b::FormatHost>(
     rc
 }
 
-/// Arguments and out-cells for the engine's normalization method at vtable +32.
-/// The mode is an integer bit pattern on the stack, not a VFP argument.
 pub struct NormalizeCall {
     pub args: [u32; 11],
     pub count_cell: u32,
@@ -1291,8 +1244,6 @@ fn shrink_native_table(m: &mut [u8], a: u32, heap: u32, host: &mut impl RenderHo
     0
 }
 
-/// fn_255be8 / EU 255da4 / KR 255e50. Normalizes a native word run.
-/// Scratch requires 192 disjoint bytes, restored even on early return.
 pub fn normalize_native(m: &mut [u8], a:u32,b:u32,c:u32,d:u32,mode:u32,e:u32,
     constants:u32,scratch:u32,host:&mut impl NativeNormalizeHost)->u32 {
     let mut saved=[0u8;192];
@@ -1416,17 +1367,15 @@ fn normalize_native_inner(m:&mut [u8],a:u32,b:u32,c:u32,d:u32,mode:u32,e:u32,k:u
     if direct_return {return rc;}
     release_bytes(m,heap,buffer,host);release_bytes(m,heap,pos_table,host);rc
 }
-/// fn_256320 / EU 2564dc / KR 256588.
+
 pub fn normalize_native_zero(m:&mut [u8],a:u32,b:u32,c:u32,d:u32,e:u32,k:u32,s:u32,h:&mut impl NativeNormalizeHost)->u32{
     normalize_native(m,a,b,c,d,0,e,k,s,h)
 }
-/// fn_256340 / EU 2564fc / KR 2565a8.
+
 pub fn normalize_native_one(m:&mut [u8],a:u32,b:u32,c:u32,d:u32,e:u32,k:u32,s:u32,h:&mut impl NativeNormalizeHost)->u32{
     normalize_native(m,a,b,c,d,1,e,k,s,h)
 }
 
-/// fn_2563f4 / EU 2565b0 / KR 25665c. Converts a UTF-16 run to native text,
-/// replaces it, and inserts native-boundary events. Scratch is 192 bytes.
 pub fn convert_native(m:&mut [u8],a:u32,b:u32,c:u32,d:u32,e:u32,k:u32,s:u32,host:&mut impl RenderHost)->u32 {
     let mut saved=[0u8;192];saved.copy_from_slice(&m[s as usize..s as usize+192]);
     let rc=convert_native_inner(m,a,b,c,d,e,k,s,host);
@@ -1568,11 +1517,11 @@ fn convert_native_inner(m:&mut [u8],a:u32,b:u32,c:u32,d:u32,e:u32,k:u32,s:u32,ho
     if direct_return {return rc;}
     release_bytes(m,heap,narrow,host);release_bytes(m,heap,wide,host);rc
 }
-/// fn_256df4 / EU 256fb0 / KR 25705c.
+
 pub fn convert_native_plain(m:&mut [u8],a:u32,b:u32,c:u32,d:u32,k:u32,s:u32,h:&mut impl RenderHost)->u32 {
     convert_native(m,a,b,c,d,0,k,s,h)
 }
-/// fn_256fc8 / EU 257184 / KR 257230.
+
 pub fn convert_native_marked(m:&mut [u8],a:u32,b:u32,c:u32,d:u32,k:u32,s:u32,h:&mut impl RenderHost)->u32 {
     convert_native(m,a,b,c,d,1,k,s,h)
 }
