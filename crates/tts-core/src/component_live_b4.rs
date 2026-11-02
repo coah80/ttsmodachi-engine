@@ -1,65 +1,115 @@
-
-
 #![allow(dead_code)]
+
 #![allow(non_upper_case_globals)]
 
 use crate::{boot::Memory, component_live_b::Host};
 
 const ST_POS: u32 = 0x00;
+
 const ST_BIT: u32 = 0x04;
+
 const ST_BUFFER: u32 = 0x08;
+
 const ST_TABLES: u32 = 0x0c;
+
 const ST_H0: u32 = 0x10;
+
 const ST_H1: u32 = 0x14;
+
 const ST_OUTPUT: u32 = 0x18;
 
 const TB_HEADER: u32 = 0x00;
+
 const TB_ALPHABET: u32 = 0x04;
+
 const TB_PAIRS: u32 = 0x08;
+
 const TB_INITIAL_CHARS: u32 = 0x0c;
+
 const TB_INITIAL_OFFSETS: u32 = 0x10;
+
 const TB_INITIAL_INDICES: u32 = 0x14;
+
 const TB_COUNT_TREE: u32 = 0x18;
+
 const TB_CHAR_TREE: u32 = 0x1c;
+
 const TB_DELTA_TREE: u32 = 0x20;
+
 const TB_SKIPPED_TREE: u32 = 0x24;
+
 const TB_OFFSET_TREE: u32 = 0x28;
+
 const TB_COUNTS: u32 = 0x2c;
+
 const TB_CHARS: u32 = 0x30;
+
 const TB_DELTAS: u32 = 0x34;
+
 const TB_SKIPPED_VALUES: u32 = 0x38;
+
 const TB_OFFSET_VALUES: u32 = 0x3c;
+
 const TB_DATA_OFFSET: u32 = 0x40;
+
 const TB_RECORDS: u32 = 0x44;
+
 const TB_OFFSETS: u32 = 0x48;
 
 const HD_FIRST_CHAR: u32 = 0x04;
+
 const HD_INPUT_MIN: u32 = 0x04;
+
 const HD_INPUT_MAX: u32 = 0x05;
+
 const HD_PAIR_BASE: u32 = 0x06;
+
 const HD_SEPARATOR: u32 = 0x08;
+
 const HD_PREFIX_MIN: u32 = 0x0a;
+
 const HD_PREFIX_MAX: u32 = 0x0b;
+
 const HD_WIDTH: u32 = 0x0c;
+
 const HD_BITS: u32 = 0x0d;
+
 const HD_SHIFT: u32 = 0x0e;
+
 const HD_ALIGN_MASK: u32 = 0x0f;
+
 const HD_TERMINATOR: u32 = 0x10;
+
 const HD_INITIAL_BIT: u32 = 0x11;
+
 const HD_INLINE_LIMIT: u32 = 0x12;
+
 const HD_OFFSET_BITS: u32 = 0x13;
+
 const HD_MAX_LENGTH: u32 = 0x16;
+
 const HD_DIRECT_COUNT: u32 = 0x18;
+
 const HD_COUNT_ROOT: u32 = 0x1a;
+
 const HD_CHAR_ROOT: u32 = 0x1c;
+
 const HD_DELTA_ROOT: u32 = 0x1e;
+
 const HD_SKIPPED_ROOT: u32 = 0x20;
+
 const HD_OFFSET_ROOT: u32 = 0x22;
+
 const HD_INITIAL_COUNT: u32 = 0x2e;
+
 const HD_PAGE_SIZE: u32 = 0x32;
+
 const HD_RECORD_SIZE: u32 = 0x34;
+
 const HD_OFFSET_SIZE: u32 = 0x36;
+
 const HD_INITIAL_POS: u32 = 0x38;
+
 const HD_OFFSET_BYTES: u32 = 0x44;
 
 fn g_word(m: &Memory<'_>, p: u32) -> Option<u32> {
@@ -603,27 +653,43 @@ pub fn fn_26bb6c_m(
 }
 
 const OW_HEAP: u32 = 0x04;
+
 const OW_RESOURCES: u32 = 0x0c;
+
 const OW_LOGGER: u32 = 0x10;
 
 const LD_SIZE: u32 = 0x00;
+
 const LD_STATE: u32 = 0x04;
 
 const LC_MAIN: u32 = 0x04;
+
 const LC_SYSTEM: u32 = 0x24;
+
 const LC_LANGUAGE: u32 = 0x44;
+
 const LC_KEYS: u32 = 0x68;
+
 const LC_TABLES: u32 = 0x6c;
+
 const LC_RESULTS: u32 = 0x70;
+
 const LC_QUERY: u32 = 0x74;
+
 const LC_RESOURCES: u32 = 0x78;
+
 const LC_DICT_COUNT: u32 = 0x88;
+
 const LC_RESULT_BLOCKS: u32 = 0x8a;
+
 const LC_RESULT_CAP: u32 = 0x8c;
+
 const LC_QUERY_CAP: u32 = 0x8e;
+
 const LC_RESOURCE_NAME: u32 = 0x9e;
 
 const LOOKUP_TAG: u32 = 0xf37f;
+
 const LOOKUP_SIZE: u32 = 0x2a4;
 
 const HD_SEPARATOR_OUT: u32 = 0x09;
@@ -631,8 +697,11 @@ const HD_SEPARATOR_OUT: u32 = 0x09;
 const LOOKUP_MODULE: u32 = 0x8f8f44;
 
 const LOOKUP_GATE: u32 = 0x89802008;
+
 const LOOKUP_BAD: u32 = 0x89802007;
+
 const LOOKUP_MEMORY: u32 = 0x8980200a;
+
 const LOOKUP_INVALID: u32 = 0x89802014;
 
 fn g_strcat(m: &mut Memory<'_>, dst: u32, src: u32) -> bool {
@@ -731,6 +800,7 @@ fn render_decimal(mut value: u32, buffer: &mut [u8]) {
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn lookup_tail(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -797,6 +867,7 @@ fn lookup_tail(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_1ea4e0_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -1315,36 +1386,57 @@ pub fn fn_1ea4e0_m(
 }
 
 const TC_PUNCT: u32 = 0x64;
+
 const TC_IFACE: u32 = 0x84;
+
 const TC_DOM_COUNT: u32 = 0x94;
+
 const TC_DOMAINS: u32 = 0x98;
 
 const IF_FIRST: u32 = 0x24;
+
 const IF_NEXT: u32 = 0x28;
+
 const IF_FIND: u32 = 0x34;
+
 const IF_SET: u32 = 0x50;
+
 const IF_GET: u32 = 0x58;
 
 const TA_POSITION: u32 = 0x0c;
+
 const TA_DOMAIN: u32 = 0x14;
 
 const TD_NAME: u32 = 0x00;
+
 const TD_ALPHA: u32 = 0x04;
+
 const TD_DIGITS: u32 = 0x08;
+
 const TD_PUNCT: u32 = 0x0c;
 
 const TOKEN_GATE: u32 = 0x89802008;
+
 const TOKEN_MEMORY: u32 = 0x8980200a;
+
 const TOKEN_ERROR: u32 = 0xa02a;
 
 const S_POSITION: u32 = 12;
+
 const S_ITEM: u32 = 16;
+
 const S_TEXT: u32 = 20;
+
 const S_TOKEN: u32 = 24;
+
 const S_TYPE: u32 = 28;
+
 const S_LENGTH: u32 = 32;
+
 const S_WRITTEN: u32 = 36;
+
 const S_START: u32 = 48;
+
 const SCRATCH_SIZE: u32 = 50;
 
 fn token_space(c: u8) -> bool {
@@ -1375,9 +1467,16 @@ fn token_punctuation(m: &Memory<'_>, ctx: u32, domain: u16, c: u8) -> bool {
     let domains = g_word(m, ctx.wrapping_add(TC_DOMAINS)).unwrap_or(0);
     let punct = g_word(
         m,
-        domains.wrapping_add(u32::from(domain) * 16).wrapping_add(TD_PUNCT),
+        domains
+            .wrapping_add(u32::from(domain) * 16)
+            .wrapping_add(TD_PUNCT),
     )
     .unwrap_or(0);
+    let punct = if punct == 0 {
+        g_word(m, ctx.wrapping_add(TC_PUNCT)).unwrap_or(0)
+    } else {
+        punct
+    };
     c != 0 && g_strchr(m, punct, u32::from(c)) != 0
 }
 
@@ -1390,10 +1489,16 @@ fn token_alpha(m: &Memory<'_>, ctx: u32, domain: u16, c: u8) -> bool {
     let domains = g_word(m, ctx.wrapping_add(TC_DOMAINS)).unwrap_or(0);
     let alpha = g_word(
         m,
-        domains.wrapping_add(u32::from(domain) * 16).wrapping_add(TD_ALPHA),
+        domains
+            .wrapping_add(u32::from(domain) * 16)
+            .wrapping_add(TD_ALPHA),
     )
     .unwrap_or(0);
-    c != 0 && g_strchr(m, alpha, u32::from(c)) != 0
+    if alpha == 0 {
+        !token_space(c) && !token_punctuation(m, ctx, domain, c) && !token_digit(m, ctx, domain, c)
+    } else {
+        c != 0 && g_strchr(m, alpha, u32::from(c)) != 0
+    }
 }
 
 fn token_domain(
@@ -1410,7 +1515,7 @@ fn token_domain(
     let mut guard = u32::from(count).wrapping_add(1);
     while *index < count && guard > 0 {
         guard -= 1;
-        let at = annotations.wrapping_add(u32::from(*index) * 16);
+        let at = annotations.wrapping_add(u32::from(*index) * 24);
         let pos = g_word(m, at.wrapping_add(TA_POSITION)).unwrap_or(0);
         if pos.wrapping_sub(first) > u32::from(position) {
             break;
@@ -1425,10 +1530,13 @@ fn token_domain(
     }
     let which = g_word(
         m,
-        annotations.wrapping_add(selected * 16).wrapping_add(TA_DOMAIN),
+        annotations
+            .wrapping_add(selected * 24)
+            .wrapping_add(TA_DOMAIN),
     )
     .unwrap_or(0);
     if which == 0 {
+        *domain = 999;
         return;
     }
     let n = g_half(m, ctx.wrapping_add(TC_DOM_COUNT)).unwrap_or(0);
@@ -1438,7 +1546,9 @@ fn token_domain(
     while d < n {
         let name = g_word(
             m,
-            domains.wrapping_add(u32::from(d) * 16).wrapping_add(TD_NAME),
+            domains
+                .wrapping_add(u32::from(d) * 16)
+                .wrapping_add(TD_NAME),
         )
         .unwrap_or(0);
         if name != 0
@@ -1460,6 +1570,7 @@ fn token_tail(m: &mut Memory<'_>, h: &mut impl Host, logger: u32, rc: u32) -> u3
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_1ede44_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -1488,7 +1599,6 @@ pub fn fn_1ede44_m(
         Some(v) => v,
         None => return token_tail(m, h, logger, TOKEN_MEMORY),
     };
-
     if !g_range(m, scratch, SCRATCH_SIZE) {
         h.call_m(0x173dc0, &[logger, LOOKUP_MODULE, TOKEN_ERROR, 0], m);
         return token_tail(m, h, logger, TOKEN_MEMORY);
@@ -1501,7 +1611,6 @@ pub fn fn_1ede44_m(
     let type_slot = scratch.wrapping_add(S_TYPE);
     let start_slot = scratch.wrapping_add(S_START);
     let position_slot = scratch.wrapping_add(S_POSITION);
-
     if !p_half(m, position_slot, 0)
         || !p_half(m, item, 0)
         || !p_half(m, token, 0)
@@ -1513,13 +1622,13 @@ pub fn fn_1ede44_m(
         return token_tail(m, h, logger, TOKEN_MEMORY);
     }
     let find = g_word(m, iface.wrapping_add(IF_FIND)).unwrap_or(0);
-    let mut rc = h.call_m(find, &[th0, th1, 1, 0, item], m);
+    let mut rc = h.call_guest_m(find, &[th0, th1, 1, 0, item], m);
     if rc >= 0x80000000 {
         return token_tail(m, h, logger, rc);
     }
     let get = g_word(m, iface.wrapping_add(IF_GET)).unwrap_or(0);
     let item_val = u32::from(g_half(m, item).unwrap_or(0));
-    rc = h.call_m(get, &[th0, th1, item_val, 0, text_slot, length_slot], m);
+    rc = h.call_guest_m(get, &[th0, th1, item_val, 0, text_slot, length_slot], m);
     if rc >= 0x80000000 {
         return token_tail(m, h, logger, rc);
     }
@@ -1528,14 +1637,22 @@ pub fn fn_1ede44_m(
     let mut annotation_index: u16 = 0;
     let mut token_val: u16 = 0;
     let mut error = false;
+    let mut domain: u16 = 999;
     loop {
         let text_len = g_strlen(m, text).unwrap_or(0);
         if u32::from(position) >= text_len {
             break;
         }
         let start: u16 = position;
-        let mut domain: u16 = 999;
-        token_domain(m, ctx, annotations, count, start, &mut annotation_index, &mut domain);
+        token_domain(
+            m,
+            ctx,
+            annotations,
+            count,
+            start,
+            &mut annotation_index,
+            &mut domain,
+        );
         let c = match g_byte(m, text.wrapping_add(u32::from(position))) {
             Some(v) => v,
             None => {
@@ -1629,7 +1746,11 @@ pub fn fn_1ede44_m(
                 break;
             }
         } else {
-            h.call_m(0x1738e8, &[logger, LOOKUP_MODULE, 4, 0, 0x8f8fd8, u32::from(c)], m);
+            h.call_m(
+                0x1738e8,
+                &[logger, LOOKUP_MODULE, 4, 0, 0x8f8fd8, u32::from(c)],
+                m,
+            );
             type_val = 0;
             position = position.wrapping_add(1);
         }
@@ -1645,9 +1766,9 @@ pub fn fn_1ede44_m(
         let next = g_word(m, iface.wrapping_add(IF_NEXT)).unwrap_or(0);
         let set = g_word(m, iface.wrapping_add(IF_SET)).unwrap_or(0);
         if start == 0 {
-            rc = h.call_m(first, &[th0, th1, 3, u32::from(item_val), token], m);
+            rc = h.call_guest_m(first, &[th0, th1, 3, u32::from(item_val), token], m);
         } else {
-            rc = h.call_m(next, &[th0, th1, u32::from(token_val), token], m);
+            rc = h.call_guest_m(next, &[th0, th1, u32::from(token_val), token], m);
         }
         if rc >= 0x80000000 {
             error = true;
@@ -1656,7 +1777,7 @@ pub fn fn_1ede44_m(
         token_val = g_half(m, token).unwrap_or(0);
         let fields = [(0u32, type_slot), (1u32, start_slot), (2u32, position_slot)];
         for (field, slot) in fields {
-            rc = h.call_m(
+            rc = h.call_guest_m(
                 set,
                 &[th0, th1, u32::from(token_val), field, 1, slot, written],
                 m,

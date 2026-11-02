@@ -7,6 +7,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Default)]
+
 pub struct SetupState {
     pub sample_rate: f32,
     pub active: bool,
@@ -48,8 +49,10 @@ pub struct Setup<'a, 'b> {
 }
 
 impl Setup<'_, '_> {
-
     pub fn reset(&mut self, tables: &NumericTables<'_>) {
+        self.reset_with_frequency(tables, 185.0)
+    }
+    pub fn reset_with_frequency(&mut self, tables: &NumericTables<'_>, frequency: f32) {
         let s = &mut self.state;
         s.active = false;
         s.polarity = 1.0;
@@ -62,7 +65,7 @@ impl Setup<'_, '_> {
         s.effects = [1.0; 3];
         s.smoothing = 0.05;
         s.blend = 1.0;
-        s.frequency = 185.0;
+        s.frequency = frequency;
         s.voice_gain = 1.0;
         s.value4c08 = 1.0;
         s.timing_blend = 1.0;
@@ -100,11 +103,20 @@ impl Setup<'_, '_> {
         self.filter.reset();
         self.voice_filter.reset();
     }
-
     pub fn apply_commands(&mut self, commands: &[u32], delay: i32, tables: &NumericTables<'_>) {
+        self.apply_commands_regional(commands, delay, tables, false)
+    }
+    pub fn apply_commands_regional(
+        &mut self,
+        commands: &[u32],
+        delay: i32,
+        tables: &NumericTables<'_>,
+        korean: bool,
+    ) {
+        let negative = if korean { -0.5 } else { -1.0 };
         for &command in commands {
             if command == 1 {
-                self.reset(tables);
+                self.reset_with_frequency(tables, if korean { 220.0 } else { 185.0 });
                 continue;
             }
             let s = &mut self.state;
@@ -112,7 +124,7 @@ impl Setup<'_, '_> {
             if command < 10_000_000 {
                 match command {
                     2 | 3 => {
-                        s.polarity = if command == 2 { 1.0 } else { -1.0 };
+                        s.polarity = if command == 2 { 1.0 } else { negative };
                         self.input
                             .set_pitch_blend(base, delay, s.polarity * s.blend);
                     }

@@ -1,4 +1,3 @@
-
 use crate::{boot::Memory, component_live_b};
 
 const FRAME: u32 = 0x1000;
@@ -90,10 +89,7 @@ pub struct TokenHost<'a> {
 
 impl TokenHost<'_> {
     fn dispatch(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
-        let f = crate::rom_region::to_us_guest(
-            crate::rom_region::Rom::from_entry(f),
-            f,
-        );
+        let f = crate::rom_region::to_us(self.inner.rom, f);
         match f {
             0x249cec => crate::speech_part_1::fn_249cec(m, a[0], 0x4200, self),
             0x2b7118 => crate::speech_part_3::fn_2b7118(m, a[0], a[1], FRAME, self),
@@ -103,26 +99,19 @@ impl TokenHost<'_> {
                 crate::speech_part_3::fn_2e564c(m, a[0], a[1], a[2], a[3], a[4] as u8, FRAME, self)
             }
             0x24dcf0 => crate::speech_part_3::fn_24dcf0(m, a[0], a[1], a[2], a[3], FRAME, self),
-
             0x24d5e4 => crate::normalization::byte_compare_at(m.bytes, a[0], a[1]),
-
             0x2b8504 => crate::component_live_2b7d::fn_2b8504_m(m, a[0], a[1], self),
             0x2b7fdc => crate::component_live_2b7d::fn_2b7fdc_m(m, a[0], a[1], a[2], self),
-
             0x179f30 => crate::component_live_b3::broker_179f30_live(m, a[0], a[1], a[2], self),
-
             0x26b7ec => crate::component_live_b3::fn_26b7ec_m(m, self, a[0], a[1], a[2], a[3]),
             0x26bb28 => crate::component_live_b3::fn_26bb28_m(m, self, a[0], a[1]),
             0x26bb44 => crate::component_live_b3::fn_26bb44_m(m, a[0]),
-
             0x2b4968 => crate::component_live_2b7d::fn_2b4968_m(m, a[0], a[1], self),
-
             0x24cb74 => crate::component_live_2b7d::fn_24cb74_m(m, a[0], self),
             0x24cbd4 => crate::component_live_2b7d::fn_24cbd4_m(m, a[0], self),
             0x24cc08 => crate::component_live_2b7d::fn_24cc08_m(m, a[0], a[1], self),
             0x24cdac => crate::component_live_2b7d::fn_24cdac_m(m, a[0], self),
             0x24ce40 => crate::component_live_2b7d::fn_24ce40_m(m, a[0], self),
-
             0x1966ac => crate::speech_part_1::parameter_call_m(m, f, a, 0x1800, self),
             0x2b4260 => crate::component_live_2b7d::fn_2b4260_m(m, a[0], a[1], a[2], a[3], self, 0),
             0x24b290 => crate::component_live_2b7d::fn_24b290_m(m, a[0], a[1], a[2], a[3], self),
@@ -133,19 +122,16 @@ impl TokenHost<'_> {
             0x24a5d4 => crate::component_live_2b7d::fn_24a5d4_m(m, a[0], a[1], a[2], self),
             0x24a6bc => crate::component_live_2b7d::fn_24a6bc_m(m, a[0], a[1], a[2], self),
             0x24a7a4 => crate::component_live_2b7d::fn_24a7a4_m(m, a[0], a[1], a[2], self),
-            0x2e4e80 => crate::component_live_2b7d::fn_2e4e80_m(
-                m, a[0], a[1], a[2], a[3], a[4], a[5], self,
-            ),
+            0x2e4e80 => {
+                crate::component_live_2b7d::fn_2e4e80_m(m, a[0], a[1], a[2], a[3], a[4], a[5], self)
+            }
             0x2b570c => crate::component_live_2b7d::fn_2b570c_m(m, a[0], a[1], self),
             0x2190b4 => crate::component_live_2b7d::fn_2190b4_m(m, a[0], a[1], a[2], a[3], self),
             0x2192c0 => crate::component_live_2b7d::fn_2192c0_m(m, a[0], a[1], a[2], a[3], self),
             0x24ac00 => crate::component_live_b::Host::call_m(&mut self.inner, f, a, m),
-
             0x2b73d0 => crate::component_live_2b7d::fn_2b73d0_m(m, a[0], a[1], self),
-
             0x2b5c18 => crate::component_live_2b7d::fn_2b5c18_m(m, a[0], a[1], self),
             0x2b8868 => crate::component_live_2b7d::fn_2b8868_m(m, a[0], a[1], self),
-
             0x2193a4 => {
                 if a.len() < 3 {
                     return crate::component_live_b::Host::call_m(&mut self.inner, f, a, m);
@@ -158,7 +144,6 @@ impl TokenHost<'_> {
             _ => crate::component_live_b::Host::call_m(&mut self.inner, f, a, m),
         }
     }
-
     fn heap_method(&self, m: &Memory<'_>, slot: u32) -> u32 {
         if self.heap == 0 {
             return 0;
@@ -177,6 +162,9 @@ impl component_live_b::Host for TokenHost<'_> {
 }
 
 impl crate::speech_part_1::Host for TokenHost<'_> {
+    fn guest_entry(&self, f: u32) -> u32 {
+        crate::rom_region::to_us_guest(self.inner.rom, f)
+    }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.dispatch(m, f, a)
     }
@@ -193,6 +181,9 @@ impl crate::speech_part_1::Host for TokenHost<'_> {
 }
 
 impl crate::speech_part_6::Host for TokenHost<'_> {
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.dispatch(m, crate::rom_region::to_us_guest(self.inner.rom, f), a)
+    }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.dispatch(m, f, a)
     }
@@ -254,6 +245,9 @@ impl crate::log_live::LogMethodsM for TokenHost<'_> {
 }
 
 impl crate::boot_part_f::Host for TokenHost<'_> {
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.dispatch(m, crate::rom_region::to_us_guest(self.inner.rom, f), a)
+    }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.dispatch(m, f, a)
     }

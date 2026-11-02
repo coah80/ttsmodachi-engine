@@ -1,6 +1,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
+
 pub mod engine;
 pub mod bridge;
 pub mod engine_components;
@@ -169,3 +170,5 @@ pub mod jp;
 pub mod fe_text;
 
 pub mod reentrant;
+
+pub mod speech_layout;

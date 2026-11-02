@@ -194,6 +194,47 @@ pub fn root_tail_m(m:&mut Memory<'_>,h:&mut impl Calls,engine:u32,mode:u32,delta
     for (i,b) in saved.into_iter().enumerate(){put_byte(m,s+i as u32,b);}
 }
 
+pub fn root_tail_kr_m(m:&mut Memory<'_>,h:&mut impl Calls,engine:u32,mode:u32,delta:u32,d:&RootData,s:u32) {
+    let saved=core::array::from_fn::<_,0xc30,_>(|i|m.bytes[m.offset(s+i as u32)]);
+    let w=d.words;
+    m.put_word(s+0xc18,0);m.put_word(s+0xc1c,w[0]);
+    h.call(m,0x191948,&[m.word(engine+0x11c+delta),m.word(engine+0x120+delta),s+0xc18]);
+    for i in 0..10u32 {
+        put_byte(m,s+i*0x102,m.bytes[m.offset(w[1]+i*4)]);
+        let value=match i {0=>m.word(w[2]+mode*4),2=>m.word(w[2]+32+mode*4),3=>16,_=>half(m,w[1]+i*4+2)};
+        let at=m.offset(s+i*0x102+2);m.bytes[at..at+2].copy_from_slice(&(value as u16).to_le_bytes());
+    }
+    for i in 0..2u32 {
+        let dst=s+(10+i)*0x102;
+        put_byte(m,dst,m.bytes[m.offset(w[4]+i*0x102)]);
+        let mut src=if i==0 {m.word(w[3]+mode*4)}else{w[4]+i*0x102+2};
+        let mut end=dst+2;
+        for _ in 0..127 {
+            let v=half(m,src) as u16;let at=m.offset(end);m.bytes[at..at+2].copy_from_slice(&v.to_le_bytes());
+            src+=2;end+=2;if half(m,src)==0 {break;}
+        }
+        let at=m.offset(end);m.bytes[at..at+2].fill(0);
+    }
+    h.call(m,0x19310c,&[m.word(engine+0x11c+delta),m.word(engine+0x120+delta),s,12]);
+    let buffer=engine+0x61fc+delta;let size=engine+0x69fc+delta;
+    h.call(m,0x3023b0,&[buffer,0x800]);
+    let src=h.call(m,0x16b540,&[m.word(engine+0x61bc+delta),m.word(w[5]+mode*4),size]);
+
+    let n=m.word(size).min(0x7ff);let mut i=0;
+    while i<n {
+        let b=m.bytes[m.offset(src+i)];put_byte(m,buffer+i,b);i+=1;
+        if m.bytes[m.offset(src+i)]==0 {break;}
+    }
+    put_byte(m,buffer+i,0);
+    h.call(m,0x194454,&[m.word(engine+0x11c+delta),m.word(engine+0x120+delta),w[6],m.word(size),buffer,engine+0x61f4+delta]);
+    for i in 0..18 {m.put_word(w[3]+72+i*4,m.word(w[7]+mode*72+i*4));}
+    for j in 0..4 {for i in 0..6 {
+
+        m.put_word(engine+0xac+i*16+j*4,m.word(w[8]+mode*96+j*24+i*4));
+    }}
+    for (i,b) in saved.into_iter().enumerate(){put_byte(m,s+i as u32,b);}
+}
+
 fn mem_word(mem:&[u8],p:u32)->u32 {u32::from_le_bytes(mem[p as usize..p as usize+4].try_into().unwrap())}
 fn mem_store(mem:&mut[u8],p:u32,v:u32){mem[p as usize..p as usize+4].copy_from_slice(&v.to_le_bytes());}
 use crate::frontend::classify_code;

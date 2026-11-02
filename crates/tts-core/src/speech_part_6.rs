@@ -1,4 +1,3 @@
-
 use crate::{boot::Memory, speech_part_4};
 
 pub fn fn_129778(
@@ -9,13 +8,16 @@ pub fn fn_129778(
 ) -> u32 {
     speech_part_4::fn_129778(m, host, size, fill)
 }
+
 pub fn fn_196964(m: &mut Memory<'_>, host: &mut impl speech_part_4::Host, pointer: u32, heap: u32) {
     speech_part_4::fn_196964(m, host, pointer, heap)
 }
 
 pub trait Host {
     fn call(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32;
-
+    fn call_guest(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32 {
+        self.call(m, method, args)
+    }
     fn log(
         &mut self,
         m: &mut Memory<'_>,
@@ -36,18 +38,22 @@ pub trait Host {
     );
     fn error(&mut self, m: &mut Memory<'_>, logger: u32, category: u32, code: u32);
 }
+
 fn half(m: &Memory<'_>, p: u32) -> u16 {
     let i = m.offset(p);
     u16::from_le_bytes(m.bytes[i..i + 2].try_into().unwrap())
 }
+
 fn put_half(m: &mut Memory<'_>, p: u32, v: u16) {
     let i = m.offset(p);
     m.bytes[i..i + 2].copy_from_slice(&v.to_le_bytes());
 }
+
 fn byte(m: &mut Memory<'_>, p: u32, v: u8) {
     let i = m.offset(p);
     m.bytes[i] = v;
 }
+
 fn failed(r: u32) -> bool {
     r >= 0x80000000
 }
@@ -63,7 +69,7 @@ pub fn fn_24c9fc(m: &mut Memory<'_>, h: &mut impl Host, p: u32, scratch: u32) ->
     h.log(m, logger, category, 4, b"tokentn : ReadSentence Begin", &[]);
     m.put_word(p + 0x5c, 0);
     let rc = (|| {
-        let mut r = h.call(
+        let mut r = h.call_guest(
             m,
             m.word(m.word(p + 12) + 0x34),
             &[m.word(p + 16), m.word(p + 20), 1, 0, scratch],
@@ -74,14 +80,14 @@ pub fn fn_24c9fc(m: &mut Memory<'_>, h: &mut impl Host, p: u32, scratch: u32) ->
         }
         let a = half(m, scratch) as u32;
         if a != 0
-            && !failed(h.call(
+            && !failed(h.call_guest(
                 m,
                 m.word(m.word(p + 12) + 0x5c),
                 &[m.word(p + 16), m.word(p + 20), a, 0, scratch + 2],
             ))
             && half(m, scratch + 2) == 1
         {
-            r = h.call(
+            r = h.call_guest(
                 m,
                 m.word(m.word(p + 12) + 0x58),
                 &[m.word(p + 16), m.word(p + 20), a, 0, p + 0x5c, scratch + 4],
@@ -124,7 +130,6 @@ pub fn fn_1d8f28(
     saved.copy_from_slice(&m.bytes[at..at + 40]);
     let r = (|| {
         let [a, b] = db;
-
         let s = scratch;
         for off in [10, 12] {
             put_half(m, s + off, 0);
@@ -133,7 +138,7 @@ pub fn fn_1d8f28(
             m.put_word(s + off, 0);
         }
         h.log(m, m.word(m.word(c) + 16), category, 5, b"%s", &[name]);
-        let mut r = h.call(m, m.word(m.word(c + 4) + 0x34), &[a, b, 3, x, s + 8]);
+        let mut r = h.call_guest(m, m.word(m.word(c + 4) + 0x34), &[a, b, 3, x, s + 8]);
         if failed(r) {
             return r;
         }
@@ -141,7 +146,7 @@ pub fn fn_1d8f28(
             loop {
                 let node = half(m, s + 8) as u32;
                 for (key, out) in [(1, s), (2, s + 2), (0, s + 4)] {
-                    r = h.call(
+                    r = h.call_guest(
                         m,
                         m.word(m.word(c + 4) + 0x54),
                         &[a, b, node, key, 1, out, s + 6],
@@ -153,7 +158,7 @@ pub fn fn_1d8f28(
                 let ty = m.byte(s + 4);
                 let mut have = false;
                 if ty == 5 || ty == 6 {
-                    r = h.call(
+                    r = h.call_guest(
                         m,
                         m.word(m.word(c + 4) + 0x58),
                         &[a, b, node, 4, s + 16, s + 6],
@@ -162,7 +167,7 @@ pub fn fn_1d8f28(
                         return r;
                     }
                     if ty == 6 {
-                        r = h.call(
+                        r = h.call_guest(
                             m,
                             m.word(m.word(c + 4) + 0x58),
                             &[a, b, node, 3, s + 20, s + 6],
@@ -170,13 +175,13 @@ pub fn fn_1d8f28(
                         if failed(r) {
                             return r;
                         }
-                        if !failed(h.call(
+                        if !failed(h.call_guest(
                             m,
                             m.word(m.word(c + 4) + 0x5c),
                             &[a, b, node, 6, s + 10],
                         )) && half(m, s + 10) == 1
                         {
-                            r = h.call(
+                            r = h.call_guest(
                                 m,
                                 m.word(m.word(c + 4) + 0x58),
                                 &[a, b, node, 6, s + 24, s + 12],
@@ -201,7 +206,7 @@ pub fn fn_1d8f28(
                 let logger = m.word(m.word(c) + 16);
                 if ty <= 4 {
                     m.put_word(s + 28, 0);
-                    h.call(m, m.word(m.word(c + 4) + 0x80), &[a, b, ty as u32, s + 28]);
+                    h.call_guest(m, m.word(m.word(c + 4) + 0x80), &[a, b, ty as u32, s + 28]);
                     h.log(
                         m,
                         m.word(m.word(c) + 16),
@@ -236,7 +241,7 @@ pub fn fn_1d8f28(
                         &[node, from, to, m.word(s + 16), buf],
                     );
                 }
-                if h.call(m, m.word(m.word(c + 4) + 0x3c), &[a, b, node, s + 8]) != 0
+                if h.call_guest(m, m.word(m.word(c + 4) + 0x3c), &[a, b, node, s + 8]) != 0
                     || half(m, s + 8) == 0
                 {
                     break;
@@ -261,15 +266,19 @@ pub struct TokenConstants {
     pub yes: u32,
     pub marker: u32,
 }
+
 fn len8(m: &Memory<'_>, p: u32) -> u32 {
     crate::normalization::strlen8(m.bytes, p - m.base)
 }
+
 fn copy(m: &mut Memory<'_>, d: u32, s: u32) {
     crate::normalization::strcpy_at(m.bytes, d - m.base, s - m.base);
 }
+
 fn compare(m: &Memory<'_>, a: u32, b: u32) -> i32 {
     crate::normalization::strcmp_at(m.bytes, a - m.base, b - m.base)
 }
+
 fn find(m: &Memory<'_>, a: u32, b: u32) -> u32 {
     let p = crate::frontend::find_substr(m.bytes, a - m.base, b - m.base);
     if p == 0 {
@@ -278,9 +287,11 @@ fn find(m: &Memory<'_>, a: u32, b: u32) -> u32 {
         p + m.base
     }
 }
+
 fn ling(m: &mut Memory<'_>, h: &mut impl Host, p: u32, slot: u32, a: &[u32]) -> u32 {
-    h.call(m, m.word(m.word(p + 0x18) + slot), a)
+    h.call_guest(m, m.word(m.word(p + 0x18) + slot), a)
 }
+
 fn set(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -294,18 +305,21 @@ fn set(
 ) -> u32 {
     ling(m, h, p, 0x50, &[db[0], db[1], node, key, n, data, written])
 }
+
 fn get_property(m: &mut Memory<'_>, h: &mut impl Host, props: u32, key: u32, out: u32) -> u32 {
     if let Some(rc) = m.boot_lookup_pure(0x175a1c, &[props, key, out], 0x196980) {
         return rc;
     }
     h.call(m, 0x175a1c, &[props, key, out])
 }
+
 struct Heap<'a, H> {
     host: &'a mut H,
     base: u32,
     alloc: u32,
     free: u32,
 }
+
 impl<H: Host> crate::frontend::HeapVtableM for Heap<'_, H> {
     fn alloc_at_m(&mut self, obj: u32, n: u32, bytes: &mut [u8]) -> u32 {
         self.host.call(
@@ -331,6 +345,7 @@ impl<H: Host> crate::frontend::HeapVtableM for Heap<'_, H> {
         );
     }
 }
+
 fn alloc(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, n: u32) -> u32 {
     if heap == 0 {
         return 0;
@@ -344,6 +359,7 @@ fn alloc(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, n: u32) -> u32 {
     };
     crate::frontend::heap_alloc_m(m.bytes, Some(heap - m.base), n, &mut v)
 }
+
 fn release(m: &mut Memory<'_>, h: &mut impl Host, heap: u32, p: u32) {
     if heap == 0 {
         return;
@@ -384,7 +400,6 @@ pub fn fn_1d5234(
     let mut saved = [0; 64];
     saved.copy_from_slice(&m.bytes[at..at + 64]);
     let s = scratch;
-
     put_half(m, s, 0);
     let original = half(m, cursor) as u32;
     let mut rc = 0;
@@ -451,7 +466,6 @@ pub fn fn_1d5234(
                         b"Creating token %u %u in lingdb",
                         &[pos, end as u32],
                     );
-
                     put_half(m, s + 10, end);
                     for (key, n, data) in [
                         (1, 1, s),
@@ -528,7 +542,7 @@ pub fn fn_1d5234(
                                 } else {
                                     (len8(m, phonemes) + 1).wrapping_mul(4)
                                 };
-                                rc = h.call(
+                                rc = h.call_guest(
                                     m,
                                     m.word(m.word(p + 0x48) + 0x24),
                                     &[
@@ -770,7 +784,9 @@ pub fn fn_19658c(
 }
 
 pub trait FormatHost: speech_part_4::Host + crate::render_part_d2::LocaleHost {}
+
 impl<T: speech_part_4::Host + crate::render_part_d2::LocaleHost> FormatHost for T {}
+
 fn output(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s: u32, v: u32) {
     let f = m.word(s + 4);
     let obj = m.word(s + 8);
@@ -780,6 +796,7 @@ fn output(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s: u32, v: u32) 
         h.call(m, f, &[v, obj]);
     }
 }
+
 fn numeric(
     m: &mut Memory<'_>,
     h: &mut impl speech_part_4::Host,
@@ -884,6 +901,7 @@ pub(crate) fn fn_100418(m: &mut Memory<'_>, s: u32, _c: u32, va: u32) -> u32 {
     }
     1
 }
+
 pub(crate) fn fn_100694(
     m: &mut Memory<'_>,
     h: &mut impl speech_part_4::Host,
@@ -894,6 +912,7 @@ pub(crate) fn fn_100694(
 ) -> u32 {
     numeric(m, h, s, c, va, 10, false, false, tmp)
 }
+
 pub(crate) fn fn_10035c(
     m: &mut Memory<'_>,
     h: &mut impl speech_part_4::Host,
@@ -904,6 +923,7 @@ pub(crate) fn fn_10035c(
 ) -> u32 {
     numeric(m, h, s, c, va, 10, true, false, tmp)
 }
+
 pub(crate) fn fn_100448(
     m: &mut Memory<'_>,
     h: &mut impl speech_part_4::Host,
@@ -914,6 +934,7 @@ pub(crate) fn fn_100448(
 ) -> u32 {
     numeric(m, h, s, c, va, 8, false, false, tmp)
 }
+
 pub(crate) fn fn_1004c0(
     m: &mut Memory<'_>,
     h: &mut impl speech_part_4::Host,
@@ -926,6 +947,7 @@ pub(crate) fn fn_1004c0(
     m.put_word(s + 28, 8);
     numeric(m, h, s, c, va, 16, false, true, tmp)
 }
+
 pub(crate) fn fn_4a7aa4(
     m: &mut Memory<'_>,
     h: &mut impl speech_part_4::Host,
@@ -936,6 +958,7 @@ pub(crate) fn fn_4a7aa4(
 ) -> u32 {
     numeric(m, h, s, c, va, 16, false, false, tmp)
 }
+
 pub(crate) fn fn_4a7a9c(
     m: &mut Memory<'_>,
     h: &mut impl speech_part_4::Host,
@@ -946,6 +969,7 @@ pub(crate) fn fn_4a7a9c(
 ) -> u32 {
     numeric(m, h, s, c, va, 8, true, false, tmp)
 }
+
 pub(crate) fn fn_4a7a94(
     m: &mut Memory<'_>,
     h: &mut impl speech_part_4::Host,
@@ -956,6 +980,7 @@ pub(crate) fn fn_4a7a94(
 ) -> u32 {
     numeric(m, h, s, c, va, 16, true, false, tmp)
 }
+
 pub(crate) fn fn_302034(
     m: &mut Memory<'_>,
     h: &mut impl FormatHost,
@@ -1091,6 +1116,7 @@ fn format_text(
     m.bytes[at..at + 32].copy_from_slice(&saved);
     1
 }
+
 pub(crate) fn fn_1007fc(
     m: &mut Memory<'_>,
     h: &mut impl FormatHost,
@@ -1103,6 +1129,7 @@ pub(crate) fn fn_1007fc(
     byte(m, s + 37, 0);
     format_text(m, h, s, s + 36, true, false, tmp)
 }
+
 pub(crate) fn fn_100834(
     m: &mut Memory<'_>,
     h: &mut impl FormatHost,
@@ -1115,6 +1142,7 @@ pub(crate) fn fn_100834(
     put_half(m, s + 38, 0);
     format_text(m, h, s, s + 36, true, true, tmp)
 }
+
 pub(crate) fn fn_4a7a8c(
     m: &mut Memory<'_>,
     h: &mut impl FormatHost,
@@ -1125,6 +1153,7 @@ pub(crate) fn fn_4a7a8c(
 ) -> u32 {
     format_text(m, h, s, m.word(va), false, false, tmp)
 }
+
 pub(crate) fn fn_4a7a84(
     m: &mut Memory<'_>,
     h: &mut impl FormatHost,
@@ -1145,6 +1174,7 @@ pub(crate) fn fn_1a7970(
 ) -> u32 {
     fn_4a7a7c(m, h, s, c, va)
 }
+
 pub(crate) fn fn_1a7974(
     m: &mut Memory<'_>,
     h: &mut impl speech_part_4::Host,
@@ -1189,11 +1219,13 @@ fn float_emit(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s: u32, b: u
     output(m, h, s, b as u32);
     m.put_word(s + 32, m.word(s + 32).wrapping_add(1));
 }
+
 fn float_tail(buf: &mut [u8; 32], e: i32, letter: u8, min: usize) -> usize {
     let mut n = 0;
     crate::boot_fmt::exponent(buf, &mut n, e, letter, min);
     n
 }
+
 fn float_special(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s: u32, bits: u64) -> Option<u32> {
     if bits >> 52 & 2047 != 2047 { return None; }
     let flags = m.word(s) & !16;
@@ -1211,10 +1243,12 @@ fn float_special(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s: u32, b
     speech_part_4::fn_2ffc40(m, h, s);
     Some(2)
 }
+
 fn float_sign(flags: u32, bits: u64) -> u8 {
     if bits >> 63 != 0 { b'-' } else if flags & 2 != 0 { b'+' }
     else if flags & 4 != 0 { b' ' } else { 0 }
 }
+
 pub(crate) fn fn_4a7a7c(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s: u32, c: u32, va: u32) -> u32 {
     let va = va.wrapping_add(7) & !7;
     let bits = m.word(va) as u64 | ((m.word(va + 4) as u64) << 32);
@@ -1255,6 +1289,7 @@ pub(crate) fn fn_4a7a7c(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s:
     speech_part_4::fn_2ffc40(m, h, s);
     2
 }
+
 pub(crate) fn fn_10086c(m: &mut Memory<'_>, h: &mut impl speech_part_4::Host, s: u32, _c: u32, va: u32) -> u32 {
     let va = va.wrapping_add(7) & !7;
     let bits = m.word(va) as u64 | ((m.word(va + 4) as u64) << 32);

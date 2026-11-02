@@ -1,5 +1,3 @@
-
-
 use crate::boot::Memory;
 
 pub trait Host {
@@ -9,6 +7,7 @@ pub trait Host {
 }
 
 pub struct Calls<'a, C: crate::boot::Calls>(pub &'a mut C);
+
 impl<C: crate::boot::Calls> Host for Calls<'_, C> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
         self.0.call(m, entry, args)
@@ -61,7 +60,9 @@ pub fn heap_call_m_rom(m:&mut Memory<'_>,entry:u32,args:&[u32],platform:&mut dyn
     let result=HeapExtendedRom(&mut host,rom).dispatch(m,entry,args);
     if let Some(error)=host.fault{Err(error)}else{Ok(result)}
 }
+
 struct HeapExtendedRom<'a,'p>(&'a mut crate::engine::SpeechBootHost<'p>,crate::rom_region::Rom);
+
 impl HeapExtendedRom<'_, '_>{
  fn dispatch(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{
   let f=crate::rom_region::to_us(self.1,f);
@@ -72,17 +73,22 @@ impl HeapExtendedRom<'_, '_>{
   }
  }
 }
+
 impl crate::boot_part_e::Host for HeapExtendedRom<'_, '_>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.dispatch(m,f,a)}
 }
+
 impl crate::speech_part_3::Host for HeapExtendedRom<'_, '_>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.dispatch(m,f,a)}
 }
+
 impl crate::boot_part_b::Host for HeapExtendedRom<'_, '_>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.dispatch(m,f,a)}
  fn thread_id(&mut self)->u32{crate::boot_part_b::Host::thread_id(self.0)}
 }
+
 struct HeapExtended<'a,'p>(&'a mut crate::engine::SpeechBootHost<'p>);
+
 impl HeapExtended<'_, '_>{
  fn dispatch(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{
   match f{
@@ -92,12 +98,15 @@ impl HeapExtended<'_, '_>{
   }
  }
 }
+
 impl crate::boot_part_e::Host for HeapExtended<'_, '_>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.dispatch(m,f,a)}
 }
+
 impl crate::speech_part_3::Host for HeapExtended<'_, '_>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.dispatch(m,f,a)}
 }
+
 impl crate::boot_part_b::Host for HeapExtended<'_, '_>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.dispatch(m,f,a)}
  fn thread_id(&mut self)->u32{crate::boot_part_b::Host::thread_id(self.0)}
@@ -134,7 +143,12 @@ pub fn field_data_m(m:&mut Memory<'_>,a:[u32;6],descriptors:u32)->Result<u32,cra
 }
 
 struct SpellingCalls<'a, H>(&'a mut H);
+
 impl<H: Host> crate::speech_part_2::Host for SpellingCalls<'_, H> {
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.0
+            .call_m(crate::rom_region::to_us_guest(self.0.rom(), f), a, m)
+    }
     fn call(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32 {
         if entry == 0x219554 {
             fn_219554_m(m, args[0], args[1], args[2], args[3])
@@ -336,9 +350,12 @@ pub fn fn_219554_m(m: &mut Memory<'_>, p: u32, tag: u32, value: u32, which: u32)
     rc
 }
 
-use crate::frontend::{strlen_bytes,copy_str,compare_str};
+use crate::frontend::{compare_str, copy_str, strlen_bytes};
+
 fn mem_word(m:&[u8],p:u32)->u32{u32::from_le_bytes(m[p as usize..p as usize+4].try_into().unwrap())}
+
 fn mem_store(m:&mut[u8],p:u32,v:u32){m[p as usize..p as usize+4].copy_from_slice(&v.to_le_bytes());}
+
 fn mem_store16(m:&mut[u8],p:u32,v:u16){m[p as usize..p as usize+2].copy_from_slice(&v.to_le_bytes());}
 
 pub trait PromptOrthHooksM {
@@ -570,13 +587,16 @@ pub fn prompt_orth_live_m(
     let rc=fn_200e64_m(&mut OrthLive{p,s:scratch,h},m.bytes,p,tag,input[0],input[1],active);
     m.bytes[at..at+16].copy_from_slice(&saved);rc
 }
+
 struct OrthLive<'a,H>{p:u32,s:u32,h:&'a mut H}
+
 impl<H:Host> OrthLive<'_,H>{
  fn invoke(&mut self,m:&mut[u8],f:u32,a:&[u32])->u32{self.h.call_m(f,a,&mut Memory{base:0,bytes:m})}
  fn method(&mut self,m:&mut[u8],table:u32,slot:u32,a:&[u32])->u32{
   let f=mem_word(m,mem_word(m,self.p+table)+slot);self.invoke(m,f,a)
  }
 }
+
 impl<H:Host> PromptOrthHooksM for OrthLive<'_,H> {
  fn check_m(&mut self,p:u32,tag:u32,expected:u32,size:u32,_:&mut[u8])->u32{
   crate::normalization::quad_check(p,tag,expected,size)
@@ -616,8 +636,10 @@ impl<H:Host> PromptOrthHooksM for OrthLive<'_,H> {
  fn log_no_memory_m(&mut self,log:u32,code:u32,flag:u32,m:&mut[u8]){self.invoke(m,0x173dc0,&[log,0x8f96ac,code,flag]);}
 }
 
-use crate::frontend::u16_len;
 use crate::fe_text::narrow_176460 as recode_176460;
+
+use crate::frontend::u16_len;
+
 fn mem_half(m:&[u8],p:u32)->u16{u16::from_le_bytes(m[p as usize..p as usize+2].try_into().unwrap())}
 
 pub trait InsertPromptHooksM {
@@ -745,7 +767,9 @@ pub fn insert_prompt_live_m(m:&mut Memory<'_>,a:[u32;8],scratch:u32,h:&mut impl 
  let rc=fn_1ff4fc_m(&mut InsertLive{s:scratch,h,text:0,output:0},m.bytes,a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7]);
  m.bytes[at..at+112].copy_from_slice(&saved);rc
 }
+
 struct InsertLive<'a,H>{s:u32,h:&'a mut H,text:u32,output:u32}
+
 impl<H:Host> InsertLive<'_,H>{
  fn invoke(&mut self,m:&mut[u8],f:u32,a:&[u32])->u32{self.h.call_m(f,a,&mut Memory{base:0,bytes:m})}
  fn log(&mut self,m:&mut[u8],logger:u32,format:&[u8],arg:u32){
@@ -753,6 +777,7 @@ impl<H:Host> InsertLive<'_,H>{
   self.invoke(m,0x1738e8,&[logger,0x8f95d4,5,0,self.s+64,self.s+56]);
  }
 }
+
 impl<H:Host> InsertPromptHooksM for InsertLive<'_,H>{
  fn check_m(&mut self,p:u32,tag:u32,_:&mut[u8])->u32{crate::normalization::quad_check(p,tag,0x11d,0x48)}
  fn resolve_m(&mut self,a:u32,b:u32,out:&mut u32,m:&mut[u8])->u32{
@@ -778,7 +803,8 @@ impl<H:Host> InsertPromptHooksM for InsertLive<'_,H>{
  fn log_no_memory_m(&mut self,log:u32,m:&mut[u8]){self.invoke(m,0x173dc0,&[log,0x8f95d4,0xb798,0]);}
 }
 
-use crate::frontend::{validate_handle,move_bytes,u16_copy};
+use crate::frontend::{move_bytes, u16_copy, validate_handle};
+
 fn field_alloc_m(mem:&mut[u8],arena:u32,size:u32,alloc:&mut impl FnMut(u32,u32,&mut[u8])->u32)->u32{
  struct Allocator<'a,F>(&'a mut F);
 
@@ -910,7 +936,9 @@ pub fn write_field_m(
 pub fn fn_1d5ba8_m(m:&mut Memory<'_>,p:u32,tag:u32,db:[u32;2],pending:u32,e:&crate::speech_part_1::ProcessEnvironment,scratch:u32,h:&mut impl Host)->u32{
  crate::speech_part_1::fn_1d5ba8(m,p,tag,db,pending,e,scratch,&mut ProcessCalls{h,log_s:scratch+768})
 }
+
 struct ProcessCalls<'a,H>{h:&'a mut H,log_s:u32}
+
 impl<H:Host> ProcessCalls<'_,H>{
  fn trace(&mut self,m:&mut Memory<'_>,logger:u32,category:u32,level:u32,format:Option<&[u8]>,guest_format:u32,values:&[u32]){
   assert!(values.len()<=16);
@@ -923,6 +951,7 @@ impl<H:Host> ProcessCalls<'_,H>{
   m.bytes[at..at+320].copy_from_slice(&saved);
  }
 }
+
 impl<H:Host> crate::speech_part_1::Host for ProcessCalls<'_,H>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.h.call_m(f,a,m)}
  fn get(&mut self,m:&mut Memory<'_>,f:u32,handle:u32,pos:u32,len:u32)->(u32,u32,u32){
@@ -933,15 +962,41 @@ impl<H:Host> crate::speech_part_1::Host for ProcessCalls<'_,H>{
   m.put_word(self.log_s,saved[0]);m.put_word(self.log_s+4,saved[1]);(rc,n,ptr)
  }
 }
-impl<H:Host> crate::speech_part_6::Host for ProcessCalls<'_,H>{
- fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.h.call_m(f,a,m)}
- fn log(&mut self,m:&mut Memory<'_>,logger:u32,category:u32,level:u32,format:&[u8],values:&[u32]){
-  self.trace(m,logger,category,level,Some(format),0,values)
- }
- fn log_guest(&mut self,m:&mut Memory<'_>,logger:u32,category:u32,level:u32,format:u32,values:&[u32]){
-  self.trace(m,logger,category,level,None,format,values)
- }
- fn error(&mut self,m:&mut Memory<'_>,logger:u32,category:u32,code:u32){self.h.call_m(0x173dc0,&[logger,category,code,0,0,0],m);}
+
+impl<H: Host> crate::speech_part_6::Host for ProcessCalls<'_, H> {
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.h
+            .call_m(crate::rom_region::to_us_guest(self.h.rom(), f), a, m)
+    }
+    fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.h.call_m(f, a, m)
+    }
+    fn log(
+        &mut self,
+        m: &mut Memory<'_>,
+        logger: u32,
+        category: u32,
+        level: u32,
+        format: &[u8],
+        values: &[u32],
+    ) {
+        self.trace(m, logger, category, level, Some(format), 0, values)
+    }
+    fn log_guest(
+        &mut self,
+        m: &mut Memory<'_>,
+        logger: u32,
+        category: u32,
+        level: u32,
+        format: u32,
+        values: &[u32],
+    ) {
+        self.trace(m, logger, category, level, None, format, values)
+    }
+    fn error(&mut self, m: &mut Memory<'_>, logger: u32, category: u32, code: u32) {
+        self.h
+            .call_m(0x173dc0, &[logger, category, code, 0, 0, 0], m);
+    }
 }
 
 pub fn process_environment_eu()->crate::speech_part_1::ProcessEnvironment{
@@ -1053,7 +1108,9 @@ pub fn ld_reset_live_m(m:&mut Memory<'_>,p:u32,tag:u32,scratch:u32,h:&mut impl H
  let rc=crate::db_live::ld_reset_m(&mut DbCalls{h,s:scratch},m,p,tag,&data,scratch);
  m.bytes[at..at+96].copy_from_slice(&saved);rc
 }
+
 struct DbCalls<'a,H>{h:&'a mut H,s:u32}
+
 impl<H:Host> crate::db_live::DbHooksM for DbCalls<'_,H>{
  fn call_m(&mut self,f:u32,a:&[u32],m:&mut Memory<'_>)->u32{
   if f==0x1738e8{
@@ -1066,6 +1123,7 @@ impl<H:Host> crate::db_live::DbHooksM for DbCalls<'_,H>{
 
  fn literal_m(&self,us:u32)->u32{crate::rom_region::addr(self.h.rom(),us)}
 }
+
 impl<H:Host> crate::db_live::PoolHooksM for DbCalls<'_,H>{
  fn log_pool_m(&mut self,p:u32,blocks:u32,m:&mut Memory<'_>){
   let stage=b"before ResetPool\0";let at=m.offset(self.s+64);m.bytes[at..at+stage.len()].copy_from_slice(stage);
@@ -1082,9 +1140,16 @@ errors:[0x24ea48,0x24ee48,0x1ec3f4,0x250d48,0x207740]
 }
 }
 
-impl<H:Host> crate::speech_part_2::Host for ProcessCalls<'_,H>{
- fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.h.call_m(f,a,m)}
+impl<H: Host> crate::speech_part_2::Host for ProcessCalls<'_, H> {
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.h
+            .call_m(crate::rom_region::to_us_guest(self.h.rom(), f), a, m)
+    }
+    fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.h.call_m(f, a, m)
+    }
 }
+
 impl<H:Host> crate::boot_part_b::Host for ProcessCalls<'_,H>{
  fn real_log_args(&mut self)->bool{true}
  fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool{
@@ -1094,7 +1159,9 @@ impl<H:Host> crate::boot_part_b::Host for ProcessCalls<'_,H>{
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.h.call_m(f,a,m)}
  fn thread_id(&mut self)->u32{self.h.thread_id_m()}
 }
+
 impl<H:Host> crate::boot_part_b::FormatHost for ProcessCalls<'_,H>{}
+
 impl<H:Host> crate::log_live::LogMethodsM for ProcessCalls<'_,H>{
  fn log_m(&mut self,f:u32,p:u32,category:u32,level:u32,arg:u32,fmt:u32,va:u32,m:&mut Memory<'_>)->u32{
   self.h.call_m(f,&[p,category,level,arg,fmt,va],m)
@@ -1243,6 +1310,7 @@ pub fn clone_record_m(
 }
 
 struct OtherCalls<'a,H>(&'a mut H);
+
 impl<H:Host> crate::component_live_b::Host for OtherCalls<'_,H>{
  fn call_m(&mut self,f:u32,a:&[u32],m:&mut Memory<'_>)->u32{self.0.call_m(f,a,m)}
 }
@@ -1252,6 +1320,7 @@ pub fn stream_call_live_m(m:&mut Memory<'_>,f:u32,a:&[u32],h:&mut impl Host)->u3
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_2104b0_m(
  m:&mut Memory<'_>,p:u32,tag:u32,input:[u32;2],active:u32,scratch:u32,saved:&mut[u8],
  events:&mut[crate::frontend::TextEvent],event_bytes:&mut[u8],text:&mut[u8],h:&mut impl Host,
@@ -1272,7 +1341,9 @@ pub fn fn_2104b0_m(
  for(i,o)in owner.outputs.iter().enumerate(){m.put_word(p+24+i as u32*8,o.first);m.put_word(p+28+i as u32*8,o.second);}
  m.bytes[at..at+saved.len()].copy_from_slice(saved);result
 }
+
 struct RewriterLive<'a,'m,H>{m:&'a mut Memory<'m>,h:&'a mut H,p:u32,s:u32,capacity:usize}
+
 impl<H:Host> RewriterLive<'_, '_,H>{
  fn method(&mut self,table:u32,slot:u32,a:&[u32])->u32{
   let f=self.m.word(self.m.word(self.p+table)+slot);self.h.call_m(f,a,self.m)
@@ -1297,6 +1368,7 @@ impl<H:Host> RewriterLive<'_, '_,H>{
   let at=self.m.offset(self.s+16);self.m.bytes[at..at+data.len()].copy_from_slice(data);Ok(self.s+16)
  }
 }
+
 impl<H:Host> crate::frontend::RewriterText for RewriterLive<'_, '_,H>{
  fn first(&mut self,i:crate::frontend::RewriterHandle,table:u32,root:u16,out:&mut u16)->u32{self.child(52,i.first,i.second,table,root as u32,out)}
  fn next(&mut self,i:crate::frontend::RewriterHandle,node:u16,out:&mut u16)->u32{
@@ -1320,6 +1392,7 @@ impl<H:Host> crate::frontend::RewriterText for RewriterLive<'_, '_,H>{
   let(rc,ptr)=self.data(i,node,field,count);
   if rc>=0x80000000||ptr==0{return Ok((rc,false));}
   let n=*count as usize;if n>scratch.len(){return Err(crate::frontend_types::Error::Capacity{required:n,available:scratch.len()});}
+
   for(j,e)in scratch[..n].iter_mut().enumerate(){
    let p=ptr+j as u32*24;e.kind=self.half(p);e.flags=self.half(p+2);e.data=[self.m.word(p+4),self.m.word(p+8)];e.position=self.m.word(p+12)as i32;e.length=self.m.word(p+16)as i32;e.value=self.m.word(p+20)as i32;
   }
@@ -1331,6 +1404,7 @@ impl<H:Host> crate::frontend::RewriterText for RewriterLive<'_, '_,H>{
  }
  fn release(&mut self,i:crate::frontend::RewriterHandle)->u32{self.method(4,32,&[i.first,i.second])}
 }
+
 impl<H:Host> crate::frontend::RewriterBuffer for RewriterLive<'_, '_,H>{
  fn append(&mut self,i:crate::frontend::RewriterHandle,data:&[u8])->u32{
   let ptr=self.stage(data).expect("caller must reserve serialized-event capacity in the guest frame");
@@ -1345,6 +1419,7 @@ impl<H:Host> crate::frontend::RewriterBuffer for RewriterLive<'_, '_,H>{
   rc
  }
 }
+
 impl<H:Host> crate::frontend::RewriterPositions for RewriterLive<'_, '_,H>{
  fn get(&mut self,i:crate::frontend::RewriterHandle,out:&mut i32,which:u32)->u32{
   self.m.put_word(self.s,*out as u32);let rc=self.method(20,60,&[i.first,i.second,self.s,which]);*out=self.m.word(self.s)as i32;rc
@@ -1442,6 +1517,7 @@ pub fn record_link_m(m:&mut Memory<'_>,f:u32,a:[u32;4])->Result<u32,crate::engin
 }
 
 struct HeapMethods<'a,H>{heap:u32,h:&'a mut H}
+
 impl<H:Host> crate::frontend::HeapVtableM for HeapMethods<'_,H>{
  fn alloc_at_m(&mut self,obj:u32,n:u32,bytes:&mut[u8])->u32{
   let f=mem_word(bytes,mem_word(bytes,self.heap));self.h.call_m(f,&[obj,n],&mut Memory{base:0,bytes})
@@ -1492,6 +1568,7 @@ pub fn clear_db_m<H: DbClearHooksM>(
 }
 
 struct ClearLive<'a,H>{h:&'a mut H,s:u32}
+
 impl<H:Host> DbClearHooksM for ClearLive<'_,H>{
  fn log_begin_m(&mut self,log:u32,bytes:&mut[u8]){
   self.h.call_m(0x1738e8,&[log,0x8d7b56,4,0,0x15b5b8,self.s+16],&mut Memory{base:0,bytes});
@@ -1512,15 +1589,24 @@ pub fn clear_db_live_m(m:&mut Memory<'_>,a:[u32;2],scratch:u32,h:&mut impl Host)
 }
 
 use crate::heap::Heap;
-use crate::pronunciation::{LookupContext,LookupHost,LookupDictionary,LookupDictionaryState,terminated_len,append_terminated,read_offset,write_offset,text_at,string_differs,render_number};
+
+use crate::pronunciation::{
+    append_terminated, read_offset, render_number, string_differs, terminated_len, text_at,
+    write_offset, LookupContext, LookupDictionary, LookupDictionaryState, LookupHost,
+};
+
 #[derive(Clone,Copy)]
+
 enum LookupWhich{Main,System,Language}
+
 fn lookup_selected(ctx:&LookupContext,w:LookupWhich)->LookupDictionary{
  match w{LookupWhich::Main=>ctx.main,LookupWhich::System=>ctx.system,LookupWhich::Language=>ctx.language}
 }
+
 fn lookup_store(ctx:&mut LookupContext,w:LookupWhich,d:LookupDictionary){
  match w{LookupWhich::Main=>ctx.main=d,LookupWhich::System=>ctx.system=d,LookupWhich::Language=>ctx.language=d}
 }
+
 fn lookup_prefix_differs(arena:&[u8],key:u32,prefix:&[u8],n:i32)->bool{
  crate::frontend::compare_str_n(text_at(arena,key),prefix,n)!=0
 }
@@ -1533,6 +1619,7 @@ pub trait LookupDictionariesM{
  #[allow(clippy::too_many_arguments)]
  fn lookup_m(&mut self,slot:u8,state:&mut LookupDictionaryState,text:u32,start:&mut i16,end:&mut i16,fold:bool,length:&mut i16,heap:&mut impl Heap)->bool;
 }
+
 struct LookupCleanupM {
     dictionary: LookupDictionary,
     which: LookupWhich,
@@ -1598,6 +1685,7 @@ impl LookupCleanupM {
         rc
     }
 }
+
 fn lookup_find_dictionary(ctx: &LookupContext, arena: &[u8], lookup_key: u32, key: u32) -> i16 {
     let mut i = 0u16;
     while i < ctx.dictionary_count {
@@ -1879,9 +1967,11 @@ pub fn lookup_dictionary_m(
 fn lookup_state_read(m:&Memory<'_>,p:u32)->LookupDictionaryState{
  LookupDictionaryState{bit_byte:m.word(p),bit_index:m.byte(p+4),buffer:m.word(p+8),tables:m.word(p+12),h0:m.word(p+16),h1:m.word(p+20),output:m.word(p+24)}
 }
+
 fn lookup_state_write(m:&mut Memory<'_>,p:u32,s:LookupDictionaryState){
  m.put_word(p,s.bit_byte);m.put_byte(p+4,s.bit_index);m.put_word(p+8,s.buffer);m.put_word(p+12,s.tables);m.put_word(p+16,s.h0);m.put_word(p+20,s.h1);m.put_word(p+24,s.output);
 }
+
 fn lookup_context_read(m:&Memory<'_>,p:u32)->LookupContext{
  let owner=m.word(p);let half=|o:u32|{let at=m.offset(p+o);u16::from_le_bytes(m.bytes[at..at+2].try_into().unwrap())};
  let mut c=LookupContext{
@@ -1895,12 +1985,15 @@ fn lookup_context_read(m:&Memory<'_>,p:u32)->LookupContext{
  };
  let at=m.offset(p+0x9e);c.name.copy_from_slice(&m.bytes[at..at+256]);c.name2.copy_from_slice(&m.bytes[at+256..at+512]);c
 }
+
 fn lookup_context_write(m:&mut Memory<'_>,p:u32,c:&LookupContext){
  for(i,d)in [c.main,c.system,c.language].iter().enumerate(){lookup_state_write(m,p+8+i as u32*32,d.state);}
  for(o,v)in [(0x68,c.keys),(0x6c,c.tables),(0x70,c.results),(0x74,c.query),(0x78,c.resources)]{m.put_word(p+o,v);}
  for(o,v)in [(0x88,c.dictionary_count),(0x8a,c.result_blocks),(0x8c,c.result_capacity),(0x8e,c.query_capacity as u16)]{m.put_half(p+o,v);}
 }
+
 struct LookupHeap<'a,'m,'h,H>{m:&'a mut Memory<'m>,heap:u32,h:&'a core::cell::RefCell<&'h mut H>}
+
 impl<H:Host> Heap for LookupHeap<'_, '_, '_,H>{
  fn allocate(&mut self,n:u32)->Option<u32>{let p=self.h.borrow_mut().call_m(0x196394,&[self.heap,n],self.m);(p!=0&&p<0x80000000).then_some(p)}
  fn allocate_zeroed(&mut self,n:u32,size:u32)->Option<u32>{let p=self.h.borrow_mut().call_m(0x1963b8,&[self.heap,n,size],self.m);(p!=0&&p<0x80000000).then_some(p)}
@@ -1908,7 +2001,9 @@ impl<H:Host> Heap for LookupHeap<'_, '_, '_,H>{
  fn release(&mut self,p:u32){self.h.borrow_mut().call_m(0x196428,&[self.heap,p],self.m);}
  fn arena(&mut self)->&mut[u8]{self.m.bytes}
 }
+
 struct LookupServices<'a,'h,H>{p:u32,resources:u32,s:u32,h:&'a core::cell::RefCell<&'h mut H>}
+
 impl<H:Host> LookupHost for LookupServices<'_, '_,H>{
  fn check(&mut self,tag:u32,expected:u32,size:u32)->u32{crate::normalization::quad_check(self.p,tag,expected,size)}
  fn resource_open(&mut self,heap:&mut impl Heap,name:&[u8],out:&mut u32)->u32{
@@ -1919,7 +2014,9 @@ impl<H:Host> LookupHost for LookupServices<'_, '_,H>{
  fn resource_close(&mut self,heap:&mut impl Heap,handle:u32){self.h.borrow_mut().call_m(0x179f3c,&[self.resources,handle],&mut Memory{base:0,bytes:heap.arena()});}
  fn resource_release(&mut self,_:u32,_:u32){panic!("lookup does not use resource_release")}
 }
+
 struct LookupDictionaryLive<'a,'h,H>{p:u32,s:u32,h:&'a core::cell::RefCell<&'h mut H>,fault:Option<u32>}
+
 impl<H:Host> LookupDictionaryLive<'_, '_,H>{
  fn state_at(&self,slot:u8)->u32{assert!(slot<3);self.p+8+u32::from(slot)*32}
  fn header<'a>(&self,heap:&'a mut impl Heap,state:&LookupDictionaryState)->crate::morphology::DictionaryHeader<'a>{
@@ -1927,6 +2024,7 @@ impl<H:Host> LookupDictionaryLive<'_, '_,H>{
   crate::morphology::DictionaryHeader{bytes:&bytes[header..header+76]}
  }
 }
+
 impl<H:Host> LookupDictionariesM for LookupDictionaryLive<'_, '_,H>{
  fn load_m(&mut self,slot:u8,state:&mut LookupDictionaryState,key:u32,size:u32,resource:u32,heap:&mut impl Heap)->u32{
   let p=self.state_at(slot);let mut m=Memory{base:0,bytes:heap.arena()};lookup_state_write(&mut m,p,*state);
@@ -1987,6 +2085,7 @@ pub struct DictionaryWorkspace{
  alphabet:[u8;256],pairs:[[u8;2];256],initial_characters:[u8;256],initial_offsets:[u32;256],initial_indices:[u32;256],
  query:[u8;1024],output:[u8;1024],
 }
+
 impl Default for DictionaryWorkspace{
  fn default()->Self{Self{
   trees:[[[0;2];DICTIONARY_NODES];5],count_values:[0;DICTIONARY_NODES],skip_values:[0;DICTIONARY_NODES*2+2],offset_values:[0;DICTIONARY_NODES*2+2],
@@ -1994,7 +2093,9 @@ impl Default for DictionaryWorkspace{
   initial_characters:[0;256],initial_offsets:[0;256],initial_indices:[0;256],query:[0;1024],output:[0;1024],
  }}
 }
+
 fn dictionary_half(m:&Memory<'_>,p:u32)->u16{let at=m.offset(p);u16::from_le_bytes(m.bytes[at..at+2].try_into().unwrap())}
+
 fn dictionary_tree(m:&Memory<'_>,ptr:u32,root:u16,out:&mut[[u16;2];DICTIONARY_NODES])->Result<(usize,usize),crate::engine::Error>{
  let mut visited=[false;DICTIONARY_NODES];let mut todo=[0u16;DICTIONARY_NODES];let mut used=1;todo[0]=root;let mut span=0;let mut leaves=0;
  while used!=0{
@@ -2006,7 +2107,9 @@ fn dictionary_tree(m:&Memory<'_>,ptr:u32,root:u16,out:&mut[[u16;2];DICTIONARY_NO
  }
  Ok((span,leaves))
 }
+
 struct DictionaryBrokerPages<'a,'m,H>{m:&'a mut Memory<'m>,p:u32,h:&'a mut H,last:u32,fault:Option<u32>}
+
 impl<H:Host> crate::morphology::DictionaryPages for DictionaryBrokerPages<'_, '_,H>{
  fn read(&mut self,offset:u32,n:u32)->Result<&[u8],crate::frontend_types::Error>{
   let args=[self.m.word(self.p+16),self.m.word(self.p+20),offset,n,self.p+8];
@@ -2153,20 +2256,29 @@ pub fn fn_26bb54_m(m:&mut Memory<'_>,p:u32)->u8{
 use crate::depes;
 
 pub const VM_LAYERS: usize = 5;
+
 pub const VM_CODE_MAX: usize = 65536;
+
 pub const VM_RULE_MAX: usize = 4096;
+
 pub const VM_MODULE_MAX: usize = 128;
 
 pub const VM_CLASS_MAX: usize = 162 * 256;
 
 pub const VM_GROUP_MAX: usize = 162 * 64;
+
 pub const VM_MATRIX_MAX: usize = 64 * 256;
+
 pub const VM_KIND_MAX: usize = 256;
+
 pub const VM_CAPTURE_TYPE_MAX: usize = 512;
+
 pub const VM_CAPTURE_MAX: usize = 256;
 
 pub const VM_ROW_MAX: usize = 30000;
+
 pub const VM_FRAME_MAX: usize = 50;
+
 pub const VM_SCANNER_MAX: usize = 64;
 
 pub struct VmWorkspace {
@@ -2709,6 +2821,7 @@ const PHRASING_DATA_MAX: usize = 16384;
 const PHRASING_MARK_SIZE: usize = 24;
 
 struct NoExpansion;
+
 impl VmExpansion for NoExpansion {
     fn expand_m(
         &mut self,
@@ -3635,6 +3748,7 @@ pub fn fn_1df780_m<'m>(
 }
 
 pub struct PhrasingPlatform;
+
 impl crate::engine::HeapPlatform for PhrasingPlatform {
     fn thread_id(&mut self) -> u32 {
         0x1ff82000
@@ -3733,6 +3847,7 @@ impl<P: crate::engine::HeapPlatform> Host for PhrasingCalls<'_, P> {
 }
 
 #[derive(Clone, Copy)]
+
 pub struct HeapCall {
     pub entry: u32,
     pub args: [u32; 4],
@@ -3822,11 +3937,17 @@ fn terminated_length(bytes: &[u8]) -> usize {
 }
 
 const FE_TEXT_SCRATCH: u32 = 0x0e0ffd00;
+
 const FE_TEXT_VALUE: u32 = FE_TEXT_SCRATCH + 0x00;
+
 const FE_TEXT_WRITTEN: u32 = FE_TEXT_SCRATCH + 0x04;
+
 const FE_TEXT_POINTER: u32 = FE_TEXT_SCRATCH + 0x08;
+
 const FE_TEXT_LENGTH: u32 = FE_TEXT_SCRATCH + 0x0c;
+
 const FE_TEXT_HALF: u32 = FE_TEXT_SCRATCH + 0x10;
+
 const FE_TEXT_NAME: u32 = FE_TEXT_SCRATCH + 0x40;
 
 const FE_TEXT_RULE: &[u8] = b"disambiguate_punctuation";
@@ -3836,6 +3957,7 @@ const FE_TEXT_UNBOUND: u32 = 0x8000_2001;
 fn fe_text_byte(arena: &[u8], at: u32) -> u8 {
     arena.get(at as usize).copied().unwrap_or(0)
 }
+
 fn fe_text_half(arena: &[u8], at: u32) -> u16 {
     let index = at as usize;
     if index + 2 <= arena.len() {
@@ -3844,6 +3966,7 @@ fn fe_text_half(arena: &[u8], at: u32) -> u16 {
         0
     }
 }
+
 fn fe_text_word(arena: &[u8], at: u32) -> u32 {
     let index = at as usize;
     if index + 4 <= arena.len() {
@@ -3857,18 +3980,21 @@ fn fe_text_word(arena: &[u8], at: u32) -> u32 {
         0
     }
 }
+
 fn fe_text_store_half(arena: &mut [u8], at: u32, value: u16) {
     let index = at as usize;
     if index + 2 <= arena.len() {
         arena[index..index + 2].copy_from_slice(&value.to_le_bytes());
     }
 }
+
 fn fe_text_store_word(arena: &mut [u8], at: u32, value: u32) {
     let index = at as usize;
     if index + 4 <= arena.len() {
         arena[index..index + 4].copy_from_slice(&value.to_le_bytes());
     }
 }
+
 fn fe_text_strlen(arena: &[u8], at: u32) -> u32 {
     let mut length = 0u32;
     while fe_text_byte(arena, at.wrapping_add(length)) != 0 {
@@ -3876,6 +4002,7 @@ fn fe_text_strlen(arena: &[u8], at: u32) -> u32 {
     }
     length
 }
+
 fn fe_text_equal(arena: &[u8], at: u32, literal: &[u8]) -> bool {
     let mut index = 0usize;
     while index < literal.len() {
@@ -4006,7 +4133,6 @@ impl<P: crate::engine::HeapPlatform> Host for FeTextLive<'_, P> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
         self.calls += 1;
         match entry {
-
             0x15c4b0 | 0x15c744 | 0x15c9a4 | 0x15c7d8 | 0x15ca38 => {
                 let Ok(quad) = <[u32; 4]>::try_from(args) else {
                     return self.unbound(entry);
@@ -4044,29 +4170,20 @@ impl<P: crate::engine::HeapPlatform> Host for FeTextLive<'_, P> {
                 }
                 depes_get_layer_m(m, args[0], args[1], args[2], args[3], args[4])
             }
-            0x1963e0 => {
-
-                match heap_call_m_rom(m, entry, args, &mut *self.platform, self.rom) {
-                    Ok(status) => status,
-                    Err(error) => {
-                        self.fault = Some(error);
-                        self.unbound(entry)
-                    }
+            0x1963e0 => match heap_call_m_rom(m, entry, args, &mut *self.platform, self.rom) {
+                Ok(status) => status,
+                Err(error) => {
+                    self.fault = Some(error);
+                    self.unbound(entry)
                 }
-            }
+            },
             0x2193a4 => {
                 if args.len() < 3 {
                     return self.unbound(entry);
                 }
                 let mut workspace = self.workspace.take().unwrap_or_default();
-                let status = depes_exec_module_m(
-                    m,
-                    args[0],
-                    args[1],
-                    args[2],
-                    &mut workspace,
-                    self,
-                );
+                let status =
+                    depes_exec_module_m(m, args[0], args[1], args[2], &mut workspace, self);
                 self.workspace = Some(workspace);
                 status
             }
@@ -4076,7 +4193,7 @@ impl<P: crate::engine::HeapPlatform> Host for FeTextLive<'_, P> {
                     platform: &mut *self.platform,
                     fault: None,
                     scratch: 0x500,
-            rom: crate::rom_region::Rom::Us,
+                    rom,
                 };
                 let status = host.call_m_with(entry, args, m, rom);
                 if host.fault.is_some() {
@@ -4164,14 +4281,15 @@ impl<P: crate::engine::HeapPlatform> crate::normalization::NormOutHost for FeTex
 }
 
 impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'_, P> {
-
+    fn literal(&self, us: u32) -> u32 {
+        crate::rom_region::addr(self.rom, us)
+    }
     fn cmp_seq(&mut self, _arena: &mut [u8], _a: u32, _b: u32) -> i32 {
         0
     }
     fn lock_call(&mut self, _target: u32) -> u32 {
         self.unbound(0x176f2c)
     }
-
     fn lat_first_node(
         &mut self,
         arena: &mut [u8],
@@ -4183,7 +4301,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     ) -> u32 {
         fe_text_store_half(arena, FE_TEXT_HALF, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
             self.call_m(0x15c544, &[h0, h1, kind, x, FE_TEXT_HALF], &mut memory)
         };
         if status < 0x8000_0000 {
@@ -4201,7 +4322,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     ) -> u32 {
         fe_text_store_half(arena, FE_TEXT_HALF, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
             self.call_m(0x15c7d8, &[h0, h1, node, FE_TEXT_HALF], &mut memory)
         };
         if status < 0x8000_0000 {
@@ -4209,7 +4333,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         }
         status
     }
-
     fn lat_get_int(
         &mut self,
         arena: &mut [u8],
@@ -4224,7 +4347,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         fe_text_store_word(arena, FE_TEXT_VALUE, 0);
         fe_text_store_half(arena, FE_TEXT_WRITTEN, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
             self.call_m(
                 0x15d0c4,
                 &[h0, h1, node, field, n, FE_TEXT_VALUE, FE_TEXT_WRITTEN],
@@ -4250,7 +4376,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         fe_text_store_word(arena, FE_TEXT_POINTER, 0);
         fe_text_store_half(arena, FE_TEXT_LENGTH, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
             self.call_m(
                 0x15d378,
                 &[h0, h1, node, key, FE_TEXT_POINTER, FE_TEXT_LENGTH],
@@ -4277,7 +4406,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     ) -> u32 {
         fe_text_store_half(arena, FE_TEXT_HALF, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
             self.call_m(0x15d594, &[h0, h1, node, key, FE_TEXT_HALF], &mut memory)
         };
         if status < 0x8000_0000 {
@@ -4298,7 +4430,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     ) -> u32 {
         fe_text_store_half(arena, FE_TEXT_WRITTEN, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
             self.call_m(
                 0x15cdcc,
                 &[h0, h1, node, key, n, data, FE_TEXT_WRITTEN],
@@ -4321,7 +4456,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         data: &[u8],
         written: &mut u16,
     ) -> u32 {
-
         assert!(
             data.len() <= 4,
             "lat_set_field_bytes: {0} bytes exceed the 4-byte stage",
@@ -4339,7 +4473,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         }
         fe_text_store_half(arena, FE_TEXT_WRITTEN, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
             self.call_m(
                 0x15cdcc,
                 &[h0, h1, node, key, n, FE_TEXT_VALUE, FE_TEXT_WRITTEN],
@@ -4362,7 +4499,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     ) -> u32 {
         fe_text_store_half(arena, FE_TEXT_HALF, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
             self.call_m(0x15d6c4, &[h0, h1, kind, x, FE_TEXT_HALF], &mut memory)
         };
         if status < 0x8000_0000 {
@@ -4381,8 +4521,11 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     ) -> u32 {
         fe_text_store_half(arena, FE_TEXT_HALF, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
-            self.call_m(0x15c744, &[h0, h1, kind, x, FE_TEXT_HALF], &mut memory)
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
+            self.call_m(0x15bf74, &[h0, h1, kind, x, FE_TEXT_HALF], &mut memory)
         };
         if status < 0x8000_0000 {
             *node = fe_text_half(arena, FE_TEXT_HALF);
@@ -4399,8 +4542,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     ) -> u32 {
         fe_text_store_half(arena, FE_TEXT_HALF, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
-
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
             self.call_m(0x15c1e4, &[h0, h1, node, FE_TEXT_HALF], &mut memory)
         };
         if status < 0x8000_0000 {
@@ -4418,8 +4563,11 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     ) -> u32 {
         fe_text_store_half(arena, FE_TEXT_HALF, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
-            self.call_m(0x15c4b0, &[h0, h1, node, FE_TEXT_HALF], &mut memory)
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
+            self.call_m(0x15c2f0, &[h0, h1, node, FE_TEXT_HALF], &mut memory)
         };
         if status < 0x8000_0000 {
             *new = fe_text_half(arena, FE_TEXT_HALF);
@@ -4427,7 +4575,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         status
     }
     fn lat_remove(&mut self, arena: &mut [u8], h0: u32, h1: u32, node: u32) -> u32 {
-        let mut memory = Memory { base: 0, bytes: &mut *arena };
+        let mut memory = Memory {
+            base: 0,
+            bytes: &mut *arena,
+        };
         self.call_m(0x15da64, &[h0, h1, node], &mut memory)
     }
     fn lat_reset(&mut self, _arena: &mut [u8], _h0: u32, _h1: u32) -> u32 {
@@ -4500,16 +4651,39 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     }
     fn dct_get_param(
         &mut self,
-        _arena: &mut [u8],
-        _h0: u32,
-        _h1: u32,
-        _sect: u32,
-        _key: u32,
-        _val: &mut u32,
-        _found: &mut u16,
-        _n: &mut i32,
+        arena: &mut [u8],
+        h0: u32,
+        h1: u32,
+        sect: u32,
+        key: u32,
+        val: &mut u32,
+        found: &mut u16,
+        n: &mut i32,
     ) -> u32 {
-        self.unbound(0x175944)
+        let mut memory = Memory {
+            base: 0,
+            bytes: arena,
+        };
+        memory.put_word(FE_TEXT_POINTER, *val);
+        memory.put_half(FE_TEXT_HALF, *found);
+        memory.put_word(FE_TEXT_VALUE, *n as u32);
+        let rc = self.call_m(
+            0x1ea4e0,
+            &[
+                h0,
+                h1,
+                sect,
+                key,
+                FE_TEXT_POINTER,
+                FE_TEXT_HALF,
+                FE_TEXT_VALUE,
+            ],
+            &mut memory,
+        );
+        *val = memory.word(FE_TEXT_POINTER);
+        *found = memory.half(FE_TEXT_HALF);
+        *n = memory.word(FE_TEXT_VALUE) as i32;
+        rc
     }
     fn dct_get_flags(
         &mut self,
@@ -4521,7 +4695,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     ) -> u32 {
         self.unbound(0x1756d0)
     }
-
     fn depes_set_input(
         &mut self,
         arena: &mut [u8],
@@ -4531,7 +4704,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         s: u32,
         n: u32,
     ) -> u32 {
-        let mut memory = Memory { base: 0, bytes: &mut *arena };
+        let mut memory = Memory {
+            base: 0,
+            bytes: &mut *arena,
+        };
         self.call_m(0x218f88, &[h0, h1, layer, s, n], &mut memory)
     }
     fn depes_get_output(
@@ -4546,7 +4722,10 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         fe_text_store_word(arena, FE_TEXT_POINTER, 0);
         fe_text_store_half(arena, FE_TEXT_LENGTH, 0);
         let status = {
-            let mut memory = Memory { base: 0, bytes: &mut *arena };
+            let mut memory = Memory {
+                base: 0,
+                bytes: &mut *arena,
+            };
             self.call_m(
                 0x2191c8,
                 &[h0, h1, layer, FE_TEXT_POINTER, FE_TEXT_LENGTH],
@@ -4559,7 +4738,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         }
         status
     }
-
     fn depes_set_rules(&mut self, arena: &mut [u8], h0: u32, h1: u32, _name: u32) -> u32 {
         let length = self.build_rule(arena, true);
         let status = self.exec_rule(arena, h0, h1, length);
@@ -4569,15 +4747,7 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         }
         status
     }
-
-    fn depes_set_weights(
-        &mut self,
-        arena: &mut [u8],
-        h0: u32,
-        h1: u32,
-        w: u32,
-        n: u32,
-    ) -> u32 {
+    fn depes_set_weights(&mut self, arena: &mut [u8], h0: u32, h1: u32, w: u32, n: u32) -> u32 {
         if h0 == 0 || h1 != 0xf37e {
             return 0x8970_2008;
         }
@@ -4618,7 +4788,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         *len = fe_text_half(arena, h0.wrapping_add(0x34));
         0
     }
-
     fn prop_get(&mut self, arena: &mut [u8], h0: u32, h1: u32, pos: &mut i32, flag: u32) -> u32 {
         fe_text_store_word(arena, FE_TEXT_POINTER, 0);
         let status = self.get_option(arena, h0, h1, FE_TEXT_POINTER, flag);
@@ -4630,7 +4799,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     fn prop_set(&mut self, arena: &mut [u8], h0: u32, h1: u32, val: u32, flag: u32) -> u32 {
         self.set_option(arena, h0, h1, val, flag)
     }
-
     fn char_punctuation(&mut self, arena: &mut [u8], h0: u32, h1: u32, c: u32) -> i32 {
         if h0 == 0 || h1 != 0xf37f || c > 0xff {
             return 0;
@@ -4652,10 +4820,12 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
         }
     }
     fn log_level(&mut self, arena: &mut [u8], log: u32) -> u32 {
-        let mut memory = Memory { base: 0, bytes: &mut *arena };
+        let mut memory = Memory {
+            base: 0,
+            bytes: &mut *arena,
+        };
         self.call_m(0x173fd8, &[log], &mut memory)
     }
-
     fn dp_first_node(
         &mut self,
         _arena: &mut [u8],
@@ -4729,7 +4899,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     fn dp_remove(&mut self, _arena: &mut [u8], _h0: u32, _h1: u32, _node: u32) -> u32 {
         self.unbound(0x15da64)
     }
-
     fn out_get_pos(
         &mut self,
         _arena: &mut [u8],
@@ -4779,7 +4948,6 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     fn out_set_pos(&mut self, _arena: &mut [u8], _h0: u32, _h1: u32, _pos: i32, _flag: u32) -> u32 {
         self.unbound(0x219554)
     }
-
     fn st_open(
         &mut self,
         _arena: &mut [u8],
@@ -4850,7 +5018,14 @@ impl<P: crate::engine::HeapPlatform> crate::fe_text::FeTextHost for FeTextLive<'
     ) -> u32 {
         self.unbound(0x21958c)
     }
-    fn depes_set_pos(&mut self, _arena: &mut [u8], _h0: u32, _h1: u32, _pos: i32, _flag: u32) -> u32 {
+    fn depes_set_pos(
+        &mut self,
+        _arena: &mut [u8],
+        _h0: u32,
+        _h1: u32,
+        _pos: i32,
+        _flag: u32,
+    ) -> u32 {
         self.unbound(0x219554)
     }
     fn dict_count(&mut self, _arena: &mut [u8], _ha: u32, _hb: u32) -> u32 {

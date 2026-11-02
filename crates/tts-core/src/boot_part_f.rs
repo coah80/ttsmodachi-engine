@@ -1,4 +1,3 @@
-
 use crate::{boot::Memory, normalization};
 
 pub struct Environment {
@@ -10,15 +9,20 @@ pub struct Environment {
 }
 
 #[derive(Clone, Copy)]
+
 pub enum Key {
     Address(u32),
     Local(u32),
 }
+
 pub trait Host {
     fn call(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32;
-
+    fn call_guest(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32 {
+        self.call(m, method, args)
+    }
     fn compare(&mut self, m: &mut Memory<'_>, method: u32, key: &mut Key, value: &mut u32) -> u32;
 }
+
 fn byte(m: &mut Memory<'_>, p: u32, v: u8) {
     let i = m.offset(p);
     m.bytes[i] = v;
@@ -37,20 +41,23 @@ pub fn compare_parameter(m: &Memory<'_>, key: Key, value: u32) -> u32 {
     frame[12..16].copy_from_slice(&b.to_le_bytes());
     normalization::dbl_deref_ne(&frame, 0, 4)
 }
+
 pub fn fn_1b2128(m: &mut Memory<'_>, p: u32, x: u32, h: &mut impl Host) {
     if x != 0 {
-        h.call(m, m.word(p + 12), &[m.word(p + 16), x]);
+        h.call_guest(m, m.word(p + 12), &[m.word(p + 16), x]);
     }
 }
+
 pub fn fn_1b2140(m: &mut Memory<'_>, p: u32, size: u32, out: &mut u8, h: &mut impl Host) -> u32 {
     if size == 0 {
         *out = 9;
         return 0;
     }
-    let r = h.call(m, m.word(p), &[m.word(p + 16), size]);
+    let r = h.call_guest(m, m.word(p), &[m.word(p + 16), size]);
     *out = u8::from(r == 0);
     r
 }
+
 pub fn fn_1b218c(
     m: &mut Memory<'_>,
     p: u32,
@@ -63,14 +70,16 @@ pub fn fn_1b218c(
         *out = 9;
         return 0;
     }
-    let r = h.call(m, m.word(p + 8), &[m.word(p + 16), old, size]);
+    let r = h.call_guest(m, m.word(p + 8), &[m.word(p + 16), old, size]);
     *out = u8::from(r == 0);
     r
 }
+
 pub fn fn_1ba3c0(m: &mut Memory<'_>, p: u32, e: &Environment) -> u32 {
     m.put_word(p, e.stream_base_vtable);
     0
 }
+
 pub fn fn_1ba85c(m: &mut Memory<'_>, v: u32, value: u32, h: &mut impl Host) -> u32 {
     let need = m.word(v + 8).wrapping_add(1);
     let mut status = 0;
@@ -97,6 +106,7 @@ pub fn fn_1ba85c(m: &mut Memory<'_>, v: u32, value: u32, h: &mut impl Host) -> u
     }
     status as u32
 }
+
 pub fn fn_1ba8e0(m: &mut Memory<'_>, v: u32, mut key: Key, cmp: u32, h: &mut impl Host) -> u32 {
     let mut i = 0u32;
     while i < m.word(v + 8) {
@@ -110,6 +120,7 @@ pub fn fn_1ba8e0(m: &mut Memory<'_>, v: u32, mut key: Key, cmp: u32, h: &mut imp
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_1b35a0(
     m: &mut Memory<'_>,
     s: u32,
@@ -142,6 +153,7 @@ pub fn fn_1b35a0(
     }
     status as u32
 }
+
 pub fn fn_1b3b3c(m: &mut Memory<'_>, s: u32, key: u32, e: &Environment, h: &mut impl Host) -> u32 {
     let p = fn_1ba8e0(m, m.word(s + 8), Key::Local(key), e.compare, h);
     let out = m.word(p + 12);
@@ -151,6 +163,7 @@ pub fn fn_1b3b3c(m: &mut Memory<'_>, s: u32, key: u32, e: &Environment, h: &mut 
         m.word(p + 8)
     }
 }
+
 pub fn fn_1b3fe8(
     m: &mut Memory<'_>,
     s: u32,
@@ -177,7 +190,9 @@ pub fn fn_1b449c(m: &mut Memory<'_>, p: u32, state: u32, e: &Environment) -> u32
     }
     status
 }
+
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_1babcc(
     m: &mut Memory<'_>,
     heap: u32,
@@ -287,7 +302,7 @@ pub fn fn_1b3c34(
                     let valid = if validate == e.accept {
                         normalization::code_1(value)
                     } else {
-                        h.call(m, validate, &[value])
+                        h.call_guest(m, validate, &[value])
                     };
                     if valid == 0 {
                         return normalization::code_4(0);
@@ -331,6 +346,7 @@ pub fn fn_1b3c34(
     }
     0
 }
+
 pub fn fn_1b3ecc(m: &mut Memory<'_>, s: u32, data: u32, e: &Environment, h: &mut impl Host) -> u32 {
     fn_1b3c34(m, s, data, 0, e, h)
 }

@@ -1,20 +1,23 @@
-
 use crate::{
     engine::{Error, Memory},
     rom_region::Rom,
     tables::NumericTables,
     voice::{VoiceEvent, VoiceQueue, VoiceState, VoiceTransition},
 };
+
 fn word(b: &[u8], o: usize) -> u32 {
     u32::from_le_bytes(b[o..o + 4].try_into().unwrap())
 }
+
 fn put(b: &mut [u8], o: usize, v: u32) {
     b[o..o + 4].copy_from_slice(&v.to_le_bytes());
 }
+
 const FLOAT_OFFSETS: [usize; 22] = [
     8, 0x5c, 0x6c, 0x70, 0x74, 0x78, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4,
     0xb0, 0xc0, 0xc4, 0xc8, 0xcc, 0xd0,
 ];
+
 fn state(bytes: &[u8]) -> VoiceState {
     let f = |o| f32::from_bits(word(bytes, o));
     VoiceState {
@@ -52,6 +55,7 @@ fn state(bytes: &[u8]) -> VoiceState {
         }),
     }
 }
+
 fn write_state(s: &VoiceState, bytes: &mut [u8]) {
     let floats = [
         s.sample_rate,
@@ -107,6 +111,7 @@ fn byte(m: &Memory<'_, '_>, a: u32) -> Result<u8, Error> {
     m.read(a, &mut b)?;
     Ok(b[0])
 }
+
 fn load_queue(m: &Memory<'_, '_>, a: u32, reserve: usize) -> Result<VoiceQueue, Error> {
     let r = m.word(a)?;
     let w = m.word(a + 4)?;
@@ -140,6 +145,7 @@ fn load_queue(m: &Memory<'_, '_>, a: u32, reserve: usize) -> Result<VoiceQueue, 
     }
     Ok(q)
 }
+
 fn save_queue(
     m: &mut Memory<'_, '_>,
     a: u32,
@@ -176,6 +182,7 @@ fn save_queue(
     }
     Ok(())
 }
+
 fn clear_ring(m: &mut Memory<'_, '_>, ring: u32, width: u32) -> Result<(), Error> {
     let data = m.word(ring + 4)?;
     let count = m.word(ring + 8)?;
@@ -196,6 +203,16 @@ pub(crate) fn reset(
     object: u32,
     tables: &NumericTables<'_>,
 ) -> Result<(), Error> {
+    reset_rom(m, object, tables, Rom::Us)
+}
+
+pub(crate) fn reset_rom(
+    m: &mut Memory<'_, '_>,
+    object: u32,
+    tables: &NumericTables<'_>,
+    rom: Rom,
+) -> Result<(), Error> {
+    let frequency = if rom == Rom::Kr { 220.0 } else { 185.0 };
     let mut s = VoiceState::default();
     s.time = m.word(object + 0x64)? as i32;
     let mut input = load_queue(m, object + 0xe8, 12)?;
@@ -223,7 +240,7 @@ pub(crate) fn reset(
     input.set_pitch(base, 0, 1.0);
     input.set_gain(base, 0, 1.0);
     input.set_resampling(base, 0, 1.0);
-    input.set_frequency(base, 0, 185.0);
+    input.set_frequency(base, 0, frequency);
     for i in 0..3 {
         input.set_harmony(base, false, i, 0, 1.0);
     }
@@ -233,26 +250,32 @@ pub(crate) fn reset(
     save_queue(m, object + 0xe8, &old_input, &input)?;
     save_queue(m, object + 0x14f0, &old_commands, &commands)?;
     for o in [0x4bd0, 0x4bd8, 0x4bd9, 0x4c30] {
-        m.write(object + o, &[0])?;
+        m.write(object + crate::speech_layout::backend_field(rom, o), &[0])?;
     }
-    m.put_word(object + 0x4bdc, 0)?;
-    m.put_word(object + 0x4c34, 1)?;
+    m.put_word(object + crate::speech_layout::backend_field(rom, 0x4bdc), 0)?;
+    m.put_word(object + crate::speech_layout::backend_field(rom, 0x4c34), 1)?;
     for o in [
         0x4bd4, 0x4be0, 0x4be4, 0x4be8, 0x4bec, 0x4bf0, 0x4bf4, 0x4bfc, 0x4c04, 0x4c08, 0x4c0c,
         0x4c10, 0x4c14, 0x4c18,
     ] {
-        m.put_word(object + o, 1.0f32.to_bits())?;
+        m.put_word(
+            object + crate::speech_layout::backend_field(rom, o),
+            1.0f32.to_bits(),
+        )?;
     }
     for (o, v) in [
         (0x4bf8, 0.05f32),
-        (0x4c00, 185.0),
+        (0x4c00, frequency),
         (0x4c1c, 120.0),
         (0x4c20, 0.0),
         (0x4c24, 0.0),
         (0x4c28, 0.0),
         (0x4c2c, 0.0),
     ] {
-        m.put_word(object + o, v.to_bits())?;
+        m.put_word(
+            object + crate::speech_layout::backend_field(rom, o),
+            v.to_bits(),
+        )?;
     }
     clear_ring(m, m.word(object + 0x31f4 + 0x1c)?, 2)?;
     m.put_word(object + 0x31f4 + 0x20, 0)?;
@@ -264,12 +287,40 @@ pub(crate) fn reset(
 }
 
 pub(crate) fn set_numeric(m: &mut Memory<'_, '_>, o: u32, id: u32, v: i32) -> Result<i32, Error> {
-    let f = |m: &Memory<'_, '_>, at| m.word(o + at).map(f32::from_bits);
+    set_numeric_rom(m, o, id, v, Rom::Us)
+}
+
+pub(crate) fn set_numeric_rom(
+    m: &mut Memory<'_, '_>,
+    o: u32,
+    id: u32,
+    v: i32,
+    rom: Rom,
+) -> Result<i32, Error> {
+    let f = |m: &Memory<'_, '_>, at| {
+        m.word(o + crate::speech_layout::backend_field(rom, at))
+            .map(f32::from_bits)
+    };
     let mut pair = None;
     let (field, value, kind) = match id {
-        3 => (0x4bd4, if v != 0 { -1.0 } else { 1.0 }, Some(8)),
+        3 => (
+            0x4bd4,
+            if v != 0 {
+                if rom == Rom::Kr {
+                    -0.5
+                } else {
+                    -1.0
+                }
+            } else {
+                1.0
+            },
+            Some(8),
+        ),
         4 => {
-            m.write(o + 0x4bd8, &[(v != 0) as u8])?;
+            m.write(
+                o + crate::speech_layout::backend_field(rom, 0x4bd8),
+                &[(v != 0) as u8],
+            )?;
             if v == 0 {
                 for at in [0x34, 0x38, 0x3c] {
                     clear_ring(m, m.word(o + 0x31a4 + at)?, 4)?;
@@ -285,7 +336,10 @@ pub(crate) fn set_numeric(m: &mut Memory<'_, '_>, o: u32, id: u32, v: i32) -> Re
                 _ => 2,
             };
             let ratio = v as f32 * 0.0001;
-            m.put_word(o + 0x4bec + i * 4, ratio.to_bits())?;
+            m.put_word(
+                o + crate::speech_layout::backend_field(rom, 0x4bec) + i * 4,
+                ratio.to_bits(),
+            )?;
             let old = load_queue(m, o + 0xe8, 1)?;
             let mut q = old.clone();
             q.set_harmony(m.word(o + 0x64)? as i32, v != 10000, i as i32, 0, ratio);
@@ -293,7 +347,10 @@ pub(crate) fn set_numeric(m: &mut Memory<'_, '_>, o: u32, id: u32, v: i32) -> Re
             return Ok(0);
         }
         6 => {
-            m.write(o + 0x4c30, &[(v != 0) as u8])?;
+            m.write(
+                o + crate::speech_layout::backend_field(rom, 0x4c30),
+                &[(v != 0) as u8],
+            )?;
             (0, (v != 0) as u8 as f32, Some(20))
         }
         10_000_000 => (0x4be4, v as f32 * 0.0001, Some(0)),
@@ -322,14 +379,20 @@ pub(crate) fn set_numeric(m: &mut Memory<'_, '_>, o: u32, id: u32, v: i32) -> Re
             (0x4c2c, v as f32 * 0.001, Some(12))
         }
         240_000_000 => {
-            m.put_word(o + 0x4bdc, v as u32)?;
+            m.put_word(
+                o + crate::speech_layout::backend_field(rom, 0x4bdc),
+                v as u32,
+            )?;
             return Ok(0);
         }
         250_000_000 => (0x4be0, v.clamp(0, 10000) as f32 * 0.0001, None),
         _ => return Ok(-1),
     };
     if field != 0 {
-        m.put_word(o + field, value.to_bits())?;
+        m.put_word(
+            o + crate::speech_layout::backend_field(rom, field),
+            value.to_bits(),
+        )?;
     }
     if let Some(kind) = kind {
         let old = load_queue(m, o + 0xe8, 1)?;
@@ -351,6 +414,7 @@ pub(crate) fn set_numeric(m: &mut Memory<'_, '_>, o: u32, id: u32, v: i32) -> Re
     }
     Ok(0)
 }
+
 fn signed_half(m: &Memory<'_, '_>, a: u32) -> Result<i32, Error> {
     let mut b = [0; 2];
     m.read(a, &mut b)?;
@@ -360,6 +424,7 @@ fn signed_half(m: &Memory<'_, '_>, a: u32) -> Result<i32, Error> {
 fn convert(m: &Memory<'_, '_>, index: u32, value: i32) -> Result<i32, Error> {
     convert_rom(m, index, value, Rom::Us)
 }
+
 fn convert_rom(m: &Memory<'_, '_>, index: u32, value: i32, rom: Rom) -> Result<i32, Error> {
     let k = index * 3;
     let base = crate::rom_region::addr(rom, 0x8bdc2c);
@@ -398,13 +463,15 @@ pub(crate) fn set_voice_rom(
     };
     let o = m.word(wrapper + 8)?;
     if index == 5 && !(0..=3).contains(&value) {
-        m.write(o + 0x6a0a, &(value as i16).to_le_bytes())?;
+        m.write(
+            o + crate::speech_layout::field(rom, 0x6a0a),
+            &(value as i16).to_le_bytes(),
+        )?;
         return Ok(());
     }
-    let backend = m.word(o + 0x61b8)?;
-
+    let backend = m.word(o + crate::speech_layout::field(rom, 0x61b8))?;
     let mode = if index == 0 || index == 2 {
-        let mode = byte(m, o + 0x17a)? as i8 as i32;
+        let mode = byte(m, o + crate::speech_layout::field(rom, 0x17a))? as i8 as i32;
         if !(0..8).contains(&mode) {
             return Err(Error::InvalidVoice);
         }
@@ -432,21 +499,36 @@ pub(crate) fn set_voice_rom(
         3 => 80_000_000,
         4 => 60_000_000,
         _ => {
-            intonation(m, o, backend, value)?;
-            m.write(o + 0x6a00 + index * 2, &(value as i16).to_le_bytes())?;
+            intonation(m, o, backend, value, rom)?;
+            m.write(
+                o + crate::speech_layout::field(rom, 0x6a00) + index * 2,
+                &(value as i16).to_le_bytes(),
+            )?;
             return Ok(());
         }
     };
-    if set_numeric(m, backend, id, mapped)? != 0 {
+    if set_numeric_rom(m, backend, id, mapped, rom)? != 0 {
         return Err(Error::UnsupportedStage { entry: 0x743d70 });
     }
-    m.write(o + 0x6a00 + index * 2, &(value as i16).to_le_bytes())?;
+    m.write(
+        o + crate::speech_layout::field(rom, 0x6a00) + index * 2,
+        &(value as i16).to_le_bytes(),
+    )?;
     Ok(())
 }
-fn intonation(m: &mut Memory<'_, '_>, o: u32, b: u32, v: i32) -> Result<(), Error> {
+
+fn intonation(m: &mut Memory<'_, '_>, o: u32, b: u32, v: i32, rom: Rom) -> Result<(), Error> {
+    if rom == Rom::Kr && (0..=3).contains(&v) {
+        let duration = if v == 0 {
+            0
+        } else {
+            m.word(o + 0x100 + (v as u32 - 1) * 4)?
+        };
+        m.put_word(b + 0x4c3c, duration)?;
+    }
     if v == 0 {
         for id in [3, 110_000_000, 130_000_000] {
-            set_numeric(m, b, id, 0)?;
+            set_numeric_rom(m, b, id, 0, rom)?;
         }
     } else if (1..=3).contains(&v) {
         let i = (v - 1) as u32 * 4;
@@ -457,13 +539,13 @@ fn intonation(m: &mut Memory<'_, '_>, o: u32, b: u32, v: i32) -> Result<(), Erro
             (130_000_000, 0xd0),
         ] {
             let x = m.word(o + at + i)? as i32;
-            set_numeric(m, b, id, x)?;
+            set_numeric_rom(m, b, id, x, rom)?;
         }
         let mut h = [0; 2];
-        m.read(o + 0x182, &mut h)?;
+        m.read(o + crate::speech_layout::field(rom, 0x182), &mut h)?;
         let scale = u16::from_le_bytes(h) as f32 * 0.01;
         let x = ((m.word(o + 0xe0 + i)? as i32 as f32) * scale) as i32;
-        set_numeric(m, b, 140_000_000, x)?;
+        set_numeric_rom(m, b, 140_000_000, x, rom)?;
     }
     Ok(())
 }
@@ -476,6 +558,7 @@ pub(crate) struct BackendRegion<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub(crate) fn render_backend<'a, 'b: 'a>(
     setup: &mut crate::orchestration::Setup<'a, 'b>,
     synth: &mut crate::synthesis::SynthesisState,
@@ -668,29 +751,35 @@ pub(crate) fn parameter_reset(
     wrapper: u32,
     locks: &mut impl BackendLocks,
 ) -> Result<(), Error> {
+    parameter_reset_rom(m, wrapper, locks, Rom::Us)
+}
+
+pub(crate) fn parameter_reset_rom(
+    m: &mut Memory<'_, '_>,
+    wrapper: u32,
+    locks: &mut impl BackendLocks,
+    rom: Rom,
+) -> Result<(), Error> {
     let object = m.word(wrapper + 8)?;
     m.put_word(object + 0x2c, 0)?;
-    if byte(m, object + 0x61a0)? != 0 {
+    if byte(m, object + crate::speech_layout::field(rom, 0x61a0))? != 0 {
         return Ok(());
     }
     if byte(m, object + 0x9d)? == 0 {
-
         return Err(Error::UnsupportedStage { entry: 0x183dd4 });
     }
-
-    m.write(object + 0x61a1, &[1])?;
-    let engine = m.word(object + 0x11c)?;
-    let tag = m.word(object + 0x120)?;
+    m.write(object + crate::speech_layout::field(rom, 0x61a1), &[1])?;
+    let engine = m.word(object + crate::speech_layout::field(rom, 0x11c))?;
+    let tag = m.word(object + crate::speech_layout::field(rom, 0x120))?;
     if tag == 0x684f424a && engine != 0 && m.word(engine)? == 0x734f424a {
-        running_stop(m, engine, locks)?;
+        running_stop(m, engine, locks, rom)?;
     }
-    m.put_word(object + 0x61ac, 0)?;
-    m.put_word(object + 0x61b0, 0)?;
-    m.write(object + 0x61a0, &[0])?;
+    m.put_word(object + crate::speech_layout::field(rom, 0x61ac), 0)?;
+    m.put_word(object + crate::speech_layout::field(rom, 0x61b0), 0)?;
+    m.write(object + crate::speech_layout::field(rom, 0x61a0), &[0])?;
     m.put_word(object + 0x80, 0)?;
-    m.write(object + 0x61a2, &[0])?;
-
-    m.write(object + 0x61a0, &[1])?;
+    m.write(object + crate::speech_layout::field(rom, 0x61a2), &[0])?;
+    m.write(object + crate::speech_layout::field(rom, 0x61a0), &[1])?;
     Ok(())
 }
 
@@ -713,16 +802,22 @@ pub fn set_quality_rom(
     host: Option<&mut dyn AttrHost>,
 ) -> Result<(), Error> {
     let object = m.word(wrapper + 8)?;
-    let mode = byte(m, object + 0x17a)? as i8 as i32;
+    let mode = byte(m, object + crate::speech_layout::field(rom, 0x17a))? as i8 as i32;
     if !(0..8).contains(&mode) {
         return Err(Error::InvalidVoice);
     }
     let mapped = convert_rom(m, 1, value, rom)?
         .wrapping_add(m.word(crate::rom_region::addr(rom, 0x8bfbe4) + mode as u32 * 4)? as i32);
     let rate = (mapped as u16).clamp(50, 400);
-    m.write(object + 0x182, &rate.to_le_bytes())?;
-    let engine = m.word(object + 0x11c)?;
-    if m.word(object + 0x120)? == 0x684f424a && engine != 0 && m.word(engine)? == 0x734f424a {
+    m.write(
+        object + crate::speech_layout::field(rom, 0x182),
+        &rate.to_le_bytes(),
+    )?;
+    let engine = m.word(object + crate::speech_layout::field(rom, 0x11c))?;
+    if m.word(object + crate::speech_layout::field(rom, 0x120))? == 0x684f424a
+        && engine != 0
+        && m.word(engine)? == 0x734f424a
+    {
         locks.parameter_trace(m, engine, None, false)?;
         let context = m.word(engine + 8)?;
         let params = m.word(context + 0x14)?;
@@ -730,10 +825,8 @@ pub fn set_quality_rom(
         if locks.acquire_m(m, lock)? < 0x80000000 {
             let result = update_rate(m, params, rate, locks, rom, host);
             locks.release_m(m, lock)?;
-
             match result {
                 Ok(()) => (),
-
                 Err(Error::EngineStatus(status)) => {
                     locks.parameter_trace(m, engine, Some(status), false)?;
                 }
@@ -742,7 +835,10 @@ pub fn set_quality_rom(
         }
         locks.parameter_trace(m, engine, None, true)?;
     }
-    m.write(object + 0x6a02, &(value as i16).to_le_bytes())
+    m.write(
+        object + crate::speech_layout::field(rom, 0x6a02),
+        &(value as i16).to_le_bytes(),
+    )
 }
 
 pub trait AttrHost {
@@ -955,28 +1051,28 @@ fn stop_event(
     m: &mut Memory<'_, '_>,
     engine: u32,
     host: &mut impl BackendLocks,
+    rom: Rom,
 ) -> Result<u32, Error> {
     let callback = m.word(engine + 0x170)?;
     if callback == 0 {
         return Ok(0);
     }
-    if callback != 0x132124 {
+    if crate::rom_region::to_us_guest(rom, callback) != 0x132124 {
         return Err(Error::UnsupportedStage { entry: callback });
     }
     let speech = m.word(engine + 0x184)?;
     let vfp = if let Some(bits) = host.event_vfp() {
         bits
     } else {
-
-        let begin = m.word(speech + 0x61d0)?;
-        let end = m.word(speech + 0x61d4)?;
-        let capacity = m.word(speech + 0x61d8)? & 0x3fffffff;
+        let begin = m.word(speech + crate::speech_layout::field(rom, 0x61d0))?;
+        let end = m.word(speech + crate::speech_layout::field(rom, 0x61d4))?;
+        let capacity = m.word(speech + crate::speech_layout::field(rom, 0x61d8))? & 0x3fffffff;
         if end.wrapping_sub(begin) / 32 >= capacity || end == 0 {
             return Err(Error::UnsupportedStage { entry: 0x183258 });
         }
         [m.word(end + 4)?, m.word(end + 28)?]
     };
-    append_event(m, speech, 32, vfp, &mut EventWorkspace::new(), host)?;
+    append_event_rom(m, speech, 32, vfp, &mut EventWorkspace::new(), host, rom)?;
     struct EventHost;
     impl crate::frontend_output::CallbackHost for EventHost {
         fn event(&mut self, _: &mut crate::frontend_output::SynthesisCallback, _: u32) {}
@@ -1005,13 +1101,15 @@ fn stop_event(
             unreachable!()
         }
     }
-
     let mut state = crate::frontend_output::SynthesisCallback::default();
-    state.requested = byte(m, speech + 0x61a3)?;
+    state.requested = byte(m, speech + crate::speech_layout::field(rom, 0x61a3))?;
     state
         .handle(32, None, &mut EventHost)
         .map_err(|_| Error::InvalidSnapshot)?;
-    m.write(speech + 0x61a3, &[state.requested])?;
+    m.write(
+        speech + crate::speech_layout::field(rom, 0x61a3),
+        &[state.requested],
+    )?;
     Ok(0)
 }
 
@@ -1100,12 +1198,14 @@ fn running_stop(
     m: &mut Memory<'_, '_>,
     engine: u32,
     host: &mut impl BackendLocks,
+    rom: Rom,
 ) -> Result<(), Error> {
     struct Hooks<'a, 'b, 'c, H> {
         m: &'a mut Memory<'b, 'c>,
         engine: u32,
         host: &'a mut H,
         error: Option<Error>,
+        rom: Rom,
     }
     impl<H: BackendLocks> Hooks<'_, '_, '_, H> {
         fn result(&mut self, r: Result<u32, Error>) -> u32 {
@@ -1129,7 +1229,7 @@ fn running_stop(
             self.host.release(p)
         }
         fn flag_voice(&mut self, _: u32) -> u32 {
-            let r = stop_event(self.m, self.engine, self.host);
+            let r = stop_event(self.m, self.engine, self.host, self.rom);
             self.result(r)
         }
         fn call_stop(&mut self, a: u32, b: u32) -> u32 {
@@ -1137,7 +1237,7 @@ fn running_stop(
                 let target = self
                     .m
                     .word(self.m.word(self.m.word(self.engine + 4)? + 188)? + 64)?;
-                if target != 0x15a4b8 {
+                if crate::rom_region::to_us_guest(self.rom, target) != 0x15a4b8 {
                     return Err(Error::UnsupportedStage { entry: target });
                 }
                 scheduler_break(self.m, a, b, self.host)
@@ -1166,7 +1266,6 @@ fn running_stop(
     }
     let mut local = [0; 0x200];
     m.read(engine, &mut local[64..64 + 0x188])?;
-
     let logger = m.word(m.word(engine + 0x10)? + 16)?;
     put(&mut local, 64 + 0x10, 8);
     put(&mut local, 24, logger);
@@ -1174,6 +1273,7 @@ fn running_stop(
         m,
         engine,
         host,
+        rom,
         error: None,
     };
     crate::frontend::stop_synth(&mut hooks, &mut local, Some(64), 0x684f424a);
@@ -1184,6 +1284,7 @@ fn running_stop(
 }
 
 #[derive(Clone, Copy)]
+
 pub(crate) enum SongRegion {
     Western,
     Korean,
@@ -1287,6 +1388,7 @@ fn song_tag(raw: &[u8], at: usize) -> Result<(u16, u16, usize, u8), Error> {
 pub struct EventWorkspace {
     bytes: [u8; 0xa400],
 }
+
 impl EventWorkspace {
 
     pub const fn new() -> Self {
@@ -1302,11 +1404,23 @@ pub fn append_event(
     workspace: &mut EventWorkspace,
     host: &mut impl BackendLocks,
 ) -> Result<(), Error> {
+    append_event_rom(m, speech, kind, vfp, workspace, host, Rom::Us)
+}
+
+pub fn append_event_rom(
+    m: &mut Memory<'_, '_>,
+    speech: u32,
+    kind: u32,
+    vfp: [u32; 2],
+    workspace: &mut EventWorkspace,
+    host: &mut impl BackendLocks,
+    rom: Rom,
+) -> Result<(), Error> {
     const OLD: u32 = 0x6400;
     const NEW: u32 = 0x8400;
-    let begin = m.word(speech + 0x61d0)?;
-    let end = m.word(speech + 0x61d4)?;
-    let flags = m.word(speech + 0x61d8)?;
+    let begin = m.word(speech + crate::speech_layout::field(rom, 0x61d0))?;
+    let end = m.word(speech + crate::speech_layout::field(rom, 0x61d4))?;
+    let flags = m.word(speech + crate::speech_layout::field(rom, 0x61d8))?;
     let count = end.wrapping_sub(begin) / 32;
     let capacity = flags & 0x3fffffff;
     if count > 256 || (end.wrapping_sub(begin) % 32) != 0 {
@@ -1321,9 +1435,8 @@ pub fn append_event(
     if grow && grown > 256 {
         return Err(Error::InputTooLong);
     }
-    let allocator = m.word(speech + 0x61cc)?;
+    let allocator = m.word(speech + crate::speech_layout::field(rom, 0x61cc))?;
     let ticks = host.ticks()?;
-
     if grow && (allocator == 0 || flags & 0xc0000000 != 0x40000000) {
         return Ok(());
     }
@@ -1342,7 +1455,6 @@ pub fn append_event(
             &mut b[OLD as usize..OLD as usize + count as usize * 32],
         )?;
     }
-
     if !grow && end != 0 {
         m.read(
             end,
@@ -1374,7 +1486,6 @@ pub fn append_event(
                     .event_allocate(self.memory, self.allocator, args[1], args[2])
                     .and_then(|pointer| {
                         self.fresh = pointer;
-
                         if pointer == 0 {
                             return Err(Error::InvalidSnapshot);
                         }
@@ -1435,9 +1546,18 @@ pub fn append_event(
             &b[local_begin as usize..(local_begin + written) as usize],
         )?;
     }
-    m.put_word(speech + 0x61d0, result_begin)?;
-    m.put_word(speech + 0x61d4, result_begin.wrapping_add(written))?;
-    m.put_word(speech + 0x61d8, word(b, 0x61d8))?;
+    m.put_word(
+        speech + crate::speech_layout::field(rom, 0x61d0),
+        result_begin,
+    )?;
+    m.put_word(
+        speech + crate::speech_layout::field(rom, 0x61d4),
+        result_begin.wrapping_add(written),
+    )?;
+    m.put_word(
+        speech + crate::speech_layout::field(rom, 0x61d8),
+        word(b, 0x61d8),
+    )?;
     Ok(())
 }
 
@@ -1532,8 +1652,11 @@ fn store_parameter(
 }
 
 #[cfg(not(test))]
+
 pub use live_controls::LiveControls;
+
 #[cfg(not(test))]
+
 mod live_controls {
 use super::*;
 

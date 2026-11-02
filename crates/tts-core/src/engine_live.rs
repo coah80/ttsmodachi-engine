@@ -1,13 +1,19 @@
-
-use crate::{boot::Memory, db_live::{DbHooksM, PoolHooksM}, engine};
+use crate::{
+    boot::Memory,
+    db_live::{DbHooksM, PoolHooksM},
+    engine,
+};
 
 #[derive(Clone, Copy, Debug)]
+
 pub struct CallTrace { pub entry: u32, pub caller: u32, pub args: [u32; 4], pub nargs: usize, pub r0: u32, pub depth: u32 }
 
 pub trait CallTraceSink { fn record_entry(&mut self, t: CallTrace) -> usize; fn record_return(&mut self, idx: usize, r0: u32); }
+
 struct Host<'a> { boot: engine::SpeechBootHost<'a>, boundary:Option<engine::VoiceBoundary>, runtime:Option<&'a mut dyn RuntimeServicesM>, snap:&'a [u8], trace:Option<&'a mut dyn CallTraceSink>, until:Option<u32>, depth:u32, stack:[u32;64], stack_len:usize, rom:crate::rom_region::Rom }
 
 struct ReleaseCalls<'a, 'b>(&'a mut Host<'b>);
+
 impl crate::component_live_a2::Calls for ReleaseCalls<'_, '_> {
     fn call(&mut self, m: &mut crate::boot::Memory<'_>, entry: u32, args: &[u32]) -> u32 {
         self.0.call(m, entry, args)
@@ -25,6 +31,7 @@ struct DepesBridge<'a, 'b> {
 struct DictBridge<'a, 'b> {
     host: &'a mut Host<'b>,
 }
+
 impl crate::boot_part_f::Host for DictBridge<'_, '_> {
     fn call(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32 {
         self.host.call(m, method, args)
@@ -34,11 +41,13 @@ impl crate::boot_part_f::Host for DictBridge<'_, '_> {
         0x80002001
     }
 }
+
 impl crate::log_live::LogMethodsM for DictBridge<'_, '_> {
     fn log_m(&mut self, f: u32, o: u32, c: u32, l: u32, a: u32, t: u32, v: u32, m: &mut Memory<'_>) -> u32 {
         self.host.call(m, f, &[o, c, l, a, t, v])
     }
 }
+
 impl crate::speech_part_5::Host for DictBridge<'_, '_> {
     fn scratch(&self) -> u32 {
         0x7a00
@@ -64,7 +73,9 @@ impl crate::speech_part_5::Host for DictBridge<'_, '_> {
         crate::speech_part_5::fn_2f88d4_m(m, a, b, c, array, count, self) as u32
     }
 }
+
 impl crate::speech_part_3::SpeechHost for DictBridge<'_, '_> {}
+
 impl crate::component_live_c2::C2DepesHost for DepesBridge<'_, '_> {
     fn call(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32 {
         self.host.call(m, entry, args)
@@ -73,6 +84,7 @@ impl crate::component_live_c2::C2DepesHost for DepesBridge<'_, '_> {
         self.host.rom
     }
 }
+
 impl crate::engine_components::InternalCalls for ParamBridge<'_, '_> {
     fn call(
         &mut self,
@@ -133,13 +145,18 @@ impl Host<'_> {
         }
     }
 }
+
 impl Host<'_> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
 
         if self.depth > 60 {
             panic!("live call loop at {f:#x}");
         }
-        let caller = if self.stack_len > 0 { self.stack[self.stack_len - 1] } else { 0 };
+        let caller = if self.stack_len > 0 {
+            self.stack[self.stack_len - 1]
+        } else {
+            0
+        };
         let depth = self.depth;
         self.depth += 1;
         if (self.stack_len as usize) < self.stack.len() {
@@ -150,43 +167,90 @@ impl Host<'_> {
         let mut args4 = [0u32; 4];
         args4[..nargs].copy_from_slice(&a[..nargs]);
         let idx = if let Some(t) = self.trace.as_mut() {
-            Some(t.record_entry(CallTrace { entry: f, caller, args: args4, nargs, r0: 0xeeee_eeee, depth }))
-        } else { None };
+            Some(t.record_entry(CallTrace {
+                entry: f,
+                caller,
+                args: args4,
+                nargs,
+                r0: 0xeeee_eeee,
+                depth,
+            }))
+        } else {
+            None
+        };
         let r = self.call_inner(m, f, a);
         if let (Some(t), Some(i)) = (self.trace.as_mut(), idx) {
             t.record_return(i, r);
         }
-        if self.stack_len > 0 { self.stack_len -= 1; }
+        if self.stack_len > 0 {
+            self.stack_len -= 1;
+        }
         self.depth -= 1;
         r
     }
     fn call_inner(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
-        let f = if self.rom == crate::rom_region::Rom::Us { f } else { crate::rom_region::to_us(self.rom, f) };
-        if self.boundary.is_some(){return 0x80002001;}
-
-        if self.until==Some(f){
-            let mut args=[0;7];let n=a.len().min(7);args[..n].copy_from_slice(&a[..n]);
-            self.boundary=Some(engine::VoiceBoundary{entry:f,args,event:None});return 0x80002001;
+        let f = if self.rom == crate::rom_region::Rom::Us {
+            f
+        } else {
+            crate::rom_region::to_us(self.rom, f)
+        };
+        if self.boundary.is_some() {
+            return 0x80002001;
+        }
+        if self.until == Some(f) {
+            let mut args = [0; 7];
+            let n = a.len().min(7);
+            args[..n].copy_from_slice(&a[..n]);
+            self.boundary = Some(engine::VoiceBoundary {
+                entry: f,
+                args,
+                event: None,
+            });
+            return 0x80002001;
         }
         match f {
+            0x218f88 | 0x218ba4 => crate::component_live_c::depes_set_layer_m(
+                m,
+                a[0],
+                a[1],
+                a[2],
+                a[3],
+                a.get(4).copied().unwrap_or(0),
+                self,
+            ),
+            0x2191c8 => crate::component_live_c::depes_get_layer_m(m, a[0], a[1], a[2], a[3], a[4]),
+            0x2193a4 => {
+                let mut ws = crate::component_live_c::VmWorkspace::default();
+                crate::component_live_c::depes_exec_module_m(m, a[0], a[1], a[2], &mut ws, self)
+            }
+            0x1ed1d0 => {
+                crate::component_live_c::dctlkp_canonical_token_m(m, a[0], a[1], a[2], a[3], self)
+            }
+            0x1eb978 => crate::component_live_b3::fn_1eb978_m(m, self, a[0], a[1], a[2], 0x18000),
             0x2645b4 => {
-
                 let snap = self.snap;
                 crate::engine_live_render::run_block(self, m, a[0], a[1], a[2], snap)
             }
             0x26a3e4 => {
-
                 let snap = self.snap;
                 crate::engine_live_render::run_writer(
-                    self, m, a[0], a[1], a[2], [a[3], a[4]], [a[5], a[6]], snap,
+                    self,
+                    m,
+                    a[0],
+                    a[1],
+                    a[2],
+                    [a[3], a[4]],
+                    [a[5], a[6]],
+                    snap,
                 )
             }
             0x252f88 => {
-
                 let mut p = 0;
                 let env = crate::render_part_c::Environment {
-                    cached_handle: core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom,0x8d7660) + i as u32)),
-                    default_context: crate::rom_region::addr(self.rom,0x8d7640),
+                    cached_handle: core::array::from_fn(|i| {
+                        m.byte(crate::rom_region::addr(self.rom, 0x8d7660) + i as u32)
+                    }),
+                    default_context: crate::rom_region::addr(self.rom, 0x8d7640),
                 };
                 let rc = crate::normalization::fetch_entry(
                     m.bytes,
@@ -194,447 +258,924 @@ impl Host<'_> {
                     a[1],
                     a[2],
                     Some(&mut p),
-                    &mut crate::engine_live_render::LiveFetch { host: self, env: &env },
+                    &mut crate::engine_live_render::LiveFetch {
+                        host: self,
+                        env: &env,
+                    },
                 );
                 if rc < 0x80000000 {
                     m.put_word(a[3], p);
                 }
                 rc
             }
-            0xffff0001=>{self.boot.fault=Some(engine::Error::MissingStreamAdapter{entry:f});0x80002001},
-            0x1738e8|0x173dc0=>{
-
-                if self.boot.fault.is_some(){return 0x80002001;}
-                let mut args=[0u32;6];let n=a.len().min(6);args[..n].copy_from_slice(&a[..n]);
-                if f==0x1738e8 {crate::log_live::fn_1738e8(m,args[0],args[1],args[2],args[3],args[4],args[5],self)}
-                else {crate::render_part_a::error_log(m,self,args[0],args[1],args[2],args[3],args[4],args[5])}
+            0xffff0001 => {
+                self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
+                0x80002001
             }
-            0x1a18c4|0x166054|0x183258=>{
+            0x1738e8 | 0x173dc0 => {
+                if self.boot.fault.is_some() {
+                    return 0x80002001;
+                }
+                let mut args = [0u32; 6];
+                let n = a.len().min(6);
+                args[..n].copy_from_slice(&a[..n]);
+                if f == 0x1738e8 {
+                    crate::log_live::fn_1738e8(
+                        m, args[0], args[1], args[2], args[3], args[4], args[5], self,
+                    )
+                } else {
+                    crate::render_part_a::error_log(
+                        m, self, args[0], args[1], args[2], args[3], args[4], args[5],
+                    )
+                }
+            }
+            0x1a18c4 | 0x166054 | 0x183258 => {
                 if f == 0x1a18c4 && a.len() >= 2 && m.word(a[1] + 0x19c) == 0 {
                     let scratch = 0x0e0f7f00;
                     let saved = [m.word(scratch), m.word(scratch + 4)];
-                    let rc = self.call(m, 0x19611c, &[m.word(a[1] + 8), m.word(a[1] + 12), scratch]);
+                    let rc =
+                        self.call(m, 0x19611c, &[m.word(a[1] + 8), m.word(a[1] + 12), scratch]);
                     let rc = if rc < 0x80000000 {
-                        self.call(m, 0x17b058, &[m.word(m.word(scratch) + 24), crate::rom_region::addr(self.rom, 0x19592c), scratch + 4])
-                    } else { rc };
+                        self.call(
+                            m,
+                            0x17b058,
+                            &[
+                                m.word(m.word(scratch) + 24),
+                                crate::rom_region::addr(self.rom, 0x19592c),
+                                scratch + 4,
+                            ],
+                        )
+                    } else {
+                        rc
+                    };
                     if rc < 0x80000000 {
                         let entry = m.word(scratch + 4);
                         m.put_word(a[1] + 0x19c, m.word(entry + 4));
                         m.put_word(a[1] + 0x1a0, m.word(entry + 8));
                         m.put_word(a[1] + 0x1a4, m.word(entry + 12));
                     }
-                    m.put_word(scratch, saved[0]);m.put_word(scratch + 4, saved[1]);
-                    if rc >= 0x80000000 { return rc; }
+                    m.put_word(scratch, saved[0]);
+                    m.put_word(scratch + 4, saved[1]);
+                    if rc >= 0x80000000 {
+                        return rc;
+                    }
                 }
-                let result=if let Some(runtime)=self.runtime.as_deref_mut(){runtime.invoke_m(m,f,a)}else{Err(engine::Error::UnsupportedStage{entry:f})};
-                match result{Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
+                let result = if let Some(runtime) = self.runtime.as_deref_mut() {
+                    runtime.invoke_m_rom(m, f, a, self.rom)
+                } else {
+                    Err(engine::Error::UnsupportedStage { entry: f })
+                };
+                match result {
+                    Ok(rc) => rc,
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
+                }
             }
-            0xc72018=>{
-
-                if self.runtime.as_deref().is_none_or(|r|r.guest_capture()) {
-                let slot=crate::rom_region::capture_slot(self.rom);
-                let env=crate::speech_part_4::CaptureRuntime{slot:m.word(slot),fill_flag:m.byte(crate::rom_region::addr(self.rom,0xa7b8e8))as u32,append_result:m.word(slot+4)};
-                crate::speech_part_4::fn_c72018(m,self,env,a[0],a[1]);
+            0xc72018 => {
+                if self.runtime.as_deref().is_none_or(|r| r.guest_capture()) {
+                    let slot = crate::rom_region::capture_slot(self.rom);
+                    let env = crate::speech_part_4::CaptureRuntime {
+                        slot: m.word(slot),
+                        fill_flag: m.byte(crate::rom_region::addr(self.rom, 0xa7b8e8)) as u32,
+                        append_result: m.word(slot + 4),
+                    };
+                    crate::speech_part_4::fn_c72018(m, self, env, a[0], a[1]);
                 }
-                if self.boot.fault.is_some(){return 0x80002001;}
-                let result=if let Some(runtime)=self.runtime.as_deref_mut(){runtime.invoke_m(m,f,a)}else{Err(engine::Error::UnsupportedStage{entry:f})};
-                match result{Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
+                if self.boot.fault.is_some() {
+                    return 0x80002001;
+                }
+                let result = if let Some(runtime) = self.runtime.as_deref_mut() {
+                    runtime.invoke_m_rom(m, f, a, self.rom)
+                } else {
+                    Err(engine::Error::UnsupportedStage { entry: f })
+                };
+                match result {
+                    Ok(rc) => rc,
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
+                }
             }
             0x230e1c => {
-                let e=speech_environment(m,self.rom);
-                let t=crate::speech_part_2::XcoderLiterals{input_key:crate::rom_region::addr(self.rom,0x2311b8),native_key:crate::rom_region::addr(self.rom,0x2311e8),utf16:crate::rom_region::addr(self.rom,0x231244),sync:crate::rom_region::addr(self.rom,0x2312cc),category:crate::rom_region::addr(self.rom,0x8fa93c),format:crate::rom_region::addr(self.rom,0x231238),content_type:crate::rom_region::addr(self.rom,0x23122c)};
-                let classes=core::array::from_fn(|i| m.half(crate::rom_region::addr(self.rom,0x8dc30c)+i as u32*2));
-                crate::speech_part_2::fn_230e1c(m,a[0],a[1],[a[2],a[3]],&e,&t,&classes,0x800,self)
+                let e = speech_environment(m, self.rom);
+                let t = crate::speech_part_2::XcoderLiterals {
+                    input_key: crate::rom_region::addr(self.rom, 0x2311b8),
+                    native_key: crate::rom_region::addr(self.rom, 0x2311e8),
+                    utf16: crate::rom_region::addr(self.rom, 0x231244),
+                    sync: crate::rom_region::addr(self.rom, 0x2312cc),
+                    category: crate::rom_region::addr(self.rom, 0x8fa93c),
+                    format: crate::rom_region::addr(self.rom, 0x231238),
+                    content_type: crate::rom_region::addr(self.rom, 0x23122c),
+                };
+                let classes = core::array::from_fn(|i| {
+                    m.half(crate::rom_region::addr(self.rom, 0x8dc30c) + i as u32 * 2)
+                });
+                crate::speech_part_2::fn_230e1c(
+                    m,
+                    a[0],
+                    a[1],
+                    [a[2], a[3]],
+                    &e,
+                    &t,
+                    &classes,
+                    0x800,
+                    self,
+                )
             }
-            0x22d460 => open_audio_m(&mut AudioHost{h:self,p:a[0],index:0},m.bytes,(a[0]!=0).then_some(a[0]),a[1],a[2],a[3]),
-            0x22d6dc => pump_insertion_at_m(&mut BufferHost{h:self,p:a[0]},m.bytes,a[0],a[1],a[4]),
+            0x22d460 => open_audio_m(
+                &mut AudioHost {
+                    h: self,
+                    p: a[0],
+                    index: 0,
+                },
+                m.bytes,
+                (a[0] != 0).then_some(a[0]),
+                a[1],
+                a[2],
+                a[3],
+            ),
+            0x22d6dc => pump_insertion_at_m(
+                &mut BufferHost { h: self, p: a[0] },
+                m.bytes,
+                a[0],
+                a[1],
+                a[4],
+            ),
             0x227d64 => {
-                let mut args=[0;7];args[..a.len()].copy_from_slice(a);
-                match selection_root_m(m,args,self.boot.platform,self.rom){Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
+                let mut args = [0; 7];
+                args[..a.len()].copy_from_slice(a);
+                match selection_root_m(m, args, self.boot.platform, self.rom) {
+                    Ok(rc) => rc,
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
+                }
             }
             0x1e57d0 => {
-                let env=stream_environment(m,self.rom);
-                let n=m.bytes.len().min(0x10000);
-                let clean=m.bytes[..n].iter().all(|b|*b==0);
-                let (rc,fault);
+                let env = stream_environment(m, self.rom);
+                let n = m.bytes.len().min(0x10000);
+                let clean = m.bytes[..n].iter().all(|b| *b == 0);
+                let (rc, fault);
                 {
-                    let mut lh=crate::component_live_b::LiveHost{platform:&mut *self.boot.platform,fault:None,scratch:0x500,rom:self.rom};
-                    rc=crate::component_live_b::fn_1e57d0_m(m,[a[0],a[1],a[2],a[3]],&env,0x600,&mut lh);
-                    fault=lh.fault;
+                    let mut lh = crate::component_live_b::LiveHost {
+                        platform: &mut *self.boot.platform,
+                        fault: None,
+                        scratch: 0x500,
+                        rom: self.rom,
+                    };
+                    rc = crate::component_live_b::fn_1e57d0_m(
+                        m,
+                        [a[0], a[1], a[2], a[3]],
+                        &env,
+                        0x600,
+                        &mut lh,
+                    );
+                    fault = lh.fault;
                 }
-                if clean{m.bytes[..n].fill(0);}
-                if let Some(e)=fault{self.boot.fault=Some(e);}
+                if clean {
+                    m.bytes[..n].fill(0);
+                }
+                if let Some(e) = fault {
+                    self.boot.fault = Some(e);
+                }
                 rc
             }
             0x1d135c => {
-                let env=language_environment(m,self.rom);
-                let n=m.bytes.len().min(0x10000);
-                let clean=m.bytes[..n].iter().all(|b|*b==0);
-                let (rc,fault);
+                let env = language_environment(m, self.rom);
+                let n = m.bytes.len().min(0x10000);
+                let clean = m.bytes[..n].iter().all(|b| *b == 0);
+                let (rc, fault);
                 {
-                    let mut lh=crate::component_live_b::LiveHost{platform:&mut *self.boot.platform,fault:None,scratch:0x500,rom:self.rom};
-                    rc=crate::component_live_b::fn_1d135c_m(m,[a[0],a[1],a[2],a[3]],&env,0x600,&mut lh);
-                    fault=lh.fault;
+                    let mut lh = crate::component_live_b::LiveHost {
+                        platform: &mut *self.boot.platform,
+                        fault: None,
+                        scratch: 0x500,
+                        rom: self.rom,
+                    };
+                    rc = crate::component_live_b::fn_1d135c_m(
+                        m,
+                        [a[0], a[1], a[2], a[3]],
+                        &env,
+                        0x600,
+                        &mut lh,
+                    );
+                    fault = lh.fault;
                 }
-                if clean{m.bytes[..n].fill(0);}
-                if let Some(e)=fault{self.boot.fault=Some(e);}
+                if clean {
+                    m.bytes[..n].fill(0);
+                }
+                if let Some(e) = fault {
+                    self.boot.fault = Some(e);
+                }
                 rc
             }
             0x1f3ea0 => {
-                let n=m.bytes.len().min(0x10000);
-                let clean=m.bytes[..n].iter().all(|b|*b==0);
-                let (rc,fault);
+                let n = m.bytes.len().min(0x10000);
+                let clean = m.bytes[..n].iter().all(|b| *b == 0);
+                let (rc, fault);
                 {
-                    let mut lh=crate::component_live_b::LiveHost{platform:&mut *self.boot.platform,fault:None,scratch:0x500,rom:self.rom};
-                    rc=crate::component_live_b::fn_1f3ea0_m(m,[a[0],a[1],a[2],a[3],a[4]],0xd00,&mut lh);
-                    fault=lh.fault;
+                    let mut lh = crate::component_live_b::LiveHost {
+                        platform: &mut *self.boot.platform,
+                        fault: None,
+                        scratch: 0x500,
+                        rom: self.rom,
+                    };
+                    rc = crate::component_live_b::fn_1f3ea0_m(
+                        m,
+                        [a[0], a[1], a[2], a[3], a[4]],
+                        0xd00,
+                        &mut lh,
+                    );
+                    fault = lh.fault;
                 }
-                if clean{m.bytes[..n].fill(0);}
-                if let Some(e)=fault{self.boot.fault=Some(e);}
+                if clean {
+                    m.bytes[..n].fill(0);
+                }
+                if let Some(e) = fault {
+                    self.boot.fault = Some(e);
+                }
                 rc
             }
             0x202f9c => {
-
-                let r={let p=&mut *self.boot.platform;let rom=self.rom;fn_202f9c_m(m,a[0],a[1],a[2],a[3],p,rom)};
-                match r{Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
+                let r = {
+                    let p = &mut *self.boot.platform;
+                    let rom = self.rom;
+                    fn_202f9c_m(m, a[0], a[1], a[2], a[3], p, rom)
+                };
+                match r {
+                    Ok(rc) => rc,
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
+                }
             }
             0x1f4724 => {
-                let r={let p=&mut *self.boot.platform;let rom=self.rom;fn_1f4724_m(m,a[0],a[1],a[2],a[3],p,rom)};
-                match r{Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
+                let r = {
+                    let p = &mut *self.boot.platform;
+                    let rom = self.rom;
+                    fn_1f4724_m(m, a[0], a[1], a[2], a[3], p, rom)
+                };
+                match r {
+                    Ok(rc) => rc,
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
+                }
             }
             0x1ef464 => {
-                let e=speech_types_environment(m,self.rom);
-                crate::speech_part_2::fn_1ef464(m,a[0],a[1],[a[2],a[3]],&e,self)
+                let e = speech_types_environment(m, self.rom);
+                crate::speech_part_2::fn_1ef464(m, a[0], a[1], [a[2], a[3]], &e, self)
             }
             0x219c8c => {
-                let e=spelling_environment(m,self.rom);
-                crate::component_live_c::fn_219c8c_m(m,a[0],a[1],[a[2],a[3]],&e,self)
+                let e = spelling_environment(m, self.rom);
+                crate::component_live_c::fn_219c8c_m(m, a[0], a[1], [a[2], a[3]], &e, self)
             }
             0x1d513c => {
-                let e=component_environment(m,self.rom);
-                crate::speech_part_1::fn_1d513c(m,a[0],a[1],[a[2],a[3]],&e,self)
+                let e = component_environment(m, self.rom);
+                crate::speech_part_1::fn_1d513c(m, a[0], a[1], [a[2], a[3]], &e, self)
             }
-            0x200e2c => crate::component_live_c::fn_200e2c_m(m,a[0],a[1],0x1e80,self),
-            0x1970a0 => crate::normalization::idx5(m.bytes,a[0]),
-            0x163a98 => callback_m(m,a[..5].try_into().unwrap(),0x1c00,0x989680,self),
-            0x132124 => callback_m(m,[a[4],a[0],a[1],a[2],a[3]],0x1c00,0x989680,self),
+            0x200e2c => crate::component_live_c::fn_200e2c_m(m, a[0], a[1], 0x1e80, self),
+            0x1970a0 => crate::normalization::idx5(m.bytes, a[0]),
+            0x163a98 => callback_m(m, a[..5].try_into().unwrap(), 0x1c00, 0x989680, self),
+            0x132124 => callback_m_rom(
+                m,
+                [a[4], a[0], a[1], a[2], a[3]],
+                0x1c00,
+                0x989680,
+                self.rom,
+                self,
+            ),
             0x22c5f0 => {
-
-                let p=crate::prosody_rules::InserterParameters{
-                    input_active:m.word(a[0]+0x10),output_active:m.word(a[0]+0x18),..Default::default()};
-                let mut valid=1u8;
-                let rc=p.validate(terminated(m.bytes,a[1]),terminated(m.bytes,a[2]),&mut valid);
-                m.put_byte(a[3],valid);rc
+                let p = crate::prosody_rules::InserterParameters {
+                    input_active: m.word(a[0] + 0x10),
+                    output_active: m.word(a[0] + 0x18),
+                    ..Default::default()
+                };
+                let mut valid = 1u8;
+                let rc = p.validate(
+                    terminated(m.bytes, a[1]),
+                    terminated(m.bytes, a[2]),
+                    &mut valid,
+                );
+                m.put_byte(a[3], valid);
+                rc
             }
             0x22c6dc => {
-
-                let mut p=crate::prosody_rules::InserterParameters{
-                    input_active:m.word(a[0]+0x10),output_active:m.word(a[0]+0x18),
-                    frequency:m.word(a[0]+0x3c),buffer_samples:m.word(a[0]+0x40),
-                    volume:m.half(a[0]+0x60),rate:m.half(a[0]+0x62),
-                    adjust_volume:m.byte(a[0]+0x64),adjust_rate:m.byte(a[0]+0x65)};
-                let rc=p.set(terminated(m.bytes,a[1]),terminated(m.bytes,a[2]));
-                if p.frequency!=m.word(a[0]+0x3c) {m.put_word(a[0]+0x3c,p.frequency);}
-                if p.buffer_samples!=m.word(a[0]+0x40) {m.put_word(a[0]+0x40,p.buffer_samples);}
-                if p.volume!=m.half(a[0]+0x60) {m.put_half(a[0]+0x60,p.volume);}
-                if p.rate!=m.half(a[0]+0x62) {m.put_half(a[0]+0x62,p.rate);}
-                if p.adjust_volume!=m.byte(a[0]+0x64) {m.put_byte(a[0]+0x64,p.adjust_volume);}
-                if p.adjust_rate!=m.byte(a[0]+0x65) {m.put_byte(a[0]+0x65,p.adjust_rate);}
+                let mut p = crate::prosody_rules::InserterParameters {
+                    input_active: m.word(a[0] + 0x10),
+                    output_active: m.word(a[0] + 0x18),
+                    frequency: m.word(a[0] + 0x3c),
+                    buffer_samples: m.word(a[0] + 0x40),
+                    volume: m.half(a[0] + 0x60),
+                    rate: m.half(a[0] + 0x62),
+                    adjust_volume: m.byte(a[0] + 0x64),
+                    adjust_rate: m.byte(a[0] + 0x65),
+                };
+                let rc = p.set(terminated(m.bytes, a[1]), terminated(m.bytes, a[2]));
+                if p.frequency != m.word(a[0] + 0x3c) {
+                    m.put_word(a[0] + 0x3c, p.frequency);
+                }
+                if p.buffer_samples != m.word(a[0] + 0x40) {
+                    m.put_word(a[0] + 0x40, p.buffer_samples);
+                }
+                if p.volume != m.half(a[0] + 0x60) {
+                    m.put_half(a[0] + 0x60, p.volume);
+                }
+                if p.rate != m.half(a[0] + 0x62) {
+                    m.put_half(a[0] + 0x62, p.rate);
+                }
+                if p.adjust_volume != m.byte(a[0] + 0x64) {
+                    m.put_byte(a[0] + 0x64, p.adjust_volume);
+                }
+                if p.adjust_rate != m.byte(a[0] + 0x65) {
+                    m.put_byte(a[0] + 0x65, p.adjust_rate);
+                }
                 rc
             }
             0x2289b0 => {
-
-                let mut valid=0u8;
-                let rc=crate::frontend_output::validate_parameter(terminated(m.bytes,a[1]),terminated(m.bytes,a[2]),&mut valid);
-                m.put_byte(a[3],valid);rc
+                let mut valid = 0u8;
+                let rc = crate::frontend_output::validate_parameter(
+                    terminated(m.bytes, a[1]),
+                    terminated(m.bytes, a[2]),
+                    &mut valid,
+                );
+                m.put_byte(a[3], valid);
+                rc
             }
             0x151840 => {
-
-                let table=core::array::from_fn(|i| m.half(crate::rom_region::addr(self.rom,0x8dc30c)+i as u32*2));
-                let pair=core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom,0x8d7660)+i as u32));
-                let mut valid=0u8;
-                let rc=crate::frontend::validate_param(m.bytes,&table,(a[0]!=0).then_some(a[0]),
-                    terminated(m.bytes,a[1]),(a[2]!=0).then_some(a[2]),&mut valid,&pair,crate::rom_region::addr(self.rom,0x8d7640));
-                m.put_byte(a[3],valid);rc
+                let table = core::array::from_fn(|i| {
+                    m.half(crate::rom_region::addr(self.rom, 0x8dc30c) + i as u32 * 2)
+                });
+                let pair = core::array::from_fn(|i| {
+                    m.byte(crate::rom_region::addr(self.rom, 0x8d7660) + i as u32)
+                });
+                let mut valid = 0u8;
+                let rc = crate::frontend::validate_param(
+                    m.bytes,
+                    &table,
+                    (a[0] != 0).then_some(a[0]),
+                    terminated(m.bytes, a[1]),
+                    (a[2] != 0).then_some(a[2]),
+                    &mut valid,
+                    &pair,
+                    crate::rom_region::addr(self.rom, 0x8d7640),
+                );
+                m.put_byte(a[3], valid);
+                rc
             }
-            0x151df8=>{
-
-                let p=a[0];let name=a[1];let value=a[2];
-                if value==0||m.byte(value)==0||p==0 {return 0;}
-                let saved=m.word(OUT_CTX);
-                m.put_word(OUT_CTX,0);
-                let rc=self.call(m,0x19611c,&[m.word(p),m.word(p+4),OUT_CTX]);
-                if rc<0x80000000 {
-                    let ctx=m.word(OUT_CTX);
-                    let logger=m.word(ctx.wrapping_add(16));
-                    let values=[name,value];
-                    self.log_m(logger,0x8d7994,4,0x151f0c,&values,m);
-                    if self.call(m,0x195d58,&[name,crate::rom_region::addr(self.rom,0x151f24)])==0 {
-                        m.put_word(p+0x38,crate::normalization::atoi_scan(m.bytes,value));
-                    } else if self.call(m,0x195d58,&[name,crate::rom_region::addr(self.rom,0x151f3c)])==0 {
-                        m.put_word(p+0x34,crate::normalization::atoi_scan(m.bytes,value));
-                    } else if self.call(m,0x195d58,&[name,crate::rom_region::addr(self.rom,0x151f48)])==0 {
-                        m.put_word(p+0xe8,crate::normalization::atoi_scan(m.bytes,value));
-                    } else if self.call(m,0x195d58,&[name,crate::rom_region::addr(self.rom,0x151f60)])==0 {
-
-                        self.boot.fault=Some(engine::Error::MissingStreamAdapter{entry:0x15af9c});
-                        m.put_word(OUT_CTX,saved);
+            0x151df8 => {
+                let p = a[0];
+                let name = a[1];
+                let value = a[2];
+                if value == 0 || m.byte(value) == 0 || p == 0 {
+                    return 0;
+                }
+                let saved = m.word(OUT_CTX);
+                m.put_word(OUT_CTX, 0);
+                let rc = self.call(m, 0x19611c, &[m.word(p), m.word(p + 4), OUT_CTX]);
+                if rc < 0x80000000 {
+                    let ctx = m.word(OUT_CTX);
+                    let logger = m.word(ctx.wrapping_add(16));
+                    let values = [name, value];
+                    self.log_m(logger, 0x8d7994, 4, 0x151f0c, &values, m);
+                    if self.call(
+                        m,
+                        0x195d58,
+                        &[name, crate::rom_region::addr(self.rom, 0x151f24)],
+                    ) == 0
+                    {
+                        m.put_word(p + 0x38, crate::normalization::atoi_scan(m.bytes, value));
+                    } else if self.call(
+                        m,
+                        0x195d58,
+                        &[name, crate::rom_region::addr(self.rom, 0x151f3c)],
+                    ) == 0
+                    {
+                        m.put_word(p + 0x34, crate::normalization::atoi_scan(m.bytes, value));
+                    } else if self.call(
+                        m,
+                        0x195d58,
+                        &[name, crate::rom_region::addr(self.rom, 0x151f48)],
+                    ) == 0
+                    {
+                        m.put_word(p + 0xe8, crate::normalization::atoi_scan(m.bytes, value));
+                    } else if self.call(
+                        m,
+                        0x195d58,
+                        &[name, crate::rom_region::addr(self.rom, 0x151f60)],
+                    ) == 0
+                    {
+                        self.boot.fault =
+                            Some(engine::Error::MissingStreamAdapter { entry: 0x15af9c });
+                        m.put_word(OUT_CTX, saved);
                         return 0x80002001;
                     }
                 }
-                m.put_word(OUT_CTX,saved);
+                m.put_word(OUT_CTX, saved);
                 rc
             }
-            0x228aac=>{
-
-                let p=a[0];let name=a[1];let value=a[2];
-                if self.call(m,0x195d58,&[name,crate::rom_region::addr(self.rom,0x151f48)])!=0 {
-                    self.boot.fault=Some(engine::Error::MissingStreamAdapter{entry:0x2a9608});
+            0x228aac => {
+                let p = a[0];
+                let name = a[1];
+                let value = a[2];
+                if self.call(
+                    m,
+                    0x195d58,
+                    &[name, crate::rom_region::addr(self.rom, 0x151f48)],
+                ) != 0
+                {
+                    self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: 0x2a9608 });
                     return 0x80002001;
                 }
-                let table=core::array::from_fn(|i|m.half(crate::rom_region::addr(self.rom,0x8dc30c)+i as u32*2));
-                let parsed=crate::frontend::parse_int(&table,m.bytes,value) as u32;
-                let frame=m.word(p+0x18);
-                let mut buffer=if parsed>1 {parsed}else{1};
-                if frame!=0 {
-                    let remainder=parsed%frame;
-                    if remainder!=0&&buffer>frame {buffer=buffer.wrapping_sub(remainder);}
-                }
-                if buffer>frame {m.put_word(p+0x14,buffer);} else {m.put_word(p+0x14,frame);}
-                0
-            }
-            0x18f490=>{
-
-                match fn_18f490_m(m,a[0],a[1],a[2],a[3]) {
-                    Ok(rc)=>rc,
-                    Err(e)=>{self.boot.fault=Some(e);0x80002001}
-                }
-            }
-            0x183398 => {if finish_checked_m(m,a[0],a[1],a[2],0x1c40,self){0}else{0x80002001}}
-            0x84c160 => fn_84c160_m(m,a[0],a[1],self),
-            0x11da30 => {let rom=self.rom;fn_11da30_m(m,a[0],self,rom);0},
-            0x1959dc => {
-
-                if a.len() < 2 {self.boot.fault=Some(engine::Error::InvalidSnapshot);0x80002001}
-                else {fn_1959dc_m(m,a[0],a[1],self)}
-            },
-            0x196fbc|0x174b14|0x19665c|0x19869c|0x198fb4|0x196428|0x196964 => {
-
-                if a.is_empty() {self.boot.fault=Some(engine::Error::InvalidSnapshot);0x80002001}
-                else {
-                    match f {
-                        0x196fbc=>fn_196fbc_m(m,a[0],*a.get(1).unwrap_or(&0),self),
-                        0x174b14=>{fn_174b14_m(m,a[0],self);0},
-                        0x19665c=>fn_19665c_m(m,a[0],self),
-                        0x19869c=>{fn_19869c_m(m,a[0],self);0},
-                        0x198fb4=>{if a.len()<3 {self.boot.fault=Some(engine::Error::InvalidSnapshot);0x80002001} else {fn_198fb4_m(m,a[0],a[1],a[2],self);0}},
-                        0x196964=>{fn_196428_m(m,*a.get(1).unwrap_or(&0),a[0],self);0},
-                        _=>{fn_196428_m(m,a[0],*a.get(1).unwrap_or(&0),self);0},
+                let table = core::array::from_fn(|i| {
+                    m.half(crate::rom_region::addr(self.rom, 0x8dc30c) + i as u32 * 2)
+                });
+                let parsed = crate::frontend::parse_int(&table, m.bytes, value) as u32;
+                let frame = m.word(p + 0x18);
+                let mut buffer = if parsed > 1 { parsed } else { 1 };
+                if frame != 0 {
+                    let remainder = parsed % frame;
+                    if remainder != 0 && buffer > frame {
+                        buffer = buffer.wrapping_sub(remainder);
                     }
                 }
+                if buffer > frame {
+                    m.put_word(p + 0x14, buffer);
+                } else {
+                    m.put_word(p + 0x14, frame);
+                }
+                0
+            }
+            0x18f490 => match fn_18f490_m(m, a[0], a[1], a[2], a[3]) {
+                Ok(rc) => rc,
+                Err(e) => {
+                    self.boot.fault = Some(e);
+                    0x80002001
+                }
             },
+            0x183398 => {
+                if finish_checked_m(m, a[0], a[1], a[2], 0x1c40, self.rom, self) {
+                    0
+                } else {
+                    0x80002001
+                }
+            }
+            0x84c160 => fn_84c160_m(m, a[0], a[1], self),
+            0x11da30 => {
+                let rom = self.rom;
+                fn_11da30_m(m, a[0], self, rom);
+                0
+            }
+            0x1959dc => {
+                if a.len() < 2 {
+                    self.boot.fault = Some(engine::Error::InvalidSnapshot);
+                    0x80002001
+                } else {
+                    fn_1959dc_m(m, a[0], a[1], self)
+                }
+            }
+            0x196fbc | 0x174b14 | 0x19665c | 0x19869c | 0x198fb4 | 0x196428 | 0x196964 => {
+                if a.is_empty() {
+                    self.boot.fault = Some(engine::Error::InvalidSnapshot);
+                    0x80002001
+                } else {
+                    match f {
+                        0x196fbc => fn_196fbc_m(m, a[0], *a.get(1).unwrap_or(&0), self),
+                        0x174b14 => {
+                            fn_174b14_m(m, a[0], self);
+                            0
+                        }
+                        0x19665c => fn_19665c_m(m, a[0], self),
+                        0x19869c => {
+                            fn_19869c_m(m, a[0], self);
+                            0
+                        }
+                        0x198fb4 => {
+                            if a.len() < 3 {
+                                self.boot.fault = Some(engine::Error::InvalidSnapshot);
+                                0x80002001
+                            } else {
+                                fn_198fb4_m(m, a[0], a[1], a[2], self);
+                                0
+                            }
+                        }
+                        0x196964 => {
+                            fn_196428_m(m, *a.get(1).unwrap_or(&0), a[0], self);
+                            0
+                        }
+                        _ => {
+                            fn_196428_m(m, a[0], *a.get(1).unwrap_or(&0), self);
+                            0
+                        }
+                    }
+                }
+            }
             0x129778 => {
-
-                if a.is_empty() {self.boot.fault=Some(engine::Error::InvalidSnapshot);0x80002001}
-                else {
-                {let obj=m.word(crate::rom_region::addr(self.rom,0xb6f4ec));let mut b=m.word(obj.wrapping_add(0x3c));let mut k=0;while k<5{if b==0{break;}b=m.word(b.wrapping_add(12));k+=1;}}
-                crate::speech_part_4::fn_129778(m,self,a[0],m.byte(crate::rom_region::addr(self.rom,0xa7b8e8))as u32)}
-            },
+                if a.is_empty() {
+                    self.boot.fault = Some(engine::Error::InvalidSnapshot);
+                    0x80002001
+                } else {
+                    {
+                        let obj = m.word(crate::rom_region::addr(self.rom, 0xb6f4ec));
+                        let mut b = m.word(obj.wrapping_add(0x3c));
+                        let mut k = 0;
+                        while k < 5 {
+                            if b == 0 {
+                                break;
+                            }
+                            b = m.word(b.wrapping_add(12));
+                            k += 1;
+                        }
+                    }
+                    crate::speech_part_4::fn_129778(
+                        m,
+                        self,
+                        a[0],
+                        m.byte(crate::rom_region::addr(self.rom, 0xa7b8e8)) as u32,
+                    )
+                }
+            }
             0x18f6b8 => {
-
                 if a.len() >= 6 && m.word(a[0].wrapping_add(0x160)) == 0 {
                     seg7_flush_arm(self, m, f, a)
-                }
-                else if a.len() < 7 {self.boot.fault=Some(engine::Error::InvalidSnapshot);0x80002001}
-                else if self.runtime.is_none() {self.boot.fault=Some(engine::Error::UnsupportedStage{entry:f});0x80002001}
-                else {
+                } else if a.len() < 7 {
+                    self.boot.fault = Some(engine::Error::InvalidSnapshot);
+                    0x80002001
+                } else if self.runtime.is_none() {
+                    self.boot.fault = Some(engine::Error::UnsupportedStage { entry: f });
+                    0x80002001
+                } else {
                     let rt = self.runtime.as_deref_mut().unwrap();
-                    let mut hooks = crate::engine_live_back::Hooks{platform:self.boot.platform,runtime:rt,snap:self.snap,fault:None,rom:self.rom};
-                    let rc = crate::engine_live_back::fn_18f6b8_m(m,a[0],a[1],a[2],a[3],a[4],a[5],a[6],&mut hooks);
-                    if let Some(e) = hooks.fault {self.boot.fault=Some(e);0x80002001}else{rc}
+                    let mut hooks = crate::engine_live_back::Hooks {
+                        platform: self.boot.platform,
+                        runtime: rt,
+                        snap: self.snap,
+                        fault: None,
+                        rom: self.rom,
+                    };
+                    let rc = crate::engine_live_back::fn_18f6b8_m(
+                        m, a[0], a[1], a[2], a[3], a[4], a[5], a[6], &mut hooks,
+                    );
+                    if let Some(e) = hooks.fault {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    } else {
+                        rc
+                    }
                 }
             }
-            0x1fe094 => clear_text_items_m(m,a[0],a[1],0x1c80,self),
-            0x22b518|0x22a0a8|0x22b3bc|0x229de4|0x14f010|0x14f918|0x151610|0x1516c8|0x151744|0x196830|0x19690c|0x14df44|0x1749ac|0x174a04|0x15017c|0x150878|0x150c0c|0x174b38|0x175170|0x19668c|0x1966ac|0x176054|0x176104|0x175850|0x196980 => {
-
+            0x1fe094 => clear_text_items_m(m, a[0], a[1], 0x1c80, self),
+            0x22b518 | 0x22a0a8 | 0x22b3bc | 0x229de4 | 0x14f010 | 0x14f918 | 0x151610
+            | 0x1516c8 | 0x151744 | 0x196830 | 0x19690c | 0x14df44 | 0x1749ac | 0x174a04
+            | 0x15017c | 0x150878 | 0x150c0c | 0x174b38 | 0x175170 | 0x19668c | 0x1966ac
+            | 0x176054 | 0x176104 | 0x175850 | 0x196980 => {
                 if f == 0x14f010 {
-
-                    let mut si = 0; while si < self.stack_len {  si += 1; }
+                    let mut si = 0;
+                    while si < self.stack_len {
+                        si += 1;
+                    }
                 }
-                if f == 0x22b3bc {
-
+                if f == 0x22b3bc {}
+                match component_a2_m(m, f, a, self.boot.platform, self.rom) {
+                    Ok(rc) => rc,
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
                 }
-                match component_a2_m(m,f,a,self.boot.platform,self.rom){Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
             }
-            0x15140c|0x14fe9c|0x151294 => {
-                let mut regions=[engine::Region{base:m.base,bytes:m.bytes}];
-                let mut sparse=engine::Memory::new(&mut regions).expect("current arena");
-                match crate::engine_components::InternalCalls::call(&mut engine::LiveComponentCalls,&mut sparse,f,a) {
-                    Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}
+            0x15140c | 0x14fe9c | 0x151294 => {
+                let mut regions = [engine::Region {
+                    base: m.base,
+                    bytes: m.bytes,
+                }];
+                let mut sparse = engine::Memory::new(&mut regions).expect("current arena");
+                match crate::engine_components::InternalCalls::call(
+                    &mut engine::LiveComponentCalls,
+                    &mut sparse,
+                    f,
+                    a,
+                ) {
+                    Ok(rc) => rc,
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
                 }
             }
-            0x2312fc|0x231ba0 => {
-                let mut args=[0;7];args[..a.len()].copy_from_slice(a);let call=engine::StageCall{entry:f,args};
-                let mut regions=[engine::Region{base:m.base,bytes:m.bytes}];let mut sparse=engine::Memory::new(&mut regions).expect("current arena");
-                let result=if f==0x2312fc {let mut scratch=[0u8;8192];engine::xcoder_text_stage(&mut sparse,call,&mut scratch)}else{engine::xcoder_markers_stage(&mut sparse,call)};
-                match result{Ok(r)=>r.r0.expect("XCODER result"),Err(e)=>{self.boot.fault=Some(e);0x80002001}}
+            0x2312fc | 0x231ba0 => {
+                let mut args = [0; 7];
+                args[..a.len()].copy_from_slice(a);
+                let call = engine::StageCall { entry: f, args };
+                let mut regions = [engine::Region {
+                    base: m.base,
+                    bytes: m.bytes,
+                }];
+                let mut sparse = engine::Memory::new(&mut regions).expect("current arena");
+                let result = if f == 0x2312fc {
+                    let mut scratch = [0u8; 8192];
+                    engine::xcoder_text_stage(&mut sparse, call, &mut scratch)
+                } else {
+                    engine::xcoder_markers_stage(&mut sparse, call)
+                };
+                match result {
+                    Ok(r) => r.r0.expect("XCODER result"),
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
+                }
             }
             0x15daa8 => {
-                let valid=validate_handle(a[0]!=0,a[1],0xb2c2,56)<0x80000000;
-                if valid {let mut out=0;let rc=crate::linguistic::dirty(true,m.byte(a[0]+52),&mut out);m.put_byte(a[2],out);rc}
-                else {crate::linguistic::dirty(false,0,&mut 0)}
+                let valid = validate_handle(a[0] != 0, a[1], 0xb2c2, 56) < 0x80000000;
+                if valid {
+                    let mut out = 0;
+                    let rc = crate::linguistic::dirty(true, m.byte(a[0] + 52), &mut out);
+                    m.put_byte(a[2], out);
+                    rc
+                } else {
+                    crate::linguistic::dirty(false, 0, &mut 0)
+                }
             }
             0x15dad8 => {
-                let valid=validate_handle(a[0]!=0,a[1],0xb2c2,56)<0x80000000;
-                if valid {let mut out=m.byte(a[0]+52);let rc=crate::linguistic::clear_dirty(true,&mut out);m.put_byte(a[0]+52,out);rc}
-                else {crate::linguistic::clear_dirty(false,&mut 0)}
+                let valid = validate_handle(a[0] != 0, a[1], 0xb2c2, 56) < 0x80000000;
+                if valid {
+                    let mut out = m.byte(a[0] + 52);
+                    let rc = crate::linguistic::clear_dirty(true, &mut out);
+                    m.put_byte(a[0] + 52, out);
+                    rc
+                } else {
+                    crate::linguistic::clear_dirty(false, &mut 0)
+                }
             }
             0x15429c => {
-                let mut activity=[0u8;256];let n=m.half(m.word(a[0]+0x7c)+12) as usize;
-                if n>activity.len(){self.boot.fault=Some(engine::Error::Capacity{required:n,available:activity.len()});return 0x80002001;}
-                process_text_m(m,a[0],a[1],&mut activity,0x1e00,self)
+                let mut activity = [0u8; 256];
+                let n = m.half(m.word(a[0] + 0x7c) + 12) as usize;
+                if n > activity.len() {
+                    self.boot.fault = Some(engine::Error::Capacity {
+                        required: n,
+                        available: activity.len(),
+                    });
+                    return 0x80002001;
+                }
+                process_text_m(m, a[0], a[1], &mut activity, 0x1e00, self)
             }
-            0x1e4a3c|0x1f48cc|0x1503b0=>{
-                match component_b_m(m,f,a,self.boot.platform){Ok(rc)=>rc,Err(e)=>{self.boot.fault=Some(e);0x80002001}}
+            0x1e4a3c | 0x1f48cc | 0x1503b0 => {
+                match component_b_m(m, f, a, self.boot.platform, self.rom) {
+                    Ok(rc) => rc,
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
+                }
             }
-            0x18cae8=>{let mut regions=[engine::Region{base:m.base,bytes:m.bytes}];let mut sparse=engine::Memory::new(&mut regions).expect("current arena");match engine::reset_synthesis_live(&mut sparse,a[0],self.rom){Ok(())=>0,Err(e)=>{self.boot.fault=Some(e);0x80002001}}},
-            0x7f6820=>crate::speech_part_3::fn_7f6820(m,a[0]),
-            0x18cc30=>crate::boot_part_b::fn_18cc30(m,a[0],self),
-            0x18ac58=>crate::boot_part_b2::fn_18ac58(m,crate::rom_region::addr(self.rom,0xa7bf6c),crate::rom_region::addr(self.rom,0xb84078),self),
-            0x1858e4=>crate::boot_part_b2::fn_1858e4(m,crate::rom_region::addr(self.rom,0xa7c90c),crate::rom_region::addr(self.rom,0xb9be08)),
-            0x1840e8=>{crate::boot_part_b::fn_1840e8(m,self);0},
-            0x185d40=>{crate::boot_part_b::fn_185d40(m,self);0},
-            0x1b5b8c=>{notify_output_m(m,a[0],a[1],self);0},
-            0x1a1b68=>{match publish_output_m(m,a[0],self.rom,self){Ok(())=>0,Err(e)=>{self.boot.fault=Some(e);0}}},
-            0x19703c=>{
-                if a[0]==0 || m.word(a[0]+12)==0 || m.word(a[0]+20)==0 {crate::normalization::run_dtors(m.bytes,a[0])}
-                else {self.boot.fault=Some(engine::Error::MissingStreamAdapter{entry:f});0x80002001}
+            0x18cae8 => {
+                let mut regions = [engine::Region {
+                    base: m.base,
+                    bytes: m.bytes,
+                }];
+                let mut sparse = engine::Memory::new(&mut regions).expect("current arena");
+                match engine::reset_synthesis_live(&mut sparse, a[0], self.rom) {
+                    Ok(()) => 0,
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
+                }
             }
-            0x19869c=>{clear_tree_m(m,a[0],self);0}
-
-            0x14e0b4=>{let mut h=ReleaseCalls(self);crate::component_live_a2::release_stream_state_m(m,a[0],a.get(1).copied().unwrap_or(0),&mut h);0},
-            0x14dfc0=>{let p=a[0];let hp=a.get(1).copied().unwrap_or(0);if p!=0{let h=m.word(p);if h!=0{self.call(m,0x196428,&[hp,h]);}self.call(m,0x196428,&[hp,p]);}0},
-            0x196c7c=>crate::reentrant2::destroy_array_m(m,a[0],self),
-            0x198fb4=>{destroy_subtree_m(m,a[0],a[1],a[2],self);0}
-            0x196770=>crate::frontend::clear_iterator((a[0]!=0).then_some(a[0]),&mut |tree|{self.call(m,0x19869c,&[tree]);}),
-            0x230274=>pipeline_switch_m(&mut SwitchHost(self),m.bytes,a[0],a[1]),
-            0x1757a8=>crate::frontend::check_handle(a[0]!=0),
-            0x175944=>crate::db_live::get_uint(self,m,a[0],a[1],a[2]),
-            0x150fbc=>{let s=0x1e40;let saved=[m.word(s),m.word(s+4)];
-                let rc=write_copy_m(m.bytes,(a[0]!=0).then_some(a[0]),a[1],(a[2]!=0).then_some(a[2]),a[3],a[4],a[5],s,s+4,self);m.put_word(s,saved[0]);m.put_word(s+4,saved[1]);rc}
-            0x2581ac => fn_2581ac_m(m,a[0],self),
-            0x2ba6b4 => fn_2ba6b4_m(m,a[0],self),
-            0x23ffd4 => pcre_deinit_m(m,a[0],a[1],0x1d00,self),
-            0x264578 => fn_264578(m,a[0],self),
-            0x1e5af0 => crate::speech_part_2::fn_1e5af0(m,a[0],a[1],self),
-
-            0x205e58 => crate::speech_part_2::fn_205e58(m,a[0],a[1],self),
-            0x1f1138 => crate::speech_part_2::fn_1f1138(m,a[0],a[1],self),
-            0x21cd54 => crate::speech_part_2::fn_21cd54(m,a[0],a[1],self),
-            0x1d7544 => crate::speech_part_1::fn_1d7544(m,a[0],a[1],self),
-
-            0x1f4cb0 => fn_1f4cb0_m(m,a[0],a[1],self),
-
-            0x1fd6d0 => fn_1fd6d0_m(m,a[0],a[1],self),
-
-            0x1f27ec => fn_1f27ec_m(m,a[0],a[1],self),
-            0x1f3a8c => fn_1f3a8c_m(m,a[0],a[1],self),
-            0x1e03ac => fn_1e03ac_m(m,a[0],a[1],self),
-            0x1ea328 => fn_1ea328_m(m,a[0],a[1],self),
-            0x1f7e8c => fn_1f7e8c_m(m,a[0],a[1],self),
-
-            0x1f43f0 => fn_1f43f0_m(m,a[0],a[1],self),
-
-            0x211348 => fn_211348_m(m,a[0],a[1],self),
-
+            0x7f6820 => crate::speech_part_3::fn_7f6820(m, a[0]),
+            0x18cc30 => crate::boot_part_b::fn_18cc30(m, a[0], self),
+            0x18ac58 => crate::boot_part_b2::fn_18ac58(
+                m,
+                crate::rom_region::addr(self.rom, 0xa7bf6c),
+                crate::rom_region::addr(self.rom, 0xb84078),
+                self,
+            ),
+            0x1858e4 => crate::boot_part_b2::fn_1858e4(
+                m,
+                crate::rom_region::addr(self.rom, 0xa7c90c),
+                crate::rom_region::addr(self.rom, 0xb9be08),
+            ),
+            0x1840e8 => {
+                crate::boot_part_b::fn_1840e8(m, self);
+                0
+            }
+            0x185d40 => {
+                crate::boot_part_b::fn_185d40(m, self);
+                0
+            }
+            0x1b5b8c => {
+                notify_output_m(m, a[0], a[1], self);
+                0
+            }
+            0x1a1b68 => match publish_output_m(m, a[0], self.rom, self) {
+                Ok(()) => 0,
+                Err(e) => {
+                    self.boot.fault = Some(e);
+                    0
+                }
+            },
+            0x19703c => {
+                if a[0] == 0 || m.word(a[0] + 12) == 0 || m.word(a[0] + 20) == 0 {
+                    crate::normalization::run_dtors(m.bytes, a[0])
+                } else {
+                    self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
+                    0x80002001
+                }
+            }
+            0x19869c => {
+                clear_tree_m(m, a[0], self);
+                0
+            }
+            0x14e0b4 => {
+                let mut h = ReleaseCalls(self);
+                crate::component_live_a2::release_stream_state_m(
+                    m,
+                    a[0],
+                    a.get(1).copied().unwrap_or(0),
+                    &mut h,
+                );
+                0
+            }
+            0x14dfc0 => {
+                let p = a[0];
+                let hp = a.get(1).copied().unwrap_or(0);
+                if p != 0 {
+                    let h = m.word(p);
+                    if h != 0 {
+                        self.call(m, 0x196428, &[hp, h]);
+                    }
+                    self.call(m, 0x196428, &[hp, p]);
+                }
+                0
+            }
+            0x196c7c => crate::reentrant2::destroy_array_m(m, a[0], self),
+            0x198fb4 => {
+                destroy_subtree_m(m, a[0], a[1], a[2], self);
+                0
+            }
+            0x196770 => crate::frontend::clear_iterator((a[0] != 0).then_some(a[0]), &mut |tree| {
+                self.call(m, 0x19869c, &[tree]);
+            }),
+            0x230274 => pipeline_switch_m(&mut SwitchHost(self), m.bytes, a[0], a[1]),
+            0x1757a8 => crate::frontend::check_handle(a[0] != 0),
+            0x175944 => crate::db_live::get_uint(self, m, a[0], a[1], a[2]),
+            0x150fbc => {
+                let s = 0x1e40;
+                let saved = [m.word(s), m.word(s + 4)];
+                let rc = write_copy_m(
+                    m.bytes,
+                    (a[0] != 0).then_some(a[0]),
+                    a[1],
+                    (a[2] != 0).then_some(a[2]),
+                    a[3],
+                    a[4],
+                    a[5],
+                    s,
+                    s + 4,
+                    self,
+                );
+                m.put_word(s, saved[0]);
+                m.put_word(s + 4, saved[1]);
+                rc
+            }
+            0x2581ac => fn_2581ac_m(m, a[0], self),
+            0x2ba6b4 => fn_2ba6b4_m(m, a[0], self),
+            0x23ffd4 => pcre_deinit_m(m, a[0], a[1], 0x1d00, self),
+            0x264578 => fn_264578(m, a[0], self),
+            0x1e5af0 => crate::speech_part_2::fn_1e5af0(m, a[0], a[1], self),
+            0x205e58 => crate::speech_part_2::fn_205e58(m, a[0], a[1], self),
+            0x1f1138 => crate::speech_part_2::fn_1f1138(m, a[0], a[1], self),
+            0x21cd54 => crate::speech_part_2::fn_21cd54(m, a[0], a[1], self),
+            0x1d7544 => crate::speech_part_1::fn_1d7544(m, a[0], a[1], self),
+            0x1f4cb0 => fn_1f4cb0_m(m, a[0], a[1], self),
+            0x1fd6d0 => fn_1fd6d0_m(m, a[0], a[1], self),
+            0x1f27ec => fn_1f27ec_m(m, a[0], a[1], self),
+            0x1f3a8c => fn_1f3a8c_m(m, a[0], a[1], self),
+            0x1e03ac => fn_1e03ac_m(m, a[0], a[1], self),
+            0x1ea328 => fn_1ea328_m(m, a[0], a[1], self),
+            0x1f7e8c => fn_1f7e8c_m(m, a[0], a[1], self),
+            0x1f43f0 => fn_1f43f0_m(m, a[0], a[1], self),
+            0x211348 => fn_211348_m(m, a[0], a[1], self),
             0x1e3e28 => {
-                let e=component_environment(m,self.rom);
-                crate::speech_part_1::fn_1e3e28(m,a[0],a[1],&e,self)
-            },
-
+                let e = component_environment(m, self.rom);
+                crate::speech_part_1::fn_1e3e28(m, a[0], a[1], &e, self)
+            }
             0x2276dc => {
-                let e=speech_environment(m,self.rom);
-                crate::speech_part_2::fn_2276dc(m,a[0],a[1],&e,self)
-            },
-
-            0x229cc0 => fn_229cc0_m(m,a[0],a[1],self),
-
-            0x19672c => fn_19672c_m(m,a[0],a[1],self),
-
+                let e = speech_environment(m, self.rom);
+                crate::speech_part_2::fn_2276dc(m, a[0], a[1], &e, self)
+            }
+            0x229cc0 => fn_229cc0_m(m, a[0], a[1], self),
+            0x19672c => fn_19672c_m(m, a[0], a[1], self),
             0x23220c => {
-                let e=speech_environment(m,self.rom);
-                crate::speech_part_2::fn_23220c(m,a[0],a[1],&e,self)
-            },
-
-            0x207130 => fn_207130_m(m,a[0],a[1],self),
-
-            0x1de844 => fn_1de844_m(m,a[0],a[1],self),
-
-            0x1d453c => crate::speech_part_1::fn_1d453c(m,a[0],a[1],0x1d170c,self),
-
+                let e = speech_environment(m, self.rom);
+                crate::speech_part_2::fn_23220c(m, a[0], a[1], &e, self)
+            }
+            0x207130 => fn_207130_m(m, a[0], a[1], self),
+            0x1de844 => fn_1de844_m(m, a[0], a[1], self),
+            0x1d453c => crate::speech_part_1::fn_1d453c(m, a[0], a[1], 0x1d170c, self),
             0x2318f0 => {
-                let e=speech_environment(m,self.rom);
-                crate::speech_part_2::fn_2318f0(m,a[0],a[1],&e,self)
-            },
-
-            0x22b238 => fn_22b238_m(m,a[0],a[1],self),
-
+                let e = speech_environment(m, self.rom);
+                crate::speech_part_2::fn_2318f0(m, a[0], a[1], &e, self)
+            }
+            0x22b238 => fn_22b238_m(m, a[0], a[1], self),
             0x2fdc84 => {
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                crate::speech_part_5::fn_2fdc84_m(m,a[0],a[1],a[2],a[3],self)
-            },
-            0x1e502c => end_token_processing_m(m,a[0],a[1],self),
-            0x201264 => {if validate_handle(a[0]!=0,a[1],0xf383,0x20)>=0x80000000 {return 0x8bb02008;}let entry=m.word(m.word(a[0]+8)+32);call_method8_m(&mut MethodHost{h:self,entry},m.bytes,a[0],a[1])}
-            0x22e084 => reset_ctx_m(&mut ResetHost{h:self,p:a[0]},m.bytes,(a[0]!=0).then_some(a[0]),a[1]),
-            0x175a1c => fetch_param_m(self,m,a[0],a[1],a[2]),
-            0x1758ac=>{
-
-                let s=OUT_PARAM;
-                let at=m.offset(s);
-                let mut saved=[0u8;36];
-                saved.copy_from_slice(&m.bytes[at..at+36]);
-                crate::boot_port_1::fn_176c58(m,a[2],s,10);
-                let n=crate::boot_port_1::fn_195d90(m,s).wrapping_add(1);
-                let rc=crate::speech_part_1::fn_175170(m,a[0],a[1],s,n,0,s+40,self);
-                m.bytes[at..at+36].copy_from_slice(&saved);
+                crate::speech_part_5::fn_2fdc84_m(m, a[0], a[1], a[2], a[3], self)
+            }
+            0x1e502c => end_token_processing_m(m, a[0], a[1], self),
+            0x201264 => {
+                if validate_handle(a[0] != 0, a[1], 0xf383, 0x20) >= 0x80000000 {
+                    return 0x8bb02008;
+                }
+                let entry = m.word(m.word(a[0] + 8) + 32);
+                call_method8_m(&mut MethodHost { h: self, entry }, m.bytes, a[0], a[1])
+            }
+            0x22e084 => reset_ctx_m(
+                &mut ResetHost { h: self, p: a[0] },
+                m.bytes,
+                (a[0] != 0).then_some(a[0]),
+                a[1],
+            ),
+            0x175a1c => fetch_param_m(self, m, a[0], a[1], a[2]),
+            0x1758ac => {
+                let s = OUT_PARAM;
+                let at = m.offset(s);
+                let mut saved = [0u8; 36];
+                saved.copy_from_slice(&m.bytes[at..at + 36]);
+                crate::boot_port_1::fn_176c58(m, a[2], s, 10);
+                let n = crate::boot_port_1::fn_195d90(m, s).wrapping_add(1);
+                let rc = crate::speech_part_1::fn_175170(m, a[0], a[1], s, n, 0, s + 40, self);
+                m.bytes[at..at + 36].copy_from_slice(&saved);
                 rc
             }
-            0x1deb04 => crate::engine_live2::fn_1deb04_m(m,a[0],a[1]),
-            0x1e772c => crate::engine_live2::fn_1e772c_m(m,a[0],a[1]),
-            0x1f3dc0 => crate::engine_live2::fn_1f3dc0_m(m,a[0],a[1],[a[2],a[3]],self.rom,self),
-            0x1f51dc => crate::engine_live2::fn_1f51dc_m(m,a[0],a[1]),
-            0x210398 => crate::engine_live2::fn_210398_m(m,a[0],a[1],a[2],a[3],self.rom,self),
-            0x2279b4 => crate::engine_live2::fn_2279b4_m(m,a[0],a[1],[a[2],a[3]],0x5000,self,self.rom),
-            0x1e3938 => crate::engine_live2::fn_1e3938_m(m,a[0],a[1],[a[2],a[3]],0x5100,self,self.rom),
-            0x2319f0 => crate::engine_live2::fn_2319f0_m(m,a[0],a[1],[a[2],a[3]],0x5200,self,self.rom),
+            0x1deb04 => crate::engine_live2::fn_1deb04_m(m, a[0], a[1]),
+            0x1e772c => crate::engine_live2::fn_1e772c_m(m, a[0], a[1]),
+            0x1f3dc0 => {
+                crate::engine_live2::fn_1f3dc0_m(m, a[0], a[1], [a[2], a[3]], self.rom, self)
+            }
+            0x1f51dc => crate::engine_live2::fn_1f51dc_m(m, a[0], a[1]),
+            0x210398 => crate::engine_live2::fn_210398_m(m, a[0], a[1], a[2], a[3], self.rom, self),
+            0x2279b4 => crate::engine_live2::fn_2279b4_m(
+                m,
+                a[0],
+                a[1],
+                [a[2], a[3]],
+                0x5000,
+                self,
+                self.rom,
+            ),
+            0x1e3938 => crate::engine_live2::fn_1e3938_m(
+                m,
+                a[0],
+                a[1],
+                [a[2], a[3]],
+                0x5100,
+                self,
+                self.rom,
+            ),
+            0x2319f0 => crate::engine_live2::fn_2319f0_m(
+                m,
+                a[0],
+                a[1],
+                [a[2], a[3]],
+                0x5200,
+                self,
+                self.rom,
+            ),
             0x1e5bbc => {
-
-                let mut args=[0u32;5];let n=a.len().min(5);args[..n].copy_from_slice(&a[..n]);
-                match crate::component_live_b::fn_1e5bbc_m(m,args,0x5300,self) {
-                    Ok(rc)=>rc,
-                    Err(e)=>{self.boot.fault=Some(e);0x80002001}
+                let mut args = [0u32; 5];
+                let n = a.len().min(5);
+                args[..n].copy_from_slice(&a[..n]);
+                match crate::component_live_b::fn_1e5bbc_m(m, args, 0x5300, self) {
+                    Ok(rc) => rc,
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
                 }
             }
             0x1d3314 => {
-
                 let mut args = [0; 5];
                 args[..a.len().min(5)].copy_from_slice(a);
-
                 let s = PORT_FRAME_1D3314;
                 let mut bridge = ParamBridge { host: self };
                 let rc = {
-                    let mut regions = [engine::Region { base: m.base, bytes: m.bytes }];
+                    let mut regions = [engine::Region {
+                        base: m.base,
+                        bytes: m.bytes,
+                    }];
                     let mut sparse = engine::Memory::new(&mut regions).expect("current arena");
-                    crate::engine_components2::process(
-                        &mut sparse,
-                        f,
-                        args,
-                        s,
-                        &mut bridge,
-                    )
+                    crate::engine_components2::process(&mut sparse, f, args, s, &mut bridge)
                 };
                 match rc {
                     Ok(rc) => rc,
@@ -645,25 +1186,25 @@ impl Host<'_> {
                 }
             }
             0x1795f0 => {
-
                 let broker = a.first().copied().unwrap_or(0);
                 let name = a.get(1).copied().unwrap_or(0);
                 let flags = a.get(2).copied().unwrap_or(0);
                 let out = a.get(3).copied().unwrap_or(0);
                 let globals = crate::boot_port_2c::BrokerGlobals {
-                    module: crate::rom_region::addr(self.rom,0x8d7668),
-                    brokerstring_key: crate::rom_region::addr(self.rom,0x177264),
-                    add_item_format: crate::rom_region::addr(self.rom,0x177278),
-                    broker_label: crate::rom_region::addr(self.rom,0x17729c),
-                    fullpath_key: crate::rom_region::addr(self.rom,0x17823c),
-                    ctype_table: crate::rom_region::addr(self.rom,0x8dc30c),
-                    parameters_desc: crate::rom_region::addr(self.rom,0x8d7614),
-                    linguistic_desc: crate::rom_region::addr(self.rom,0x8d773c),
-                }.data_open(BROKER_DATA_SCRATCH);
+                    module: crate::rom_region::addr(self.rom, 0x8d7668),
+                    brokerstring_key: crate::rom_region::addr(self.rom, 0x177264),
+                    add_item_format: crate::rom_region::addr(self.rom, 0x177278),
+                    broker_label: crate::rom_region::addr(self.rom, 0x17729c),
+                    fullpath_key: crate::rom_region::addr(self.rom, 0x17823c),
+                    ctype_table: crate::rom_region::addr(self.rom, 0x8dc30c),
+                    parameters_desc: crate::rom_region::addr(self.rom, 0x8d7614),
+                    linguistic_desc: crate::rom_region::addr(self.rom, 0x8d773c),
+                }
+                .data_open(BROKER_DATA_SCRATCH);
                 let mut files = crate::engine_components2::live_fs::FilePlatform {
                     env: crate::speech_part_1::ArchiveEnvironment {
-                        dot: crate::rom_region::addr(self.rom,0x8cd208),
-                        parent: crate::rom_region::addr(self.rom,0x8cd20c),
+                        dot: crate::rom_region::addr(self.rom, 0x8cd208),
+                        parent: crate::rom_region::addr(self.rom, 0x8cd20c),
                         locale: 0,
                     },
                     scratch: BROKER_FILE_SCRATCH,
@@ -680,7 +1221,6 @@ impl Host<'_> {
                 )
             }
             0x1ecf68 => {
-
                 let p = a.first().copied().unwrap_or(0);
                 let a1 = a.get(1).copied().unwrap_or(0);
                 let a2 = a.get(2).copied().unwrap_or(0);
@@ -714,7 +1254,6 @@ impl Host<'_> {
                     m.bytes[at..at + 4].copy_from_slice(b"lid\0");
                     self.call(m, 0x1795f0, &[broker, s + 8, 1, s])
                 } else {
-
                     self.call(m, 0x179f30, &[broker, env.wrapping_add(0x9e), s])
                 };
                 if rc >= 0x8000_0000 {
@@ -734,7 +1273,6 @@ impl Host<'_> {
                 self.call(m, 0x179f3c, &[broker, handle])
             }
             0x26b718 => {
-
                 let mut inner = crate::component_live_c2::OpenHost {
                     query: BROKER_QUERY_SCRATCH,
                     pending_release: None,
@@ -742,24 +1280,30 @@ impl Host<'_> {
                 let mut host = crate::component_live_c2::LidHost { inner: &mut inner };
                 let found = a.get(4).copied().unwrap_or(0);
                 crate::speech_part_2::fn_26b718(
-                    m, a[0], a[1], a[2], found, BROKER_LID_SCRATCH, &mut host,
+                    m,
+                    a[0],
+                    a[1],
+                    a[2],
+                    found,
+                    BROKER_LID_SCRATCH,
+                    &mut host,
                 )
             }
             0x179f30 => {
-
                 let broker = a.first().copied().unwrap_or(0);
                 let name = a.get(1).copied().unwrap_or(0);
                 let out = a.get(2).copied().unwrap_or(0);
                 let globals = crate::boot_port_2c::BrokerGlobals {
-                    module: crate::rom_region::addr(self.rom,0x8d7668),
-                    brokerstring_key: crate::rom_region::addr(self.rom,0x177264),
-                    add_item_format: crate::rom_region::addr(self.rom,0x177278),
-                    broker_label: crate::rom_region::addr(self.rom,0x17729c),
-                    fullpath_key: crate::rom_region::addr(self.rom,0x17823c),
-                    ctype_table: crate::rom_region::addr(self.rom,0x8dc30c),
-                    parameters_desc: crate::rom_region::addr(self.rom,0x8d7614),
-                    linguistic_desc: crate::rom_region::addr(self.rom,0x8d773c),
-                }.data_open(BROKER_DATA_SCRATCH);
+                    module: crate::rom_region::addr(self.rom, 0x8d7668),
+                    brokerstring_key: crate::rom_region::addr(self.rom, 0x177264),
+                    add_item_format: crate::rom_region::addr(self.rom, 0x177278),
+                    broker_label: crate::rom_region::addr(self.rom, 0x17729c),
+                    fullpath_key: crate::rom_region::addr(self.rom, 0x17823c),
+                    ctype_table: crate::rom_region::addr(self.rom, 0x8dc30c),
+                    parameters_desc: crate::rom_region::addr(self.rom, 0x8d7614),
+                    linguistic_desc: crate::rom_region::addr(self.rom, 0x8d773c),
+                }
+                .data_open(BROKER_DATA_SCRATCH);
                 let mut inner = crate::component_live_c2::OpenHost {
                     query: BROKER_QUERY_SCRATCH,
                     pending_release: None,
@@ -767,12 +1311,14 @@ impl Host<'_> {
                 crate::leftovers_1::fn_179f30(m, broker, name, out, &globals, &mut inner)
             }
             0x179f3c => {
-
                 let mut inner = crate::component_live_c2::OpenHost {
                     query: BROKER_QUERY_SCRATCH,
                     pending_release: None,
                 };
-                let mut host = BrokerCloseDirect { host: self, inner: &mut inner };
+                let mut host = BrokerCloseDirect {
+                    host: self,
+                    inner: &mut inner,
+                };
                 crate::leftovers_1::fn_179f3c_m(m, a[0], a[1], &close_runtime_us(), &mut host)
             }
             0x14e440 => {
@@ -780,13 +1326,16 @@ impl Host<'_> {
                 0
             }
             0x2031b0 => {
-
                 let mut args = [0; 5];
                 args[..a.len().min(5)].copy_from_slice(&a[..a.len().min(5)]);
-
                 let mut bridge = DepesBridge { host: self };
                 let rc = crate::component_live_c2::fn_2031b0_m(
-                    m, DEPES_FRAME, args[0], args[1], args[4], &mut bridge,
+                    m,
+                    DEPES_FRAME,
+                    args[0],
+                    args[1],
+                    args[4],
+                    &mut bridge,
                 );
                 if bridge.host.boot.fault.is_some() {
                     return 0x80002001;
@@ -794,7 +1343,6 @@ impl Host<'_> {
                 rc
             }
             0x176f94 => crate::boot_port_1::fn_176f94(m, a[0], a[1], a[2], a[3]),
-
             0x176fd4 => {
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::InvalidSnapshot);
@@ -803,39 +1351,35 @@ impl Host<'_> {
                     crate::boot_part_d::fn_176fd4(
                         m,
                         a[0],
-                        [m.word(crate::rom_region::addr(self.rom,0x8d7660)), m.word(crate::rom_region::addr(self.rom,0x8d7664))],
+                        [
+                            m.word(crate::rom_region::addr(self.rom, 0x8d7660)),
+                            m.word(crate::rom_region::addr(self.rom, 0x8d7664)),
+                        ],
                     );
                     0
                 }
             }
             0x17486c => {
-
                 crate::boot_port_1::fn_17486c(m, a[0], a[1], a[2], a[3], DEPES_LOG_SCRATCH, self)
             }
             0x17497c => crate::component_live_c2::fn_17497c(m, a[0]) as u32,
-            0x2fbe50 => {
-
-                crate::speech_part_3::fn_2fbe50_m()
-            }
-
+            0x2fbe50 => crate::speech_part_3::fn_2fbe50_m(),
             0x17c8c0 => crate::fe_text::fold_17c8c0(a[0]),
             0x1960a8 => crate::frontend::find_substr(m.bytes, a[0], a[1]),
             0x2b331c => {
-
                 m.put_word(a[1], m.word(a[0].wrapping_add(0x44)));
                 0
             }
             0x2b3608 => {
-
                 let mut bridge = DictBridge { host: self };
-                let rc = crate::speech_part_3::fn_2b3608(m, a[0], a[1], a[2], a[3], 0x7a00, &mut bridge);
+                let rc =
+                    crate::speech_part_3::fn_2b3608(m, a[0], a[1], a[2], a[3], 0x7a00, &mut bridge);
                 if bridge.host.boot.fault.is_some() {
                     return 0x80002001;
                 }
                 rc
             }
             0x300a10 => {
-
                 if a.len() < 3 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -848,30 +1392,33 @@ impl Host<'_> {
                 0
             }
             0x17bfc0 => {
-
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                crate::component_live_c2::fn_17bfc0_m(m, a[0])
+                crate::component_live_c2::fn_17bfc0_m(m, a[0], self.rom)
             }
             0x17bd74 => {
-
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                crate::component_live_c2::fn_17bd74_m(m, a[0], a[1])
+                crate::component_live_c2::fn_17bd74_m(m, a[0], a[1], self.rom)
             }
             0x17bb44 => {
-
                 if a.len() < 7 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                let extra: [u8; 256] = core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom, 0x8dc1f3) + i as u32));
-                let mask: [u8; 16] = core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom, 0x8dc1e0) + i as u32));
-                let base: [u8; 1024] = core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom, 0x8dc2f4) + i as u32));
+                let extra: [u8; 256] = core::array::from_fn(|i| {
+                    m.byte(crate::rom_region::addr(self.rom, 0x8dc1f3) + i as u32)
+                });
+                let mask: [u8; 16] = core::array::from_fn(|i| {
+                    m.byte(crate::rom_region::addr(self.rom, 0x8dc1e0) + i as u32)
+                });
+                let base: [u8; 1024] = core::array::from_fn(|i| {
+                    m.byte(crate::rom_region::addr(self.rom, 0x8dc2f4) + i as u32)
+                });
                 let t = crate::normalization::DecoderTables {
                     extra: &extra,
                     mask: &mask,
@@ -884,7 +1431,6 @@ impl Host<'_> {
                 )
             }
             0x2b4004 => {
-
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -901,10 +1447,8 @@ impl Host<'_> {
                 (a[0] != 0).then(|| (m.byte(m.word(a[0]) + 4), m.byte(m.word(a[0]) + 0x10c))),
             ),
             0x18f488 => crate::frontend::finish_request(),
-
             0x219554 => crate::component_live_c::fn_219554_m(m, a[0], a[1], a[2], a[3]),
             0x1ea4e0 => {
-
                 if a.len() < 7 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -917,11 +1461,10 @@ impl Host<'_> {
                 }
                 rc
             }
-
-            0x17a1a4|0x179374|0x17c9d8|0x179208|0x1b2760|0x1b254c|0x1b2974|0x172de0|0x172d30 => {
+            0x17a1a4 | 0x179374 | 0x17c9d8 | 0x179208 | 0x1b2760 | 0x1b254c | 0x1b2974
+            | 0x172de0 | 0x172d30 => {
                 crate::component_live_c::broker_range_live_m(m, f, a, RANGE17_SCRATCH, self)
             }
-
             0x4a794c => {
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -936,7 +1479,7 @@ impl Host<'_> {
                 }
                 crate::speech_part_3::fn_4a78f0(m, a[0], a[1], a[2], a[3])
             }
-
+            0x26bb28 if a.len() >= 2 => crate::component_live_b3::fn_26bb28_m(m, self, a[0], a[1]),
             0x26bb44 => {
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -944,7 +1487,6 @@ impl Host<'_> {
                 }
                 crate::component_live_b3::fn_26bb44_m(m, a[0])
             }
-
             0x1769d0 => {
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -959,7 +1501,6 @@ impl Host<'_> {
                 }
                 crate::fe_text::strlen_195d90(m.bytes, a[0]) as u32
             }
-
             0x196394 => {
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -967,7 +1508,6 @@ impl Host<'_> {
                 }
                 crate::boot_part_e::alloc(m, a[0], a[1], self)
             }
-
             0x1963b8 => {
                 if a.len() < 3 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -975,7 +1515,6 @@ impl Host<'_> {
                 }
                 crate::boot_part_e::calloc(m, a[0], a[1], a[2], self)
             }
-
             0x1963e0 => {
                 if a.len() < 3 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -983,7 +1522,6 @@ impl Host<'_> {
                 }
                 crate::boot_part_e::fn_1963e0(m, a[0], a[1], a[2], self)
             }
-
             0x26b7ec => {
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -991,7 +1529,6 @@ impl Host<'_> {
                 }
                 crate::component_live_b3::fn_26b7ec_m(m, self, a[0], a[1], a[2], a[3])
             }
-
             0x275204 => {
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1005,7 +1542,6 @@ impl Host<'_> {
                     crate::component_live_b3::FE275204_SCRATCH,
                 )
             }
-
             0x2409d4 => {
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1021,23 +1557,18 @@ impl Host<'_> {
                 crate::component_live_b3::fn_21a1fc_m(m, a[0], a[1])
             }
             0x1f0a90 => {
-
                 let mut args = [0; 5];
                 let n = a.len().min(5);
                 args[..n].copy_from_slice(&a[..n]);
-
                 let s = PORT_FRAME_1F0A90;
                 let mut bridge = ParamBridge { host: self };
                 let rc = {
-                    let mut regions = [engine::Region { base: m.base, bytes: m.bytes }];
+                    let mut regions = [engine::Region {
+                        base: m.base,
+                        bytes: m.bytes,
+                    }];
                     let mut sparse = engine::Memory::new(&mut regions).expect("current arena");
-                    crate::engine_components::process(
-                        &mut sparse,
-                        f,
-                        args,
-                        s,
-                        &mut bridge,
-                    )
+                    crate::engine_components::process(&mut sparse, f, args, s, &mut bridge)
                 };
                 match rc {
                     Ok(rc) => rc,
@@ -1048,11 +1579,18 @@ impl Host<'_> {
                 }
             }
             0x281aa4 => {
-
                 let current = m.word(a[1]);
-                let next = if current == 0 { m.word(a[0] + 4) } else { m.word(current + 8) };
+                let next = if current == 0 {
+                    m.word(a[0] + 4)
+                } else {
+                    m.word(current + 8)
+                };
                 m.put_word(a[1], next);
-                if next == 0 { 0 } else { m.word(next + 4) }
+                if next == 0 {
+                    0
+                } else {
+                    m.word(next + 4)
+                }
             }
             0x17bff4 => crate::component_live_c2::fn_17bff4_m(m, a[0]),
             0x17bf70 => crate::component_live_c2::fn_17bf70_m(m, a[0], a[1], self.rom),
@@ -1061,7 +1599,6 @@ impl Host<'_> {
                 0
             }
             0x202348 => {
-
                 if a.len() < 7 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1070,13 +1607,19 @@ impl Host<'_> {
                     C2_2B3608_SCRATCH, C2_DICT_SCRATCH, C2_LANGCODE_KEY, C2_MLSET_KEY,
                     C2_NUMBEROUTPUTTRANSCRIPTIONS,
                 };
-                let _ = (C2_DICT_SCRATCH, C2_2B3608_SCRATCH, C2_NUMBEROUTPUTTRANSCRIPTIONS);
+                let _ = (
+                    C2_DICT_SCRATCH,
+                    C2_2B3608_SCRATCH,
+                    C2_NUMBEROUTPUTTRANSCRIPTIONS,
+                );
                 let mut tables = crate::component_live_c2::C2DictTables {
                     types: [[0u8; 48]; 3],
                     type_lens: [0; 3],
                     disabled: [0u8; 32],
                     disabled_len: 0,
-                    classes: core::array::from_fn(|i| m.half(crate::rom_region::addr(self.rom,0x8dc30c) + i as u32 * 2)),
+                    classes: core::array::from_fn(|i| {
+                        m.half(crate::rom_region::addr(self.rom, 0x8dc30c) + i as u32 * 2)
+                    }),
                 };
                 crate::component_live_c2::c2_dict_tables(m, &mut tables, self.rom);
                 let t = crate::speech_part_2::DictionaryLiterals {
@@ -1110,29 +1653,34 @@ impl Host<'_> {
                     ],
                 };
                 crate::speech_part_2::fn_202348(
-                    m, a[0], a[1], a[2], a[3], a[4], a[5], a[6],
-                    &tables.classes, &t, 0x7900, self,
+                    m,
+                    a[0],
+                    a[1],
+                    a[2],
+                    a[3],
+                    a[4],
+                    a[5],
+                    a[6],
+                    &tables.classes,
+                    &t,
+                    0x7900,
+                    self,
                 )
             }
             0x195ae8 => crate::frontend::move_bytes(&mut *m.bytes, a[0], a[1], a[2]),
-
             0x21a25c => {
-
                 let mut args = [0; 5];
                 let n = a.len().min(5);
                 args[..n].copy_from_slice(&a[..n]);
                 let s = PORT_FRAME_21A25C;
                 let mut bridge = ParamBridge { host: self };
                 let rc = {
-                    let mut regions = [engine::Region { base: m.base, bytes: m.bytes }];
+                    let mut regions = [engine::Region {
+                        base: m.base,
+                        bytes: m.bytes,
+                    }];
                     let mut sparse = engine::Memory::new(&mut regions).expect("current arena");
-                    crate::engine_components2::process(
-                        &mut sparse,
-                        f,
-                        args,
-                        s,
-                        &mut bridge,
-                    )
+                    crate::engine_components2::process(&mut sparse, f, args, s, &mut bridge)
                 };
                 match rc {
                     Ok(rc) => rc,
@@ -1143,16 +1691,28 @@ impl Host<'_> {
                 }
             }
             0x1756d0 => {
-
-                struct ParamLock<'a, 'b> { host: &'a mut Host<'b>, word: u32 }
+                struct ParamLock<'a, 'b> {
+                    host: &'a mut Host<'b>,
+                    word: u32,
+                }
                 impl crate::reentrant2::StateLockM for ParamLock<'_, '_> {
                     fn acquire_m(&mut self, bytes: &mut [u8]) -> u32 {
                         let mut m = Memory { base: 0, bytes };
-                        crate::speech_part_2::parameter_lock_m(&mut m, self.word, false, &mut *self.host)
+                        crate::speech_part_2::parameter_lock_m(
+                            &mut m,
+                            self.word,
+                            false,
+                            &mut *self.host,
+                        )
                     }
                     fn release_m(&mut self, bytes: &mut [u8]) -> u32 {
                         let mut m = Memory { base: 0, bytes };
-                        crate::speech_part_2::parameter_lock_m(&mut m, self.word, true, &mut *self.host)
+                        crate::speech_part_2::parameter_lock_m(
+                            &mut m,
+                            self.word,
+                            true,
+                            &mut *self.host,
+                        )
                     }
                 }
                 fn param_compare(a: u32, b: u32, bytes: &mut [u8]) -> i32 {
@@ -1178,7 +1738,10 @@ impl Host<'_> {
                 let p = if a[0] == 0 { 0 } else { m.word(a[0] + 4) };
                 let mut value = if a[2] == 0 { 0 } else { m.word(a[2]) };
                 let mut size = if a[3] == 0 { 0 } else { m.word(a[3]) };
-                let mut lock = ParamLock { host: self, word: p };
+                let mut lock = ParamLock {
+                    host: self,
+                    word: p,
+                };
                 let rc = crate::reentrant2::lookup_param_m(
                     m.bytes,
                     (a[0] != 0).then_some(a[0]),
@@ -1197,8 +1760,10 @@ impl Host<'_> {
                 rc
             }
             0x21958c => {
-
-                struct Validator { object: u32, key: u32 }
+                struct Validator {
+                    object: u32,
+                    key: u32,
+                }
                 impl crate::depes::HandleValidator for Validator {
                     fn validate(&mut self, _: u32, tag: u32, size: u32) -> u32 {
                         crate::normalization::quad_check(self.object, self.key, tag, size)
@@ -1213,7 +1778,15 @@ impl Host<'_> {
                         second: m.word(a[0] + 60) as i32,
                     };
                     let mut out = 0;
-                    let rc = opts.get(a[1], &mut out, a[3] as i32, &mut Validator { object: a[0], key: a[1] });
+                    let rc = opts.get(
+                        a[1],
+                        &mut out,
+                        a[3] as i32,
+                        &mut Validator {
+                            object: a[0],
+                            key: a[1],
+                        },
+                    );
                     if rc < 0x80000000 {
                         m.put_word(a[2], out as u32);
                     }
@@ -1221,7 +1794,6 @@ impl Host<'_> {
                 }
             }
             0x206be4 => {
-
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1229,34 +1801,51 @@ impl Host<'_> {
                 let changed = if a.len() > 4 { a[4] } else { m.word(0xe0ff938) };
                 m.bytes[SEG2_C4_SCRATCH as usize..SEG2_C4_SCRATCH as usize + SEG2_C4_LEN].fill(0);
                 let mut plat = HostPlat(&mut *self.boot.platform);
-                let mut regions = [engine::Region { base: m.base, bytes: m.bytes }];
+                let mut regions = [engine::Region {
+                    base: m.base,
+                    bytes: m.bytes,
+                }];
                 let mut sparse = match engine::Memory::new(&mut regions) {
                     Ok(v) => v,
-                    Err(e) => { self.boot.fault = Some(e); return 0x80002001; }
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        return 0x80002001;
+                    }
                 };
                 let (rc, unbound) = crate::engine_live_seg2::run_206be4_rom(
-                    &mut sparse, a[0], a[1], [a[2], a[3]], changed, SEG2_C4_SCRATCH, &mut plat, self.rom,
+                    &mut sparse,
+                    a[0],
+                    a[1],
+                    [a[2], a[3]],
+                    changed,
+                    SEG2_C4_SCRATCH,
+                    &mut plat,
+                    self.rom,
                 );
                 match rc {
                     Ok(rc) => {
                         if let Some(e) = unbound {
-                            self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: e });
+                            self.boot.fault =
+                                Some(engine::Error::MissingStreamAdapter { entry: e });
                             return 0x80002001;
                         }
                         rc
                     }
-                    Err(e) => { self.boot.fault = Some(e); 0x80002001 }
+                    Err(e) => {
+                        self.boot.fault = Some(e);
+                        0x80002001
+                    }
                 }
             }
             0x1dd914 => {
-
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
                 let changed = if a.len() > 4 { a[4] } else { m.word(0xe0ff938) };
                 let mut plat = HostPlat(&mut *self.boot.platform);
-                let (rc, unbound) = crate::engine_live_seg2::run_1dd914_rom(m, a, changed, &mut plat, self.rom);
+                let (rc, unbound) =
+                    crate::engine_live_seg2::run_1dd914_rom(m, a, changed, &mut plat, self.rom);
                 if let Some(e) = unbound {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: e });
                     return 0x80002001;
@@ -1267,12 +1856,16 @@ impl Host<'_> {
             0x1f1440 | 0x1f3248 => seg3_pos_arm(self, m, f, a),
             0x1df780 => seg3_phrasing_arm(self, m, f, a),
             0x1e7908 => {
-
                 if a.len() < 5 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                let (rc, unbound) = crate::engine_live_seg4::run_1e7908_rom(m, a, &mut *self.boot.platform, self.rom);
+                let (rc, unbound) = crate::engine_live_seg4::run_1e7908_rom(
+                    m,
+                    a,
+                    &mut *self.boot.platform,
+                    self.rom,
+                );
                 if let Some(e) = unbound {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: e });
                     return 0x80002001;
@@ -1280,12 +1873,16 @@ impl Host<'_> {
                 rc
             }
             0x1f51f8 => {
-
                 if a.len() < 5 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                let (rc, unbound) = crate::engine_live_seg4::run_1f51f8_rom(m, a, &mut *self.boot.platform, self.rom);
+                let (rc, unbound) = crate::engine_live_seg4::run_1f51f8_rom(
+                    m,
+                    a,
+                    &mut *self.boot.platform,
+                    self.rom,
+                );
                 if let Some(e) = unbound {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: e });
                     return 0x80002001;
@@ -1293,7 +1890,6 @@ impl Host<'_> {
                 rc
             }
             0x1e3b14 => seg7_marker_arm(self, m, f, a),
-
             0x2c1e2c => {
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -1305,7 +1901,6 @@ impl Host<'_> {
                 rc
             }
             0x1759a0 => {
-
                 if a.len() < 3 || a[0] == 0 || a[1] == 0 || a[2] == 0 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1320,7 +1915,6 @@ impl Host<'_> {
                 rc
             }
             0x175a24 => {
-
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1331,12 +1925,10 @@ impl Host<'_> {
                 rc
             }
             0x1966ac => {
-
                 return crate::speech_part_1::parameter_call_m(m, f, a, 0x1800, self);
             }
             0x1530d0 => seg7_pump_arm(self, m, f, a),
             0x84c160 => {
-
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1344,26 +1936,35 @@ impl Host<'_> {
                 crate::speech_part_3::fn_84c160(m, a[0], a[1], self)
             }
             0x2104b0 => {
-
                 if a.len() < 5 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-
                 let mut saved = [0u8; 65536];
                 let mut events = [crate::frontend::TextEvent::default(); 512];
                 let mut event_bytes = [0u8; 512 * 24];
                 let mut text = [0u8; 65536];
                 match crate::component_live_c::fn_2104b0_m(
-                    m, a[0], a[1], [a[2], a[3]], a[4], 0xe000000,
-                    &mut saved, &mut events, &mut event_bytes, &mut text, self,
+                    m,
+                    a[0],
+                    a[1],
+                    [a[2], a[3]],
+                    a[4],
+                    0xe000000,
+                    &mut saved,
+                    &mut events,
+                    &mut event_bytes,
+                    &mut text,
+                    self,
                 ) {
                     Ok(rc) => rc,
-                    Err(e) => { self.boot.fault = Some(frontend_error(e)); 0x80002001 }
+                    Err(e) => {
+                        self.boot.fault = Some(frontend_error(e));
+                        0x80002001
+                    }
                 }
             }
             0x2a762c => {
-
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1385,30 +1986,47 @@ impl Host<'_> {
                 rc
             }
             0x1d513c | 0x1e4a3c => {
-                let mut args=[0;7];args[..a.len()].copy_from_slice(a);
-                self.boundary=Some(engine::VoiceBoundary{entry:f,args,event:None});0x80002001
+                let mut args = [0; 7];
+                args[..a.len()].copy_from_slice(a);
+                self.boundary = Some(engine::VoiceBoundary {
+                    entry: f,
+                    args,
+                    event: None,
+                });
+                0x80002001
             }
             0x741e8c => {
-
                 if a.len() < 18 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                crate::engine_sing::song_notes(m, &crate::engine_sing::SongNoteArgs {
-                    text: a[0], events: a[1], event_count: a[2] as i32,
-                    flags: a[3] as i32,
-                    frequency: (m.half(a[1].wrapping_add(0x20c)) as i16) as f32,
-                    pitch: f32::from_bits(m.word(a[1].wrapping_add(0x210))),
-                    tail_pause: a[4] as i32, rate: a[5] as i32,
-                    volume: a[6] as i32, use_voice: a[7] as i32, voice: a[8],
-                    marker: a[9] as i32, pause: a[10], add_pause: a[11] as i32,
-                    first_duration: a[12] as i32, second_duration: a[13] as i32,
-                    penultimate_duration: a[14] as i32, last_duration: a[15] as i32,
-                    out: a[16], capacity: a[17] as i32,
-                })
+                crate::engine_sing::song_notes(
+                    m,
+                    &crate::engine_sing::SongNoteArgs {
+                        text: a[0],
+                        events: a[1],
+                        event_count: a[2] as i32,
+                        flags: a[3] as i32,
+                        frequency: (m.half(a[1].wrapping_add(0x20c)) as i16) as f32,
+                        pitch: f32::from_bits(m.word(a[1].wrapping_add(0x210))),
+                        tail_pause: a[4] as i32,
+                        rate: a[5] as i32,
+                        volume: a[6] as i32,
+                        use_voice: a[7] as i32,
+                        voice: a[8],
+                        marker: a[9] as i32,
+                        pause: a[10],
+                        add_pause: a[11] as i32,
+                        first_duration: a[12] as i32,
+                        second_duration: a[13] as i32,
+                        penultimate_duration: a[14] as i32,
+                        last_duration: a[15] as i32,
+                        out: a[16],
+                        capacity: a[17] as i32,
+                    },
+                )
             }
             0x24ac00 => {
-
                 if a.len() < 3 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1416,26 +2034,23 @@ impl Host<'_> {
                 crate::speech_part_1::fn_24ac00(m, a[0], a[1], a[2], 0x4800, self)
             }
             0x24c470 => {
-
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                let literals = crate::component_live_b::speech_literals(m, crate::rom_region::Rom::Us);
+                let literals = crate::component_live_b::speech_literals(m, self.rom);
                 crate::speech_part_2::fn_24c470(m, a[0], &literals, 0x5800, self)
             }
             0x24bbc8 => {
-
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 }
-                let shared = crate::component_live_b::speech_literals(m, crate::rom_region::Rom::Us);
-                let literals = crate::component_live_b::domain_literals(m, crate::rom_region::Rom::Us);
+                let shared = crate::component_live_b::speech_literals(m, self.rom);
+                let literals = crate::component_live_b::domain_literals(m, self.rom);
                 crate::speech_part_2::fn_24bbc8(m, a[0], &shared, &literals, 0x5000, self)
             }
             0x249cec => {
-
                 if a.is_empty() {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1443,7 +2058,6 @@ impl Host<'_> {
                 crate::speech_part_1::fn_249cec(m, a[0], 0x4200, self)
             }
             0x1ff4fc => {
-
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1451,7 +2065,6 @@ impl Host<'_> {
                 crate::component_live_c::insert_prompt_live_m(m, args, 0xe0ff600, self)
             }
             0x1e4b7c => {
-
                 let mut args5 = [0u32; 5];
                 if a.len() >= 5 {
                     args5.copy_from_slice(&a[..5]);
@@ -1469,7 +2082,6 @@ impl Host<'_> {
                     scratch: 0x600,
                     rom: self.rom,
                 };
-
                 let heap = m.word(m.word(m.word(args5[0])) + 4);
                 let mut host = crate::component_live_b2::TokenHost { inner: live, heap };
                 let rc = crate::component_live_b2::fn_1e4b7c_live(m, args5, end, 0x600, &mut host);
@@ -1480,7 +2092,6 @@ impl Host<'_> {
                 rc
             }
             0x200e64 => {
-
                 let active = if a.len() > 4 {
                     a[4]
                 } else if a.len() == 4 {
@@ -1504,7 +2115,6 @@ impl Host<'_> {
                 rc
             }
             0x1d5ba8 => {
-
                 let pending = if a.len() > 4 {
                     a[4]
                 } else if a.len() == 4 {
@@ -1519,9 +2129,14 @@ impl Host<'_> {
                     crate::rom_region::Rom::Us => crate::component_live_c::process_environment_us(),
                 };
                 let rc = crate::component_live_c::fn_1d5ba8_m(
-                    m, a[0], a[1], [a[2], a[3]], pending,
+                    m,
+                    a[0],
+                    a[1],
+                    [a[2], a[3]],
+                    pending,
                     &env,
-                    0xe0ff080, self,
+                    0xe0ff080,
+                    self,
                 );
                 if self.boot.fault.is_some() {
                     return 0x80002001;
@@ -1529,7 +2144,6 @@ impl Host<'_> {
                 rc
             }
             0x15bab0 => {
-
                 if a.len() < 2 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1541,8 +2155,10 @@ impl Host<'_> {
                 rc
             }
             0x15c544 => {
-
-                let mut regions = [engine::Region { base: m.base, bytes: m.bytes }];
+                let mut regions = [engine::Region {
+                    base: m.base,
+                    bytes: m.bytes,
+                }];
                 let mut sparse = engine::Memory::new(&mut regions).expect("current arena");
                 match crate::engine_components::InternalCalls::call(
                     &mut crate::engine_components::RegionalCalls { rom: self.rom },
@@ -1558,7 +2174,6 @@ impl Host<'_> {
                 }
             }
             0x15cdcc => {
-
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1566,7 +2181,6 @@ impl Host<'_> {
                 crate::component_live_c::write_field_live_m(m, args, self)
             }
             0x1ede44 => {
-
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1580,12 +2194,15 @@ impl Host<'_> {
                 )
             }
             0x15d378 => {
-
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
                 };
-                match crate::component_live_c::field_data_m(m, args, crate::rom_region::addr(self.rom, 0x8d7ca0)) {
+                match crate::component_live_c::field_data_m(
+                    m,
+                    args,
+                    crate::rom_region::addr(self.rom, 0x8d7ca0),
+                ) {
                     Ok(rc) => rc,
                     Err(e) => {
                         self.boot.fault = Some(e);
@@ -1594,7 +2211,6 @@ impl Host<'_> {
                 }
             }
             0x15bf74 => {
-
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1602,7 +2218,6 @@ impl Host<'_> {
                 crate::component_live_c::create_child_live_m(m, args, 0xe0fef80, self)
             }
             0x15c1e4 => {
-
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1610,7 +2225,6 @@ impl Host<'_> {
                 crate::component_live_c::clone_record_live_m(m, args, 0xe0fef80, self)
             }
             0x15db2c => {
-
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1623,7 +2237,6 @@ impl Host<'_> {
                 rc
             }
             0x15d594 => {
-
                 let mut args5 = [0u32; 5];
                 if a.len() >= 5 {
                     args5.copy_from_slice(&a[..5]);
@@ -1643,7 +2256,6 @@ impl Host<'_> {
                 }
             }
             0x15b518 => {
-
                 let ab: [u32; 2] = match a.try_into() {
                     Ok(ab) => ab,
                     Err(_) => {
@@ -1653,28 +2265,21 @@ impl Host<'_> {
                 };
                 crate::component_live_c::clear_db_live_m(m, ab, 0xe0fed00, self)
             }
-            0x15d6c4 => {
-
-                match crate::component_live_c::core_call_m_rom(m, f, a, self.rom) {
-                    Ok(rc) => rc,
-                    Err(e) => {
-                        self.boot.fault = Some(e);
-                        0x80002001
-                    }
+            0x15d6c4 => match crate::component_live_c::core_call_m_rom(m, f, a, self.rom) {
+                Ok(rc) => rc,
+                Err(e) => {
+                    self.boot.fault = Some(e);
+                    0x80002001
                 }
-            }
-            0x15c7d8 => {
-
-                match crate::component_live_c::core_call_m(m, f, a) {
-                    Ok(rc) => rc,
-                    Err(e) => {
-                        self.boot.fault = Some(e);
-                        0x80002001
-                    }
+            },
+            0x15c7d8 => match crate::component_live_c::core_call_m(m, f, a) {
+                Ok(rc) => rc,
+                Err(e) => {
+                    self.boot.fault = Some(e);
+                    0x80002001
                 }
-            }
+            },
             0x1cca64 => {
-
                 if a.len() < 4 {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1684,11 +2289,9 @@ impl Host<'_> {
                     return 0x89202008;
                 }
                 let level = self.call(m, 0x173fd8, &[m.word(m.word(a[0]) + 16)]);
-
                 if level < 100 {
                     return 0;
                 }
-
                 let flag = if a.len() > 4 {
                     a[4]
                 } else if a.len() == 4 {
@@ -1701,9 +2304,18 @@ impl Host<'_> {
                 template.copy_from_slice(&m.bytes[0x8d7b56..0x8d7b56 + 66]);
                 let mut dirty = m.byte(a[0] + 52);
                 let tables = crate::linguistic::DumpTables {
-                    sent: crate::linguistic::DumpTable { count: 0, bytes: &[] },
-                    tok: crate::linguistic::DumpTable { count: 0, bytes: &[] },
-                    word: crate::linguistic::DumpTable { count: 0, bytes: &[] },
+                    sent: crate::linguistic::DumpTable {
+                        count: 0,
+                        bytes: &[],
+                    },
+                    tok: crate::linguistic::DumpTable {
+                        count: 0,
+                        bytes: &[],
+                    },
+                    word: crate::linguistic::DumpTable {
+                        count: 0,
+                        bytes: &[],
+                    },
                 };
                 let mut first = |_: u32, _: u32, _: u32, _: u32| (1u32, 0u16);
                 let mut group = |_: u32, _: u32, _: u16, _: u16| (1u32, 0u16);
@@ -1726,7 +2338,6 @@ impl Host<'_> {
                 )
             }
             0x15d0c4 => {
-
                 let Ok(args) = a.try_into() else {
                     self.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
                     return 0x80002001;
@@ -1750,54 +2361,88 @@ impl Host<'_> {
             0x1f9310 => fn_1f9310_m(a),
             0x1f1414 => fn_1f1414_m(a),
             0x1f2bf0 => fn_1f2bf0_m(a),
-            0x1985fc => crate::frontend::begin_stage_hook((a[0]!=0).then_some(a[0])),
-            0x19860c => crate::frontend::end_stage_hook((a[0]!=0).then_some(a[0])),
+            0x1985fc => crate::frontend::begin_stage_hook((a[0] != 0).then_some(a[0])),
+            0x19860c => crate::frontend::end_stage_hook((a[0] != 0).then_some(a[0])),
             0x14ed4c => {
-                let valid=crate::frontend::validate_handle(a[0]!=0,a[1],0x47dd,32);
-                if valid>=0x80000000{return 0x81706008;}
-                let pair=[m.word(a[0]),m.word(a[0]+4)];
-                let saved=m.word(0x380);
-                let rc=self.call(m,0x19611c,&[pair[0],pair[1],0x380]);
-                let scripts=crate::frontend::OpenScripts{rc794:0,rc68c:0,rc_db0:0,rc_611c:rc,ctx_611c:m.word(0x380)};
-                m.put_word(0x380,saved);
-                crate::frontend::set_pipeline_pos(m.bytes,Some(a[0]),a[1],a[2],&scripts)
+                let valid = crate::frontend::validate_handle(a[0] != 0, a[1], 0x47dd, 32);
+                if valid >= 0x80000000 {
+                    return 0x81706008;
+                }
+                let pair = [m.word(a[0]), m.word(a[0] + 4)];
+                let saved = m.word(0x380);
+                let rc = self.call(m, 0x19611c, &[pair[0], pair[1], 0x380]);
+                let scripts = crate::frontend::OpenScripts {
+                    rc794: 0,
+                    rc68c: 0,
+                    rc_db0: 0,
+                    rc_611c: rc,
+                    ctx_611c: m.word(0x380),
+                };
+                m.put_word(0x380, saved);
+                crate::frontend::set_pipeline_pos(m.bytes, Some(a[0]), a[1], a[2], &scripts)
             }
-            0x17b058 => m.boot_parameter_call(self, f, a, 0x0e0f7e00).expect("registry lookup"),
+            0x17b058 => m
+                .boot_parameter_call(self, f, a, 0x0e0f7e00)
+                .expect("registry lookup"),
             0x19611c => {
-                let mut pair = [0;8];
-                for i in 0..8 { pair[i] = m.byte(crate::rom_region::addr(self.rom,0x8d7660)+i as u32); }
+                let mut pair = [0; 8];
+                for i in 0..8 {
+                    pair[i] = m.byte(crate::rom_region::addr(self.rom, 0x8d7660) + i as u32);
+                }
                 let half = if a[0] == 0 { None } else { Some(m.half(a[0])) };
-                let mut ctx=0;
-                let rc=crate::frontend::resolve_engine_context(a[0],half,a[1],&pair,crate::rom_region::addr(self.rom,0x8d7640),&mut ctx);
-                m.put_word(a[2],ctx); rc
+                let mut ctx = 0;
+                let rc = crate::frontend::resolve_engine_context(
+                    a[0],
+                    half,
+                    a[1],
+                    &pair,
+                    crate::rom_region::addr(self.rom, 0x8d7640),
+                    &mut ctx,
+                );
+                m.put_word(a[2], ctx);
+                rc
             }
             0x176f2c | 0x176f5c => {
-
                 let mut target = None;
-                let p=(a[0]!=0).then_some(a[0]);
-                let rc=if f==0x176f2c {
-                    crate::frontend::acquire_lock(m.bytes,p,|t| {target=Some(t);0})
+                let p = (a[0] != 0).then_some(a[0]);
+                let rc = if f == 0x176f2c {
+                    crate::frontend::acquire_lock(m.bytes, p, |t| {
+                        target = Some(t);
+                        0
+                    })
                 } else {
-                    crate::frontend::release_lock(m.bytes,p,|t| {target=Some(t);0})
+                    crate::frontend::release_lock(m.bytes, p, |t| {
+                        target = Some(t);
+                        0
+                    })
                 };
-                if let Some(t)=target {
-                    let table=m.word(m.word(a[0])+8);
-                    let entry=m.word(table+if f==0x176f2c {8}else{12});
-                    self.call(m,entry,&[t])
-                } else { rc }
+                if let Some(t) = target {
+                    let table = m.word(m.word(a[0]) + 8);
+                    let entry = m.word(table + if f == 0x176f2c { 8 } else { 12 });
+                    self.call(m, entry, &[t])
+                } else {
+                    rc
+                }
             }
-            0x195d58 => crate::frontend::compare_str(&m.bytes[a[0] as usize..],&m.bytes[a[1] as usize..]) as u32,
+            0x195d58 => {
+                crate::frontend::compare_str(&m.bytes[a[0] as usize..], &m.bytes[a[1] as usize..])
+                    as u32
+            }
             0x2c322c => {
-
                 let mut args = [0; 7];
                 args[..a.len().min(7)].copy_from_slice(&a[..a.len().min(7)]);
-                self.boundary = Some(engine::VoiceBoundary { entry: f, args, event: None });
+                self.boundary = Some(engine::VoiceBoundary {
+                    entry: f,
+                    args,
+                    event: None,
+                });
                 0x80002001
             }
             0x2be984 => {
-
                 let snap = self.snap;
                 let eu = |us: u32| crate::rom_region::addr(self.rom, us) as usize;
+                let code_literal =
+                    |us: u32| crate::rom_region::addr(self.rom, 0x2be984) + us - 0x2be984;
                 let mut escapes = [0i16; 75];
                 for (i, slot) in escapes.iter_mut().enumerate() {
                     let at = eu(0x9140e4) + i * 2;
@@ -1847,38 +2492,62 @@ impl Host<'_> {
                     blocks: &mut blocks,
                     stack: crate::engine_live_render::scratch::PCRE_STACK,
                     fallback: 0,
-                    toi_names: [0xa09390, 0xa09394, 0xa093da],
+                    toi_names: [0xa09390, 0xa09394, 0xa093da]
+                        .map(|p| crate::rom_region::addr(self.rom, p)),
                 };
                 let mut regex = crate::render_part_c::RegexData {
                     scratch: &mut escape_scratch,
                     tables: &tables,
                 };
                 let mut eos = [0u8; 40];
-                eos.copy_from_slice(&snap[0x9c56f4..0x9c56f4 + 40]);
-                let separators = crate::engine_live_render::separators_of(m,self.rom);
+                let eos_at = eu(0x9c5630) + 0xc4;
+                eos.copy_from_slice(&snap[eos_at..eos_at + 40]);
+                let separators = crate::engine_live_render::separators_of(m, self.rom);
                 let engine = crate::render_part_c::Environment {
-                    cached_handle: core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom,0x8d7660) + i as u32)),
-                    default_context: crate::rom_region::addr(self.rom,0x8d7640),
+                    cached_handle: core::array::from_fn(|i| {
+                        m.byte(crate::rom_region::addr(self.rom, 0x8d7660) + i as u32)
+                    }),
+                    default_context: crate::rom_region::addr(self.rom, 0x8d7640),
                 };
                 let parser = crate::render_part_c::ParserData {
                     eos: &eos,
                     separators: &separators,
-                    category: 0x9c5650,
-                    formats: [0x9c5830, 0x9c5888, 0x2beed0, 0x9c57c4, 0x9c577c],
+                    category: eu(0x9c5650) as u32,
+                    formats: [
+                        eu(0x9c5830) as u32,
+                        eu(0x9c5888) as u32,
+                        code_literal(0x2beed0),
+                        (eu(0x9c5630) + 0x194) as u32,
+                        (eu(0x9c5630) + 0x14c) as u32,
+                    ],
                     extra_key: 0,
                     scratch: crate::engine_live_render::scratch::SENTENCE,
                 };
                 let sentence = crate::render_part_c::SentenceData {
                     parser: &parser,
-                    labels: [0x2beeb4, 0x2beec0],
-                    nfa_format: 0x2bf130,
-                    nfa_words: [0x2bf128, 0x2bf12c],
-                    dictionary_name: 0x2bf120,
+                    labels: [code_literal(0x2beeb4), code_literal(0x2beec0)],
+                    nfa_format: code_literal(0x2bf130),
+                    nfa_words: [code_literal(0x2bf128), code_literal(0x2bf12c)],
+                    dictionary_name: code_literal(0x2bf120),
                 };
-                crate::render_part_c::fn_2be984(m, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8] as i32, &engine, &sentence, &mut regex, self)
+                crate::render_part_c::fn_2be984(
+                    m,
+                    a[0],
+                    a[1],
+                    a[2],
+                    a[3],
+                    a[4],
+                    a[5],
+                    a[6],
+                    a[7],
+                    a[8] as i32,
+                    &engine,
+                    &sentence,
+                    &mut regex,
+                    self,
+                )
             }
             0x1748a0 => {
-
                 if a[0] == 0 || m.byte(a[0] + 64) == 0 {
                     0
                 } else {
@@ -1888,7 +2557,11 @@ impl Host<'_> {
                         if vt != 0 {
                             let g = m.word(vt + 52);
                             if g != 0 {
-                                let t = self.call(m, g, &[m.word(a[0] + 8 + i * 8), a[1], a[2], a[3], a[4], a[5]]);
+                                let t = self.call(
+                                    m,
+                                    g,
+                                    &[m.word(a[0] + 8 + i * 8), a[1], a[2], a[3], a[4], a[5]],
+                                );
                                 if t >= 0x80000000 {
                                     r = t;
                                 }
@@ -1899,7 +2572,8 @@ impl Host<'_> {
                     if vt != 0 {
                         let g = m.word(vt + 52);
                         if g != 0 {
-                            let t = self.call(m, g, &[m.word(a[0] + 56), a[1], a[2], a[3], a[4], a[5]]);
+                            let t =
+                                self.call(m, g, &[m.word(a[0] + 56), a[1], a[2], a[3], a[4], a[5]]);
                             if t >= 0x80000000 {
                                 r = t;
                             }
@@ -1908,7 +2582,6 @@ impl Host<'_> {
                     r
                 }
             }
-
             0x4a779c => {
                 let target = m.word(m.word(a[0]) + 8);
                 self.call(m, target, &[a[0], a[1], 4])
@@ -1917,53 +2590,105 @@ impl Host<'_> {
             0x4a79b8 => crate::speech_part_3::fn_4a79b8(m, a[0], a[1], a[2], self),
             0x4a774c => crate::speech_part_3::fn_4a774c(m, a[0], a[1], self),
             0x39f5e8 => m.fn_39f5e8(self, [a[0], a[1], a[2]]),
-            0x39f5b8 => { crate::speech_part_3::fn_39f5b8(m, a[0], a[1], self); 0 }
+            0x39f5b8 => {
+                crate::speech_part_3::fn_39f5b8(m, a[0], a[1], self);
+                0
+            }
             0x163f20 => m.fn_163f20(self, [a[0], a[1], a[2], a[3]]),
-            0x1840fc => { crate::boot_part_b::fn_1840fc(m, a[0], self); 0 }
-            0x18423c => { crate::boot_part_b::fn_18423c(m, a[0], self); 0 }
+            0x1840fc => {
+                crate::boot_part_b::fn_1840fc(m, a[0], self);
+                0
+            }
+            0x18423c => {
+                crate::boot_part_b::fn_18423c(m, a[0], self);
+                0
+            }
             0x184f20 => m.boot_heap_allocate([a[0], a[1], a[2], a[3], a[4], a[5]]),
-            0x184f84 => { m.boot_heap_release(a[0], a[1]); 0 }
-            0x19b78c => { crate::boot_part_b2::fn_19b78c_guest(m, a[0], a[1]); 0 }
+            0x184f84 => {
+                m.boot_heap_release(a[0], a[1]);
+                0
+            }
+            0x19b78c => {
+                crate::boot_part_b2::fn_19b78c_guest(m, a[0], a[1]);
+                0
+            }
             0x1850c0 => crate::boot_port_1::fn_1850c0(m, a[0], a[1], a[2] as i32),
             0x1852e8 => crate::boot_port_1::fn_1852e8(m, a[0], a[1], a[2]),
             0x19b814 => crate::boot_port_1::fn_19b814(m, a[0], a[1], a[2], a[3], a[4]),
             0x183edc => {
-                if m.word(a[0]) == 0 { self.boot.fault=Some(engine::Error::InvalidSnapshot); return 0x80002001; }
+                if m.word(a[0]) == 0 {
+                    self.boot.fault = Some(engine::Error::InvalidSnapshot);
+                    return 0x80002001;
+                }
                 let handle = self.boot.platform.arbiter_address();
-                crate::boot_part_b2::fn_183edc(m, a[0], handle, self); 0
+                crate::boot_part_b2::fn_183edc(m, a[0], handle, self);
+                0
             }
             0x165d00 => {
                 let g = crate::boot::Globals {
-                    manager: 0, callbacks: 0, rules: 0, components: 0,
-                    dictionary: 0, context: 0, mode: 0,
+                    manager: 0,
+                    callbacks: 0,
+                    rules: 0,
+                    components: 0,
+                    dictionary: 0,
+                    context: 0,
+                    mode: 0,
                     semaphore: self.boot.platform.arbiter_address(),
-                    service: 0, command: 0,
+                    service: 0,
+                    command: 0,
                 };
-                m.fn_165d00(self, &g, a[0]); 0
+                m.fn_165d00(self, &g, a[0]);
+                0
             }
-            0x15b758 => crate::db_live::create_record_m(self,m,a[0],a[1],a[2],crate::rom_region::addr(self.rom,0x8d8274),crate::rom_region::addr(self.rom,0x8d7ca0)),
+            0x15b758 => crate::db_live::create_record_m(
+                self,
+                m,
+                a[0],
+                a[1],
+                a[2],
+                crate::rom_region::addr(self.rom, 0x8d8274),
+                crate::rom_region::addr(self.rom, 0x8d7ca0),
+            ),
             0x174aac => {
-                let ticket=core::array::from_fn(|i|m.word(crate::rom_region::addr(self.rom,0x8d7614)+i as u32*4));
-                crate::db_live::fn_174aac_m(self,m,a[0],a[1],a[2],ticket)
+                let ticket = core::array::from_fn(|i| {
+                    m.word(crate::rom_region::addr(self.rom, 0x8d7614) + i as u32 * 4)
+                });
+                crate::db_live::fn_174aac_m(self, m, a[0], a[1], a[2], ticket)
             }
-            0x175c40 => crate::db_live::append_owner_m(self,m,a[0],a[1],0x340),
-
-            0x15b5f0 => crate::db_live::close_db_m(self,m,a[0],a[1],&crate::db_live::DbData{module:0,open_begin:0,open_end:0,open_detail:0,reset_begin:0,reset_end:0,pool_name_word:0,keys:[0;5]}),
+            0x175c40 => crate::db_live::append_owner_m(self, m, a[0], a[1], 0x340),
+            0x15b5f0 => crate::db_live::close_db_m(
+                self,
+                m,
+                a[0],
+                a[1],
+                &crate::db_live::DbData {
+                    module: 0,
+                    open_begin: 0,
+                    open_end: 0,
+                    open_detail: 0,
+                    reset_begin: 0,
+                    reset_end: 0,
+                    pool_name_word: 0,
+                    keys: [0; 5],
+                },
+            ),
             _ => {
                 if self.rom == crate::rom_region::Rom::Eu && f == 0x14e084 {
                     return self.call(m, 0x14dfc0, a);
                 }
-                self.boot.invoke(m,f,a)
+                self.boot.invoke(m, f, a)
             }
         }
     }
 }
+
 impl PoolHooksM for Host<'_> {
     fn log_pool_m(&mut self,p:u32,n:u32,m:&mut Memory<'_>) {
         self.call_m(0x1738e8,&[m.word(m.word(p)+16),0x8d7b56,5,0,0x8dc928,m.word(p+4),0x180f78,
             m.word(p+24),m.word(p+20),m.word(p+12),m.word(p+16),n],m);
     }
 }
+
 impl DbHooksM for Host<'_> {
     fn literal_m(&self,us:u32)->u32 {crate::rom_region::addr(self.rom,us)}
     fn call_m(&mut self,f:u32,a:&[u32],m:&mut Memory<'_>)->u32 {
@@ -1977,7 +2702,9 @@ impl DbHooksM for Host<'_> {
         } else { self.call(m,f,a) }
     }
 }
+
 struct ViewOnly;
+
 impl crate::bridge::Platform for ViewOnly {
     fn thread_id(&mut self)->u32 {unreachable!()}
     fn arbiter_address(&self)->u32 {unreachable!()}
@@ -2043,10 +2770,15 @@ pub fn component_boundary(m:&mut engine::Memory<'_,'_>,synthesis:engine::VoiceBo
 }
 
 use crate::frontend::{compare_str,copy_str,fill_bytes};
+
 fn mem_word(m:&[u8],p:u32)->u32 {u32::from_le_bytes(m[p as usize..p as usize+4].try_into().unwrap())}
+
 fn mem_half(m:&[u8],p:u32)->u16 {u16::from_le_bytes(m[p as usize..p as usize+2].try_into().unwrap())}
+
 fn mem_store(m:&mut [u8],p:u32,v:u32) {m[p as usize..p as usize+4].copy_from_slice(&v.to_le_bytes());}
+
 fn mem_store16(m:&mut [u8],p:u32,v:u16) {m[p as usize..p as usize+2].copy_from_slice(&v.to_le_bytes());}
+
 fn terminated(m:&[u8],p:u32)->&[u8] {let s=&m[p as usize..];&s[..s.iter().position(|v|*v==0).unwrap()+1]}
 
 pub fn start_components_m(
@@ -2286,6 +3018,7 @@ fn component_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speec
         input_types:[m.word(addr(rom,0x8f8860)),m.word(addr(rom,0x8f8860)+4)],
     }
 }
+
 fn stream_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speech_part_1::StreamEnvironment {
     use crate::rom_region::addr;
     crate::speech_part_1::StreamEnvironment{
@@ -2302,6 +3035,7 @@ fn stream_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speech_p
         ids:core::array::from_fn(|i|m.half(addr(rom,0x8f8cae)+i as u32*6)),
     }
 }
+
 fn language_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speech_part_1::LanguageEnvironment {    use crate::rom_region::addr;
     crate::speech_part_1::LanguageEnvironment{
         cached_handle:core::array::from_fn(|i|m.byte(addr(rom,0x8d7660)+i as u32)),
@@ -2317,9 +3051,16 @@ fn language_environment(m:&Memory<'_>,rom:crate::rom_region::Rom)->crate::speech
         lid_state:source_literal(m,b"lidstate"),
     }
 }
+
 impl crate::speech_part_2::Host for Host<'_> {
-    fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.call(m,f,a)}
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.call(m, crate::rom_region::to_us_guest(self.rom, f), a)
+    }
+    fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.call(m, f, a)
+    }
 }
+
 impl crate::boot_part_b::Host for Host<'_> {
     fn real_log_args(&mut self)->bool { true }
     fn log_variadic(&mut self,m:&mut Memory<'_>,entry:u32,a:[u32;4],format:&[u8],varargs:&[u32])->bool {
@@ -2329,10 +3070,13 @@ impl crate::boot_part_b::Host for Host<'_> {
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.call(m,f,a)}
     fn thread_id(&mut self)->u32 {self.boot.platform.thread_id()}
 }
+
 impl crate::boot_part_e::Host for Host<'_> {
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.call(m,f,a)}
 }
+
 impl crate::boot_part_b::FormatHost for Host<'_> {}
+
 impl crate::log_live::LogMethodsM for Host<'_> {
     fn log_m(&mut self,f:u32,o:u32,c:u32,l:u32,a:u32,t:u32,v:u32,m:&mut Memory<'_>)->u32 {self.call(m,f,&[o,c,l,a,t,v])}
 }
@@ -2355,8 +3099,12 @@ pub fn fetch_param_m(h:&mut impl DbHooksM,m:&mut Memory<'_>,obj:u32,key:u32,out:
     if rc>=0x80000000 && result<0x80000000 {result=rc;}result
 }
 
-use crate::frontend::{validate_handle,render_unsigned,divmod_u32,INSERT_EVENT_LEN,filter_markers,copy_bytes};
+use crate::frontend::{
+    copy_bytes, divmod_u32, filter_markers, render_unsigned, validate_handle, INSERT_EVENT_LEN,
+};
+
 use core::cell::RefCell;
+
 pub trait AudioOpenHooksM {
 
     fn stream_open_m(
@@ -2374,6 +3122,7 @@ pub trait AudioOpenHooksM {
 
     fn content_open_failed_m(&mut self, logger: u32, code: u32, mem: &mut [u8]);
 }
+
 pub trait CtxResetHooksM {
 
     fn release_pair_m(&mut self, a: u32, b: u32, flag: u32, mem: &mut [u8]) -> u32;
@@ -2384,10 +3133,12 @@ pub trait CtxResetHooksM {
 
     fn null_pair_m(&mut self, mem: &mut [u8]) -> (u32, u32);
 }
+
 pub trait VMethodHooksM {
 
     fn call_method_m(&mut self, c: u32, d: u32, mem: &mut [u8]) -> u32;
 }
+
 pub trait InserterPumpHooksM {
 
     fn buf_available_m(&mut self, h0: u32, h1: u32, count: &mut u32, end: &mut u8, mem: &mut [u8]) -> u32;
@@ -2437,6 +3188,7 @@ pub trait InserterPumpHooksM {
 
     fn null_pair_m(&mut self, mem: &mut [u8]) -> (u32, u32);
 }
+
 pub trait EmitHooksM {
 
     fn put_output_m(
@@ -2459,40 +3211,66 @@ pub trait EmitHooksM {
 }
 
 const OUT_LOCAL: u32 = 0x1f00;
+
 const OUT_REQUEST: u32 = 0x1f20;
+
 const OUT_SCRATCH: u32 = 0x1f40;
+
 const OUT_CTX: u32 = 0x1f54;
+
 const OUT_PARAM: u32 = 0x1f60;
 
-fn fn_183258_m(m:&mut Memory<'_>,p:u32,kind:u32,vfp:engine::NotificationRegisters)->u32 {
-    let vector=p.wrapping_add(0x61cc);
-    let begin=m.word(vector.wrapping_add(4));
-    let end=m.word(vector.wrapping_add(8));
-    let capacity=m.word(vector.wrapping_add(12));
-    let count=end.wrapping_sub(begin) as i32>>5;
-    let reserved=capacity&0x3fffffff;
-
-    let tick=if end!=0 {
-        let last=end.wrapping_sub(32);
-        if last>=begin {
-            m.word(last.wrapping_add(8)) as u64|((m.word(last.wrapping_add(12)) as u64)<<32)
-        } else {0}
-    } else {0};
-    if (reserved as i32)<=count {
-        let grown=if reserved==0 {1} else {reserved.wrapping_mul(2)};
-        if (reserved as i32)<(grown as i32) {
-
-            return crate::boot_part_b2::fn_183258_live(m,p,kind,vfp.s16,vfp.s17,tick);
+fn fn_183258_m(
+    m: &mut Memory<'_>,
+    p: u32,
+    kind: u32,
+    vfp: engine::NotificationRegisters,
+    rom: crate::rom_region::Rom,
+) -> u32 {
+    let vector = p.wrapping_add(crate::speech_layout::field(rom, 0x61cc));
+    let begin = m.word(vector.wrapping_add(4));
+    let end = m.word(vector.wrapping_add(8));
+    let capacity = m.word(vector.wrapping_add(12));
+    let count = end.wrapping_sub(begin) as i32 >> 5;
+    let reserved = capacity & 0x3fffffff;
+    let tick = if end != 0 {
+        let last = end.wrapping_sub(32);
+        if last >= begin {
+            m.word(last.wrapping_add(8)) as u64 | ((m.word(last.wrapping_add(12)) as u64) << 32)
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+    if (reserved as i32) <= count {
+        let grown = if reserved == 0 {
+            1
+        } else {
+            reserved.wrapping_mul(2)
+        };
+        if (reserved as i32) < (grown as i32) {
+            return crate::boot_part_b2::fn_183258_live(
+                m,
+                p + crate::speech_layout::field(rom, 0x61cc) - 0x61cc,
+                kind,
+                vfp.s16,
+                vfp.s17,
+                tick,
+            );
         }
     }
-    if end!=0 {
-        let first=vfp.s16;
-        let tail=vfp.s17;
-        for (i,v) in [kind,first,tick as u32,(tick>>32) as u32,0,0,0,tail].into_iter().enumerate(){
-            m.put_word(end.wrapping_add(i as u32*4),v);
+    if end != 0 {
+        let first = vfp.s16;
+        let tail = vfp.s17;
+        for (i, v) in [kind, first, tick as u32, (tick >> 32) as u32, 0, 0, 0, tail]
+            .into_iter()
+            .enumerate()
+        {
+            m.put_word(end.wrapping_add(i as u32 * 4), v);
         }
     }
-    m.put_word(vector.wrapping_add(8),end.wrapping_add(32));
+    m.put_word(vector.wrapping_add(8), end.wrapping_add(32));
     0
 }
 
@@ -2663,11 +3441,36 @@ pub fn fn_18f490_m(m:&mut Memory<'_>,st:u32,ob:u32,tags:u32,ntags:u32)->Result<u
 }
 
 struct QueueRuntime{registers:engine::NotificationRegisters}
+
 impl RuntimeServicesM for QueueRuntime {
-    fn invoke_m(&mut self,m:&mut Memory<'_>,entry:u32,a:&[u32])->Result<u32,engine::Error>{
+    fn invoke_m_rom(
+        &mut self,
+        m: &mut Memory<'_>,
+        entry: u32,
+        a: &[u32],
+        rom: crate::rom_region::Rom,
+    ) -> Result<u32, engine::Error> {
+        if entry == 0x183258 {
+            Ok(fn_183258_m(m, a[0], a[1], self.registers, rom))
+        } else {
+            self.invoke_m(m, entry, a)
+        }
+    }
+    fn invoke_m(
+        &mut self,
+        m: &mut Memory<'_>,
+        entry: u32,
+        a: &[u32],
+    ) -> Result<u32, engine::Error> {
         match entry {
-            0x183258=>Ok(fn_183258_m(m,a[0],a[1],self.registers)),
-            _=>Err(engine::Error::UnsupportedStage{entry}),
+            0x183258 => Ok(fn_183258_m(
+                m,
+                a[0],
+                a[1],
+                self.registers,
+                crate::rom_region::Rom::Us,
+            )),
+            _ => Err(engine::Error::UnsupportedStage { entry }),
         }
     }
 }
@@ -2824,6 +3627,7 @@ pub trait SynthTeardownHooksM {
 
     fn reopen_pipeline_cs_m(&mut self, cs: u32, mem: &mut [u8]) -> u32;
 }
+
 pub fn open_audio_m<H: AudioOpenHooksM>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -2879,6 +3683,7 @@ pub fn open_audio_m<H: AudioOpenHooksM>(
     }
     rc
 }
+
 pub fn reset_ctx_m<H: CtxResetHooksM>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -2920,6 +3725,7 @@ pub fn reset_ctx_m<H: CtxResetHooksM>(
     }
     ret
 }
+
 pub fn call_method8_m<H: VMethodHooksM>(hooks: &mut H, mem: &mut [u8], base: u32, q: u32) -> u32 {
     if validate_handle(true, q, 0xf383, 0x20) >= 0x80000000 {
         return 0x8bb02008;
@@ -2928,11 +3734,17 @@ pub fn call_method8_m<H: VMethodHooksM>(hooks: &mut H, mem: &mut [u8], base: u32
         mem_word(mem, base.wrapping_add(12)),
         mem_word(mem, base.wrapping_add(16)), mem)
 }
+
 trait StatusM {fn set_m(&mut self,value:u8,mem:&mut [u8]);}
+
 struct LocalStatus<'a>(&'a mut u8);
+
 impl StatusM for LocalStatus<'_>{fn set_m(&mut self,v:u8,_:&mut [u8]){*self.0=v;}}
+
 struct GuestStatus(u32);
+
 impl StatusM for GuestStatus{fn set_m(&mut self,v:u8,m:&mut [u8]){m[self.0 as usize]=v;}}
+
 pub fn pump_insertion_m<H:InserterPumpHooksM>(h:&mut H,mem:&mut [u8],p:u32,key:u32,status:&mut u8)->u32 {
     pump_insertion_impl(h,mem,p,key,&mut LocalStatus(status))
 }
@@ -2940,6 +3752,7 @@ pub fn pump_insertion_m<H:InserterPumpHooksM>(h:&mut H,mem:&mut [u8],p:u32,key:u
 pub fn pump_insertion_at_m<H:InserterPumpHooksM>(h:&mut H,mem:&mut [u8],p:u32,key:u32,status:u32)->u32 {
     pump_insertion_impl(h,mem,p,key,&mut GuestStatus(status))
 }
+
 fn pump_insertion_impl<H: InserterPumpHooksM>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -3190,6 +4003,7 @@ fn pump_insertion_impl<H: InserterPumpHooksM>(
     }
     rc
 }
+
 pub fn emit_output_m<H: EmitHooksM>(
     mem: &mut [u8],
     p: u32,
@@ -3488,6 +4302,7 @@ pub fn emit_output_m<H: EmitHooksM>(
     }
     rc
 }
+
 pub fn teardown_synth_m<H: SynthTeardownHooksM + EmitHooksM>(
     mem: &mut [u8],
     p: u32,
@@ -3629,6 +4444,7 @@ pub fn teardown_synth_m<H: SynthTeardownHooksM + EmitHooksM>(
     }
     rc
 }
+
 pub fn close_components_m(
     mem: &mut [u8],
     synth: u32,
@@ -3685,10 +4501,15 @@ macro_rules! drain_validate_end {
         }
     };
 }
+
 drain_validate_end!(fn_1f27ec_m, 0xf385, 0x20, 0x89e02008);
+
 drain_validate_end!(fn_1f3a8c_m, 0xf386, 0x30, 0x89f02008);
+
 drain_validate_end!(fn_1e03ac_m, 0xf387, 40, 0x8a002008);
+
 drain_validate_end!(fn_1ea328_m, 0xf3b3, 60, 0x8b802008);
+
 drain_validate_end!(fn_1f7e8c_m, 0xf388, 64, 0x8a102008);
 
 fn fn_207130_m(m: &mut Memory<'_>, p: u32, tag: u32, _host: &mut Host<'_>) -> u32 {
@@ -3963,6 +4784,7 @@ pub fn synthesis_drain_m(
 struct DrainDb<'a, 'h> {
     host: &'a core::cell::RefCell<Host<'h>>,
 }
+
 impl crate::boot::Calls for DrainDb<'_, '_> {
     fn call(&mut self, memory: &mut crate::boot::Memory<'_>, address: u32, args: &[u32]) -> u32 {
         self.host.borrow_mut().call(memory, address, args)
@@ -3972,9 +4794,11 @@ impl crate::boot::Calls for DrainDb<'_, '_> {
         0
     }
 }
+
 impl crate::db_live::PoolHooksM for DrainDb<'_, '_> {
     fn log_pool_m(&mut self, _pool: u32, _blocks: u32, _mem: &mut crate::boot::Memory<'_>) {}
 }
+
 impl crate::db_live::DbHooksM for DrainDb<'_, '_> {
     fn call_m(&mut self, entry: u32, args: &[u32], mem: &mut crate::boot::Memory<'_>) -> u32 {
         self.host.borrow_mut().call(mem, entry, args)
@@ -4400,12 +5224,15 @@ pub fn process_text_m(
 }
 
 struct MethodHost<'h,'p> { h:&'h mut Host<'p>, entry:u32 }
+
 impl VMethodHooksM for MethodHost<'_,'_> {
     fn call_method_m(&mut self,a:u32,b:u32,bytes:&mut [u8])->u32 {
         self.h.call(&mut Memory{base:0,bytes},self.entry,&[a,b])
     }
 }
+
 struct ResetHost<'h,'p>{h:&'h mut Host<'p>,p:u32}
+
 impl CtxResetHooksM for ResetHost<'_,'_> {
     fn release_pair_m(&mut self,a:u32,b:u32,c:u32,bytes:&mut [u8])->u32 {
         let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.p+48)+48);self.h.call(&mut m,f,&[a,b,c])
@@ -4429,6 +5256,7 @@ pub fn end_token_processing_m(m:&mut Memory<'_>,p:u32,tag:u32,h:&mut impl crate:
 }
 
 struct HostPlat<'a>(&'a mut dyn engine::HeapPlatform);
+
 impl engine::HeapPlatform for HostPlat<'_> {
     fn thread_id(&mut self) -> u32 { self.0.thread_id() }
     fn arbiter_address(&self) -> u32 { self.0.arbiter_address() }
@@ -4436,6 +5264,7 @@ impl engine::HeapPlatform for HostPlat<'_> {
 }
 
 #[inline(never)]
+
 fn seg3_oneword_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     if a.len() < 4 {
         h.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -4456,6 +5285,7 @@ fn seg3_oneword_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
 }
 
 #[inline(never)]
+
 fn seg3_pos_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     if a.len() < 5 {
         h.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -4488,6 +5318,7 @@ fn seg3_pos_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
 }
 
 #[inline(never)]
+
 fn seg3_phrasing_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     if a.len() < 5 {
         h.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -4519,6 +5350,7 @@ fn seg3_phrasing_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
 }
 
 #[inline(never)]
+
 fn seg7_marker_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     let Some(rt) = h.runtime.as_deref_mut() else {
         h.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -4540,6 +5372,7 @@ fn seg7_marker_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
 }
 
 #[inline(never)]
+
 fn seg7_flush_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     let Some(rt) = h.runtime.as_deref_mut() else {
         h.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -4594,7 +5427,9 @@ fn seg7_flush_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
         }
     }
 }
+
 #[inline(never)]
+
 fn seg7_pump_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
     let Some(rt) = h.runtime.as_deref_mut() else {
         h.boot.fault = Some(engine::Error::MissingStreamAdapter { entry: f });
@@ -4649,9 +5484,11 @@ fn seg7_pump_arm(h: &mut Host, m: &mut Memory, f: u32, a: &[u32]) -> u32 {
         }
     }
 }
+
 pub fn call_live_m(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine::HeapPlatform)->Result<u32,engine::Error> {
     call_live_m_rom(m,f,a,platform,crate::rom_region::Rom::Us)
 }
+
 pub fn call_live_m_rom(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<u32,engine::Error> {
     let mut h=Host{boot:engine::SpeechBootHost{platform,fault:None},boundary:None,runtime:None,snap:&[],trace:None,until:None,depth:0,stack:[0;64],stack_len:0,rom};
     let rc=h.call(m,f,a);
@@ -4661,6 +5498,7 @@ pub fn call_live_m_rom(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine
 }
 
 struct BufferHost<'h,'p>{h:&'h mut Host<'p>,p:u32}
+
 impl BufferHost<'_,'_> {
     fn buffer(&mut self,bytes:&mut [u8],off:u32,args:&[u32])->u32 {
         let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.p+12)+off);
@@ -4671,6 +5509,7 @@ impl BufferHost<'_,'_> {
         self.h.call(&mut m,f,args)
     }
 }
+
 fn slots_m<R>(bytes:&mut [u8],values:[u32;4],f:impl FnOnce(&mut [u8],u32)->R)->(R,[u32;4]) {
     let s=0x1900;let saved=core::array::from_fn::<_,4,_>(|i|mem_word(bytes,s+i as u32*4));
     for (i,v) in values.iter().enumerate(){mem_store(bytes,s+i as u32*4,*v);}
@@ -4678,6 +5517,7 @@ fn slots_m<R>(bytes:&mut [u8],values:[u32;4],f:impl FnOnce(&mut [u8],u32)->R)->(
     for (i,v) in saved.iter().enumerate(){mem_store(bytes,s+i as u32*4,*v);}
     (r,out)
 }
+
 impl InserterPumpHooksM for BufferHost<'_,'_> {
     fn buf_available_m(&mut self,a:u32,b:u32,count:&mut u32,end:&mut u8,bytes:&mut [u8])->u32 {
         let (rc,v)=slots_m(bytes,[*count,*end as u32,0,0],|m,s|self.buffer(m,72,&[a,b,s,s+4]));*count=v[0];*end=v[1] as u8;rc
@@ -4707,7 +5547,9 @@ impl InserterPumpHooksM for BufferHost<'_,'_> {
     fn pump_remote_m(&mut self,bytes:&mut [u8],p:u32)->u32 {self.h.call(&mut Memory{base:0,bytes},0x22c85c,&[p])}
     fn null_pair_m(&mut self,bytes:&mut [u8])->(u32,u32) {(mem_word(bytes,crate::rom_region::addr(self.h.rom,0x8d7660)),mem_word(bytes,crate::rom_region::addr(self.h.rom,0x8d7664)))}
 }
+
 struct AudioHost<'h,'p>{h:&'h mut Host<'p>,p:u32,index:u32}
+
 impl AudioOpenHooksM for AudioHost<'_,'_> {
     fn stream_open_m(&mut self,a:u32,b:u32,name:&[u8],x:u32,y:u32,out:&mut (u32,u32),bytes:&mut [u8])->u32 {
         let s=0x1a00usize;let mut saved=[0u8;128];saved.copy_from_slice(&bytes[s..s+128]);
@@ -4749,76 +5591,226 @@ pub const NESTED_CAP_S0: u32 = NESTED_163A98_SP + 0x18;
 pub const NESTED_CAP_S1: u32 = NESTED_163A98_SP + 0x14;
 
 pub const NESTED_RESULT: u32 = NESTED_163A98_SP + 0x64;
-pub fn callback_m(m:&mut Memory<'_>,a:[u32;5],_scratch:u32,tick:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
-    let p=a[0];let event=a[4];
-    h.call_m(0x183258,&[p,m.word(event)],m);
-    match m.word(event) {
-        1=>{h.call_m(0x18cae8,&[m.word(p+0x61b8)],m);}
-        2=>{if h.call_m(0x183398,&[p,a[1],a[2]],m)==0x80002001{return 0x80002001;}m.put_byte(p+0x61b4,1);}
-        8=>{
-            let result=m.word(event+8);
-            m.put_word(result+8,m.word(p+0x6194).wrapping_add(m.word(p+0x6198)&!1));
-            m.put_word(result+4,m.word(p+0x6198));
-            m.put_word(result+16,m.word(p+0x619c));m.put_word(result+12,4000);
-        }
-        16=>{
-            loop {
-                let ready=h.call_m(0x18cc30,&[p],m);
-                if ready!=0 && (m.byte(p+0xa8)==0 || m.word(p+0x18)<=1 || m.word(p+0x20)!=0) {break;}
-                if m.byte(p+0x61a1)!=0 {return 0;}
-                h.call_m(0x166054,&[tick,0],m);
-            }
 
-            if !render_callback_m(m,p,a[1],a[2],m.word(event+8),NESTED_CAP_S0,false,h){return 0x80002001;}
-            h.call_m(0x1840fc,&[p+0x110],m);
-            let ready=h.call_m(m.word(m.word(p)+120),&[p],m);
-            if ready!=0 && m.byte(p+0x61a4)==0 && m.byte(p+0xa8)==0 && m.byte(p+0x61a2)==0 {m.put_byte(p+0x61a2,1);}
-            h.call_m(0x18423c,&[p+0x110],m);
-            if m.byte(p+0x178)<16 {
-                let delay=((m.word(p+0x61c4) as u64)<<32|m.word(p+0x61c0) as u64).wrapping_mul(1000);
-                h.call_m(0x166054,&[delay as u32,(delay>>32) as u32],m);
+pub fn callback_m(
+    m: &mut Memory<'_>,
+    a: [u32; 5],
+    _scratch: u32,
+    tick: u32,
+    h: &mut impl crate::reentrant::HooksM,
+) -> u32 {
+    callback_m_rom(m, a, _scratch, tick, crate::rom_region::Rom::Us, h)
+}
+
+pub fn callback_m_rom(
+    m: &mut Memory<'_>,
+    a: [u32; 5],
+    _scratch: u32,
+    tick: u32,
+    rom: crate::rom_region::Rom,
+    h: &mut impl crate::reentrant::HooksM,
+) -> u32 {
+    let p = a[0];
+    let event = a[4];
+    h.call_m(0x183258, &[p, m.word(event)], m);
+    match m.word(event) {
+        1 => {
+            h.call_m(
+                0x18cae8,
+                &[m.word(p + crate::speech_layout::field(rom, 0x61b8))],
+                m,
+            );
+        }
+        2 => {
+            if h.call_m(0x183398, &[p, a[1], a[2]], m) == 0x80002001 {
+                return 0x80002001;
+            }
+            m.put_byte(p + crate::speech_layout::field(rom, 0x61b4), 1);
+        }
+        8 => {
+            let result = m.word(event + 8);
+            m.put_word(
+                result + 8,
+                m.word(p + crate::speech_layout::field(rom, 0x6194))
+                    .wrapping_add(m.word(p + crate::speech_layout::field(rom, 0x6198)) & !1),
+            );
+            m.put_word(
+                result + 4,
+                m.word(p + crate::speech_layout::field(rom, 0x6198)),
+            );
+            m.put_word(
+                result + 16,
+                m.word(p + crate::speech_layout::field(rom, 0x619c)),
+            );
+            m.put_word(result + 12, 4000);
+        }
+        16 => {
+            loop {
+                let ready = h.call_m(0x18cc30, &[p], m);
+                if ready != 0
+                    && (m.byte(p + 0xa8) == 0 || m.word(p + 0x18) <= 1 || m.word(p + 0x20) != 0)
+                {
+                    break;
+                }
+                if m.byte(p + crate::speech_layout::field(rom, 0x61a1)) != 0 {
+                    return 0;
+                }
+                h.call_m(0x166054, &[tick, 0], m);
+            }
+            if !render_callback_m(
+                m,
+                p,
+                a[1],
+                a[2],
+                m.word(event + 8),
+                NESTED_CAP_S0,
+                false,
+                rom,
+                h,
+            ) {
+                return 0x80002001;
+            }
+            h.call_m(0x1840fc, &[p + crate::speech_layout::field(rom, 0x110)], m);
+            let ready = h.call_m(m.word(m.word(p) + 120), &[p], m);
+            if ready != 0
+                && m.byte(p + crate::speech_layout::field(rom, 0x61a4)) == 0
+                && m.byte(p + 0xa8) == 0
+                && m.byte(p + crate::speech_layout::field(rom, 0x61a2)) == 0
+            {
+                m.put_byte(p + crate::speech_layout::field(rom, 0x61a2), 1);
+            }
+            h.call_m(0x18423c, &[p + crate::speech_layout::field(rom, 0x110)], m);
+            if m.byte(p + crate::speech_layout::field(rom, 0x178)) < 16 {
+                let delay = ((m.word(p + crate::speech_layout::field(rom, 0x61c4)) as u64) << 32
+                    | m.word(p + crate::speech_layout::field(rom, 0x61c0)) as u64)
+                    .wrapping_mul(1000);
+                h.call_m(0x166054, &[delay as u32, (delay >> 32) as u32], m);
             }
         }
-        32=>m.put_byte(p+0x61a3,1),
-        _=>{}
+        32 => m.put_byte(p + crate::speech_layout::field(rom, 0x61a3), 1),
+        _ => {}
     }
     0
 }
 
-pub fn finish_m(m:&mut Memory<'_>,p:u32,a:u32,b:u32,scratch:u32,h:&mut impl crate::reentrant::HooksM) {let _=finish_checked_m(m,p,a,b,scratch,h);}
-fn finish_checked_m(m:&mut Memory<'_>,p:u32,a:u32,b:u32,scratch:u32,h:&mut impl crate::reentrant::HooksM)->bool {
-    let saved=core::array::from_fn::<_,7,_>(|i|m.word(scratch+i as u32*4));
-    m.put_word(scratch+4,0);m.put_word(scratch+12,0);
-    let ok=render_callback_m(m,p,a,b,scratch,scratch+20,true,h);
-    for (i,v) in saved.iter().enumerate(){m.put_word(scratch+i as u32*4,*v);}
+pub fn finish_m(
+    m: &mut Memory<'_>,
+    p: u32,
+    a: u32,
+    b: u32,
+    scratch: u32,
+    h: &mut impl crate::reentrant::HooksM,
+) {
+    let _ = finish_checked_m(m, p, a, b, scratch, crate::rom_region::Rom::Us, h);
+}
+
+fn finish_checked_m(
+    m: &mut Memory<'_>,
+    p: u32,
+    a: u32,
+    b: u32,
+    scratch: u32,
+    rom: crate::rom_region::Rom,
+    h: &mut impl crate::reentrant::HooksM,
+) -> bool {
+    let saved = core::array::from_fn::<_, 7, _>(|i| m.word(scratch + i as u32 * 4));
+    m.put_word(scratch + 4, 0);
+    m.put_word(scratch + 12, 0);
+    let ok = render_callback_m(m, p, a, b, scratch, scratch + 20, true, rom, h);
+    for (i, v) in saved.iter().enumerate() {
+        m.put_word(scratch + i as u32 * 4, *v);
+    }
     ok
 }
-fn render_callback_m(m:&mut Memory<'_>,p:u32,a:u32,b:u32,result:u32,s:u32,flush:bool,h:&mut impl crate::reentrant::HooksM)->bool {
-    let saved=[m.word(s),m.word(s+4)];
-    let offset=m.word(p+0x28).wrapping_mul(2);
-    let first=m.word(p+0x78).wrapping_add(offset);
-    m.put_word(s,0x4b000u32.wrapping_sub(offset)>>1);
-    m.put_word(s+4,if m.word(p+0x18)<2 {offset>>1}else{0x25800});
 
-    if h.call_m(0x1a18c4,&[m.word(p+0x61b8),a,b,result,first,s,m.word(p+0x7c),s+4,flush as u32],m)==0x80002001 {
+fn render_callback_m(
+    m: &mut Memory<'_>,
+    p: u32,
+    a: u32,
+    b: u32,
+    result: u32,
+    s: u32,
+    flush: bool,
+    rom: crate::rom_region::Rom,
+    h: &mut impl crate::reentrant::HooksM,
+) -> bool {
+    let saved = [m.word(s), m.word(s + 4)];
+    let offset = m.word(p + 0x28).wrapping_mul(2);
+    let first = m.word(p + 0x78).wrapping_add(offset);
+    m.put_word(s, 0x4b000u32.wrapping_sub(offset) >> 1);
+    m.put_word(
+        s + 4,
+        if m.word(p + 0x18) < 2 {
+            offset >> 1
+        } else {
+            0x25800
+        },
+    );
+    if h.call_m(
+        0x1a18c4,
+        &[
+            m.word(p + crate::speech_layout::field(rom, 0x61b8)),
+            a,
+            b,
+            result,
+            first,
+            s,
+            m.word(p + 0x7c),
+            s + 4,
+            flush as u32,
+        ],
+        m,
+    ) == 0x80002001
+    {
         return false;
     }
-    let mut counts=[m.word(s),m.word(s+4)];
-    m.put_word(p+0x80,m.word(p+0x80).wrapping_add(counts[0].wrapping_add(counts[1]).wrapping_mul(2)));
-    if flush && m.word(p+0x80)<0x400 {
-        let mut one=0x4b000i32.wrapping_sub(counts[0] as i32);
-        let mut two=0x4b000i32.wrapping_sub(counts[1] as i32);
-        if one>0x400 {one=0x400;two=0;}else{let left=0x400i32.wrapping_sub(two);if two>left {two=left;}}
-        let pads=[one as u32,two as u32];
-        crate::frontend::fill_bytes(m.bytes,first+counts[0]*2,0,pads[0]*2);
-        crate::frontend::fill_bytes(m.bytes,m.word(p+0x7c)+counts[1]*2,0,pads[1]*2);
-        counts[0]=counts[0].wrapping_add(pads[0]);counts[1]=counts[1].wrapping_add(pads[1]);
-        m.put_word(p+0x80,m.word(p+0x80).wrapping_add(pads[0].wrapping_add(pads[1]).wrapping_mul(2)));
+    let mut counts = [m.word(s), m.word(s + 4)];
+    m.put_word(
+        p + 0x80,
+        m.word(p + 0x80)
+            .wrapping_add(counts[0].wrapping_add(counts[1]).wrapping_mul(2)),
+    );
+    if flush && m.word(p + 0x80) < 0x400 {
+        let mut one = 0x4b000i32.wrapping_sub(counts[0] as i32);
+        let mut two = 0x4b000i32.wrapping_sub(counts[1] as i32);
+        if one > 0x400 {
+            one = 0x400;
+            two = 0;
+        } else {
+            let left = 0x400i32.wrapping_sub(two);
+            if two > left {
+                two = left;
+            }
+        }
+        let pads = [one as u32, two as u32];
+        crate::frontend::fill_bytes(m.bytes, first + counts[0] * 2, 0, pads[0] * 2);
+        crate::frontend::fill_bytes(m.bytes, m.word(p + 0x7c) + counts[1] * 2, 0, pads[1] * 2);
+        counts[0] = counts[0].wrapping_add(pads[0]);
+        counts[1] = counts[1].wrapping_add(pads[1]);
+        m.put_word(
+            p + 0x80,
+            m.word(p + 0x80)
+                .wrapping_add(pads[0].wrapping_add(pads[1]).wrapping_mul(2)),
+        );
     }
-    h.call_m(0xc72018,&[first,counts[0]*2],m);
-    h.call_m(0xc72018,&[m.word(p+0x7c),counts[1]*2],m);
-    h.call_m(0x1a1b68,&[p],m);
-    m.put_word(s,saved[0]);m.put_word(s+4,saved[1]);true
+    h.call_m(0xc72018, &[first, counts[0] * 2], m);
+    h.call_m(0xc72018, &[m.word(p + 0x7c), counts[1] * 2], m);
+    h.call_m(0x1a1b68, &[p], m);
+    m.put_word(s, saved[0]);
+    m.put_word(s + 4, saved[1]);
+    true
+}
+
+pub fn finish_m_rom(
+    m: &mut Memory<'_>,
+    p: u32,
+    a: u32,
+    b: u32,
+    scratch: u32,
+    rom: crate::rom_region::Rom,
+    h: &mut impl crate::reentrant::HooksM,
+) {
+    let _ = finish_checked_m(m, p, a, b, scratch, rom, h);
 }
 
 pub fn clear_text_items_m(m:&mut Memory<'_>,p:u32,tag:u32,scratch:u32,h:&mut impl crate::reentrant::HooksM)->u32 {
@@ -4832,6 +5824,7 @@ pub fn clear_text_items_m(m:&mut Memory<'_>,p:u32,tag:u32,scratch:u32,h:&mut imp
 }
 
 struct ReentrantBoot<'a,H>(&'a mut H);
+
 impl<H:crate::reentrant::HooksM> crate::boot_part_e::Host for ReentrantBoot<'_,H> {
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.0.call_m(f,a,m)}
 }
@@ -4878,6 +5871,7 @@ pub fn pcre_deinit_m(m:&mut Memory<'_>,p:u32,key:u32,scratch:u32,h:&mut impl cra
     if logger!=0 {h.call_m(0x1738e8,&[logger,0x914050,4,0,0x240188,scratch],m);}
     m.put_word(scratch,saved);0
 }
+
 fn pcre_free_entry_m(m:&mut Memory<'_>,p:u32,i:u32,head:bool,h:&mut impl crate::reentrant::HooksM) {
     let mut entry=m.word(m.word(p+4)+i*4);
     if entry!=0 {
@@ -4904,6 +5898,7 @@ impl SchedulerHooksM for Host<'_> {
 }
 
 #[inline(never)]
+
 fn selection_root_m(m:&mut Memory<'_>,args:[u32;7],platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<u32,engine::Error> {
                 let mut nodes=[crate::selection::DecisionNode{question:0,miss:0,hit:0};65536];
                 let mut features=crate::component_live_a::FeatureWorkspace{blob:[0;131072],bytes:[[0;2053];60],words:[[0;1025];60],ints:[[0;16384];6],pitch:[0;4096],contexts:[0;9216],modes:[0;16384],markers:[crate::prosody::ProsodyMarker{kind:0,active:0,position:0};1024],carrier:[0;4096]};
@@ -4911,19 +5906,48 @@ fn selection_root_m(m:&mut Memory<'_>,args:[u32;7],platform:&mut dyn engine::Hea
                 crate::component_live_a::fn_227d64_m(m,args,crate::component_live_a::SCRATCH_227D64,&mut nodes,platform,&mut features,rom)
 }
 
-fn component_a2_m(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine::HeapPlatform,rom:crate::rom_region::Rom)->Result<u32,engine::Error> {
-    let dependency=0x3000usize;let root=0x4000u32;
-    let mut saved=[0u8;4352];saved.copy_from_slice(&m.bytes[dependency..dependency+4352]);
-    let mut h=crate::component_live_a2::LiveCalls::new(platform,dependency as u32).with_rom(rom);
-    let rc=match f {
-        0x22b3bc=>{let (k,mi)=match rom{crate::rom_region::Rom::Eu=>(0x22b3e4,0x14f96c),_=>(0x22b228,0x14f8a8)};crate::component_live_a2::fn_22b3bc_m(m,a[0],a[1],a[2],a[3],k,mi,root,&mut h)},
-        0x229de4=>{let (b,mk)=match rom{crate::rom_region::Rom::Eu=>(0x22a1e0,0x22a230),_=>(0x22a024,0x22a074)};crate::component_live_a2::fn_229de4_m(m,a[0],a[1],[a[2],a[3]],b,mk,root,&mut h)},
-        0x22b518=>{let lt=match rom{crate::rom_region::Rom::Eu=>0x15e030,_=>0x15df6c};let dt=match rom{crate::rom_region::Rom::Eu=>0x8fb98c,_=>0x8fa74c};crate::component_live_a2::fn_22b518_m(m,a[0],a[1],a[4],lt,root,&mut h,dt)},
-        0x22a0a8=>crate::component_live_a2::fn_22a0a8_m(m,a[0],a[1],a[4],root,&mut h),
-        _=>crate::component_live_a2::Calls::call(&mut h,m,f,a),
+fn component_a2_m(
+    m: &mut Memory<'_>,
+    f: u32,
+    a: &[u32],
+    platform: &mut dyn engine::HeapPlatform,
+    rom: crate::rom_region::Rom,
+) -> Result<u32, engine::Error> {
+    let dependency = 0x3000usize;
+    let root = 0x4000u32;
+    let mut saved = [0u8; 4352];
+    saved.copy_from_slice(&m.bytes[dependency..dependency + 4352]);
+    let mut h = crate::component_live_a2::LiveCalls::new(platform, dependency as u32).with_rom(rom);
+    let rc = match f {
+        0x22b3bc => {
+            let (k, mi) = (
+                crate::rom_region::addr(rom, 0x22b228),
+                crate::rom_region::addr(rom, 0x14f8a8),
+            );
+            crate::component_live_a2::fn_22b3bc_m(m, a[0], a[1], a[2], a[3], k, mi, root, &mut h)
+        }
+        0x229de4 => {
+            let (b, mk) = (
+                crate::rom_region::addr(rom, 0x22a024),
+                crate::rom_region::addr(rom, 0x22a074),
+            );
+            crate::component_live_a2::fn_229de4_m(m, a[0], a[1], [a[2], a[3]], b, mk, root, &mut h)
+        }
+        0x22b518 => {
+            let lt = crate::rom_region::addr(rom, 0x15df6c);
+            let dt = crate::rom_region::addr(rom, 0x8fa74c);
+            crate::component_live_a2::fn_22b518_m(m, a[0], a[1], a[4], lt, root, &mut h, dt)
+        }
+        0x22a0a8 => crate::component_live_a2::fn_22a0a8_m(m, a[0], a[1], a[4], root, &mut h),
+        _ => crate::component_live_a2::Calls::call(&mut h, m, f, a),
     };
-    let fault=h.fault();m.bytes[dependency..dependency+4352].copy_from_slice(&saved);
-    if let Some(e)=fault{Err(e)}else{Ok(rc)}
+    let fault = h.fault();
+    m.bytes[dependency..dependency + 4352].copy_from_slice(&saved);
+    if let Some(e) = fault {
+        Err(e)
+    } else {
+        Ok(rc)
+    }
 }
 
 pub fn destroy_subtree_m(m:&mut Memory<'_>,tree:u32,node:u32,end:u32,h:&mut impl crate::reentrant::HooksM) {
@@ -4932,6 +5956,7 @@ pub fn destroy_subtree_m(m:&mut Memory<'_>,tree:u32,node:u32,end:u32,h:&mut impl
     destroy_subtree_m(m,tree,m.word(node+4),end,h);
     destroy_node_m(m,tree,node,h);
 }
+
 fn destroy_node_m(m:&mut Memory<'_>,tree:u32,node:u32,h:&mut impl crate::reentrant::HooksM) {
     let p=m.word(node+16);
     if p!=0 {h.call_m(m.word(m.word(tree+36)+4),&[p,m.word(tree+32)],m);}
@@ -4949,6 +5974,7 @@ pub fn clear_tree_m(m:&mut Memory<'_>,tree:u32,h:&mut impl crate::reentrant::Hoo
     }
     m.put_word(tree+24,0);m.put_word(tree,tree);m.put_word(tree+4,tree);
 }
+
 pub trait SwitchHooksM {
     fn read_switch_m(&mut self,obj:u32,value:&mut u32,mem:&mut [u8])->u32;
     fn close_pipes_m(&mut self,p:u32,mem:&mut [u8])->u32;
@@ -4968,7 +5994,9 @@ pub fn pipeline_switch_m(h:&mut impl SwitchHooksM,mem:&mut [u8],p:u32,key:u32)->
     }
     rc
 }
+
 struct SwitchHost<'h,'p>(&'h mut Host<'p>);
+
 impl SwitchHooksM for SwitchHost<'_,'_> {
     fn read_switch_m(&mut self,obj:u32,value:&mut u32,bytes:&mut [u8])->u32 {
         let (rc,v)=slots_m(bytes,[0;4],|bytes,s|{
@@ -5049,17 +6077,38 @@ pub fn fn_2a762c_m(
     }
     0
 }
-fn component_b_m(m:&mut Memory<'_>,f:u32,a:&[u32],platform:&mut dyn engine::HeapPlatform)->Result<u32,engine::Error> {
-    let dependency=0x6000usize;let root=0x7000;
-    let mut saved=[0u8;8192];saved.copy_from_slice(&m.bytes[dependency..dependency+8192]);
-    let mut h=crate::component_live_b::LiveHost{platform,fault:None,scratch:dependency as u32,rom:crate::rom_region::Rom::Us};
-    let rc=match f {
-        0x1e4a3c=>crate::component_live_b::fn_1e4a3c_m(m,a[0],a[1],&mut h),
-        0x1f48cc=>crate::component_live_b::fn_1f48cc_m(m,a[..5].try_into().unwrap(),root,&mut h),
-        _=>crate::component_live_b::Host::call_m(&mut h,f,a,m),
+
+fn component_b_m(
+    m: &mut Memory<'_>,
+    f: u32,
+    a: &[u32],
+    platform: &mut dyn engine::HeapPlatform,
+    rom: crate::rom_region::Rom,
+) -> Result<u32, engine::Error> {
+    let dependency = 0x6000usize;
+    let root = 0x7000;
+    let mut saved = [0u8; 8192];
+    saved.copy_from_slice(&m.bytes[dependency..dependency + 8192]);
+    let mut h = crate::component_live_b::LiveHost {
+        platform,
+        fault: None,
+        scratch: dependency as u32,
+        rom,
     };
-    let fault=h.fault;m.bytes[dependency..dependency+8192].copy_from_slice(&saved);
-    if let Some(e)=fault{Err(e)}else{Ok(rc)}
+    let rc = match f {
+        0x1e4a3c => crate::component_live_b::fn_1e4a3c_m(m, a[0], a[1], &mut h),
+        0x1f48cc => {
+            crate::component_live_b::fn_1f48cc_m(m, a[..5].try_into().unwrap(), root, &mut h)
+        }
+        _ => crate::component_live_b::Host::call_m(&mut h, f, a, m),
+    };
+    let fault = h.fault;
+    m.bytes[dependency..dependency + 8192].copy_from_slice(&saved);
+    if let Some(e) = fault {
+        Err(e)
+    } else {
+        Ok(rc)
+    }
 }
 
 mod backend_codec {
@@ -5482,12 +6531,17 @@ pub struct BackendWorkspace<'a> {
     pub parameter_values:Option<[&'a [u8];2]>,
     pub rom:crate::rom_region::Rom,
 }
+
 fn backend_capacity(required:usize,available:usize)->Result<(),engine::Error> {
     if required>available{Err(engine::Error::Capacity{required,available})}else{Ok(())}
 }
+
 fn read_shorts_m(m:&Memory<'_>,p:u32,out:&mut [i16]){for(i,v)in out.iter_mut().enumerate(){*v=m.half(p+i as u32*2)as i16;}}
+
 fn read_floats_m(m:&Memory<'_>,p:u32,out:&mut [f32]){for(i,v)in out.iter_mut().enumerate(){*v=f32::from_bits(m.word(p+i as u32*4));}}
+
 fn read_ints_m(m:&Memory<'_>,p:u32,out:&mut [i32]){for(i,v)in out.iter_mut().enumerate(){*v=m.word(p+i as u32*4)as i32;}}
+
 fn parameter_span_m(m:&Memory<'_>,engine:u32,key:&[u8])->Result<(u32,usize),engine::Error> {
     let params=m.word(m.word(engine+8)+20);let tree=m.word(params+8)+24;let mut node=m.word(tree);
     while node!=tree {
@@ -5499,144 +6553,430 @@ fn parameter_span_m(m:&Memory<'_>,engine:u32,key:&[u8])->Result<(u32,usize),engi
     Err(engine::Error::EngineStatus(0x8b702014))
 }
 
-pub fn render_backend_m(m:&mut Memory<'_>,a:[u32;9],w:&mut BackendWorkspace<'_>)->Result<[usize;2],engine::Error> {
-    use crate::{buffers::{RingBuffer,SampleFilter,VoiceFilter},effects::VoiceEffect,
-        frames::{LipSync,PlannedSegments,TimingSegments},orchestration::Setup,
-        output::SpeechTiming,queue::*,resources::*,tables::NumericTables};
-    let p=a[0];let eng=a[1];let data=a[3];assert_eq!(m.base,0);
-    let mut raw=[0u8;0x4d00];raw.copy_from_slice(&m.bytes[p as usize..p as usize+0x4d00]);
-    let buffer_offsets=[0x20,0x24,0x2c,0x3c,0x44,0x50];
-    let ptr: [u32;6]=core::array::from_fn(|i|m.word(p+buffer_offsets[i]));
-    let sizes:[usize;6]=core::array::from_fn(|i|m.word(ptr[i]-12)as usize);
-    for(size,width)in sizes.into_iter().zip([4,4,2,4,1,4]){if size%width!=0{return Err(engine::Error::InvalidSnapshot);}}
-    backend_capacity(sizes[0]/4,w.modulation.len())?;backend_capacity(sizes[1]/4,w.window.len())?;
-    backend_capacity(sizes[2]/2,w.input.len())?;backend_capacity(sizes[3]/4,w.output.len())?;
-    backend_capacity(sizes[4],64)?;backend_capacity(sizes[5]/4,w.grain.len())?;
-    let mut tracker=[0u8;64];tracker[..sizes[4]].copy_from_slice(&m.bytes[ptr[4]as usize..ptr[4]as usize+sizes[4]]);
-    read_floats_m(m,ptr[0],&mut w.modulation[..sizes[0]/4]);read_floats_m(m,ptr[1],&mut w.window[..sizes[1]/4]);
-    read_shorts_m(m,ptr[2],&mut w.input[..sizes[2]/2]);read_ints_m(m,ptr[3],&mut w.output[..sizes[3]/4]);read_ints_m(m,ptr[5],&mut w.grain[..sizes[5]/4]);
-    let headers: [u32;4]=core::array::from_fn(|i|m.word(p+[0x31d8,0x31dc,0x31e0,0x3210][i]));
-    let ring_data:[u32;4]=core::array::from_fn(|i|m.word(headers[i]+4));
-    let ring_len:[usize;4]=core::array::from_fn(|i|m.word(headers[i]+8)as usize);
-    let ring_pos:[u32;4]=core::array::from_fn(|i|m.word(headers[i]+12));
-    for i in 0..3{backend_capacity(ring_len[i],w.voice_delays[i].len())?;read_floats_m(m,ring_data[i],&mut w.voice_delays[i][..ring_len[i]]);}
-    backend_capacity(ring_len[3],w.sample_delay.len())?;
-    for(i,v)in w.sample_delay[..ring_len[3]].iter_mut().enumerate(){*v=m.half(ring_data[3]+i as u32*2);}
-    let audio_ptr=m.word(crate::rom_region::addr(w.rom,0xa7b794));read_shorts_m(m,audio_ptr,w.audio);
+pub fn render_backend_m(
+    m: &mut Memory<'_>,
+    a: [u32; 9],
+    w: &mut BackendWorkspace<'_>,
+) -> Result<[usize; 2], engine::Error> {
 
-    for i in 0..128 {
-        let at=0x3c44+i*4;let value=backend_codec::word(&raw,at);
-        if audio_ptr<=value && value<=audio_ptr+crate::queue::AUDIO_CAPACITY as u32*2 {
-            backend_codec::put(&mut raw,at,(value-audio_ptr)/2);
+
+
+    use crate::{
+        buffers::{RingBuffer, SampleFilter, VoiceFilter},
+        effects::VoiceEffect,
+        frames::{LipSync, PlannedSegments, TimingSegments},
+        orchestration::Setup,
+        output::SpeechTiming,
+        queue::*,
+        resources::*,
+        tables::NumericTables,
+    };
+    let p = a[0];
+    let eng = a[1];
+    let data = a[3];
+    assert_eq!(m.base, 0);
+    let mut raw = [0u8; 0x4d00];
+    raw.copy_from_slice(&m.bytes[p as usize..p as usize + 0x4d00]);
+    if w.rom == crate::rom_region::Rom::Kr {
+        raw.copy_within(0x4bbc..0x4cfc, 0x4bc0);
+        raw[0x4bbc..0x4bc0].fill(0);
+    }
+    let buffer_offsets = [0x20, 0x24, 0x2c, 0x3c, 0x44, 0x50];
+    let ptr: [u32; 6] = core::array::from_fn(|i| m.word(p + buffer_offsets[i]));
+    let sizes: [usize; 6] = core::array::from_fn(|i| m.word(ptr[i] - 12) as usize);
+    for (size, width) in sizes.into_iter().zip([4, 4, 2, 4, 1, 4]) {
+        if size % width != 0 {
+            return Err(engine::Error::InvalidSnapshot);
         }
     }
-    read_shorts_m(m,m.word(p+0x31ec),w.wave);read_floats_m(m,crate::rom_region::addr(w.rom,0xa7b7f0),w.normalization);
-
-    let samples=m.word(data+4)as usize/2;let events=m.word(data+12)as usize;
-    backend_capacity(samples,w.samples.len())?;backend_capacity(events,w.events.len())?;
-    read_shorts_m(m,m.word(data+8),&mut w.samples[..samples]);
-    let event_ptr=m.word(data+16);
-    for(i,e)in w.events[..events].iter_mut().enumerate(){
-        let q=event_ptr+i as u32*40;*e=SpeechEvent{kind:m.half(q+4),value:m.word(q+12)as i32,position:m.word(q+16),character:m.half(q+24),command:m.word(q+28)};
+    backend_capacity(sizes[0] / 4, w.modulation.len())?;
+    backend_capacity(sizes[1] / 4, w.window.len())?;
+    backend_capacity(sizes[2] / 2, w.input.len())?;
+    backend_capacity(sizes[3] / 4, w.output.len())?;
+    backend_capacity(sizes[4], 64)?;
+    backend_capacity(sizes[5] / 4, w.grain.len())?;
+    let mut tracker = [0u8; 64];
+    tracker[..sizes[4]].copy_from_slice(&m.bytes[ptr[4] as usize..ptr[4] as usize + sizes[4]]);
+    read_floats_m(m, ptr[0], &mut w.modulation[..sizes[0] / 4]);
+    read_floats_m(m, ptr[1], &mut w.window[..sizes[1] / 4]);
+    read_shorts_m(m, ptr[2], &mut w.input[..sizes[2] / 2]);
+    read_ints_m(m, ptr[3], &mut w.output[..sizes[3] / 4]);
+    read_ints_m(m, ptr[5], &mut w.grain[..sizes[5] / 4]);
+    let headers: [u32; 4] =
+        core::array::from_fn(|i| m.word(p + [0x31d8, 0x31dc, 0x31e0, 0x3210][i]));
+    let ring_data: [u32; 4] = core::array::from_fn(|i| m.word(headers[i] + 4));
+    let ring_len: [usize; 4] = core::array::from_fn(|i| m.word(headers[i] + 8) as usize);
+    let ring_pos: [u32; 4] = core::array::from_fn(|i| m.word(headers[i] + 12));
+    for i in 0..3 {
+        backend_capacity(ring_len[i], w.voice_delays[i].len())?;
+        read_floats_m(m, ring_data[i], &mut w.voice_delays[i][..ring_len[i]]);
     }
-    let capacities=[m.word(a[5])as usize,m.word(a[7])as usize];
-    backend_capacity(capacities[0],w.first.len())?;backend_capacity(capacities[1],w.second.len())?;
-    let mut synth=backend_codec::synthesis_state(&raw,&tracker);let mut voice=synth.voice.clone();
-    if w.rom==crate::rom_region::Rom::Eu{
-        let g=|o:usize|f32::from_bits(u32::from_le_bytes(tracker[o..o+4].try_into().unwrap()));
-        synth.tracker=crate::pitch::PitchTracker::Resonator(crate::pitch::EuTracker{period:crate::pitch::PeriodTracker{
-            min_period:m.word(ptr[4])as i32,max_period:m.word(ptr[4]+4)as i32,
-            period:m.word(ptr[4]+8)as i32,period_delta:m.word(ptr[4]+12)as i32,
-            reset:tracker[16]as i8,stable_count:m.word(ptr[4]+20)as i32,
-            polarity:m.word(ptr[4]+24)as i32},
-            previous:g(28),older:g(32),oldest:g(36),coefficient:g(40),sample_rate:g(44)});
+    backend_capacity(ring_len[3], w.sample_delay.len())?;
+    for (i, v) in w.sample_delay[..ring_len[3]].iter_mut().enumerate() {
+        *v = m.half(ring_data[3] + i as u32 * 2);
     }
-    let mut input_events=backend_codec::queue(&raw[0xe8..0x14f0]);let mut commands=backend_codec::queue(&raw[0x14f0..0x28f8]);
-    let [r0,r1,r2]=&mut w.voice_delays;
-    let mut voice_filter=VoiceFilter{rings:[
-        RingBuffer{samples:&mut r0[..ring_len[0]],position:ring_pos[0]},
-        RingBuffer{samples:&mut r1[..ring_len[1]],position:ring_pos[1]},
-        RingBuffer{samples:&mut r2[..ring_len[2]],position:ring_pos[2]},
-    ],history:f32::from_bits(backend_codec::word(&raw,0x31f0))};
-    let mut filter=SampleFilter{ring:RingBuffer{samples:&mut w.sample_delay[..ring_len[3]],position:ring_pos[3]},history:f32::from_bits(backend_codec::word(&raw,0x3214))};
-    let pair=|off:usize|core::array::from_fn(|i|backend_codec::word(&raw,0x31a4+off+i*4)as i32);
-    let mut effect=VoiceEffect{gain:backend_codec::word(&raw,0x31ac)as i32,feedforward:pair(12),feedback:pair(20),delay:pair(28),rate:pair(36),depth:pair(44),phase:pair(64)};
-    let mut state=backend_codec::setup_state(&raw);
-    let mut controls=crate::controls::FilterControls{values:core::array::from_fn(|i|backend_codec::word(&raw,0x31fc+i*4)as i32)};
-    let mut setup=Setup{state:&mut state,voice_active:raw[0x48]!=0,voice:&mut voice,input:&mut input_events,commands:&mut commands,filter:&mut filter,voice_filter:&mut voice_filter,controls:&mut controls};
-    let mut timing=SpeechTiming{phoneme:u16::from_le_bytes(raw[0x4c38..0x4c3a].try_into().unwrap()),pitch_duration:backend_codec::word(&raw,0x4c3c)as i32};
-    let mut starts:[i32;128]=core::array::from_fn(|i|backend_codec::word(&raw,0x2924+i*4)as i32);
-    let mut lengths:[i32;128]=core::array::from_fn(|i|backend_codec::word(&raw,0x2b24+i*4)as i32);
-    let mut voiced:[u8;128]=core::array::from_fn(|i|raw[0x2d24+i]);
-    let mut scales:[f32;128]=core::array::from_fn(|i|f32::from_bits(backend_codec::word(&raw,0x2da4+i*4)));
-    let mut positions:[i32;128]=core::array::from_fn(|i|backend_codec::word(&raw,0x2fa4+i*4)as i32);
-    let mut segments=PlannedSegments{starts:&mut starts,lengths:&mut lengths,voiced:&mut voiced,output:TimingSegments{scales:&mut scales,positions:&mut positions}};
-    let mut lip_samples:[i16;0x301]=core::array::from_fn(|i|i16::from_le_bytes(raw[0x321a+i*2..0x321c+i*2].try_into().unwrap()));
-    let mut lip=LipSync{samples:&mut lip_samples,count:backend_codec::word(&raw,0x381c)as i32,limit:backend_codec::word(&raw,0x3824)as i32};
-    let mut frame=backend_codec::decode(&raw[0x3828..0x4bc4]);let mut position=backend_codec::word(&raw,0x4bc8)as i32;
-    let boundary=m.word(p+0x4bc0);let voice_boundary=VoiceBoundary{enabled:m.byte(boundary+4)!=0,distance:m.word(boundary+20)as i32};
-    let parameter_spans=if w.parameter_values.is_none(){Some([parameter_span_m(m,eng,b"rate\0")?,parameter_span_m(m,eng,b"voiceml\0")?])}else{None};
-    let synth_ptr=m.word(eng+0x1a8);let resource_synth=[m.half(synth_ptr),m.half(synth_ptr+2)];
-    let table=m.word(m.word(eng+0x1a0)+16);let dims=[m.half(table+20),m.half(table+18),m.half(table+32)];
-    let rows=m.word(table+36);let row_len=(dims[0]as usize+dims[1]as usize)*dims[2]as usize;
+    let audio_ptr = m.word(crate::rom_region::addr(w.rom, 0xa7b794));
+    read_shorts_m(m, audio_ptr, w.audio);
+    for i in 0..128 {
+        let at = 0x3c44 + i * 4;
+        let value = backend_codec::word(&raw, at);
+        if audio_ptr <= value && value <= audio_ptr + crate::queue::AUDIO_CAPACITY as u32 * 2 {
+            backend_codec::put(&mut raw, at, (value - audio_ptr) / 2);
+        }
+    }
+    read_shorts_m(m, m.word(p + 0x31ec), w.wave);
+    read_floats_m(m, crate::rom_region::addr(w.rom, 0xa7b7f0), w.normalization);
+    let samples = m.word(data + 4) as usize / 2;
+    let events = m.word(data + 12) as usize;
+    backend_capacity(samples, w.samples.len())?;
+    backend_capacity(events, w.events.len())?;
+    read_shorts_m(m, m.word(data + 8), &mut w.samples[..samples]);
+    let event_ptr = m.word(data + 16);
+    for (i, e) in w.events[..events].iter_mut().enumerate() {
+        let q = event_ptr + i as u32 * 40;
+        *e = SpeechEvent {
+            kind: m.half(q + 4),
+            value: m.word(q + 12) as i32,
+            position: m.word(q + 16),
+            character: m.half(q + 24),
+            command: m.word(q + 28),
+        };
+    }
+    let capacities = [m.word(a[5]) as usize, m.word(a[7]) as usize];
+    backend_capacity(capacities[0], w.first.len())?;
+    backend_capacity(capacities[1], w.second.len())?;
+    let mut synth = backend_codec::synthesis_state(&raw, &tracker);
+    let mut voice = synth.voice.clone();
+    if w.rom == crate::rom_region::Rom::Eu {
+        let g =
+            |o: usize| f32::from_bits(u32::from_le_bytes(tracker[o..o + 4].try_into().unwrap()));
+        synth.tracker = crate::pitch::PitchTracker::Resonator(crate::pitch::EuTracker {
+            period: crate::pitch::PeriodTracker {
+                min_period: m.word(ptr[4]) as i32,
+                max_period: m.word(ptr[4] + 4) as i32,
+                period: m.word(ptr[4] + 8) as i32,
+                period_delta: m.word(ptr[4] + 12) as i32,
+                reset: tracker[16] as i8,
+                stable_count: m.word(ptr[4] + 20) as i32,
+                polarity: m.word(ptr[4] + 24) as i32,
+            },
+            previous: g(28),
+            older: g(32),
+            oldest: g(36),
+            coefficient: g(40),
+            sample_rate: g(44),
+        });
+    }
+    let mut input_events = backend_codec::queue(&raw[0xe8..0x14f0]);
+    let mut commands = backend_codec::queue(&raw[0x14f0..0x28f8]);
+    let [r0, r1, r2] = &mut w.voice_delays;
+    let mut voice_filter = VoiceFilter {
+        rings: [
+            RingBuffer {
+                samples: &mut r0[..ring_len[0]],
+                position: ring_pos[0],
+            },
+            RingBuffer {
+                samples: &mut r1[..ring_len[1]],
+                position: ring_pos[1],
+            },
+            RingBuffer {
+                samples: &mut r2[..ring_len[2]],
+                position: ring_pos[2],
+            },
+        ],
+        history: f32::from_bits(backend_codec::word(&raw, 0x31f0)),
+    };
+    let mut filter = SampleFilter {
+        ring: RingBuffer {
+            samples: &mut w.sample_delay[..ring_len[3]],
+            position: ring_pos[3],
+        },
+        history: f32::from_bits(backend_codec::word(&raw, 0x3214)),
+    };
+    let pair = |off: usize| {
+        core::array::from_fn(|i| backend_codec::word(&raw, 0x31a4 + off + i * 4) as i32)
+    };
+    let mut effect = VoiceEffect {
+        gain: backend_codec::word(&raw, 0x31ac) as i32,
+        feedforward: pair(12),
+        feedback: pair(20),
+        delay: pair(28),
+        rate: pair(36),
+        depth: pair(44),
+        phase: pair(64),
+    };
+    let mut state = backend_codec::setup_state(&raw);
+    let mut controls = crate::controls::FilterControls {
+        values: core::array::from_fn(|i| backend_codec::word(&raw, 0x31fc + i * 4) as i32),
+    };
+    let mut setup = Setup {
+        state: &mut state,
+        voice_active: raw[0x48] != 0,
+        voice: &mut voice,
+        input: &mut input_events,
+        commands: &mut commands,
+        filter: &mut filter,
+        voice_filter: &mut voice_filter,
+        controls: &mut controls,
+    };
+    let mut timing = SpeechTiming {
+        phoneme: u16::from_le_bytes(raw[0x4c38..0x4c3a].try_into().unwrap()),
+        pitch_duration: backend_codec::word(&raw, 0x4c3c) as i32,
+    };
+    let mut starts: [i32; 128] =
+        core::array::from_fn(|i| backend_codec::word(&raw, 0x2924 + i * 4) as i32);
+    let mut lengths: [i32; 128] =
+        core::array::from_fn(|i| backend_codec::word(&raw, 0x2b24 + i * 4) as i32);
+    let mut voiced: [u8; 128] = core::array::from_fn(|i| raw[0x2d24 + i]);
+    let mut scales: [f32; 128] =
+        core::array::from_fn(|i| f32::from_bits(backend_codec::word(&raw, 0x2da4 + i * 4)));
+    let mut positions: [i32; 128] =
+        core::array::from_fn(|i| backend_codec::word(&raw, 0x2fa4 + i * 4) as i32);
+    let mut segments = PlannedSegments {
+        starts: &mut starts,
+        lengths: &mut lengths,
+        voiced: &mut voiced,
+        output: TimingSegments {
+            scales: &mut scales,
+            positions: &mut positions,
+        },
+    };
+    let mut lip_samples: [i16; 0x301] = core::array::from_fn(|i| {
+        i16::from_le_bytes(raw[0x321a + i * 2..0x321c + i * 2].try_into().unwrap())
+    });
+    let mut lip = LipSync {
+        samples: &mut lip_samples,
+        count: backend_codec::word(&raw, 0x381c) as i32,
+        limit: backend_codec::word(&raw, 0x3824) as i32,
+    };
+    let mut frame = backend_codec::decode(&raw[0x3828..0x4bc4]);
+    let mut position = backend_codec::word(&raw, 0x4bc8) as i32;
+    let boundary = backend_codec::word(&raw, 0x4bc0);
+    let voice_boundary = VoiceBoundary {
+        enabled: m.byte(boundary + 4) != 0,
+        distance: m.word(boundary + 20) as i32,
+    };
+    let parameter_spans = if w.parameter_values.is_none() {
+        Some([
+            parameter_span_m(m, eng, b"rate\0")?,
+            parameter_span_m(m, eng, b"voiceml\0")?,
+        ])
+    } else {
+        None
+    };
+    let synth_ptr = m.word(eng + 0x1a8);
+    let resource_synth = [m.half(synth_ptr), m.half(synth_ptr + 2)];
+    let table = m.word(m.word(eng + 0x1a0) + 16);
+    let dims = [m.half(table + 20), m.half(table + 18), m.half(table + 32)];
+    let rows = m.word(table + 36);
+    let row_len = (dims[0] as usize + dims[1] as usize) * dims[2] as usize;
+    let korean_timing = crate::output::KoreanTiming {
+        scales: core::array::from_fn(|i| {
+            core::array::from_fn(|j| {
+                f32::from_bits(backend_codec::word(&raw, 0x4c44 + (i * 4 + j) * 4))
+            })
+        }),
+        limits: core::array::from_fn(|i| backend_codec::word(&raw, 0x4c64 + i * 4) as i32),
+    };
     let made;
     let final_resource;
-    let lang=match w.rom{
-        crate::rom_region::Rom::Us=>crate::pitch::Language::UsEnglish,
-        crate::rom_region::Rom::Eu=>crate::pitch::Language::UkEnglish,
-        crate::rom_region::Rom::Kr=>crate::pitch::Language::Korean,
+    let lang = match w.rom {
+        crate::rom_region::Rom::Us => crate::pitch::Language::UsEnglish,
+        crate::rom_region::Rom::Eu => crate::pitch::Language::UkEnglish,
+        crate::rom_region::Rom::Kr => crate::pitch::Language::Korean,
     };
-    let mut pscratch=[0f32;1024];
-    let freqs:[f32;5]=if w.rom==crate::rom_region::Rom::Eu{
-        [f32::from_bits(m.word(0x8bf7dc)),f32::from_bits(m.word(0x8bf7e0)),
-         f32::from_bits(m.word(0x8bf7e4)),f32::from_bits(m.word(0x8bf7e8)),
-         f32::from_bits(m.word(0x8bf7ec))]
-    }else{[0.;5]};
+    let mut pscratch = [0f32; 1024];
+    let freqs: [f32; 5] = if w.rom == crate::rom_region::Rom::Eu {
+        [
+            f32::from_bits(m.word(0x8bf7dc)),
+            f32::from_bits(m.word(0x8bf7e0)),
+            f32::from_bits(m.word(0x8bf7e4)),
+            f32::from_bits(m.word(0x8bf7e8)),
+            f32::from_bits(m.word(0x8bf7ec)),
+        ]
+    } else {
+        [0.; 5]
+    };
     {
-        let bytes=&*m.bytes;
-        let values=if let Some(v)=w.parameter_values {v}else{let [(rate,rate_len),(ml,ml_len)]=parameter_spans.unwrap();[&bytes[rate as usize..rate as usize+rate_len],&bytes[ml as usize..ml as usize+ml_len]]};
-        let parameters=[ParameterEntry{key:b"rate\0",value:values[0]},ParameterEntry{key:b"voiceml\0",value:values[1]}];
-        let resource=VoiceResource{bytes:&bytes[rows as usize..rows as usize+row_len],count:dims[2],key_width:dims[0],value_width:dims[1],disabled:false};
-        let mut resources=EngineResources{valid:true,environment_status:0,parameters:Parameters{entries:&parameters},phonemes:PhonemeMaps{maps:[resource;4]},articulation:Articulation{symbols:&bytes[crate::rom_region::addr(w.rom,0x8d8458) as usize..crate::rom_region::addr(w.rom,0x8d8458) as usize+332*8],values:&bytes[crate::rom_region::addr(w.rom,0x8d8eb8) as usize..crate::rom_region::addr(w.rom,0x8d8eb8) as usize+332*18]},synth:resource_synth};
-        let tables=NumericTables::from_bytes(&bytes[crate::rom_region::addr(w.rom,0xa21fb0) as usize..crate::rom_region::addr(w.rom,0xa21fb0) as usize+NumericTables::CONSTANT_BYTES],&bytes[crate::rom_region::addr(w.rom,0x8cbfe0) as usize..crate::rom_region::addr(w.rom,0x8cbfe0) as usize+NumericTables::COSINE_BYTES]).ok_or(engine::Error::InvalidSnapshot)?;
-        let class_base=crate::rom_region::addr(w.rom,0xb6b300) as usize;let classification=bytes[class_base..class_base+256].try_into().unwrap();
-        made=crate::engine_backend::render_backend(&mut setup,&mut synth,&mut frame,w.audio,&mut position,voice_boundary,classification,&mut timing,&mut segments,&mut lip,&mut resources,
-            &mut w.input[..sizes[2]/2],&mut w.output[..sizes[3]/4],&mut w.grain[..sizes[5]/4],&w.window[..sizes[1]/4],w.modulation,w.normalization,&mut effect,w.wave,&tables,
-            &w.samples[..samples],&w.events[..events],[&mut w.first[..capacities[0]],&mut w.second[..capacities[1]]],a[8]!=0,raw[0x4bd9]!=0,
-            &mut crate::engine_backend::BackendRegion{language:lang,scratch:&mut pscratch,frequencies:&freqs,korean_timing:None});
-        final_resource=resources.synth;
+        let bytes = &*m.bytes;
+        let values = if let Some(v) = w.parameter_values {
+            v
+        } else {
+            let [(rate, rate_len), (ml, ml_len)] = parameter_spans.unwrap();
+            [
+                &bytes[rate as usize..rate as usize + rate_len],
+                &bytes[ml as usize..ml as usize + ml_len],
+            ]
+        };
+        let parameters = [
+            ParameterEntry {
+                key: b"rate\0",
+                value: values[0],
+            },
+            ParameterEntry {
+                key: b"voiceml\0",
+                value: values[1],
+            },
+        ];
+        let resource = VoiceResource {
+            bytes: &bytes[rows as usize..rows as usize + row_len],
+            count: dims[2],
+            key_width: dims[0],
+            value_width: dims[1],
+            disabled: false,
+        };
+        let mut resources = EngineResources {
+            valid: true,
+            environment_status: 0,
+            parameters: Parameters {
+                entries: &parameters,
+            },
+            phonemes: PhonemeMaps {
+                maps: [resource; 4],
+            },
+            articulation: Articulation {
+                symbols: &bytes[crate::rom_region::addr(w.rom, 0x8d8458) as usize
+                    ..crate::rom_region::addr(w.rom, 0x8d8458) as usize + 332 * 8],
+                values: &bytes[crate::rom_region::addr(w.rom, 0x8d8eb8) as usize
+                    ..crate::rom_region::addr(w.rom, 0x8d8eb8) as usize + 332 * 18],
+            },
+            synth: resource_synth,
+        };
+        let tables = NumericTables::from_bytes(
+            &bytes[crate::rom_region::addr(w.rom, 0xa21fb0) as usize
+                ..crate::rom_region::addr(w.rom, 0xa21fb0) as usize
+                    + NumericTables::CONSTANT_BYTES],
+            &bytes[crate::rom_region::addr(w.rom, 0x8cbfe0) as usize
+                ..crate::rom_region::addr(w.rom, 0x8cbfe0) as usize + NumericTables::COSINE_BYTES],
+        )
+        .ok_or(engine::Error::InvalidSnapshot)?;
+        let class_base = crate::rom_region::addr(w.rom, 0xb6b300) as usize;
+        let classification = bytes[class_base..class_base + 256].try_into().unwrap();
+        made = crate::engine_backend::render_backend(
+            &mut setup,
+            &mut synth,
+            &mut frame,
+            w.audio,
+            &mut position,
+            voice_boundary,
+            classification,
+            &mut timing,
+            &mut segments,
+            &mut lip,
+            &mut resources,
+            &mut w.input[..sizes[2] / 2],
+            &mut w.output[..sizes[3] / 4],
+            &mut w.grain[..sizes[5] / 4],
+            &w.window[..sizes[1] / 4],
+            w.modulation,
+            w.normalization,
+            &mut effect,
+            w.wave,
+            &tables,
+            &w.samples[..samples],
+            &w.events[..events],
+            [
+                &mut w.first[..capacities[0]],
+                &mut w.second[..capacities[1]],
+            ],
+            a[8] != 0,
+            raw[0x4bd9] != 0,
+            &mut crate::engine_backend::BackendRegion {
+                language: lang,
+                scratch: &mut pscratch,
+                frequencies: &freqs,
+                korean_timing: if w.rom == crate::rom_region::Rom::Kr {
+                    Some(&korean_timing)
+                } else {
+                    None
+                },
+            },
+        );
+        final_resource = resources.synth;
     }
-    backend_codec::write_setup(setup.state,&mut raw);backend_codec::write_state(setup.voice,&mut raw);
-    backend_codec::write_queue(setup.input,&mut raw[0xe8..0x14f0]);backend_codec::write_queue(setup.commands,&mut raw[0x14f0..0x28f8]);
-    for i in 0..4{backend_codec::put(&mut raw,0x31fc+i*4,setup.controls.values[i]as u32);}
-    synth.voice=setup.voice.clone();backend_codec::store_state(&synth,&mut raw,&mut tracker);
-    for i in 0..128{
-        backend_codec::put(&mut raw,0x2924+i*4,segments.starts[i]as u32);backend_codec::put(&mut raw,0x2b24+i*4,segments.lengths[i]as u32);raw[0x2d24+i]=segments.voiced[i];
-        backend_codec::put(&mut raw,0x2da4+i*4,segments.output.scales[i].to_bits());backend_codec::put(&mut raw,0x2fa4+i*4,segments.output.positions[i]as u32);
+    backend_codec::write_setup(setup.state, &mut raw);
+    backend_codec::write_state(setup.voice, &mut raw);
+    backend_codec::write_queue(setup.input, &mut raw[0xe8..0x14f0]);
+    backend_codec::write_queue(setup.commands, &mut raw[0x14f0..0x28f8]);
+    for i in 0..4 {
+        backend_codec::put(&mut raw, 0x31fc + i * 4, setup.controls.values[i] as u32);
     }
-    for(i,v)in lip.samples.iter().enumerate(){raw[0x321a+i*2..0x321c+i*2].copy_from_slice(&v.to_le_bytes());}
-    backend_codec::put(&mut raw,0x381c,lip.count as u32);raw[0x4c38..0x4c3a].copy_from_slice(&timing.phoneme.to_le_bytes());backend_codec::put(&mut raw,0x4c3c,timing.pitch_duration as u32);
-    backend_codec::encode(&frame,&mut raw[0x3828..0x4bc4]);
-
-    for i in 0..(frame.audio.count.max(0)as usize).min(128){backend_codec::put(&mut raw,0x3c44+i*4,audio_ptr+(frame.audio.offsets[i]as u32)*2);}
-    backend_codec::put(&mut raw,0x4bc8,position as u32);backend_codec::put(&mut raw,0x31e4,effect.phase[0]as u32);backend_codec::put(&mut raw,0x31e8,effect.phase[1]as u32);
-    backend_codec::put(&mut raw,0x31f0,setup.voice_filter.history.to_bits());
-    m.bytes[p as usize..p as usize+raw.len()].copy_from_slice(&raw);
-    for(i,v)in w.input[..sizes[2]/2].iter().enumerate(){m.put_half(ptr[2]+i as u32*2,*v as u16);}
-    for(i,v)in w.output[..sizes[3]/4].iter().enumerate(){m.put_word(ptr[3]+i as u32*4,*v as u32);}
-    for(i,v)in w.grain[..sizes[5]/4].iter().enumerate(){m.put_word(ptr[5]+i as u32*4,*v as u32);}
-    m.bytes[ptr[4]as usize..ptr[4]as usize+sizes[4]].copy_from_slice(&tracker[..sizes[4]]);
-    for i in 0..3{
-        m.put_word(headers[i]+12,setup.voice_filter.rings[i].position);
-        for(j,v)in setup.voice_filter.rings[i].samples.iter().enumerate(){m.put_word(ring_data[i]+j as u32*4,v.to_bits());}
+    synth.voice = setup.voice.clone();
+    backend_codec::store_state(&synth, &mut raw, &mut tracker);
+    for i in 0..128 {
+        backend_codec::put(&mut raw, 0x2924 + i * 4, segments.starts[i] as u32);
+        backend_codec::put(&mut raw, 0x2b24 + i * 4, segments.lengths[i] as u32);
+        raw[0x2d24 + i] = segments.voiced[i];
+        backend_codec::put(
+            &mut raw,
+            0x2da4 + i * 4,
+            segments.output.scales[i].to_bits(),
+        );
+        backend_codec::put(
+            &mut raw,
+            0x2fa4 + i * 4,
+            segments.output.positions[i] as u32,
+        );
     }
-    m.put_word(headers[3]+12,setup.filter.ring.position);
-    for(j,v)in setup.filter.ring.samples.iter().enumerate(){m.put_half(ring_data[3]+j as u32*2,*v);}
-    for(i,v)in w.audio.iter().enumerate(){m.put_half(audio_ptr+i as u32*2,*v as u16);}
-    for(i,v)in final_resource.iter().enumerate(){m.put_half(synth_ptr+i as u32*2,*v);}
-    for(i,v)in w.first[..made[0]].iter().enumerate(){m.put_half(a[4]+i as u32*2,*v as u16);}
-    for(i,v)in w.second[..made[1]].iter().enumerate(){m.put_half(a[6]+i as u32*2,*v as u16);}
-    m.put_word(a[5],made[0]as u32);m.put_word(a[7],made[1]as u32);
+    for (i, v) in lip.samples.iter().enumerate() {
+        raw[0x321a + i * 2..0x321c + i * 2].copy_from_slice(&v.to_le_bytes());
+    }
+    backend_codec::put(&mut raw, 0x381c, lip.count as u32);
+    raw[0x4c38..0x4c3a].copy_from_slice(&timing.phoneme.to_le_bytes());
+    backend_codec::put(&mut raw, 0x4c3c, timing.pitch_duration as u32);
+    backend_codec::encode(&frame, &mut raw[0x3828..0x4bc4]);
+    for i in 0..(frame.audio.count.max(0) as usize).min(128) {
+        backend_codec::put(
+            &mut raw,
+            0x3c44 + i * 4,
+            audio_ptr + (frame.audio.offsets[i] as u32) * 2,
+        );
+    }
+    backend_codec::put(&mut raw, 0x4bc8, position as u32);
+    backend_codec::put(&mut raw, 0x31e4, effect.phase[0] as u32);
+    backend_codec::put(&mut raw, 0x31e8, effect.phase[1] as u32);
+    backend_codec::put(&mut raw, 0x31f0, setup.voice_filter.history.to_bits());
+    if w.rom == crate::rom_region::Rom::Kr {
+        m.bytes[p as usize..p as usize + 0x4bbc].copy_from_slice(&raw[..0x4bbc]);
+        m.bytes[p as usize + 0x4bbc..p as usize + 0x4cfc].copy_from_slice(&raw[0x4bc0..]);
+    } else {
+        m.bytes[p as usize..p as usize + raw.len()].copy_from_slice(&raw);
+    }
+    for (i, v) in w.input[..sizes[2] / 2].iter().enumerate() {
+        m.put_half(ptr[2] + i as u32 * 2, *v as u16);
+    }
+    for (i, v) in w.output[..sizes[3] / 4].iter().enumerate() {
+        m.put_word(ptr[3] + i as u32 * 4, *v as u32);
+    }
+    for (i, v) in w.grain[..sizes[5] / 4].iter().enumerate() {
+        m.put_word(ptr[5] + i as u32 * 4, *v as u32);
+    }
+    m.bytes[ptr[4] as usize..ptr[4] as usize + sizes[4]].copy_from_slice(&tracker[..sizes[4]]);
+    for i in 0..3 {
+        m.put_word(headers[i] + 12, setup.voice_filter.rings[i].position);
+        for (j, v) in setup.voice_filter.rings[i].samples.iter().enumerate() {
+            m.put_word(ring_data[i] + j as u32 * 4, v.to_bits());
+        }
+    }
+    m.put_word(headers[3] + 12, setup.filter.ring.position);
+    for (j, v) in setup.filter.ring.samples.iter().enumerate() {
+        m.put_half(ring_data[3] + j as u32 * 2, *v);
+    }
+    for (i, v) in w.audio.iter().enumerate() {
+        m.put_half(audio_ptr + i as u32 * 2, *v as u16);
+    }
+    for (i, v) in final_resource.iter().enumerate() {
+        m.put_half(synth_ptr + i as u32 * 2, *v);
+    }
+    for (i, v) in w.first[..made[0]].iter().enumerate() {
+        m.put_half(a[4] + i as u32 * 2, *v as u16);
+    }
+    for (i, v) in w.second[..made[1]].iter().enumerate() {
+        m.put_half(a[6] + i as u32 * 2, *v as u16);
+    }
+    m.put_word(a[5], made[0] as u32);
+    m.put_word(a[7], made[1] as u32);
     Ok(made)
 }
 
@@ -5685,23 +7025,42 @@ pub fn publish_output_m(m:&mut Memory<'_>,p:u32,rom:crate::rom_region::Rom,h:&mu
 }
 
 pub trait RuntimeServicesM {
-    fn guest_capture(&self)->bool {true}
-    fn invoke_m(&mut self,m:&mut Memory<'_>,entry:u32,args:&[u32])->Result<u32,engine::Error>;
-
-    fn emit_pcm_m(&mut self,samples:&[i16])->Result<(),engine::Error>{
-        let _=samples;
-        Err(engine::Error::UnsupportedStage{entry:0xc72018})
+    fn guest_capture(&self) -> bool {
+        true
+    }
+    fn invoke_m(
+        &mut self,
+        m: &mut Memory<'_>,
+        entry: u32,
+        args: &[u32],
+    ) -> Result<u32, engine::Error>;
+    fn invoke_m_rom(
+        &mut self,
+        m: &mut Memory<'_>,
+        entry: u32,
+        args: &[u32],
+        _rom: crate::rom_region::Rom,
+    ) -> Result<u32, engine::Error> {
+        self.invoke_m(m, entry, args)
+    }
+    fn emit_pcm_m(&mut self, samples: &[i16]) -> Result<(), engine::Error> {
+        let _ = samples;
+        Err(engine::Error::UnsupportedStage { entry: 0xc72018 })
     }
 }
+
 pub struct OutputRuntime<'a> {
     pub inner: &'a mut dyn RuntimeServicesM,
     pub guest_capture: bool,
 }
+
 impl RuntimeServicesM for OutputRuntime<'_> {
+    fn invoke_m_rom(&mut self,m:&mut Memory<'_>,entry:u32,args:&[u32],rom:crate::rom_region::Rom)->Result<u32,engine::Error> { self.inner.invoke_m_rom(m,entry,args,rom) }
     fn guest_capture(&self)->bool {self.guest_capture}
     fn invoke_m(&mut self,m:&mut Memory<'_>,entry:u32,args:&[u32])->Result<u32,engine::Error> {self.inner.invoke_m(m,entry,args)}
     fn emit_pcm_m(&mut self,samples:&[i16])->Result<(),engine::Error> {self.inner.emit_pcm_m(samples)}
 }
+
 pub trait SleepPlatform {
     fn sleep_ns(&mut self,nanoseconds:u64)->Result<(),engine::Error>;
 }
@@ -5714,32 +7073,105 @@ pub struct RuntimeM<'a,'w>{
     pub registers:engine::NotificationRegisters,
     pub sleeper:&'a mut dyn SleepPlatform,
 }
-impl RuntimeServicesM for RuntimeM<'_,'_>{
-    fn invoke_m(&mut self,m:&mut Memory<'_>,entry:u32,a:&[u32])->Result<u32,engine::Error>{
-        match entry{
-            0x1a18c4=>{
-                let work=self.backend.as_deref_mut().ok_or(engine::Error::UnsupportedStage{entry})?;
-                render_backend_m(m,a.try_into().map_err(|_|engine::Error::InvalidSnapshot)?,work)?;Ok(0)
+
+impl RuntimeServicesM for RuntimeM<'_, '_> {
+    fn invoke_m_rom(
+        &mut self,
+        m: &mut Memory<'_>,
+        entry: u32,
+        a: &[u32],
+        rom: crate::rom_region::Rom,
+    ) -> Result<u32, engine::Error> {
+        if entry != 0x183258 {
+            return self.invoke_m(m, entry, a);
+        }
+        struct Clock(u64);
+        impl engine::Platform for Clock {
+            fn ticks(&mut self) -> u64 {
+                self.0
             }
-            0xc72018=>{
-                if a[1]&1!=0{return Err(engine::Error::InvalidSnapshot);}
-                let n=a[1]as usize/2;backend_capacity(self.written+n,self.pcm.len())?;
-                for i in 0..n{self.pcm[self.written+i]=m.half(a[0]+i as u32*2)as i16;}
-                self.written+=n;Ok(0)
+        }
+        let mut regions = [engine::Region {
+            base: m.base,
+            bytes: m.bytes,
+        }];
+        let mut sparse = engine::Memory::new(&mut regions)?;
+        engine::notify_synthesis_live_rom(
+            &mut sparse,
+            a[0],
+            a[1],
+            self.registers,
+            &mut Clock(self.tick),
+            rom,
+        )?;
+        Ok(0)
+    }
+    fn invoke_m(
+        &mut self,
+        m: &mut Memory<'_>,
+        entry: u32,
+        a: &[u32],
+    ) -> Result<u32, engine::Error> {
+        match entry {
+            0x1a18c4 => {
+                let work = self
+                    .backend
+                    .as_deref_mut()
+                    .ok_or(engine::Error::UnsupportedStage { entry })?;
+                render_backend_m(
+                    m,
+                    a.try_into().map_err(|_| engine::Error::InvalidSnapshot)?,
+                    work,
+                )?;
+                Ok(0)
             }
-            0x166054=>{self.sleeper.sleep_ns((a[1]as u64)<<32|a[0]as u64)?;Ok(0)}
-            0x183258=>{
-                struct Clock(u64);impl engine::Platform for Clock{fn ticks(&mut self)->u64{self.0}}
-                let mut regions=[engine::Region{base:m.base,bytes:m.bytes}];let mut sparse=engine::Memory::new(&mut regions)?;
-                engine::notify_synthesis_live(&mut sparse,a[0],a[1],self.registers,&mut Clock(self.tick))?;Ok(0)
+            0xc72018 => {
+                if a[1] & 1 != 0 {
+                    return Err(engine::Error::InvalidSnapshot);
+                }
+                let n = a[1] as usize / 2;
+                backend_capacity(self.written + n, self.pcm.len())?;
+                for i in 0..n {
+                    self.pcm[self.written + i] = m.half(a[0] + i as u32 * 2) as i16;
+                }
+                self.written += n;
+                Ok(0)
             }
-            _=>Err(engine::Error::UnsupportedStage{entry}),
+            0x166054 => {
+                self.sleeper.sleep_ns((a[1] as u64) << 32 | a[0] as u64)?;
+                Ok(0)
+            }
+            0x183258 => {
+                struct Clock(u64);
+                impl engine::Platform for Clock {
+                    fn ticks(&mut self) -> u64 {
+                        self.0
+                    }
+                }
+                let mut regions = [engine::Region {
+                    base: m.base,
+                    bytes: m.bytes,
+                }];
+                let mut sparse = engine::Memory::new(&mut regions)?;
+                engine::notify_synthesis_live(
+                    &mut sparse,
+                    a[0],
+                    a[1],
+                    self.registers,
+                    &mut Clock(self.tick),
+                )?;
+                Ok(0)
+            }
+            _ => Err(engine::Error::UnsupportedStage { entry }),
         }
     }
-    fn emit_pcm_m(&mut self,samples:&[i16])->Result<(),engine::Error>{
-        backend_capacity(self.written+samples.len(),self.pcm.len())?;
-        for (i,s) in samples.iter().enumerate(){self.pcm[self.written+i]=*s;}
-        self.written+=samples.len();Ok(())
+    fn emit_pcm_m(&mut self, samples: &[i16]) -> Result<(), engine::Error> {
+        backend_capacity(self.written + samples.len(), self.pcm.len())?;
+        for (i, s) in samples.iter().enumerate() {
+            self.pcm[self.written + i] = *s;
+        }
+        self.written += samples.len();
+        Ok(())
     }
 }
 
@@ -5782,6 +7214,7 @@ pub fn call_live_until_m_traced(
     if let Some(b)=h.boundary{return Err(engine::Error::UnsupportedStage{entry:b.entry});}
     Ok(rc)
 }
+
 pub fn call_live_with_runtime_m_traced(
     m:&mut Memory<'_>,entry:u32,args:&[u32],platform:&mut dyn engine::HeapPlatform,
     runtime:&mut dyn RuntimeServicesM,snap:&[u8],trace:&mut dyn CallTraceSink,rom:crate::rom_region::Rom,
@@ -5802,16 +7235,24 @@ impl crate::speech_part_4::Host for Host<'_>{
  fn heap_exhausted(&mut self,size:u32){self.boot.fault.get_or_insert(engine::Error::HeapExhausted{size});}
  fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.call(m,f,a)}
 }
+
 impl crate::component_live_c::Host for Host<'_>{
  fn call_m(&mut self,entry:u32,args:&[u32],m:&mut Memory<'_>)->u32{self.call(m,entry,args)}
  fn thread_id_m(&mut self)->u32{self.boot.platform.thread_id()}
  fn rom(&self)->crate::rom_region::Rom{self.rom}
 }
+
 impl crate::boot_port_3b::Host for Host<'_>{
  fn call(&mut self,m:&mut Memory<'_>,address:u32,args:&[u32])->u32{self.call(m,address,args)}
 }
-impl crate::component_live_b::Host for Host<'_>{
- fn call_m(&mut self,entry:u32,args:&[u32],m:&mut Memory<'_>)->u32{self.call(m,entry,args)}
+
+impl crate::component_live_b::Host for Host<'_> {
+    fn rom(&self) -> crate::rom_region::Rom {
+        self.rom
+    }
+    fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
+        self.call(m, entry, args)
+    }
 }
 
 impl crate::boot::Calls for Host<'_> {
@@ -5825,6 +7266,7 @@ impl crate::boot::Calls for Host<'_> {
         0
     }
 }
+
 impl crate::speech_part_3::Host for Host<'_> {
     fn call(&mut self, memory: &mut crate::boot::Memory<'_>, method: u32, args: &[u32]) -> u32 {
         self.call(memory, method, args)
@@ -5842,11 +7284,13 @@ impl crate::frontend::HeapVtable for Host<'_> {
         panic!("the live sentence match reached the arena-blind releaser");
     }
 }
+
 impl crate::frontend::MethodTable for Host<'_> {
     fn call_at(&mut self, _o: u32, _a: u32, _b: u32) -> u32 {
         panic!("the live sentence match reached the arena-blind method table");
     }
 }
+
 impl crate::render_part_c::Host for Host<'_> {
     fn call(&mut self, memory: &mut crate::boot::Memory<'_>, entry: u32, args: &[u32]) -> u32 {
         self.call(memory, entry, args)
@@ -5862,32 +7306,76 @@ impl crate::engine_live_render::LiveDispatch for Host<'_>{
  fn rom(&self)->crate::rom_region::Rom{self.rom}
 
 }
-impl crate::speech_part_1::Host for Host<'_>{
- fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.call(m,f,a)}
- fn get(&mut self,m:&mut Memory<'_>,f:u32,handle:u32,pos:u32,len:u32)->(u32,u32,u32){
-  let s=0x1ea0;
-  let saved=[m.word(s),m.word(s+4)];
-  m.put_word(s,0);m.put_word(s+4,0);
-  let rc=self.call(m,f,&[handle,pos,len,s,s+4]);
-  let got=(rc,m.word(s),m.word(s+4));
-  m.put_word(s,saved[0]);m.put_word(s+4,saved[1]);
-  got
- }
+
+impl crate::speech_part_1::Host for Host<'_> {
+    fn guest_entry(&self, f: u32) -> u32 {
+        crate::rom_region::to_us_guest(self.rom, f)
+    }
+    fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.call(m, f, a)
+    }
+    fn get(
+        &mut self,
+        m: &mut Memory<'_>,
+        f: u32,
+        handle: u32,
+        pos: u32,
+        len: u32,
+    ) -> (u32, u32, u32) {
+        let s = 0x1ea0;
+        let saved = [m.word(s), m.word(s + 4)];
+        m.put_word(s, 0);
+        m.put_word(s + 4, 0);
+        let rc = self.call(m, f, &[handle, pos, len, s, s + 4]);
+        let got = (rc, m.word(s), m.word(s + 4));
+        m.put_word(s, saved[0]);
+        m.put_word(s + 4, saved[1]);
+        got
+    }
 }
-impl crate::speech_part_6::Host for Host<'_>{
- fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32{self.call(m,f,a)}
- fn log(&mut self,m:&mut Memory<'_>,logger:u32,category:u32,level:u32,format:&[u8],values:&[u32]){
-  let filtered=logger==0||level>m.byte(logger+48) as u32||(m.byte(logger+49)!=0&&level>4);
-  let fmt=if filtered {0} else {source_literal(m,format)};
-  self.log_m(logger,category,level,fmt,values,m);
- }
- fn log_guest(&mut self,m:&mut Memory<'_>,logger:u32,category:u32,level:u32,fmt:u32,values:&[u32]){
-  self.log_m(logger,category,level,fmt,values,m);
- }
- fn error(&mut self,m:&mut Memory<'_>,logger:u32,category:u32,code:u32){
-  self.call(m,0x173dc0,&[logger,category,code,0]);
- }
+
+impl crate::speech_part_6::Host for Host<'_> {
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.call(m, crate::rom_region::to_us_guest(self.rom, f), a)
+    }
+    fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.call(m, f, a)
+    }
+    fn log(
+        &mut self,
+        m: &mut Memory<'_>,
+        logger: u32,
+        category: u32,
+        level: u32,
+        format: &[u8],
+        values: &[u32],
+    ) {
+        let filtered = logger == 0
+            || level > m.byte(logger + 48) as u32
+            || (m.byte(logger + 49) != 0 && level > 4);
+        let fmt = if filtered {
+            0
+        } else {
+            source_literal(m, format)
+        };
+        self.log_m(logger, category, level, fmt, values, m);
+    }
+    fn log_guest(
+        &mut self,
+        m: &mut Memory<'_>,
+        logger: u32,
+        category: u32,
+        level: u32,
+        fmt: u32,
+        values: &[u32],
+    ) {
+        self.log_m(logger, category, level, fmt, values, m);
+    }
+    fn error(&mut self, m: &mut Memory<'_>, logger: u32, category: u32, code: u32) {
+        self.call(m, 0x173dc0, &[logger, category, code, 0]);
+    }
 }
+
 impl Host<'_>{
 
  fn log_m(&mut self,logger:u32,category:u32,level:u32,fmt:u32,values:&[u32],m:&mut Memory<'_>){
@@ -6000,26 +7488,41 @@ fn process_start_m(a:&[u32],tag:u32,size:u32,error:u32)->u32 {
 }
 
 const DEPES_FRAME: u32 = 0x0e0f_d600;
+
 const DEPES_FRAME_LEN: usize = 0x400;
+
 const PORT_FRAME_1D3314: u32 = 0x0e0f_da00;
+
 const PORT_FRAME_1F0A90: u32 = 0x0e0f_db40;
+
 const PORT_FRAME_21A25C: u32 = 0x0e0f_dc80;
+
 const DEPES_LOG_SCRATCH: u32 = 0x7800;
 
 const SEG2_C4_SCRATCH: u32 = 0x0e0f_8000;
+
 const SEG2_C4_LEN: usize = 0x1000;
 
 const MAP_WORD: u32 = 0x0e0f_d500;
+
 const MAP_ENV: u32 = 0x0e0f_d540;
 
 const RANGE17_SCRATCH: u32 = 0x0e0f_d400;
+
 const BROKER_DATA_SCRATCH: u32 = 0x0e0f_d000;
+
 const BROKER_QUERY_SCRATCH: u32 = 0x0e0f_d020;
+
 const BROKER_FILE_SCRATCH: u32 = 0x0e0f_c000;
+
 const BROKER_LIT_BASE: u32 = 0x0e0f_d100;
+
 const BROKER_LIT_END: u32 = 0x0e0f_d200;
+
 const BROKER_LID_SCRATCH: u32 = 0x0e0f_d200;
+
 const BROKER_UNMAP_SCRATCH: u32 = 0x0e0f_d300;
+
 const BROKER_CLOSE_SCRATCH: u32 = 0x0e0f_d340;
 
 struct BrokerDataHost<'a, 'b> {

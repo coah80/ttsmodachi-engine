@@ -1,11 +1,12 @@
-
+pub use crate::engine::Error as LiveError;
 
 pub use crate::engine_live::{
     call_live_with_runtime_m_rom, call_live_with_runtime_m_traced, BackendWorkspace,
     CallTrace, CallTraceSink, RuntimeM, RuntimeServicesM, SleepPlatform,
 };
-pub use crate::engine::Error as LiveError;
+
 pub use crate::rom_region::Rom;
+
 pub use crate::{boot, engine};
 
 pub fn run_back_m(
@@ -123,7 +124,6 @@ impl crate::boot_part_b::Host for Hooks<'_, '_, '_> {
 }
 
 impl BackHost {
-
     pub fn call_entry(
         m: &mut boot::Memory<'_>,
         entry: u32,
@@ -134,7 +134,6 @@ impl BackHost {
     ) -> Result<u32, LiveError> {
         Self::call_entry_rom(m, entry, args, platform, runtime, snap, Rom::Us)
     }
-
     pub fn call_entry_rom(
         m: &mut boot::Memory<'_>,
         entry: u32,
@@ -146,11 +145,16 @@ impl BackHost {
     ) -> Result<u32, LiveError> {
         let entry = crate::rom_region::to_us_guest(rom, entry);
         match entry {
-
             0x163a98 => {
                 let a: [u32; 5] = args.try_into().map_err(|_| LiveError::InvalidSnapshot)?;
-                let mut h = Hooks { platform, runtime, snap, fault: None, rom };
-                let rc = crate::engine_live::callback_m(m, a, 0x1c00, 0x989680, &mut h);
+                let mut h = Hooks {
+                    platform,
+                    runtime,
+                    snap,
+                    fault: None,
+                    rom,
+                };
+                let rc = crate::engine_live::callback_m_rom(m, a, 0x1c00, 0x989680, rom, &mut h);
                 if let Some(e) = h.fault {
                     return Err(e);
                 }
@@ -161,31 +165,47 @@ impl BackHost {
                     return Err(LiveError::InvalidSnapshot);
                 }
                 let a = [args[4], args[0], args[1], args[2], args[3]];
-                let mut h = Hooks { platform, runtime, snap, fault: None, rom };
-                let rc = crate::engine_live::callback_m(m, a, 0x1c00, 0x989680, &mut h);
+                let mut h = Hooks {
+                    platform,
+                    runtime,
+                    snap,
+                    fault: None,
+                    rom,
+                };
+                let rc = crate::engine_live::callback_m_rom(m, a, 0x1c00, 0x989680, rom, &mut h);
                 if let Some(e) = h.fault {
                     return Err(e);
                 }
                 Ok(rc)
             }
-
             0x84c160 => {
                 if args.len() < 2 {
                     return Err(LiveError::InvalidSnapshot);
                 }
-                let mut h = Hooks { platform, runtime, snap, fault: None, rom };
+                let mut h = Hooks {
+                    platform,
+                    runtime,
+                    snap,
+                    fault: None,
+                    rom,
+                };
                 let rc = crate::speech_part_3::fn_84c160(m, args[0], args[1], &mut h);
                 if let Some(e) = h.fault {
                     return Err(e);
                 }
                 Ok(rc)
             }
-
             0xc72018 => {
                 if args.len() < 2 {
                     return Err(LiveError::InvalidSnapshot);
                 }
-                let mut h = Hooks { platform, runtime, snap, fault: None, rom };
+                let mut h = Hooks {
+                    platform,
+                    runtime,
+                    snap,
+                    fault: None,
+                    rom,
+                };
                 if h.runtime.guest_capture() {
                     let env = crate::speech_part_4::CaptureRuntime {
                         slot: m.word(crate::rom_region::capture_slot(rom)),
@@ -197,7 +217,9 @@ impl BackHost {
                 if let Some(e) = h.fault {
                     return Err(e);
                 }
-                h.runtime.invoke_m(m, 0xc72018, &[args[0], args[1]]).map(|_| 0)?;
+                h.runtime
+                    .invoke_m(m, 0xc72018, &[args[0], args[1]])
+                    .map(|_| 0)?;
                 Ok(0)
             }
             0x18f6b8 => {
@@ -213,7 +235,13 @@ impl BackHost {
                     args[4],
                     args[5],
                     args[6],
-                    &mut Hooks { platform, runtime, snap, fault: None, rom },
+                    &mut Hooks {
+                        platform,
+                        runtime,
+                        snap,
+                        fault: None,
+                        rom,
+                    },
                 );
                 Ok(rc)
             }
@@ -226,11 +254,16 @@ impl BackHost {
                     args[0],
                     args[1],
                     args[2],
-                    &mut Hooks { platform, runtime, snap, fault: None, rom },
+                    &mut Hooks {
+                        platform,
+                        runtime,
+                        snap,
+                        fault: None,
+                        rom,
+                    },
                 );
                 Ok(rc)
             }
-
             _ => run_back_rom(m, entry, args, platform, runtime, snap, rom),
         }
     }
@@ -291,6 +324,7 @@ fn pump_engine_stop(m: &mut boot::Memory<'_>, user: u32, h: &mut Hooks<'_, '_, '
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn pump_render_half(
     m: &mut boot::Memory<'_>,
     user: u32,
@@ -342,6 +376,7 @@ fn pump_render_half(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn pump_pop_half(
     m: &mut boot::Memory<'_>,
     user: u32,
@@ -436,6 +471,7 @@ fn pump_pop_half(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_18f6b8_m(
     m: &mut boot::Memory<'_>,
     user: u32,

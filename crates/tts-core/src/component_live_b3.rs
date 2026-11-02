@@ -1,73 +1,123 @@
-
-
 #![allow(dead_code)]
+
 #![allow(non_upper_case_globals)]
 
 use crate::{boot::Memory, component_live_b::Host};
 
 const OUT_ADD_CHILD: u32 = 9;
+
 const OUT_NEW_RECORD: u32 = 10;
+
 const OUT_INSERT_BEFORE: u32 = 11;
+
 const OUT_GET_FIRST: u32 = 13;
+
 const OUT_GET_NEXT: u32 = 15;
+
 const OUT_SET_FIELD: u32 = 20;
+
 const OUT_GET_FIELD: u32 = 21;
+
 const OUT_GET_FIELD_PTR: u32 = 22;
+
 const OUT_HAS_FIELD: u32 = 23;
+
 const OUT_REMOVE: u32 = 24;
 
 const CFG_GET_STRING: u32 = 7;
+
 const CFG_ADD_WORD: u32 = 9;
+
 const CFG_WORD_LENGTHS: u32 = 10;
+
 const CFG_SET_MARKERS: u32 = 11;
+
 const CFG_NORMALIZE_TOKEN: u32 = 13;
+
 const CFG_NORMALIZE_WORD: u32 = 14;
+
 const CFG_LOOKUP: u32 = 18;
 
 const D_8f9524: u32 = 0x8f9524;
+
 const D_8f9532: u32 = 0x8f9532;
+
 const D_8f9574: u32 = 0x8f9574;
+
 const D_8f9580: u32 = 0x8f9580;
 
 const TRANS_SET_STRING: u32 = 9;
+
 const TRANS_GET_STRING: u32 = 10;
+
 const TRANS_SELECT: u32 = 11;
+
 const TRANS_SET_POS: u32 = 14;
+
 const TRANS_GET_POS: u32 = 15;
 
 const FE_OUT: u32 = 0x0c;
+
 const FE_CFG_HANDLE: u32 = 0x10;
+
 const FE_CFG_VT: u32 = 0x18;
+
 const FE_TRANS_HANDLE: u32 = 0x1c;
+
 const FE_TRANS_VT: u32 = 0x24;
+
 const FE_F50: u32 = 0x50;
+
 const FE_TEXT_OFFSET: u32 = 0x50;
+
 const FE_NONCTDPS: u32 = 0x70;
+
 const FE_DPS: u32 = 0x71;
+
 const FE_DOMAIN: u32 = 0x72;
+
 const FE_F173: u32 = 0x173;
+
 const FE_LEX: u32 = 0x174;
+
 const FE_NO_RICH_TRANS: u32 = 0x17a;
+
 const FE_CLM_VARIANTS: u32 = 0x17b;
+
 const FE_CLC_EXTRA_MAIN_TRANS: u32 = 0x17c;
+
 const FE_EXTRA_MAIN_TRANS: u32 = 0x17d;
+
 const FE_F1A5: u32 = 0x1a5;
+
 const FE_DPS_MULTI_TRANS: u32 = 0x2a6;
+
 const FE_N_OUT_TRANS: u32 = 0x2a7;
+
 const FE_NO_EXT_CLC: u32 = 0x2a8;
+
 const FE_LANG_CODE: u32 = 0x2ac;
+
 const FE_ESC_TN: u32 = 0x2b0;
+
 const FE_CLM_HANDLE: u32 = 0x34;
+
 const FE_CLM_MAP: u32 = 0x3c;
+
 const FE_F68: u32 = 0x68;
 
 const MARKER_LEN: u32 = 24;
+
 const MARKER_TYPE: u32 = 0;
+
 const MARKER_POS: u32 = 12;
+
 const MARKER_LEN_OFF: u32 = 16;
+
 const MARKER_VAL: u32 = 20;
 
 const FAIL_MEM: u32 = 0x89b0200a;
+
 const FAIL_HANDLE: u32 = 0x89b02008;
 
 fn g_word(m: &Memory<'_>, p: u32) -> Option<u32> {
@@ -278,13 +328,7 @@ fn g_copy_n(m: &mut Memory<'_>, dst: u32, src: u32, n: u32) -> bool {
     g_memmove(m, dst, src, n)
 }
 
-fn out_call(
-    m: &mut Memory<'_>,
-    h: &mut impl Host,
-    out: u32,
-    slot: u32,
-    args: &[u32],
-) -> u32 {
+fn out_call(m: &mut Memory<'_>, h: &mut impl Host, out: u32, slot: u32, args: &[u32]) -> u32 {
     let f = match g_word(m, out.wrapping_add(slot * 4)) {
         Some(v) => v,
         None => return 0x80002001,
@@ -292,7 +336,7 @@ fn out_call(
     let mut all = [0u32; 12];
     let n = args.len().min(12);
     all[..n].copy_from_slice(&args[..n]);
-    h.call_m(f, &all[..n], m)
+    h.call_guest_m(f, &all[..n], m)
 }
 
 fn cfg_call(m: &mut Memory<'_>, h: &mut impl Host, cfg: u32, slot: u32, args: &[u32]) -> u32 {
@@ -303,7 +347,7 @@ fn cfg_call(m: &mut Memory<'_>, h: &mut impl Host, cfg: u32, slot: u32, args: &[
     let mut all = [0u32; 12];
     let n = args.len().min(12);
     all[..n].copy_from_slice(&args[..n]);
-    h.call_m(f, &all[..n], m)
+    h.call_guest_m(f, &all[..n], m)
 }
 
 pub fn fn_17c800_m(class_table: &[u8], c: u32) -> u32 {
@@ -506,25 +550,166 @@ pub fn fn_1ed954_m(
     if which == 0 {
         return 0x89802007;
     }
-    let flag = g_byte(m, ctx.wrapping_add(0x1a4)).unwrap_or(0);
-    let name = ctx.wrapping_add(0x104);
+    let flag = g_byte(m, ctx.wrapping_add(0x29e)).unwrap_or(0);
+    let name = ctx.wrapping_add(0x19e);
     if flag != 0 && g_strcmp(m, text, name) != 0 {
-        let rc = fn_1eb978_m(m, h, ctx, handle, text);
+        let rc = h.call_m(0x1eb978, &[ctx, handle, text], m);
         if rc >= 0x80000000 {
             return rc;
         }
         g_strcpy(m, name, text);
     }
-    let mut repl = g_word(m, ctx.wrapping_add(0x1b4)).unwrap_or(0);
+    let mut repl = g_word(m, ctx.wrapping_add(0x2a0)).unwrap_or(0);
     if repl == 0 {
-        repl = g_word(m, ctx.wrapping_add(0xac)).unwrap_or(0);
+        repl = g_word(m, ctx.wrapping_add(0x90)).unwrap_or(0);
     }
     fn_1ed520_m(m, h, ctx, repl, which, capacity)
 }
 
-fn fn_1eb978_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handle: u32, text: u32) -> u32 {
-    let _ = (m, h, ctx, handle, text);
-    FAIL_UNSUPPORTED
+pub(crate) fn fn_1eb978_m(
+    m: &mut Memory<'_>,
+    h: &mut impl Host,
+    ctx: u32,
+    handle: u32,
+    text: u32,
+    scratch: u32,
+) -> u32 {
+    if ctx == 0 {
+        return 0x89802008;
+    }
+    let saved = core::array::from_fn::<_, 512, _>(|i| m.byte(scratch + i as u32));
+    let result = (|| {
+        let heap = m.word(m.word(ctx) + 4);
+        let mut last_rc = 0;
+        for (i, b) in b"fecfg\0".iter().enumerate() {
+            m.put_byte(scratch + 256 + i as u32, *b);
+        }
+        for (phase, prefix) in [
+            b"canonmap".as_slice(),
+            b"canonmapg2pdct".as_slice(),
+            b"canonmapusage".as_slice(),
+        ]
+        .iter()
+        .enumerate()
+        {
+            m.put_half(scratch + 276, if phase == 2 { 0xffff } else { 0 });
+            let mut count;
+            for specific in [true, false] {
+                for (i, b) in prefix.iter().enumerate() {
+                    m.put_byte(scratch + i as u32, *b);
+                }
+                let mut end = prefix.len() as u32;
+                if specific {
+                    m.put_byte(scratch + end, b'_');
+                    end += 1;
+                    let mut i = 0;
+                    loop {
+                        let b = m.byte(text + i);
+                        if b == 0 {
+                            break;
+                        }
+                        m.put_byte(scratch + end, b);
+                        end += 1;
+                        i += 1;
+                    }
+                }
+                m.put_byte(scratch + end, 0);
+                let rc = h.call_m(
+                    0x1ea4e0,
+                    &[
+                        ctx,
+                        handle,
+                        scratch + 256,
+                        scratch,
+                        scratch + 272,
+                        scratch + 276,
+                        scratch + 278,
+                    ],
+                    m,
+                );
+                last_rc = rc;
+                if rc >= 0x80000000 {
+                    return 0x89802007;
+                }
+                count = m.half(scratch + 276);
+                if count != 0 || !specific {
+                    break;
+                }
+                if phase == 2 {
+                    m.put_half(scratch + 276, 0xffff);
+                }
+            }
+            count = m.half(scratch + 276);
+            let out = m.word(scratch + 272);
+            if phase < 2 {
+                if count == 0 {
+                    continue;
+                }
+                let field = if phase == 0 { 0x90 } else { 0x2a0 };
+                let mut cache = m.word(ctx + field);
+                if cache == 0 {
+                    cache = h.call_m(0x196394, &[heap, 704], m);
+                    if cache == 0 {
+                        return 0x8980200a;
+                    }
+                    m.put_word(ctx + field, cache);
+                    for i in 0..176 {
+                        m.put_word(cache + i * 4, 0);
+                    }
+                }
+                for i in 0..count {
+                    let row = m.word(out + i as u32 * 4);
+                    let index = m.byte(row) as u32;
+                    if index >= 176 {
+                        return 0x89802007;
+                    }
+                    if m.word(cache + index * 4) == 0 {
+                        let mut n = 0;
+                        while m.byte(row + 2 + n) != 0 {
+                            n += 1;
+                        }
+                        let dest = h.call_m(0x196394, &[heap, n + 1], m);
+                        if dest == 0 {
+                            return 0x8980200a;
+                        }
+                        m.put_word(cache + index * 4, dest);
+                        for j in 0..=n {
+                            m.put_byte(dest + j, m.byte(row + 2 + j));
+                        }
+                    }
+                }
+            } else if count == 1 {
+                let value = m.word(out);
+                let sep = m.byte(scratch + 278);
+                let mut n = 0;
+                while m.byte(value + n) != 0 && m.byte(value + n) != sep {
+                    n += 1;
+                }
+                if m.byte(value + n) == sep {
+                    m.put_byte(value + n, 0);
+                }
+                for (label, mode) in [
+                    (b"all".as_slice(), 0),
+                    (b"nocaseconv".as_slice(), 2),
+                    (b"g2pdct".as_slice(), 1),
+                ] {
+                    if n == label.len() as u32
+                        && label
+                            .iter()
+                            .enumerate()
+                            .all(|(i, b)| m.byte(value + i as u32) == *b)
+                    {
+                        m.put_half(ctx + 0x9c, mode);
+                    }
+                }
+            }
+        }
+        last_rc
+    })();
+    for (i, b) in saved.iter().enumerate() {
+        m.put_byte(scratch + i as u32, *b);
+    }
+    result
 }
 
 pub fn fn_195d90_m(m: &Memory<'_>, s: u32) -> Option<u32> {
@@ -606,31 +791,18 @@ pub fn fn_26ff18_m(
     token_check: u32,
     lang_only: u32,
 ) -> u32 {
-
     const S_VALUE: u32 = 0x00;
-
     const S_WORDS: u32 = 0x04;
-
     const S_COUNT: u32 = 0x08;
-
     const S_SEP: u32 = 0x0a;
-
     const S_STATUS: u32 = 0x0c;
-
     const S_FOUR: u32 = 0x0e;
-
     const S_PRIO: u32 = 0x10;
-
     const S_REC: u32 = 0x12;
-
     const S_START: u32 = 0x14;
-
     const S_END: u32 = 0x16;
-
     const S_LANGC: u32 = 0x18;
-
     const S_NAME: u32 = 0x20;
-
     let env = g_word(m, ctx).unwrap_or(0);
     let cfg = g_word(m, env.wrapping_add(0x14)).unwrap_or(0);
     let log = g_word(m, env.wrapping_add(0x10)).unwrap_or(0);
@@ -641,28 +813,36 @@ pub fn fn_26ff18_m(
     let text_off = g_half(m, ctx.wrapping_add(0x50)).unwrap_or(0) as i16;
     let lex_flag = g_byte(m, ctx.wrapping_add(0x172)).unwrap_or(0);
     let use_lang_domain = g_byte(m, ctx.wrapping_add(0x2b4)).unwrap_or(0);
-
-    let rc = h.call_m(0x175a1c, &[cfg, s_lit(h.rom(), 0x2702ac), scratch.wrapping_add(S_VALUE)], m);
+    let rc = h.call_m(
+        0x175a1c,
+        &[cfg, s_lit(h.rom(), 0x2702ac), scratch.wrapping_add(S_VALUE)],
+        m,
+    );
     if rc < 0x80000000 {
         let value = g_word(m, scratch.wrapping_add(S_VALUE)).unwrap_or(0);
         if h.call_m(0x195d58, &[value, s_lit(h.rom(), 0x2702bc)], m) == 0 {
             return 0;
         }
     }
-    h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x2702c0), word], m);
-
+    h.call_m(
+        0x1738e8,
+        &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x2702c0), word],
+        m,
+    );
     if !p_half(m, scratch.wrapping_add(S_COUNT), 0) {
         return FAIL_MEM;
     }
     let ret = if use_lang_domain != 0 {
-        h.call_m(0x195cd0, &[scratch.wrapping_add(S_NAME), s_lit(h.rom(), 0x2702d4)], m);
+        h.call_m(
+            0x195cd0,
+            &[scratch.wrapping_add(S_NAME), s_lit(h.rom(), 0x2702d4)],
+            m,
+        );
         let index = u32::from(g_byte(m, word).unwrap_or(0));
-        let langs = ctx
-            .wrapping_add(0x2b5)
-            .wrapping_add(index.wrapping_mul(3));
+        let langs = ctx.wrapping_add(0x2b5).wrapping_add(index.wrapping_mul(3));
         h.call_m(0x195c90, &[scratch.wrapping_add(S_NAME), langs], m);
         let f = g_word(m, lex_vt.wrapping_add(7 * 4)).unwrap_or(0);
-        h.call_m(
+        h.call_guest_m(
             f,
             &[
                 handle,
@@ -677,7 +857,7 @@ pub fn fn_26ff18_m(
         )
     } else {
         let f = g_word(m, lex_vt.wrapping_add(18 * 4)).unwrap_or(0);
-        h.call_m(
+        h.call_guest_m(
             f,
             &[
                 handle,
@@ -695,18 +875,15 @@ pub fn fn_26ff18_m(
     if ret >= 0x80000000 {
         return ret;
     }
-
     let count = g_half(m, scratch.wrapping_add(S_COUNT)).unwrap_or(0);
     let sep = u32::from(g_byte(m, scratch.wrapping_add(S_SEP)).unwrap_or(0));
     let words = g_word(m, scratch.wrapping_add(S_WORDS)).unwrap_or(0);
     let mut prio = 1u16;
     let mut langc = 0u8;
     let mut status = ret;
-
     if !p_half(m, scratch.wrapping_add(S_REC), rec) {
         return FAIL_MEM;
     }
-
     for index in 0..count {
         let w = g_word(m, words.wrapping_add(u32::from(index) * 4)).unwrap_or(0);
         let mut phon = 0u32;
@@ -715,7 +892,6 @@ pub fn fn_26ff18_m(
         let mut pos = 0u32;
         let mut gpos = 0u32;
         let mut prio_s = 0u32;
-
         let mut p = h.call_m(0x195d30, &[w, sep], m);
         if p != 0 {
             pos = p.wrapping_add(1);
@@ -759,11 +935,18 @@ pub fn fn_26ff18_m(
             h.call_m(0x173dc0, &[log, 0x8f9532, 0x84d1, 0], m);
             return 0x89b02007;
         }
-        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x2702d8), w], m);
-
+        h.call_m(
+            0x1738e8,
+            &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x2702d8), w],
+            m,
+        );
         if dom != 0 && h.call_m(0x195d58, &[dom, s_lit(h.rom(), 0x2702b8)], m) != 0 {
             if h.call_m(0x1960a8, &[dom, domain], m) == 0 {
-                h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x2705ec)], m);
+                h.call_m(
+                    0x1738e8,
+                    &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x2705ec)],
+                    m,
+                );
                 continue;
             }
         }
@@ -772,7 +955,6 @@ pub fn fn_26ff18_m(
             let lang_list = g_word(m, ctx.wrapping_add(0x2ac)).unwrap_or(0);
             let mut skip = false;
             if lang == 0 || h.call_m(0x195d30, &[lang, 0x21], m) != 0 {
-
                 p_byte(m, lang.wrapping_add(3), 0);
             } else {
                 let found = h.call_m(0x1960a8, &[domain, lang], m);
@@ -781,7 +963,11 @@ pub fn fn_26ff18_m(
                     || (len != 0 && g_byte(m, found.wrapping_add(len)).unwrap_or(0) != 0);
                 if lang_only != 0 {
                     if token_check == 0 && bad && h.call_m(0x1769d0, &[lang, lang_key], m) != 0 {
-                        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x27060c), lang], m);
+                        h.call_m(
+                            0x1738e8,
+                            &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x27060c), lang],
+                            m,
+                        );
                         skip = true;
                     }
                 } else if token_check == 0 && bad {
@@ -793,7 +979,11 @@ pub fn fn_26ff18_m(
                         0
                     };
                     if h.call_m(0x1769d0, &[lang, lang_key], m) != 0 || user == 0 || mark != 0x7c {
-                        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270630), lang], m);
+                        h.call_m(
+                            0x1738e8,
+                            &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270630), lang],
+                            m,
+                        );
                         skip = true;
                     }
                 }
@@ -812,7 +1002,11 @@ pub fn fn_26ff18_m(
                         0
                     };
                     if h.call_m(0x1769d0, &[lang, lang_key], m) != 0 || user == 0 || mark != 0x7c {
-                        h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270664), lang], m);
+                        h.call_m(
+                            0x1738e8,
+                            &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270664), lang],
+                            m,
+                        );
                         skip = true;
                     }
                 }
@@ -821,7 +1015,6 @@ pub fn fn_26ff18_m(
                 continue;
             }
         }
-
         let len = h.call_m(0x195d90, &[orig], m);
         let end_value = u16::wrapping_add(start, len as u16);
         if !p_half(m, end, end_value) {
@@ -848,7 +1041,7 @@ pub fn fn_26ff18_m(
         if !p_half(m, scratch.wrapping_add(S_START), start) {
             return FAIL_MEM;
         }
-        let rc = h.call_m(
+        let rc = h.call_guest_m(
             set_field,
             &[
                 rec_obj,
@@ -864,7 +1057,7 @@ pub fn fn_26ff18_m(
         if rc >= 0x80000000 {
             return rc;
         }
-        let rc = h.call_m(
+        let rc = h.call_guest_m(
             set_field,
             &[
                 rec_obj,
@@ -880,7 +1073,7 @@ pub fn fn_26ff18_m(
         if rc >= 0x80000000 {
             return rc;
         }
-        let rc = h.call_m(
+        let rc = h.call_guest_m(
             set_field,
             &[
                 rec_obj,
@@ -896,7 +1089,6 @@ pub fn fn_26ff18_m(
         if rc >= 0x80000000 {
             return rc;
         }
-
         let base = g_word(m, text).unwrap_or(0);
         let limit = base
             .wrapping_add(u32::from(g_half(m, end).unwrap_or(0)))
@@ -916,13 +1108,12 @@ pub fn fn_26ff18_m(
                 q = h.call_m(0x195d30, &[p, 0x5f], m);
             }
         }
-
         let mut p = h.call_m(0x195d30, &[w, 0x12], m);
         if p != 0 {
             p = p.wrapping_add(1);
             p_byte(m, p.wrapping_sub(1), 0);
             let n = h.call_m(0x195d90, &[p], m).wrapping_add(1) as u16;
-            let rc = h.call_m(
+            let rc = h.call_guest_m(
                 set_field,
                 &[
                     rec_obj,
@@ -940,7 +1131,7 @@ pub fn fn_26ff18_m(
             }
         }
         let wlen = h.call_m(0x195d90, &[w], m).wrapping_add(1) as u16;
-        let rc = h.call_m(
+        let rc = h.call_guest_m(
             set_field,
             &[
                 rec_obj,
@@ -957,13 +1148,13 @@ pub fn fn_26ff18_m(
             return rc;
         }
         if phon != 0 {
-            let empty = h.call_m(0x195d58, &[phon, 0x270608], m) == 0;
+            let empty = h.call_m(0x195d58, &[phon, s_lit(h.rom(), 0x270608)], m) == 0;
             let (n, value) = if empty {
-                (2u32, 0x270af0u32)
+                (2u32, s_lit(h.rom(), 0x270af0))
             } else {
                 (h.call_m(0x195d90, &[phon], m).wrapping_add(1), phon)
             };
-            let rc = h.call_m(
+            let rc = h.call_guest_m(
                 set_field,
                 &[
                     rec_obj,
@@ -981,13 +1172,13 @@ pub fn fn_26ff18_m(
             }
         }
         if gpos != 0 {
-            let empty = h.call_m(0x195d58, &[gpos, 0x270608], m) == 0;
+            let empty = h.call_m(0x195d58, &[gpos, s_lit(h.rom(), 0x270608)], m) == 0;
             let (n, value) = if empty {
-                (2u32, 0x270af0u32)
+                (2u32, s_lit(h.rom(), 0x270af0))
             } else {
                 (h.call_m(0x195d90, &[gpos], m).wrapping_add(1), gpos)
             };
-            let rc = h.call_m(
+            let rc = h.call_guest_m(
                 set_field,
                 &[
                     rec_obj,
@@ -1006,7 +1197,7 @@ pub fn fn_26ff18_m(
         }
         if pos != 0 {
             let n = h.call_m(0x195d90, &[pos], m).wrapping_add(1);
-            let rc = h.call_m(
+            let rc = h.call_guest_m(
                 set_field,
                 &[
                     rec_obj,
@@ -1032,7 +1223,7 @@ pub fn fn_26ff18_m(
             let phon = h.call_m(0x1960a8, &[domain, lang], m);
             langc = g_byte(m, lang).unwrap_or(0);
             let lang_len = h.call_m(0x195d90, &[lang], m).wrapping_add(1);
-            let rc = h.call_m(
+            let rc = h.call_guest_m(
                 set_field,
                 &[
                     rec_obj,
@@ -1045,7 +1236,11 @@ pub fn fn_26ff18_m(
                 ],
                 m,
             );
-            h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270af4), lang], m);
+            h.call_m(
+                0x1738e8,
+                &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270af4), lang],
+                m,
+            );
             let user = if g_word(m, ctx.wrapping_add(0x2ac)).unwrap_or(0) != 0 {
                 h.call_m(
                     0x1960a8,
@@ -1073,10 +1268,20 @@ pub fn fn_26ff18_m(
                     &[lang, g_word(m, ctx.wrapping_add(0x2b0)).unwrap_or(0)],
                     m,
                 ) == 0;
-                if (phon != 0 && (len == 0 || tail == 0)) || (same && user != 0 && mark == 0x7c)
-                {
+                if (phon != 0 && (len == 0 || tail == 0)) || (same && user != 0 && mark == 0x7c) {
                     prio = prio.wrapping_add(1);
-                    h.call_m(0x1738e8, &[log, 0x8f9532, 5, 0, s_lit(h.rom(), 0x270b08), u32::from(prio)], m);
+                    h.call_m(
+                        0x1738e8,
+                        &[
+                            log,
+                            0x8f9532,
+                            5,
+                            0,
+                            s_lit(h.rom(), 0x270b08),
+                            u32::from(prio),
+                        ],
+                        m,
+                    );
                 }
             }
             if rc >= 0x80000000 {
@@ -1084,7 +1289,7 @@ pub fn fn_26ff18_m(
             }
         } else {
             langc = 0;
-            let rc = h.call_m(
+            let rc = h.call_guest_m(
                 set_field,
                 &[
                     rec_obj,
@@ -1092,7 +1297,7 @@ pub fn fn_26ff18_m(
                     u32::from(g_half(m, scratch.wrapping_add(S_REC)).unwrap_or(rec)),
                     9,
                     1,
-                    0x270b24,
+                    s_lit(h.rom(), 0x270b24),
                     scratch.wrapping_add(S_STATUS),
                 ],
                 m,
@@ -1104,7 +1309,7 @@ pub fn fn_26ff18_m(
         if !p_half(m, scratch.wrapping_add(S_PRIO), prio) {
             return FAIL_MEM;
         }
-        let rc = h.call_m(
+        let rc = h.call_guest_m(
             set_field,
             &[
                 rec_obj,
@@ -1133,15 +1338,10 @@ pub fn fn_26ff18_m(
 }
 
 pub const FE275204_SCRATCH: u32 = 0x0e0f_9000;
+
 const FE275204_LEN: usize = 0x400;
 
-pub fn fn_275204_m(
-    m: &mut Memory<'_>,
-    h: &mut impl Host,
-    fe: u32,
-    mode: u32,
-    scratch: u32,
-) -> u32 {
+pub fn fn_275204_m(m: &mut Memory<'_>, h: &mut impl Host, fe: u32, mode: u32, scratch: u32) -> u32 {
     use crate::component_live_b4::fn_1ea4e0_m;
     const PREFIXES: [&[u8]; 8] = [
         b"mdeminwrdlen_",
@@ -1153,7 +1353,6 @@ pub fn fn_275204_m(
         b"mdenondctdps_",
         b"mdedps_",
     ];
-
     const FIELDS: [(u32, u8); 8] = [
         (0x6a, 0),
         (0x6b, 0),
@@ -1172,9 +1371,7 @@ pub fn fn_275204_m(
     const VALC: u32 = 0x180;
     const LENC: u32 = 0x184;
     const SEPC: u32 = 0x186;
-    if !g_range(m, scratch, FE275204_LEN as u32)
-        || !g_range(m, fe, 0x72)
-    {
+    if !g_range(m, scratch, FE275204_LEN as u32) || !g_range(m, fe, 0x72) {
         return FAIL_MEM;
     }
     let base = match scratch.checked_sub(m.base) {
@@ -1184,13 +1381,20 @@ pub fn fn_275204_m(
     let mut saved = [0u8; FE275204_LEN];
     saved.copy_from_slice(&m.bytes[base..base + FE275204_LEN]);
     let result = (|| {
-
-        for (off, v) in [(0x6au32, 0u8), (0x6b, 0), (0x6c, 0), (0x6d, 0x10), (0x6e, 0), (0x6f, 0), (0x70, 0), (0x71, 1)] {
+        for (off, v) in [
+            (0x6au32, 0u8),
+            (0x6b, 0),
+            (0x6c, 0),
+            (0x6d, 0x10),
+            (0x6e, 0),
+            (0x6f, 0),
+            (0x70, 0),
+            (0x71, 1),
+        ] {
             if !p_byte(m, fe.wrapping_add(off), v) {
                 return FAIL_MEM;
             }
         }
-
         let mut mode_buf = [0u8; 128];
         let mut mode_len = 0usize;
         while mode_len < 128 {
@@ -1222,7 +1426,6 @@ pub fn fn_275204_m(
             Some(v) => v,
             None => return FAIL_MEM,
         };
-
         let sec = scratch.wrapping_add(SEC);
         let exp_upper = scratch.wrapping_add(EXP_UPPER);
         let exp_stem = scratch.wrapping_add(EXP_STEM);
@@ -1231,7 +1434,12 @@ pub fn fn_275204_m(
         let valc = scratch.wrapping_add(VALC);
         let lenc = scratch.wrapping_add(LENC);
         let sepc = scratch.wrapping_add(SEPC);
-        for (at, s) in [(sec, b"fecfg\0".as_slice()), (exp_upper, b"upper\0".as_slice()), (exp_stem, b"stemafx\0".as_slice()), (exp_yes, b"yes\0".as_slice())] {
+        for (at, s) in [
+            (sec, b"fecfg\0".as_slice()),
+            (exp_upper, b"upper\0".as_slice()),
+            (exp_stem, b"stemafx\0".as_slice()),
+            (exp_yes, b"yes\0".as_slice()),
+        ] {
             let at0 = match at.checked_sub(m.base) {
                 Some(v) => v as usize,
                 None => return FAIL_MEM,
@@ -1244,7 +1452,6 @@ pub fn fn_275204_m(
         let mut rc = 0u32;
         for (i, prefix) in PREFIXES.iter().enumerate() {
             let (off, parse) = FIELDS[i];
-
             if prefix.len() + mode_len + 1 > 256 {
                 return FAIL_MEM;
             }
@@ -1259,7 +1466,6 @@ pub fn fn_275204_m(
             if !p_half(m, lenc, 0xffff) {
                 return FAIL_MEM;
             }
-
             if crate::rom_region::to_us_guest(h.rom(), method) == 0x1ea4e0 {
                 rc = fn_1ea4e0_m(m, h, pair0, pair1, sec, key, valc, lenc, sepc);
             } else {
@@ -1273,7 +1479,6 @@ pub fn fn_275204_m(
                 None => return FAIL_MEM,
             };
             if len == 0 {
-
                 let bare = &prefix[..prefix.len() - 1];
                 m.bytes[key0..key0 + bare.len()].copy_from_slice(bare);
                 m.bytes[key0 + bare.len()] = 0;
@@ -1296,7 +1501,11 @@ pub fn fn_275204_m(
                     continue;
                 }
             }
-            let val = match g_word(m, valc) {
+            let results = match g_word(m, valc) {
+                Some(v) => v,
+                None => return FAIL_MEM,
+            };
+            let val = match g_word(m, results) {
                 Some(v) => v,
                 None => return FAIL_MEM,
             };
@@ -1307,7 +1516,6 @@ pub fn fn_275204_m(
                 Some(v) => v,
                 None => return FAIL_MEM,
             };
-
             let mut e = val;
             loop {
                 match g_byte(m, e) {
@@ -1345,7 +1553,6 @@ pub fn fn_275204_m(
                     2 => exp_stem,
                     _ => exp_yes,
                 };
-
                 let mut k = 0u32;
                 let eq = loop {
                     let a = match g_byte(m, val.wrapping_add(k)) {
@@ -1368,7 +1575,6 @@ pub fn fn_275204_m(
                     }
                 };
                 if parse == 2 {
-
                     if eq && !p_byte(m, dst, 1) {
                         return FAIL_MEM;
                     }
@@ -1384,7 +1590,9 @@ pub fn fn_275204_m(
 }
 
 pub const FN_275928_FRAME_END: u32 = 0xa64;
+
 pub const FN_275928_NEC: u32 = 0x4c0;
+
 pub const FN_275928_N26: u32 = 0x5c4;
 
 pub const SP_1F98C8_ENTRY: u32 = 0xe0ff938;
@@ -1392,26 +1600,47 @@ pub const SP_1F98C8_ENTRY: u32 = 0xe0ff938;
 pub const F1F98C8_FRAME: u32 = 0x2e8;
 
 pub const F275928_FRAME: u32 = 0x4e0;
+
 const F275928_WORDS: u32 = 0x604;
+
 const F275928_TOKEN_TEXT: u32 = 0x704;
+
 const F275928_NTOKEN: u32 = 0x784;
+
 const F275928_NWORDS: u32 = 0x804;
+
 const F275928_WORD: u32 = 0x904;
+
 const F275928_NWORD: u32 = 0x984;
+
 const F275928_LENGTHS: u32 = 0xa24;
+
 const F275928_KIND: u32 = 0xa64;
+
 const F275928_NEXT_KIND: u32 = 0xa65;
+
 const F275928_READ: u32 = 0xa66;
+
 const F275928_NEXT_TOKEN: u32 = 0xa68;
+
 const F275928_TOKEN_END: u32 = 0xa6a;
+
 const F275928_MATCHED_END: u32 = 0xa6c;
+
 const F275928_START: u32 = 0xa6e;
+
 const F275928_COUNT: u32 = 0xa70;
+
 const F275928_RESULTS: u32 = 0xa74;
+
 const F275928_WRITTEN: u32 = 0xa78;
+
 const F275928_PRIORITY: u32 = 0xa7a;
+
 const F275928_FIRST: u32 = 0xa7c;
+
 const EMPTY_S: u32 = 0x2702b8;
+
 const STAR_S: u32 = 0x276778;
 
 fn f275928_sep(c: u8) -> bool {
@@ -1445,6 +1674,7 @@ fn f275928_read_word(m: &mut Memory<'_>, text: u32, text_off: u16, start: u16, w
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_275928_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -1485,20 +1715,16 @@ pub fn fn_275928_m(
     let afirst = scratch.wrapping_add(F275928_FIRST);
     let n26 = scratch.wrapping_add(FN_275928_N26);
     let nec = scratch.wrapping_add(FN_275928_NEC);
-
     let gsp = sp.wrapping_sub(F275928_FRAME);
-
     let token_api = g_word(m, fe.wrapping_add(0x0c)).unwrap_or(0);
     let dict_obj = g_word(m, fe.wrapping_add(0x10)).unwrap_or(0);
     let dict_data = g_word(m, fe.wrapping_add(0x14)).unwrap_or(0);
     let dict_api = g_word(m, fe.wrapping_add(0x18)).unwrap_or(0);
-
     let nonctdps = g_byte(m, fe.wrapping_add(0x70)).unwrap_or(0);
     let dps = g_byte(m, fe.wrapping_add(0x71)).unwrap_or(0);
     let domain = fe.wrapping_add(0x72);
     let services = g_word(m, fe).unwrap_or(0);
     let logger = g_word(m, services.wrapping_add(0x10)).unwrap_or(0);
-
     let f_get_attr = g_word(m, token_api.wrapping_add(0x54)).unwrap_or(0);
     let f_next = g_word(m, token_api.wrapping_add(0x3c)).unwrap_or(0);
     let f_insert_child = g_word(m, token_api.wrapping_add(0x2c)).unwrap_or(0);
@@ -1506,7 +1732,6 @@ pub fn fn_275928_m(
     let f_word_lengths = g_word(m, dict_api.wrapping_add(0x28)).unwrap_or(0);
     let f_normalize_token = g_word(m, dict_api.wrapping_add(0x34)).unwrap_or(0);
     let f_normalize_word = g_word(m, dict_api.wrapping_add(0x38)).unwrap_or(0);
-
     for b in [word, words, token_text, nword, nwords, ntoken] {
         h.call_m(0x195cd0, &[b, s_lit(h.rom(), 0x2702b8)], m);
     }
@@ -1533,10 +1758,17 @@ pub fn fn_275928_m(
             return FAIL_MEM;
         }
     }
-
-    status = h.call_m(
+    status = h.call_guest_m(
         f_get_attr,
-        &[handle_obj, handle_data, u32::from(g_half(m, tok).unwrap_or(0)), 0, 1, akind, aread],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(g_half(m, tok).unwrap_or(0)),
+            0,
+            1,
+            akind,
+            aread,
+        ],
         m,
     );
     if status >= 0x80000000 {
@@ -1544,9 +1776,14 @@ pub fn fn_275928_m(
     }
     let mut kind = g_byte(m, akind).unwrap_or(0);
     while kind == 5 || kind == 6 || kind == 7 {
-        status = h.call_m(
+        status = h.call_guest_m(
             f_next,
-            &[handle_obj, handle_data, u32::from(g_half(m, tok).unwrap_or(0)), tok],
+            &[
+                handle_obj,
+                handle_data,
+                u32::from(g_half(m, tok).unwrap_or(0)),
+                tok,
+            ],
             m,
         );
         if status >= 0x80000000 {
@@ -1555,9 +1792,17 @@ pub fn fn_275928_m(
         if g_half(m, tok).unwrap_or(0) == 0 {
             return status;
         }
-        status = h.call_m(
+        status = h.call_guest_m(
             f_get_attr,
-            &[handle_obj, handle_data, u32::from(g_half(m, tok).unwrap_or(0)), 0, 1, akind, aread],
+            &[
+                handle_obj,
+                handle_data,
+                u32::from(g_half(m, tok).unwrap_or(0)),
+                0,
+                1,
+                akind,
+                aread,
+            ],
             m,
         );
         if status >= 0x80000000 {
@@ -1573,9 +1818,14 @@ pub fn fn_275928_m(
         if (end as i16) <= (g_half(m, atoken_end).unwrap_or(0) as i16) {
             return status;
         }
-        status = h.call_m(
+        status = h.call_guest_m(
             f_next,
-            &[handle_obj, handle_data, u32::from(g_half(m, tok).unwrap_or(0)), anext_token],
+            &[
+                handle_obj,
+                handle_data,
+                u32::from(g_half(m, tok).unwrap_or(0)),
+                anext_token,
+            ],
             m,
         );
         if status >= 0x80000000 {
@@ -1584,9 +1834,17 @@ pub fn fn_275928_m(
         let mut next_token = g_half(m, anext_token).unwrap_or(0);
         let mut next_kind = 3u8;
         if next_token != 0 {
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_get_attr,
-                &[handle_obj, handle_data, u32::from(next_token), 0, 1, anext_kind, aread],
+                &[
+                    handle_obj,
+                    handle_data,
+                    u32::from(next_token),
+                    0,
+                    1,
+                    anext_kind,
+                    aread,
+                ],
                 m,
             );
             if status >= 0x80000000 {
@@ -1594,7 +1852,7 @@ pub fn fn_275928_m(
             }
             next_kind = g_byte(m, anext_kind).unwrap_or(0);
             while next_kind == 5 || next_kind == 6 || next_kind == 7 {
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_next,
                     &[handle_obj, handle_data, u32::from(next_token), anext_token],
                     m,
@@ -1606,9 +1864,17 @@ pub fn fn_275928_m(
                 if next_token == 0 {
                     break;
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_attr,
-                    &[handle_obj, handle_data, u32::from(next_token), 0, 1, anext_kind, aread],
+                    &[
+                        handle_obj,
+                        handle_data,
+                        u32::from(next_token),
+                        0,
+                        1,
+                        anext_kind,
+                        aread,
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
@@ -1620,9 +1886,17 @@ pub fn fn_275928_m(
         if next_token == 0 {
             next_kind = 3;
         }
-        status = h.call_m(
+        status = h.call_guest_m(
             f_get_attr,
-            &[handle_obj, handle_data, u32::from(g_half(m, tok).unwrap_or(0)), 1, 1, astart, aread],
+            &[
+                handle_obj,
+                handle_data,
+                u32::from(g_half(m, tok).unwrap_or(0)),
+                1,
+                1,
+                astart,
+                aread,
+            ],
             m,
         );
         if status >= 0x80000000 {
@@ -1634,8 +1908,16 @@ pub fn fn_275928_m(
             if kind != 3 && previous_kind == 3 {
                 fallback = 0;
                 segment_start = g_half(m, tok).unwrap_or(0);
-                if f275928_read_word(m, text, g_half(m, fe.wrapping_add(0x50)).unwrap_or(0), start, word) {
-                    if next_token != 0 && h.call_m(0x195d58, &[mode, s_lit(h.rom(), 0x2760d8)], m) != 0 {
+                if f275928_read_word(
+                    m,
+                    text,
+                    g_half(m, fe.wrapping_add(0x50)).unwrap_or(0),
+                    start,
+                    word,
+                ) {
+                    if next_token != 0
+                        && h.call_m(0x195d58, &[mode, s_lit(h.rom(), 0x2760d8)], m) != 0
+                    {
                         if !g_strcpy(m, words, word) {
                             return FAIL_MEM;
                         }
@@ -1643,9 +1925,17 @@ pub fn fn_275928_m(
                             return FAIL_MEM;
                         }
                         h.call_m(0x195bec, &[lengths, 0, 0x40], m);
-                        status = h.call_m(
+                        status = h.call_guest_m(
                             f_word_lengths,
-                            &[dict_obj, dict_data, words, s_lit(h.rom(), 0x2760e0), mode, aresults, acount],
+                            &[
+                                dict_obj,
+                                dict_data,
+                                words,
+                                s_lit(h.rom(), 0x2760e0),
+                                mode,
+                                aresults,
+                                acount,
+                            ],
                             m,
                         );
                         let mut length_count = 0u8;
@@ -1669,15 +1959,8 @@ pub fn fn_275928_m(
                                 }
                                 j = j.wrapping_add(1);
                             }
-
-                            status = fn_2409d4_m(
-                                m,
-                                h,
-                                lengths,
-                                u32::from(length_count),
-                                1,
-                                0x270b28,
-                            );
+                            status =
+                                fn_2409d4_m(m, h, lengths, u32::from(length_count), 1, 0x270b28);
                         }
                         if status >= 0x80000000 {
                             return status;
@@ -1688,7 +1971,9 @@ pub fn fn_275928_m(
                         {
                             let wanted = g_byte(m, lengths.wrapping_add(u32::from(k))).unwrap_or(0);
                             let src = g_word(m, text).unwrap_or(0);
-                            let mut pos = g_half(m, fe.wrapping_add(0x50)).unwrap_or(0).wrapping_add(start);
+                            let mut pos = g_half(m, fe.wrapping_add(0x50))
+                                .unwrap_or(0)
+                                .wrapping_add(start);
                             let mut i = 0u16;
                             let mut found = 0u8;
                             while found < wanted
@@ -1704,11 +1989,9 @@ pub fn fn_275928_m(
                                     break;
                                 }
                                 let cur = g_byte(m, src.wrapping_add(u32::from(pos))).unwrap_or(0);
-                                let prev = g_byte(
-                                    m,
-                                    src.wrapping_add(u32::from(pos.wrapping_sub(1))),
-                                )
-                                .unwrap_or(0);
+                                let prev =
+                                    g_byte(m, src.wrapping_add(u32::from(pos.wrapping_sub(1))))
+                                        .unwrap_or(0);
                                 if f275928_sep(cur) && !f275928_sep(prev) {
                                     found = found.wrapping_add(1);
                                 }
@@ -1720,11 +2003,9 @@ pub fn fn_275928_m(
                                 }
                                 let at_end =
                                     g_byte(m, src.wrapping_add(u32::from(pos))).unwrap_or(0);
-                                let prev = g_byte(
-                                    m,
-                                    src.wrapping_add(u32::from(pos.wrapping_sub(1))),
-                                )
-                                .unwrap_or(0);
+                                let prev =
+                                    g_byte(m, src.wrapping_add(u32::from(pos.wrapping_sub(1))))
+                                        .unwrap_or(0);
                                 if at_end == 0 && !f275928_sep(prev) {
                                     found = found.wrapping_add(1);
                                 }
@@ -1734,7 +2015,7 @@ pub fn fn_275928_m(
                                 if !g_strcpy(m, nwords, words) {
                                     return FAIL_MEM;
                                 }
-                                status = h.call_m(
+                                status = h.call_guest_m(
                                     f_normalize_word,
                                     &[dict_obj, dict_data, mode, nwords, 0x100],
                                     m,
@@ -1761,8 +2042,7 @@ pub fn fn_275928_m(
                                     if status >= 0x80000000 {
                                         return status;
                                     }
-                                    if (end as i16)
-                                        < (g_half(m, amatched_end).unwrap_or(0) as i16)
+                                    if (end as i16) < (g_half(m, amatched_end).unwrap_or(0) as i16)
                                     {
                                         end = g_half(m, amatched_end).unwrap_or(0);
                                     }
@@ -1798,7 +2078,7 @@ pub fn fn_275928_m(
                         if !g_strcpy(m, nword, word) {
                             return FAIL_MEM;
                         }
-                        status = h.call_m(
+                        status = h.call_guest_m(
                             f_normalize_word,
                             &[dict_obj, dict_data, mode, nword, 0x80],
                             m,
@@ -1828,9 +2108,7 @@ pub fn fn_275928_m(
                         }
                     }
                 }
-
-                if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16)
-                    && nonctdps != 0
+                if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16) && nonctdps != 0
                 {
                     if !p_half(m, afirst, 0) {
                         return FAIL_MEM;
@@ -1861,10 +2139,9 @@ pub fn fn_275928_m(
             if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16)
                 && (previous_kind != 3 || next_kind != 3)
             {
-
                 let mut reach_store = false;
                 if kind == 0 || kind == 1 {
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_get_attr,
                         &[
                             handle_obj,
@@ -1881,7 +2158,6 @@ pub fn fn_275928_m(
                         return status;
                     }
                     let token_end = g_half(m, atoken_end).unwrap_or(0);
-
                     let text_off_now = g_half(m, fe.wrapping_add(0x50)).unwrap_or(0);
                     let begin = text_off_now.wrapping_add(start);
                     let length = u32::from(token_end.wrapping_add(text_off_now))
@@ -1889,7 +2165,6 @@ pub fn fn_275928_m(
                     if length < 0x80 {
                         reach_store = true;
                         let t = g_word(m, text).unwrap_or(0);
-
                         if !f195e38_copy(m, token_text, t.wrapping_add(u32::from(begin)), length) {
                             return FAIL_MEM;
                         }
@@ -1900,11 +2175,12 @@ pub fn fn_275928_m(
                         if !g_strcpy(m, ntoken, token_text) {
                             return FAIL_MEM;
                         }
-
-                        status = if crate::rom_region::to_us_guest(h.rom(), f_normalize_token) == 0x1ed3b0 {
+                        status = if crate::rom_region::to_us_guest(h.rom(), f_normalize_token)
+                            == 0x1ed3b0
+                        {
                             fn_1ed3b0_m(m, h, dict_obj, dict_data, mode, ntoken, 0x80)
                         } else {
-                            h.call_m(
+                            h.call_guest_m(
                                 f_normalize_token,
                                 &[dict_obj, dict_data, mode, ntoken, 0x80],
                                 m,
@@ -1940,7 +2216,6 @@ pub fn fn_275928_m(
                         if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16) {
                             if kind == 0 {
                                 if dps != 0 {
-
                                     status = crate::component_g2p::fn_2c9ba0_m(
                                         m,
                                         h,
@@ -1960,9 +2235,7 @@ pub fn fn_275928_m(
                                         return status;
                                     }
                                 }
-                                if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16)
-                                {
-
+                                if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16) {
                                     status = crate::component_g2p::fn_2c93f0_m(
                                         m,
                                         h,
@@ -2010,13 +2283,10 @@ pub fn fn_275928_m(
                         }
                     }
                 }
-                if reach_store
-                    && (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16)
-                {
+                if reach_store && (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16) {
                     fallback = 1;
                 }
                 if kind != 3 && next_kind == 3 {
-
                     let mut xh = XHost {
                         inner: &mut *h,
                         vm: crate::component_live_c::VmWorkspace::default(),
@@ -2042,8 +2312,7 @@ pub fn fn_275928_m(
                         return status;
                     }
                 }
-
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_attr,
                     &[
                         handle_obj,
@@ -2071,7 +2340,7 @@ pub fn fn_275928_m(
                 && next_kind == 3
             {
                 if kind == 0 {
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_get_attr,
                         &[
                             handle_obj,
@@ -2088,14 +2357,12 @@ pub fn fn_275928_m(
                         return status;
                     }
                     let token_end = g_half(m, atoken_end).unwrap_or(0);
-
                     let text_off_now = g_half(m, fe.wrapping_add(0x50)).unwrap_or(0);
                     let begin = text_off_now.wrapping_add(start);
                     let length = u32::from(token_end.wrapping_add(text_off_now))
                         .wrapping_sub(u32::from(begin));
                     if length < 0x80 {
                         let t = g_word(m, text).unwrap_or(0);
-
                         if !f195e38_copy(m, token_text, t.wrapping_add(u32::from(begin)), length) {
                             return FAIL_MEM;
                         }
@@ -2106,11 +2373,12 @@ pub fn fn_275928_m(
                         if !g_strcpy(m, ntoken, token_text) {
                             return FAIL_MEM;
                         }
-
-                        status = if crate::rom_region::to_us_guest(h.rom(), f_normalize_token) == 0x1ed3b0 {
+                        status = if crate::rom_region::to_us_guest(h.rom(), f_normalize_token)
+                            == 0x1ed3b0
+                        {
                             fn_1ed3b0_m(m, h, dict_obj, dict_data, mode, ntoken, 0x80)
                         } else {
-                            h.call_m(
+                            h.call_guest_m(
                                 f_normalize_token,
                                 &[dict_obj, dict_data, mode, ntoken, 0x80],
                                 m,
@@ -2118,7 +2386,6 @@ pub fn fn_275928_m(
                         };
                         if status < 0x80000000 {
                             if dps != 0 {
-
                                 status = crate::component_g2p::fn_2c9ba0_m(
                                     m,
                                     h,
@@ -2138,9 +2405,7 @@ pub fn fn_275928_m(
                                     return status;
                                 }
                             }
-                            if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16)
-                            {
-
+                            if (g_half(m, amatched_end).unwrap_or(0) as i16) <= (start as i16) {
                                 status = crate::component_g2p::fn_2c93f0_m(
                                     m,
                                     h,
@@ -2164,7 +2429,6 @@ pub fn fn_275928_m(
                             fallback = 1;
                         }
                     }
-
                     let mut xh = XHost {
                         inner: &mut *h,
                         vm: crate::component_live_c::VmWorkspace::default(),
@@ -2217,8 +2481,7 @@ pub fn fn_275928_m(
                 }
             }
         }
-
-        status = h.call_m(
+        status = h.call_guest_m(
             f_get_attr,
             &[
                 handle_obj,
@@ -2243,18 +2506,29 @@ pub fn fn_275928_m(
 }
 
 const F274564_AUX: u32 = 0x00;
+
 const F274564_AUX2: u32 = 0x08;
+
 const F274564_VALS: u32 = 0x0c;
+
 const F274564_FOUND: u32 = 0x10;
+
 const F274564_LEN: u32 = 0x14;
+
 const F274564_LANG: u32 = 0x18;
+
 const F274564_LNGKEY: u32 = 0x20;
+
 const F274564_ONE: u32 = 0x30;
+
 const F274564_BOUND: u32 = 0x32;
+
 const F274564_OUT: u32 = 0x34;
+
 const F274564_WRITTEN: u32 = 0x38;
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_274564_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2284,7 +2558,6 @@ pub fn fn_274564_m(
     let bound_at = scratch.wrapping_add(F274564_BOUND);
     let out_at = scratch.wrapping_add(F274564_OUT);
     let written_at = scratch.wrapping_add(F274564_WRITTEN);
-
     let env = g_word(m, p).unwrap_or(0);
     let heap = g_word(m, env.wrapping_add(4)).unwrap_or(0);
     let log = g_word(m, env.wrapping_add(16)).unwrap_or(0);
@@ -2311,7 +2584,6 @@ pub fn fn_274564_m(
     if !p_half(m, one_at, 1) || !p_half(m, bound_at, boundary) {
         return FAIL_MEM;
     }
-
     let nm = g_half(m, nm_out).unwrap_or(0);
     let mut mark_idx = g_half(m, mi_out).unwrap_or(0);
     while mark_idx < nm {
@@ -2339,7 +2611,6 @@ pub fn fn_274564_m(
     if !p_half(m, mi_out, mark_idx) {
         return FAIL_MEM;
     }
-
     let mut node = g_half(m, tok_out).unwrap_or(0);
     let mut tok: u16 = 0;
     let mut wpos: u16 = 0;
@@ -2347,13 +2618,13 @@ pub fn fn_274564_m(
     let mut sent_node: u16 = 0;
     let mut ftype: u8 = 0;
     while node != 0 && (sent_node == 0 || (wpos as i16) < (end_in as u16 as i16)) {
-        let mut status = h.call_m(f_get_attr, &[a, c, u32::from(node), 0, 1, out_at, aux], m);
+        let mut status = h.call_guest_m(f_get_attr, &[a, c, u32::from(node), 0, 1, out_at, aux], m);
         if status >= 0x80000000 {
             return status;
         }
         ftype = g_byte(m, out_at).unwrap_or(0);
         if ftype <= 3 {
-            status = h.call_m(f_get_attr, &[a, c, u32::from(node), 2, 1, out_at, aux], m);
+            status = h.call_guest_m(f_get_attr, &[a, c, u32::from(node), 2, 1, out_at, aux], m);
             if status >= 0x80000000 {
                 return status;
             }
@@ -2362,13 +2633,13 @@ pub fn fn_274564_m(
         } else if ftype == 5 {
             sent_node = node;
         }
-        status = h.call_m(f_next, &[a, c, u32::from(node), out_at], m);
+        status = h.call_guest_m(f_next, &[a, c, u32::from(node), out_at], m);
         if status >= 0x80000000 {
             return status;
         }
         node = g_half(m, out_at).unwrap_or(0);
         if prev != 0 {
-            status = h.call_m(f_remove, &[a, c, prev], m);
+            status = h.call_guest_m(f_remove, &[a, c, prev], m);
             if status >= 0x80000000 {
                 return status;
             }
@@ -2382,17 +2653,16 @@ pub fn fn_274564_m(
         }
         prev = 0;
     }
-
-    let mut status = h.call_m(f_get_ptr, &[a, c, u32::from(sent_node), 3, out_at, aux], m);
+    let mut status = h.call_guest_m(f_get_ptr, &[a, c, u32::from(sent_node), 3, out_at, aux], m);
     if status >= 0x80000000 {
         return status;
     }
     let mut str_addr = g_word(m, out_at).unwrap_or(0);
     let mut has: i16 = 0;
-    status = h.call_m(f_has_attr, &[a, c, u32::from(sent_node), 9, out_at], m);
+    status = h.call_guest_m(f_has_attr, &[a, c, u32::from(sent_node), 9, out_at], m);
     if status < 0x80000000 && g_half(m, out_at).unwrap_or(0) == 1 {
         has = 1;
-        status = h.call_m(f_get_ptr, &[a, c, u32::from(sent_node), 9, out_at, aux], m);
+        status = h.call_guest_m(f_get_ptr, &[a, c, u32::from(sent_node), 9, out_at, aux], m);
         if status >= 0x80000000 {
             return status;
         }
@@ -2417,7 +2687,6 @@ pub fn fn_274564_m(
     let mut str_len = h.call_m(0x195d90, &[str_addr], m);
     let is_bs = str_len > 4 && g_byte(m, str_addr).unwrap_or(0) == b'\\';
     if is_bs && g_byte(m, str_addr.wrapping_add(1)).unwrap_or(0) == b'T' {
-
         let key = *b"lngphon_e\0\0\0\0\0\0\0";
         let mut kb = key;
         kb[8] = g_byte(m, str_addr.wrapping_add(2)).unwrap_or(0);
@@ -2429,9 +2698,17 @@ pub fn fn_274564_m(
         if !p_word(m, vals_at, 0) || !p_half(m, found_at, 0) || !p_byte(m, len_at, 0) {
             return FAIL_MEM;
         }
-        status = h.call_m(
+        status = h.call_guest_m(
             f_cfg_get,
-            &[cfgh0, cfgh1, s_fecfg(h.rom()), lngkey, vals_at, found_at, len_at],
+            &[
+                cfgh0,
+                cfgh1,
+                s_fecfg(h.rom()),
+                lngkey,
+                vals_at,
+                found_at,
+                len_at,
+            ],
             m,
         );
         if status >= 0x80000000 {
@@ -2450,12 +2727,11 @@ pub fn fn_274564_m(
         }
         str_addr = str_addr.wrapping_add(4);
     }
-
     if g_byte(m, str_addr).unwrap_or(0) == b'#' {
         let mut n = sent_node;
         let mut ntype = ftype;
         while n != 0 && ntype != 4 && ntype != 9 && ntype != 10 {
-            status = h.call_m(f_up, &[a, c, u32::from(n), out_at], m);
+            status = h.call_guest_m(f_up, &[a, c, u32::from(n), out_at], m);
             if status >= 0x80000000 {
                 return status;
             }
@@ -2463,14 +2739,14 @@ pub fn fn_274564_m(
             if n == 0 {
                 break;
             }
-            status = h.call_m(f_get_attr, &[a, c, u32::from(n), 0, 1, out_at, aux], m);
+            status = h.call_guest_m(f_get_attr, &[a, c, u32::from(n), 0, 1, out_at, aux], m);
             if status >= 0x80000000 {
                 return status;
             }
             ntype = g_byte(m, out_at).unwrap_or(0);
         }
         if n != 0 {
-            status = h.call_m(f_set_attr, &[a, c, u32::from(n), 8, 1, bound_at, aux2], m);
+            status = h.call_guest_m(f_set_attr, &[a, c, u32::from(n), 8, 1, bound_at, aux2], m);
             if status >= 0x80000000 {
                 return status;
             }
@@ -2479,7 +2755,6 @@ pub fn fn_274564_m(
     while g_byte(m, str_addr).unwrap_or(0) == b'#' {
         str_addr = str_addr.wrapping_add(1);
     }
-
     let mut wp = str_addr;
     let mut pos = start_in;
     loop {
@@ -2507,9 +2782,9 @@ pub fn fn_274564_m(
             wend = wend.wrapping_add(1);
         }
         if first != 0 {
-            status = h.call_m(f_insert_child, &[a, c, u32::from(sent_node), out_at], m);
+            status = h.call_guest_m(f_insert_child, &[a, c, u32::from(sent_node), out_at], m);
         } else {
-            status = h.call_m(f_insert_after, &[a, c, u32::from(tok), out_at], m);
+            status = h.call_guest_m(f_insert_after, &[a, c, u32::from(tok), out_at], m);
         }
         if status >= 0x80000000 {
             return status;
@@ -2518,27 +2793,27 @@ pub fn fn_274564_m(
         if !p_half(m, out_at, 10) {
             return FAIL_MEM;
         }
-        status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 0, 1, out_at, aux2], m);
+        status = h.call_guest_m(f_set_attr, &[a, c, u32::from(tok), 0, 1, out_at, aux2], m);
         if status >= 0x80000000 {
             return status;
         }
         if !p_half(m, out_at, pos) {
             return FAIL_MEM;
         }
-        status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 1, 1, out_at, aux2], m);
+        status = h.call_guest_m(f_set_attr, &[a, c, u32::from(tok), 1, 1, out_at, aux2], m);
         if status >= 0x80000000 {
             return status;
         }
         if !p_half(m, out_at, wend) {
             return FAIL_MEM;
         }
-        status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 2, 1, out_at, aux2], m);
+        status = h.call_guest_m(f_set_attr, &[a, c, u32::from(tok), 2, 1, out_at, aux2], m);
         if status >= 0x80000000 {
             return status;
         }
         if attr9 != 0 {
             let alen = h.call_m(0x195d90, &[attr9], m);
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_set_attr,
                 &[a, c, u32::from(tok), 9, alen.wrapping_add(1), attr9, aux2],
                 m,
@@ -2548,7 +2823,6 @@ pub fn fn_274564_m(
             }
         }
         n_words = n_words.wrapping_add(1);
-
         while g_byte(m, wp).unwrap_or(0) != 0
             && g_byte(m, wp).unwrap_or(0) != b'_'
             && g_byte(m, wp).unwrap_or(0) != b' '
@@ -2572,9 +2846,14 @@ pub fn fn_274564_m(
             buf = nb;
             if use_lex != 0 {
                 if h.call_m(0x195d58, &[lang, s_lit(h.rom(), 0x2702b8)], m) != 0 {
-                    status = h.call_m(f_lex_lookup, &[lexh0, lexh1, 1, str_addr, need, buf, lang], m);
+                    status = h.call_guest_m(
+                        f_lex_lookup,
+                        &[lexh0, lexh1, 1, str_addr, need, buf, lang],
+                        m,
+                    );
                 } else {
-                    status = h.call_m(f_lex_lookup, &[lexh0, lexh1, 1, str_addr, need, buf, 0], m);
+                    status =
+                        h.call_guest_m(f_lex_lookup, &[lexh0, lexh1, 1, str_addr, need, buf, 0], m);
                 }
             } else {
                 status = h.call_m(0x195cd0, &[buf, str_addr], m);
@@ -2582,7 +2861,6 @@ pub fn fn_274564_m(
             if status >= 0x80000000 {
                 return status;
             }
-
             let b0 = g_byte(m, buf).unwrap_or(0);
             let b1 = g_byte(m, buf.wrapping_add(1)).unwrap_or(0);
             let b2 = g_byte(m, buf.wrapping_add(2)).unwrap_or(0);
@@ -2592,13 +2870,13 @@ pub fn fn_274564_m(
                 if !p_byte(m, out_at, 0) {
                     return FAIL_MEM;
                 }
-                status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 3, 1, out_at, aux2], m);
+                status = h.call_guest_m(f_set_attr, &[a, c, u32::from(tok), 3, 1, out_at, aux2], m);
             } else {
                 str_len = h.call_m(0x195d90, &[buf], m);
                 if !p_half(m, out_at, 0) {
                     return FAIL_MEM;
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set_attr,
                     &[a, c, u32::from(tok), 3, str_len.wrapping_add(1), buf, aux2],
                     m,
@@ -2611,7 +2889,7 @@ pub fn fn_274564_m(
             if !p_byte(m, out_at, 0) {
                 return FAIL_MEM;
             }
-            status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 3, 1, out_at, aux2], m);
+            status = h.call_guest_m(f_set_attr, &[a, c, u32::from(tok), 3, 1, out_at, aux2], m);
             if status >= 0x80000000 {
                 return status;
             }
@@ -2621,9 +2899,17 @@ pub fn fn_274564_m(
             if !p_half(m, out_at, 0) {
                 return FAIL_MEM;
             }
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_set_attr,
-                &[a, c, u32::from(tok), 11, str_len.wrapping_add(1), extra, aux2],
+                &[
+                    a,
+                    c,
+                    u32::from(tok),
+                    11,
+                    str_len.wrapping_add(1),
+                    extra,
+                    aux2,
+                ],
                 m,
             );
             if status >= 0x80000000 {
@@ -2632,19 +2918,26 @@ pub fn fn_274564_m(
             extra = 0;
             last_word = tok;
         }
-
-        status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 5, 2, s_lit(h.rom(), STAR_S), aux2], m);
+        status = h.call_guest_m(
+            f_set_attr,
+            &[a, c, u32::from(tok), 5, 2, s_lit(h.rom(), STAR_S), aux2],
+            m,
+        );
         if status >= 0x80000000 {
             return status;
         }
-        status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 6, 2, s_lit(h.rom(), STAR_S), aux2], m);
+        status = h.call_guest_m(
+            f_set_attr,
+            &[a, c, u32::from(tok), 6, 2, s_lit(h.rom(), STAR_S), aux2],
+            m,
+        );
         if status >= 0x80000000 {
             return status;
         }
         if !p_half(m, out_at, 1) {
             return FAIL_MEM;
         }
-        status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 7, 1, out_at, aux2], m);
+        status = h.call_guest_m(f_set_attr, &[a, c, u32::from(tok), 7, 1, out_at, aux2], m);
         if status >= 0x80000000 {
             return status;
         }
@@ -2653,16 +2946,24 @@ pub fn fn_274564_m(
             if !p_half(m, out_at, 0) {
                 return FAIL_MEM;
             }
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_set_attr,
-                &[a, c, u32::from(tok), 9, str_len.wrapping_add(1), attr9, aux2],
+                &[
+                    a,
+                    c,
+                    u32::from(tok),
+                    9,
+                    str_len.wrapping_add(1),
+                    attr9,
+                    aux2,
+                ],
                 m,
             );
         } else {
             if !p_byte(m, out_at, 0) {
                 return FAIL_MEM;
             }
-            status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 9, 1, out_at, aux2], m);
+            status = h.call_guest_m(f_set_attr, &[a, c, u32::from(tok), 9, 1, out_at, aux2], m);
         }
         if status >= 0x80000000 {
             return status;
@@ -2684,7 +2985,7 @@ pub fn fn_274564_m(
             if !p_half(m, out_at, boundary) {
                 return FAIL_MEM;
             }
-            status = h.call_m(f_set_attr, &[a, c, u32::from(tok), 8, 1, out_at, aux2], m);
+            status = h.call_guest_m(f_set_attr, &[a, c, u32::from(tok), 8, 1, out_at, aux2], m);
             if status >= 0x80000000 {
                 return status;
             }
@@ -2716,7 +3017,7 @@ pub fn fn_274564_m(
             tok = sent_node;
         }
     }
-    status = h.call_m(f_next, &[a, c, u32::from(tok), tok_out], m);
+    status = h.call_guest_m(f_next, &[a, c, u32::from(tok), tok_out], m);
     if status >= 0x80000000 {
         return status;
     }
@@ -2724,7 +3025,11 @@ pub fn fn_274564_m(
         if !p_half(m, out_at, n_words) {
             return FAIL_MEM;
         }
-        status = h.call_m(f_set_attr, &[a, c, u32::from(last_word), 7, 1, out_at, aux2], m);
+        status = h.call_guest_m(
+            f_set_attr,
+            &[a, c, u32::from(last_word), 7, 1, out_at, aux2],
+            m,
+        );
         if status >= 0x80000000 {
             return status;
         }
@@ -2737,6 +3042,7 @@ pub fn fn_274564_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn f275928_emit_token(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2759,21 +3065,34 @@ fn f275928_emit_token(
 ) -> u32 {
     h.call_m(
         0x173dc0,
-        &[logger, 0x8f9532, 0x84d3, s_lit(h.rom(), 0x276764), name, buf, s_lit(h.rom(), 0x276750), u32::from(kind)],
+        &[
+            logger,
+            0x8f9532,
+            0x84d3,
+            s_lit(h.rom(), 0x276764),
+            name,
+            buf,
+            s_lit(h.rom(), 0x276750),
+            u32::from(kind),
+        ],
         m,
     );
     let wlen = h.call_m(0x195d90, &[buf], m);
     if !p_byte(m, akind, 4) {
         return FAIL_MEM;
     }
-
     let start = g_half(m, astart).unwrap_or(0);
     if !p_half(m, amatched_end, (wlen as u16).wrapping_add(start)) {
         return FAIL_MEM;
     }
-    let mut status = h.call_m(
+    let mut status = h.call_guest_m(
         f_insert_child,
-        &[handle_obj, handle_data, u32::from(g_half(m, tok).unwrap_or(0)), tok],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(g_half(m, tok).unwrap_or(0)),
+            tok,
+        ],
         m,
     );
     if status >= 0x80000000 {
@@ -2796,9 +3115,17 @@ fn f275928_emit_token(
         return FAIL_MEM;
     }
     for (id, n, val) in fields {
-        status = h.call_m(
+        status = h.call_guest_m(
             f_set_attr,
-            &[handle_obj, handle_data, u32::from(g_half(m, tok).unwrap_or(0)), id, n, val, awritten],
+            &[
+                handle_obj,
+                handle_data,
+                u32::from(g_half(m, tok).unwrap_or(0)),
+                id,
+                n,
+                val,
+                awritten,
+            ],
             m,
         );
         if status >= 0x80000000 {
@@ -2806,9 +3133,14 @@ fn f275928_emit_token(
         }
     }
     if advance {
-        status = h.call_m(
+        status = h.call_guest_m(
             f_next,
-            &[handle_obj, handle_data, u32::from(g_half(m, tok).unwrap_or(0)), tok],
+            &[
+                handle_obj,
+                handle_data,
+                u32::from(g_half(m, tok).unwrap_or(0)),
+                tok,
+            ],
             m,
         );
     }
@@ -2816,77 +3148,141 @@ fn f275928_emit_token(
 }
 
 const S_CLMVARIANTS: u32 = 0x1f9cf8;
+
 const S_NO: u32 = 0x1f9d04;
+
 const S_CLCMLEXTRA: u32 = 0x1f9d08;
+
 const S_NUMOUTTRANS: u32 = 0x1f9d1c;
+
 const S_NORICHTRANS: u32 = 0x1f9d38;
+
 const S_FALSE: u32 = 0x1f9d4c;
+
 const S_FECFG: u32 = 0x1f9d54;
+
 fn s_fecfg(rom: crate::rom_region::Rom) -> u32 {
     crate::rom_region::addr(rom, S_FECFG)
 }
+
 const S_MPTHREE: u32 = 0x1f9d5c;
+
 const S_MPTHREEML: u32 = 0x1f9d64;
+
 const S_VADVDE: u32 = 0x1f9d70;
+
 const S_DTSCORE: u32 = 0x1f9d78;
+
 const S_DTHIST: u32 = 0x1f9d94;
+
 const S_DTVAR: u32 = 0x1f9db4;
+
 const S_NORMAL: u32 = 0x1fa2dc;
+
 fn s_normal(rom: crate::rom_region::Rom) -> u32 {
     crate::rom_region::addr(rom, S_NORMAL)
 }
+
 fn s_lit(rom: crate::rom_region::Rom, us: u32) -> u32 {
     crate::rom_region::addr(rom, us)
 }
+
 const S_PROMPT: u32 = 0x1fa89c;
+
 const S_LATIN: u32 = 0x1fa8a4;
+
 const S_PHON: u32 = 0x1db2d4;
 
 const F198C8_LOC: u32 = 0x2000;
+
 const F198C8_S2759: u32 = 0x3000;
+
 const L_TMP: u32 = 0x00;
+
 const L_NUMBUF: u32 = 0x54;
+
 const L_KEY: u32 = 0x58;
+
 const L_DELIDS: u32 = 0xe0;
+
 const L_N: u32 = 0x1e0;
+
 const L_X: u32 = 0x1e2;
+
 const L_HAS: u32 = 0x1e4;
+
 const L_W: u32 = 0x1e6;
+
 const L_NMK: u32 = 0x1e8;
+
 const L_LEN: u32 = 0x1ea;
+
 const L_TEXTPOS: u32 = 0x1ec;
+
 const L_VAL: u32 = 0x1f0;
+
 const L_SEP: u32 = 0x1f4;
+
 const L_TYPE: u32 = 0x1f5;
+
 const L_WTYPE: u32 = 0x1f6;
+
 const L_POSC: u32 = 0x1f7;
+
 const L_WPOS: u32 = 0x1f8;
+
 const L_W2: u32 = 0x1fa;
+
 const L_START: u32 = 0x1fc;
+
 const L_END: u32 = 0x1fe;
+
 const L_ROOT: u32 = 0x200;
+
 const L_TOK: u32 = 0x202;
+
 const L_TEXT: u32 = 0x204;
+
 const L_STR4: u32 = 0x208;
+
 const L_STR3: u32 = 0x20c;
+
 const L_STR6: u32 = 0x210;
+
 const L_MARK: u32 = 0x214;
+
 const L_STR5: u32 = 0x218;
+
 const L_OPT: u32 = 0x21c;
+
 const L_MI: u32 = 0x220;
+
 const L_NM: u32 = 0x222;
+
 const L_WSTART: u32 = 0x224;
+
 const L_WEND: u32 = 0x226;
+
 const L_PREV: u32 = 0x228;
+
 const L_LAST: u32 = 0x22a;
+
 const L_NEWT: u32 = 0x22c;
+
 const L_ONE: u32 = 0x22e;
+
 const L_F7: u32 = 0x230;
+
 const L_CUR: u32 = 0x232;
+
 const L_POS: u32 = 0x234;
+
 const L_CLM: u32 = 0x2bc;
+
 const L_NO4: u32 = 0x2c0;
+
 const L_CODE: u32 = 0x2c4;
+
 const L_CLMSIZE: u32 = 0x2c8;
 
 const L_TOKFRAME: u32 = 0x300;
@@ -2913,6 +3309,7 @@ fn f198c8_puts(m: &mut Memory<'_>, dst: u32, s: &[u8]) -> bool {
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_1f98c8_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2936,6 +3333,7 @@ pub fn fn_1f98c8_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn fn_1f98c8_inner(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -2946,15 +3344,15 @@ fn fn_1f98c8_inner(
     c: u32,
     done: u32,
 ) -> (u32, [u32; 5]) {
-
     if !p_half(m, p.wrapping_add(0x50), 0) {
         return (FAIL_MEM, [0u32; 5]);
     }
     let loc = scratch.wrapping_add(F198C8_LOC);
     let s2759 = scratch.wrapping_add(F198C8_S2759);
     let at = |o: u32| loc.wrapping_add(o);
-
-    let normstr = SP_1F98C8_ENTRY.wrapping_sub(F1F98C8_FRAME).wrapping_add(0x220);
+    let normstr = SP_1F98C8_ENTRY
+        .wrapping_sub(F1F98C8_FRAME)
+        .wrapping_add(0x220);
     let zero5 = [0u32; 5];
     let env = g_word(m, p).unwrap_or(0);
     let heap = g_word(m, env.wrapping_add(4)).unwrap_or(0);
@@ -2982,7 +3380,6 @@ fn fn_1f98c8_inner(
     let f_get_pos = g_word(m, trans_vt.wrapping_add(TRANS_GET_POS * 4)).unwrap_or(0);
     let f_set_pos = g_word(m, trans_vt.wrapping_add(TRANS_SET_POS * 4)).unwrap_or(0);
     use crate::component_live_b4::fn_1ea4e0_m;
-
     let mut status = h.call_m(0x176f94, &[p, b, 0xf384, 0x4c8], m);
     if status >= 0x80000000 {
         return (0x89b02008, zero5);
@@ -2990,23 +3387,37 @@ fn fn_1f98c8_inner(
     if !p_byte(m, done, 1) {
         return (FAIL_MEM, zero5);
     }
-
-    status = h.call_m(0x1756d0, &[params, s_lit(h.rom(), S_CLMVARIANTS), at(L_OPT), 0], m);
+    status = h.call_m(
+        0x1756d0,
+        &[params, s_lit(h.rom(), S_CLMVARIANTS), at(L_OPT), 0],
+        m,
+    );
     let mut clm_variants = 1u8;
     if status >= 0x80000000
-        || h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_NO)], m) == 0
+        || h.call_m(
+            0x1769d0,
+            &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_NO)],
+            m,
+        ) == 0
     {
         clm_variants = 0;
     }
     if !p_byte(m, p.wrapping_add(FE_CLM_VARIANTS), clm_variants) {
         return (FAIL_MEM, zero5);
     }
-
-    status = h.call_m(0x1756d0, &[params, s_lit(h.rom(), S_CLCMLEXTRA), at(L_OPT), 0], m);
+    status = h.call_m(
+        0x1756d0,
+        &[params, s_lit(h.rom(), S_CLCMLEXTRA), at(L_OPT), 0],
+        m,
+    );
     let extra_main = g_byte(m, p.wrapping_add(FE_EXTRA_MAIN_TRANS)).unwrap_or(0);
     let mut clc_extra = 1u8;
     if status >= 0x80000000
-        || h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_NO)], m) == 0
+        || h.call_m(
+            0x1769d0,
+            &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_NO)],
+            m,
+        ) == 0
         || extra_main == 0
     {
         clc_extra = 0;
@@ -3014,14 +3425,16 @@ fn fn_1f98c8_inner(
     if !p_byte(m, p.wrapping_add(FE_CLC_EXTRA_MAIN_TRANS), clc_extra) {
         return (FAIL_MEM, zero5);
     }
-
-    status = h.call_m(0x1756d0, &[params, s_lit(h.rom(), S_NUMOUTTRANS), at(L_OPT), 0], m);
+    status = h.call_m(
+        0x1756d0,
+        &[params, s_lit(h.rom(), S_NUMOUTTRANS), at(L_OPT), 0],
+        m,
+    );
     let mut n_out_trans = 1u8;
     let mut dps_multi = g_byte(m, p.wrapping_add(FE_DPS_MULTI_TRANS)).unwrap_or(0);
     if status < 0x80000000 && g_word(m, at(L_OPT)).unwrap_or(0) != 0 {
         let nt = h.call_m(0x17c550, &[g_word(m, at(L_OPT)).unwrap_or(0)], m) as u8;
         n_out_trans = nt;
-
         if (i32::from(nt) - 1) <= i32::from(dps_multi) {
             dps_multi = nt.wrapping_sub(1);
         }
@@ -3031,30 +3444,55 @@ fn fn_1f98c8_inner(
     {
         return (FAIL_MEM, zero5);
     }
-
-    status = h.call_m(0x1756d0, &[params, s_lit(h.rom(), S_NORICHTRANS), at(L_OPT), 0], m);
+    status = h.call_m(
+        0x1756d0,
+        &[params, s_lit(h.rom(), S_NORICHTRANS), at(L_OPT), 0],
+        m,
+    );
     let mut no_rich = 0u8;
     if !(status >= 0x80000000
-        || h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_FALSE)], m) == 0)
+        || h.call_m(
+            0x1769d0,
+            &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_FALSE)],
+            m,
+        ) == 0)
     {
         no_rich = 1;
     }
     status = h.call_m(0x1756d0, &[params, s_fecfg(h.rom()), at(L_OPT), 0], m);
     if no_rich != 0
         && status < 0x80000000
-        && h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_MPTHREE)], m) != 0
-        && h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_MPTHREEML)], m) != 0
-        && h.call_m(0x1769d0, &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_VADVDE)], m) != 0
+        && h.call_m(
+            0x1769d0,
+            &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_MPTHREE)],
+            m,
+        ) != 0
+        && h.call_m(
+            0x1769d0,
+            &[
+                g_word(m, at(L_OPT)).unwrap_or(0),
+                s_lit(h.rom(), S_MPTHREEML),
+            ],
+            m,
+        ) != 0
+        && h.call_m(
+            0x1769d0,
+            &[g_word(m, at(L_OPT)).unwrap_or(0), s_lit(h.rom(), S_VADVDE)],
+            m,
+        ) != 0
     {
         no_rich = 0;
     }
     if !p_byte(m, p.wrapping_add(FE_NO_RICH_TRANS), no_rich) {
         return (FAIL_MEM, zero5);
     }
-
     let lex = g_word(m, p.wrapping_add(FE_LEX)).unwrap_or(0);
     if h.call_m(0x196764, &[lex], m) != 0 {
-        let keys = [s_lit(h.rom(), S_DTSCORE), s_lit(h.rom(), S_DTHIST), s_lit(h.rom(), S_DTVAR)];
+        let keys = [
+            s_lit(h.rom(), S_DTSCORE),
+            s_lit(h.rom(), S_DTHIST),
+            s_lit(h.rom(), S_DTVAR),
+        ];
         let types = [1u32, 2, 5];
         let mut prune_opt = [0u32; 3];
         for (i, k) in keys.iter().enumerate() {
@@ -3066,14 +3504,17 @@ fn fn_1f98c8_inner(
             };
         }
         let n_trans_opt = {
-            status = h.call_m(0x1756d0, &[params, s_lit(h.rom(), S_NUMOUTTRANS), at(L_OPT), 0], m);
+            status = h.call_m(
+                0x1756d0,
+                &[params, s_lit(h.rom(), S_NUMOUTTRANS), at(L_OPT), 0],
+                m,
+            );
             if status >= 0x80000000 {
                 0
             } else {
                 g_word(m, at(L_OPT)).unwrap_or(0)
             }
         };
-
         if !p_word(m, at(0x238), 0)
             || !p_word(m, at(0x23c), 0)
             || !p_word(m, at(0x240), 0)
@@ -3094,7 +3535,11 @@ fn fn_1f98c8_inner(
                 if !p_word(m, at(0x23c), dkey) {
                     return (FAIL_MEM, zero5);
                 }
-                status = h.call_m(0x196860, &[g_word(m, at(0x238)).unwrap_or(0), at(0x23c), at(0x240)], m);
+                status = h.call_m(
+                    0x196860,
+                    &[g_word(m, at(0x238)).unwrap_or(0), at(0x23c), at(0x240)],
+                    m,
+                );
                 if status >= 0x80000000 {
                     break;
                 }
@@ -3104,14 +3549,12 @@ fn fn_1f98c8_inner(
                 for (optr, ty) in opts {
                     if optr != 0 {
                         let oval = h.call_m(0x17c550, &[optr], m);
-                        if !p_byte(m, at(0x244), ty)
-                            || !p_word(m, at(0x248), oval)
-                        {
+                        if !p_byte(m, at(0x244), ty) || !p_word(m, at(0x248), oval) {
                             return (FAIL_MEM, zero5);
                         }
                         status = h.call_m(0x2b1814, &[eid, at(0x244), 1], m);
                         if status != 0 {
-                            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d4, 0], m);
+                            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d4, 0], m);
                             return ((status.wrapping_add(0x1ea0)) | 0x89b02000, zero5);
                         }
                     }
@@ -3122,8 +3565,7 @@ fn fn_1f98c8_inner(
         let _ = types;
         let _ = status;
     }
-
-    status = h.call_m(f_get_first, &[a, c, 1, 0, at(L_ROOT)], m);
+    status = h.call_guest_m(f_get_first, &[a, c, 1, 0, at(L_ROOT)], m);
     if status >= 0x80000000 {
         return (status, zero5);
     }
@@ -3131,14 +3573,14 @@ fn fn_1f98c8_inner(
     if !p_half(m, at(L_HAS), 0) {
         return (FAIL_MEM, zero5);
     }
-    status = h.call_m(f_has_field, &[a, c, u32::from(root), 0, at(L_HAS)], m);
+    status = h.call_guest_m(f_has_field, &[a, c, u32::from(root), 0, at(L_HAS)], m);
     if status >= 0x80000000 || g_half(m, at(L_HAS)).unwrap_or(0) != 1 {
         return (status, zero5);
     }
     if !p_half(m, at(L_N), 0) {
         return (FAIL_MEM, zero5);
     }
-    status = h.call_m(
+    status = h.call_guest_m(
         f_get_field_ptr,
         &[a, c, u32::from(root), 0, at(L_TEXT), at(L_N)],
         m,
@@ -3150,7 +3592,7 @@ fn fn_1f98c8_inner(
     let text_len = h.call_m(0x195d90, &[text], m);
     let mut text_copy = h.call_m(0x196394, &[heap, text_len.wrapping_add(1)], m);
     if text_copy == 0 {
-        h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+        h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
         return (0x89b0200a, zero5);
     }
     let mut bufs = zero5;
@@ -3159,7 +3601,6 @@ fn fn_1f98c8_inner(
     if status >= 0x80000000 {
         return (status, bufs);
     }
-
     {
         let mut i = 0u32;
         while i < 256 {
@@ -3169,11 +3610,10 @@ fn fn_1f98c8_inner(
             i += 1;
         }
     }
-
     if !p_half(m, at(L_N), 0) {
         return (FAIL_MEM, bufs);
     }
-    status = h.call_m(
+    status = h.call_guest_m(
         f_get_field_ptr,
         &[a, c, u32::from(root), 1, at(L_MARK), at(L_N)],
         m,
@@ -3194,11 +3634,10 @@ fn fn_1f98c8_inner(
     if !p_half(m, at(L_MI), mi) {
         return (FAIL_MEM, bufs);
     }
-
     if !p_word(m, at(L_TEXTPOS), 0) {
         return (FAIL_MEM, bufs);
     }
-    status = h.call_m(f_get_pos, &[h2_a, h2_b, at(L_TEXTPOS), 0], m);
+    status = h.call_guest_m(f_get_pos, &[h2_a, h2_b, at(L_TEXTPOS), 0], m);
     if status >= 0x80000000 {
         return (status, bufs);
     }
@@ -3206,7 +3645,7 @@ fn fn_1f98c8_inner(
     if !p_byte(m, p.wrapping_add(FE_F1A5), 0) {
         return (FAIL_MEM, bufs);
     }
-    status = h.call_m(f_get_first, &[a, c, 3, u32::from(root), at(L_TOK)], m);
+    status = h.call_guest_m(f_get_first, &[a, c, 3, u32::from(root), at(L_TOK)], m);
     if status >= 0x80000000 {
         return (status, bufs);
     }
@@ -3214,14 +3653,30 @@ fn fn_1f98c8_inner(
     if !p_half(m, at(L_LEN), 0xffff) {
         return (FAIL_MEM, bufs);
     }
-
     if crate::rom_region::to_us_guest(h.rom(), f_get_string) == 0x1ea4e0 {
-
-        status = fn_1ea4e0_m(m, h, h_a, h_b, s_fecfg(h.rom()), s_normal(h.rom()), at(L_VAL), at(L_LEN), at(L_SEP));
+        status = fn_1ea4e0_m(
+            m,
+            h,
+            h_a,
+            h_b,
+            s_fecfg(h.rom()),
+            s_normal(h.rom()),
+            at(L_VAL),
+            at(L_LEN),
+            at(L_SEP),
+        );
     } else {
-        status = h.call_m(
+        status = h.call_guest_m(
             f_get_string,
-            &[h_a, h_b, s_fecfg(h.rom()), s_normal(h.rom()), at(L_VAL), at(L_LEN), at(L_SEP)],
+            &[
+                h_a,
+                h_b,
+                s_fecfg(h.rom()),
+                s_normal(h.rom()),
+                at(L_VAL),
+                at(L_LEN),
+                at(L_SEP),
+            ],
             m,
         );
     }
@@ -3246,7 +3701,6 @@ fn fn_1f98c8_inner(
             return (status, bufs);
         }
     }
-
     let f173 = g_byte(m, p.wrapping_add(FE_F173)).unwrap_or(0);
     let mut mk: u32 = 0;
     let mut cap_mk = 0u16;
@@ -3254,7 +3708,7 @@ fn fn_1f98c8_inner(
     if f173 == 1 {
         mk = h.call_m(0x1963b8, &[heap, 1, 11 * MARKER_LEN], m);
         if mk == 0 {
-            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
             return (0x89b0200a, bufs);
         }
         bufs[4] = mk;
@@ -3266,12 +3720,11 @@ fn fn_1f98c8_inner(
             || !p_word(m, m0.wrapping_add(MARKER_POS), base)
             || !p_half(m, m1.wrapping_add(MARKER_TYPE), 36)
             || !p_word(m, m1.wrapping_add(MARKER_POS), base)
-            || !p_word(m, m1.wrapping_add(MARKER_VAL), D_8f9580)
+            || !p_word(m, m1.wrapping_add(MARKER_VAL), s_lit(h.rom(), D_8f9580))
         {
             return (FAIL_MEM, bufs);
         }
     }
-
     let mut first = true;
     let mut mode = b'N';
     let esc_tn = g_word(m, p.wrapping_add(FE_LANG_CODE).wrapping_add(4)).unwrap_or(0);
@@ -3282,29 +3735,38 @@ fn fn_1f98c8_inner(
         if !p_byte(m, at(L_TYPE), 0) || !p_half(m, at(L_N), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 0, 1, at(L_TYPE), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 0, 1, at(L_TYPE), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
         let wtype = g_byte(m, at(L_TYPE)).unwrap_or(0);
         if wtype == 5 || wtype == 6 || wtype == 7 {
-            if !p_half(m, at(L_START), 0)
-                || !p_half(m, at(L_END), 0)
-                || !p_word(m, at(L_STR4), 0)
-            {
+            if !p_half(m, at(L_START), 0) || !p_half(m, at(L_END), 0) || !p_word(m, at(L_STR4), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_field, &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)], m);
+            status = h.call_guest_m(
+                f_get_field,
+                &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
-            status = h.call_m(f_get_field, &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)], m);
+            status = h.call_guest_m(
+                f_get_field,
+                &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
             let start = g_half(m, at(L_START)).unwrap_or(0);
             let end = g_half(m, at(L_END)).unwrap_or(0);
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_get_field_ptr,
                 &[a, c, u32::from(tok), 4, at(L_STR4), at(L_N)],
                 m,
@@ -3318,7 +3780,7 @@ fn fn_1f98c8_inner(
                 if !p_word(m, at(L_STR3), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_field_ptr,
                     &[a, c, u32::from(tok), 3, at(L_STR3), at(L_N)],
                     m,
@@ -3333,7 +3795,7 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_HAS), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(f_has_field, &[a, c, u32::from(tok), 6, at(L_HAS)], m);
+                status = h.call_guest_m(f_has_field, &[a, c, u32::from(tok), 6, at(L_HAS)], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -3341,7 +3803,7 @@ fn fn_1f98c8_inner(
                     if !p_word(m, at(L_STR6), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_get_field_ptr,
                         &[a, c, u32::from(tok), 6, at(L_STR6), at(L_N)],
                         m,
@@ -3354,14 +3816,13 @@ fn fn_1f98c8_inner(
             }
             let mut w = g_half(m, at(L_W)).unwrap_or(0);
             if first {
-                status =
-                    h.call_m(f_add_child, &[a, c, 2, u32::from(root), at(L_W)], m);
+                status = h.call_guest_m(f_add_child, &[a, c, 2, u32::from(root), at(L_W)], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
                 first = false;
             } else {
-                status = h.call_m(f_new_record, &[a, c, u32::from(w), at(L_W)], m);
+                status = h.call_guest_m(f_new_record, &[a, c, u32::from(w), at(L_W)], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -3370,7 +3831,11 @@ fn fn_1f98c8_inner(
             let s4len = h.call_m(0x195d90, &[str4], m);
             macro_rules! setf {
                 ($id:expr, $f:expr, $n:expr, $v:expr) => {{
-                    status = h.call_m(f_set_field, &[a, c, u32::from($id), $f, $n, $v, at(L_X)], m);
+                    status = h.call_guest_m(
+                        f_set_field,
+                        &[a, c, u32::from($id), $f, $n, $v, at(L_X)],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -3410,9 +3875,7 @@ fn fn_1f98c8_inner(
                         new_mode = b'L';
                     } else if h.call_m(0x195d58, &[str4, normstr], m) != 0 {
                         let s4l = h.call_m(0x195d90, &[str4], m);
-                        if hit == 0
-                            || g_byte(m, hit.wrapping_add(s4l)).unwrap_or(0) != b'|'
-                        {
+                        if hit == 0 || g_byte(m, hit.wrapping_add(s4l)).unwrap_or(0) != b'|' {
                             new_mode = b'L';
                         } else {
                             let mut kk = s4l;
@@ -3431,18 +3894,32 @@ fn fn_1f98c8_inner(
                 let start = g_half(m, at(L_START)).unwrap_or(0);
                 if mode != new_mode {
                     if start == 0 {
-                        if n_mk >= 2 && !p_word(m, mk.wrapping_add(MARKER_LEN).wrapping_add(MARKER_VAL), if new_mode == b'L' { D_8f9574 } else { D_8f9580 }) {
+                        if n_mk >= 2
+                            && !p_word(
+                                m,
+                                mk.wrapping_add(MARKER_LEN).wrapping_add(MARKER_VAL),
+                                if new_mode == b'L' {
+                                    s_lit(h.rom(), D_8f9574)
+                                } else {
+                                    s_lit(h.rom(), D_8f9580)
+                                },
+                            )
+                        {
                             return (FAIL_MEM, bufs);
                         }
                     } else {
                         if n_mk.wrapping_add(1) > cap_mk {
                             let grown = h.call_m(
                                 0x1963e0,
-                                &[heap, mk, u32::from(cap_mk.wrapping_add(11)).wrapping_mul(MARKER_LEN)],
+                                &[
+                                    heap,
+                                    mk,
+                                    u32::from(cap_mk.wrapping_add(11)).wrapping_mul(MARKER_LEN),
+                                ],
                                 m,
                             );
                             if grown == 0 {
-                                h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                                h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                                 return (0x89b0200a, bufs);
                             }
                             mk = grown;
@@ -3451,11 +3928,19 @@ fn fn_1f98c8_inner(
                         }
                         let e = mk.wrapping_add(u32::from(n_mk).wrapping_mul(MARKER_LEN));
                         if !p_half(m, e.wrapping_add(MARKER_TYPE), 36)
-                            || !p_word(m, e.wrapping_add(MARKER_POS), base.wrapping_add(u32::from(start)))
+                            || !p_word(
+                                m,
+                                e.wrapping_add(MARKER_POS),
+                                base.wrapping_add(u32::from(start)),
+                            )
                             || !p_word(
                                 m,
                                 e.wrapping_add(MARKER_VAL),
-                                if new_mode == b'L' { D_8f9574 } else { D_8f9580 },
+                                if new_mode == b'L' {
+                                    s_lit(h.rom(), D_8f9574)
+                                } else {
+                                    s_lit(h.rom(), D_8f9580)
+                                },
                             )
                         {
                             return (FAIL_MEM, bufs);
@@ -3470,39 +3955,36 @@ fn fn_1f98c8_inner(
         if !p_half(m, at(L_TOK), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_next, &[a, c, u32::from(prev), at(L_TOK)], m);
+        status = h.call_guest_m(f_get_next, &[a, c, u32::from(prev), at(L_TOK)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
         tok = g_half(m, at(L_TOK)).unwrap_or(0);
-        status = h.call_m(f_remove, &[a, c, u32::from(prev)], m);
+        status = h.call_guest_m(f_remove, &[a, c, u32::from(prev)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
     }
-
     {
         use crate::component_live_b4::fn_1ede44_m;
         if f173 == 1 {
             status = fn_1ede44_m(m, h, at(L_TOKFRAME), h_a, h_b, a, c, mk, n_mk);
         } else {
-            status =
-                fn_1ede44_m(m, h, at(L_TOKFRAME), h_a, h_b, a, c, markers, n_markers);
+            status = fn_1ede44_m(m, h, at(L_TOKFRAME), h_a, h_b, a, c, markers, n_markers);
         }
     }
     if status >= 0x80000000 {
         return (status, bufs);
     }
-
     if !p_half(m, at(L_TOK), 0) || !p_half(m, at(L_W), 0) {
         return (FAIL_MEM, bufs);
     }
-    status = h.call_m(f_get_first, &[a, c, 3, u32::from(root), at(L_TOK)], m);
+    status = h.call_guest_m(f_get_first, &[a, c, 3, u32::from(root), at(L_TOK)], m);
     if status >= 0x80000000 {
         return (status, bufs);
     }
     tok = g_half(m, at(L_TOK)).unwrap_or(0);
-    status = h.call_m(f_get_first, &[a, c, 2, u32::from(root), at(L_W)], m);
+    status = h.call_guest_m(f_get_first, &[a, c, 2, u32::from(root), at(L_W)], m);
     if status >= 0x80000000 {
         return (status, bufs);
     }
@@ -3510,7 +3992,11 @@ fn fn_1f98c8_inner(
     if !p_half(m, at(L_WPOS), 0) {
         return (FAIL_MEM, bufs);
     }
-    status = h.call_m(f_get_field, &[a, c, u32::from(w), 1, 1, at(L_WPOS), at(L_N)], m);
+    status = h.call_guest_m(
+        f_get_field,
+        &[a, c, u32::from(w), 1, 1, at(L_WPOS), at(L_N)],
+        m,
+    );
     if status >= 0x80000000 {
         return (status, bufs);
     }
@@ -3519,7 +4005,7 @@ fn fn_1f98c8_inner(
         if !p_half(m, at(L_W), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_insert_before, &[a, c, u32::from(w), at(L_W)], m);
+        status = h.call_guest_m(f_insert_before, &[a, c, u32::from(w), at(L_W)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -3527,21 +4013,34 @@ fn fn_1f98c8_inner(
         if !p_byte(m, at(L_TYPE), 0) || !p_half(m, at(L_START), 0) || !p_half(m, at(L_END), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 0, 1, at(L_TYPE), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 0, 1, at(L_TYPE), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
         macro_rules! setf2 {
             ($id:expr, $f:expr, $n:expr, $v:expr) => {{
-                status = h.call_m(f_set_field, &[a, c, u32::from($id), $f, $n, $v, at(L_X)], m);
+                status =
+                    h.call_guest_m(f_set_field, &[a, c, u32::from($id), $f, $n, $v, at(L_X)], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -3553,7 +4052,7 @@ fn fn_1f98c8_inner(
         if !p_half(m, at(L_TOK), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
+        status = h.call_guest_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -3569,7 +4068,7 @@ fn fn_1f98c8_inner(
         if !p_half(m, at(L_W), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_next, &[a, c, u32::from(w), at(L_W)], m);
+        status = h.call_guest_m(f_get_next, &[a, c, u32::from(w), at(L_W)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -3578,7 +4077,11 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_WPOS), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_field, &[a, c, u32::from(w), 1, 1, at(L_WPOS), at(L_N)], m);
+            status = h.call_guest_m(
+                f_get_field,
+                &[a, c, u32::from(w), 1, 1, at(L_WPOS), at(L_N)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -3589,17 +4092,22 @@ fn fn_1f98c8_inner(
     }
     w = last;
     while tok != 0 {
-        if !p_byte(m, at(L_TYPE), 0)
-            || !p_half(m, at(L_START), 0)
-            || !p_half(m, at(L_END), 0)
-        {
+        if !p_byte(m, at(L_TYPE), 0) || !p_half(m, at(L_START), 0) || !p_half(m, at(L_END), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 0, 1, at(L_TYPE), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 0, 1, at(L_TYPE), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -3611,7 +4119,7 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_W), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_next, &[a, c, u32::from(w), at(L_W)], m);
+            status = h.call_guest_m(f_get_next, &[a, c, u32::from(w), at(L_W)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -3620,7 +4128,11 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_WPOS), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(f_get_field, &[a, c, u32::from(w), 1, 1, at(L_WPOS), at(L_N)], m);
+                status = h.call_guest_m(
+                    f_get_field,
+                    &[a, c, u32::from(w), 1, 1, at(L_WPOS), at(L_N)],
+                    m,
+                );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -3635,11 +4147,19 @@ fn fn_1f98c8_inner(
         if !p_half(m, at(L_END), 0) || !p_byte(m, at(L_WTYPE), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(w), 0, 1, at(L_WTYPE), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(w), 0, 1, at(L_WTYPE), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -3655,27 +4175,39 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_W), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_insert_before, &[a, c, u32::from(w), at(L_W)], m);
+            status = h.call_guest_m(f_insert_before, &[a, c, u32::from(w), at(L_W)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
             w = g_half(m, at(L_W)).unwrap_or(0);
-            status = h.call_m(f_set_field, &[a, c, u32::from(w), 0, 1, at(L_TYPE), at(L_X)], m);
+            status = h.call_guest_m(
+                f_set_field,
+                &[a, c, u32::from(w), 0, 1, at(L_TYPE), at(L_X)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
-            status = h.call_m(f_set_field, &[a, c, u32::from(w), 1, 1, at(L_START), at(L_X)], m);
+            status = h.call_guest_m(
+                f_set_field,
+                &[a, c, u32::from(w), 1, 1, at(L_START), at(L_X)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
-            status = h.call_m(f_set_field, &[a, c, u32::from(w), 2, 1, at(L_END), at(L_X)], m);
+            status = h.call_guest_m(
+                f_set_field,
+                &[a, c, u32::from(w), 2, 1, at(L_END), at(L_X)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
             if !p_half(m, at(L_W), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_next, &[a, c, u32::from(w), at(L_W)], m);
+            status = h.call_guest_m(f_get_next, &[a, c, u32::from(w), at(L_W)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -3684,20 +4216,32 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_W), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_new_record, &[a, c, u32::from(w), at(L_W)], m);
+            status = h.call_guest_m(f_new_record, &[a, c, u32::from(w), at(L_W)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
             w = g_half(m, at(L_W)).unwrap_or(0);
-            status = h.call_m(f_set_field, &[a, c, u32::from(w), 0, 1, at(L_TYPE), at(L_X)], m);
+            status = h.call_guest_m(
+                f_set_field,
+                &[a, c, u32::from(w), 0, 1, at(L_TYPE), at(L_X)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
-            status = h.call_m(f_set_field, &[a, c, u32::from(w), 1, 1, at(L_START), at(L_X)], m);
+            status = h.call_guest_m(
+                f_set_field,
+                &[a, c, u32::from(w), 1, 1, at(L_START), at(L_X)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
-            status = h.call_m(f_set_field, &[a, c, u32::from(w), 2, 1, at(L_END), at(L_X)], m);
+            status = h.call_guest_m(
+                f_set_field,
+                &[a, c, u32::from(w), 2, 1, at(L_END), at(L_X)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -3706,22 +4250,21 @@ fn fn_1f98c8_inner(
         if !p_half(m, at(L_TOK), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_next, &[a, c, u32::from(prev), at(L_TOK)], m);
+        status = h.call_guest_m(f_get_next, &[a, c, u32::from(prev), at(L_TOK)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
         tok = g_half(m, at(L_TOK)).unwrap_or(0);
-        status = h.call_m(f_remove, &[a, c, u32::from(prev)], m);
+        status = h.call_guest_m(f_remove, &[a, c, u32::from(prev)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
     }
-
     let mut str4_last = 0u32;
     if !p_half(m, at(L_TOK), 0) {
         return (FAIL_MEM, bufs);
     }
-    status = h.call_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
+    status = h.call_guest_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
     if status >= 0x80000000 {
         return (status, bufs);
     }
@@ -3729,7 +4272,6 @@ fn fn_1f98c8_inner(
     if !p_word(m, at(L_TEXT), text_copy) {
         return (FAIL_MEM, bufs);
     }
-
     if !p_half(m, p.wrapping_add(0x68), tok) {
         return (FAIL_MEM, bufs);
     }
@@ -3738,7 +4280,11 @@ fn fn_1f98c8_inner(
         if !p_byte(m, at(L_WTYPE), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(w2), 0, 1, at(L_WTYPE), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(w2), 0, 1, at(L_WTYPE), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -3747,11 +4293,19 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_START), 0) || !p_half(m, at(L_END), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_field, &[a, c, u32::from(w2), 1, 1, at(L_START), at(L_N)], m);
+            status = h.call_guest_m(
+                f_get_field,
+                &[a, c, u32::from(w2), 1, 1, at(L_START), at(L_N)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
-            status = h.call_m(f_get_field, &[a, c, u32::from(w2), 2, 1, at(L_END), at(L_N)], m);
+            status = h.call_guest_m(
+                f_get_field,
+                &[a, c, u32::from(w2), 2, 1, at(L_END), at(L_N)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -3761,7 +4315,7 @@ fn fn_1f98c8_inner(
                 if !p_word(m, at(L_STR4), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_field_ptr,
                     &[a, c, u32::from(w2), 4, at(L_STR4), at(L_N)],
                     m,
@@ -3776,7 +4330,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_HAS), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(f_has_field, &[a, c, u32::from(w2), 9, at(L_HAS)], m);
+                    status = h.call_guest_m(f_has_field, &[a, c, u32::from(w2), 9, at(L_HAS)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -3790,7 +4344,6 @@ fn fn_1f98c8_inner(
                     {
                         return (FAIL_MEM, bufs);
                     }
-
                     let sp_2759 = SP_1F98C8_ENTRY.wrapping_sub(F1F98C8_FRAME);
                     status = fn_275928_m(
                         m,
@@ -3814,7 +4367,6 @@ fn fn_1f98c8_inner(
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-
                     text_copy = g_word(m, at(L_TEXT)).unwrap_or(0);
                     bufs[0] = text_copy;
                     tok = g_half(m, at(L_TOK)).unwrap_or(0);
@@ -3823,7 +4375,7 @@ fn fn_1f98c8_inner(
                     if !p_word(m, at(L_STR3), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_get_field_ptr,
                         &[a, c, u32::from(w2), 3, at(L_STR3), at(L_N)],
                         m,
@@ -3867,7 +4419,7 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_W2), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(f_get_next, &[a, c, u32::from(w2), at(L_W2)], m);
+                status = h.call_guest_m(f_get_next, &[a, c, u32::from(w2), at(L_W2)], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -3877,14 +4429,13 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_W2), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_next, &[a, c, u32::from(w2), at(L_W2)], m);
+            status = h.call_guest_m(f_get_next, &[a, c, u32::from(w2), at(L_W2)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
             w2 = g_half(m, at(L_W2)).unwrap_or(0);
         }
     }
-
     let f50 = g_half(m, p.wrapping_add(FE_F50)).unwrap_or(0) as i16;
     if f50 > 0 {
         let mut mmark = mi;
@@ -3892,7 +4443,9 @@ fn fn_1f98c8_inner(
             let pos = f198c8_mark_pos(m, markers, mmark);
             if !p_word(
                 m,
-                markers.wrapping_add(u32::from(mmark).wrapping_mul(MARKER_LEN)).wrapping_add(MARKER_POS),
+                markers
+                    .wrapping_add(u32::from(mmark).wrapping_mul(MARKER_LEN))
+                    .wrapping_add(MARKER_POS),
                 pos.wrapping_add(f50 as u32),
             ) {
                 return (FAIL_MEM, bufs);
@@ -3910,7 +4463,11 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_WSTART), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_field, &[a, c, u32::from(f68), 1, 1, at(L_WSTART), at(L_N)], m);
+            status = h.call_guest_m(
+                f_get_field,
+                &[a, c, u32::from(f68), 1, 1, at(L_WSTART), at(L_N)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -3920,7 +4477,11 @@ fn fn_1f98c8_inner(
             if !p_byte(m, at(L_WTYPE), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_field, &[a, c, u32::from(f68), 0, 1, at(L_WTYPE), at(L_N)], m);
+            status = h.call_guest_m(
+                f_get_field,
+                &[a, c, u32::from(f68), 0, 1, at(L_WTYPE), at(L_N)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -3929,7 +4490,11 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_WEND), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(f_get_field, &[a, c, u32::from(f68), 2, 1, at(L_WEND), at(L_N)], m);
+                status = h.call_guest_m(
+                    f_get_field,
+                    &[a, c, u32::from(f68), 2, 1, at(L_WEND), at(L_N)],
+                    m,
+                );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -3939,7 +4504,7 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_WSTART), wstart) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set_field,
                     &[a, c, u32::from(f68), 1, 1, at(L_WSTART), at(L_X)],
                     m,
@@ -3950,7 +4515,7 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_WEND), wend) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set_field,
                     &[a, c, u32::from(f68), 2, 1, at(L_WEND), at(L_X)],
                     m,
@@ -3962,7 +4527,7 @@ fn fn_1f98c8_inner(
             if !p_half(m, p.wrapping_add(0x68), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_next, &[a, c, u32::from(f68), p.wrapping_add(0x68)], m);
+            status = h.call_guest_m(f_get_next, &[a, c, u32::from(f68), p.wrapping_add(0x68)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -3971,7 +4536,11 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_WSTART), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(f_get_field, &[a, c, u32::from(f68), 1, 1, at(L_WSTART), at(L_N)], m);
+                status = h.call_guest_m(
+                    f_get_field,
+                    &[a, c, u32::from(f68), 1, 1, at(L_WSTART), at(L_N)],
+                    m,
+                );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -3983,7 +4552,7 @@ fn fn_1f98c8_inner(
         }
     }
     text_pos = text_pos.wrapping_add(f50 as u32);
-    status = h.call_m(f_set_pos, &[h2_a, h2_b, text_pos, 0], m);
+    status = h.call_guest_m(f_set_pos, &[h2_a, h2_b, text_pos, 0], m);
     if status >= 0x80000000 {
         return (status, bufs);
     }
@@ -3991,23 +4560,29 @@ fn fn_1f98c8_inner(
         return (FAIL_MEM, bufs);
     }
     let tclen = h.call_m(0x195d90, &[text_copy], m);
-
     if !p_word(m, markers.wrapping_add(MARKER_LEN_OFF), tclen) {
         return (FAIL_MEM, bufs);
     }
-    status = h.call_m(
+    status = h.call_guest_m(
         f_set_field,
-        &[a, c, u32::from(root), 0, tclen.wrapping_add(1), text_copy, at(L_X)],
+        &[
+            a,
+            c,
+            u32::from(root),
+            0,
+            tclen.wrapping_add(1),
+            text_copy,
+            at(L_X),
+        ],
         m,
     );
     if status >= 0x80000000 {
         return (status, bufs);
     }
-
     if !p_half(m, at(L_TOK), 0) {
         return (FAIL_MEM, bufs);
     }
-    status = h.call_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
+    status = h.call_guest_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
     if status >= 0x80000000 {
         return (status, bufs);
     }
@@ -4017,13 +4592,17 @@ fn fn_1f98c8_inner(
         if !p_byte(m, at(L_WTYPE), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
         let wt = g_byte(m, at(L_WTYPE)).unwrap_or(0);
         if wt <= 3 {
-            status = h.call_m(f_remove, &[a, c, u32::from(tok)], m);
+            status = h.call_guest_m(f_remove, &[a, c, u32::from(tok)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -4033,20 +4612,19 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_TOK), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
+            status = h.call_guest_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
         } else {
             prev = tok;
             if !p_half(m, at(L_TOK), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_next, &[a, c, u32::from(prev), at(L_TOK)], m);
+            status = h.call_guest_m(f_get_next, &[a, c, u32::from(prev), at(L_TOK)], m);
         }
         if status >= 0x80000000 {
             return (status, bufs);
         }
         tok = g_half(m, at(L_TOK)).unwrap_or(0);
     }
-
     mi = 0;
     if !p_half(m, at(L_MI), 0) {
         return (FAIL_MEM, bufs);
@@ -4059,27 +4637,36 @@ fn fn_1f98c8_inner(
     if !p_half(m, at(L_TOK), 0) {
         return (FAIL_MEM, bufs);
     }
-    status = h.call_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
+    status = h.call_guest_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
     if status >= 0x80000000 {
         return (status, bufs);
     }
     tok = g_half(m, at(L_TOK)).unwrap_or(0);
     while tok != 0 {
-        if !p_byte(m, at(L_WTYPE), 0)
-            || !p_half(m, at(L_START), 0)
-            || !p_half(m, at(L_END), 0)
-        {
+        if !p_byte(m, at(L_WTYPE), 0) || !p_half(m, at(L_START), 0) || !p_half(m, at(L_END), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
-        status = h.call_m(f_get_field, &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -4090,7 +4677,7 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_HAS), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_has_field, &[a, c, u32::from(tok), 11, at(L_HAS)], m);
+            status = h.call_guest_m(f_has_field, &[a, c, u32::from(tok), 11, at(L_HAS)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -4098,7 +4685,7 @@ fn fn_1f98c8_inner(
                 if !p_word(m, at(L_STR4), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_field_ptr,
                     &[a, c, u32::from(tok), 11, at(L_STR4), at(L_N)],
                     m,
@@ -4107,11 +4694,11 @@ fn fn_1f98c8_inner(
                     return (status, bufs);
                 }
                 let alt = g_word(m, at(L_STR4)).unwrap_or(0);
-                let s = h.call_m(0x1960a8, &[alt, 0x1fb9bc], m);
+                let s = h.call_m(0x1960a8, &[alt, s_lit(h.rom(), 0x1fb9bc)], m);
                 if s != 0 && !p_byte(m, s, 0) {
                     return (FAIL_MEM, bufs);
                 }
-                let s = h.call_m(0x1960a8, &[alt, 0x1fb9c0], m);
+                let s = h.call_m(0x1960a8, &[alt, s_lit(h.rom(), 0x1fb9c0)], m);
                 if s != 0 && !p_byte(m, s, 0) {
                     return (FAIL_MEM, bufs);
                 }
@@ -4120,7 +4707,7 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_TOK), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
+            status = h.call_guest_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -4134,7 +4721,7 @@ fn fn_1f98c8_inner(
                 let mut k = 0u8;
                 while (k as u16) < n_del {
                     let id = g_half(m, at(L_DELIDS).wrapping_add((k as u32) * 2)).unwrap_or(0);
-                    status = h.call_m(f_remove, &[a, c, u32::from(id)], m);
+                    status = h.call_guest_m(f_remove, &[a, c, u32::from(id)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -4159,7 +4746,7 @@ fn fn_1f98c8_inner(
                 let mut word_buf = bufs[1];
                 let grown = h.call_m(0x1963e0, &[heap, word_buf, need], m);
                 if grown == 0 {
-                    h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                    h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                     return (0x89b0200a, bufs);
                 }
                 word_buf = grown;
@@ -4184,9 +4771,17 @@ fn fn_1f98c8_inner(
                     return (FAIL_MEM, bufs);
                 }
                 let wblen = h.call_m(0x195d90, &[word_buf], m);
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set_field,
-                    &[a, c, u32::from(tok), 10, wblen.wrapping_add(1), word_buf, at(L_X)],
+                    &[
+                        a,
+                        c,
+                        u32::from(tok),
+                        10,
+                        wblen.wrapping_add(1),
+                        word_buf,
+                        at(L_X),
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
@@ -4196,7 +4791,7 @@ fn fn_1f98c8_inner(
                 if !p_word(m, at(L_STR3), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_field_ptr,
                     &[a, c, u32::from(tok), 3, at(L_STR3), at(L_N)],
                     m,
@@ -4215,8 +4810,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_LEN), 0xffff) {
                         return (FAIL_MEM, bufs);
                     }
-
-                    let src = D_8f9524.wrapping_add(8);
+                    let src = s_lit(h.rom(), D_8f9524).wrapping_add(8);
                     let mut i = 0u32;
                     while i < 8 {
                         let ch = g_byte(m, src.wrapping_add(i)).unwrap_or(0);
@@ -4232,12 +4826,28 @@ fn fn_1f98c8_inner(
                     }
                     if crate::rom_region::to_us_guest(h.rom(), f_get_string) == 0x1ea4e0 {
                         status = fn_1ea4e0_m(
-                            m, h, h_a, h_b, s_fecfg(h.rom()), at(L_KEY), at(L_VAL), at(L_LEN), at(L_SEP),
+                            m,
+                            h,
+                            h_a,
+                            h_b,
+                            s_fecfg(h.rom()),
+                            at(L_KEY),
+                            at(L_VAL),
+                            at(L_LEN),
+                            at(L_SEP),
                         );
                     } else {
-                        status = h.call_m(
+                        status = h.call_guest_m(
                             f_get_string,
-                            &[h_a, h_b, s_fecfg(h.rom()), at(L_KEY), at(L_VAL), at(L_LEN), at(L_SEP)],
+                            &[
+                                h_a,
+                                h_b,
+                                s_fecfg(h.rom()),
+                                at(L_KEY),
+                                at(L_VAL),
+                                at(L_LEN),
+                                at(L_SEP),
+                            ],
                             m,
                         );
                     }
@@ -4262,7 +4872,7 @@ fn fn_1f98c8_inner(
             if !p_word(m, at(L_STR5), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_get_field_ptr,
                 &[a, c, u32::from(tok), 5, at(L_STR5), at(L_N)],
                 m,
@@ -4287,7 +4897,7 @@ fn fn_1f98c8_inner(
             if !p_word(m, at(L_STR3), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_get_field_ptr,
                 &[a, c, u32::from(tok), 3, at(L_STR3), at(L_N)],
                 m,
@@ -4300,14 +4910,20 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_END), 0) || !p_half(m, at(L_F7), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status =
-                    h.call_m(f_get_field, &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)], m);
+                status = h.call_guest_m(
+                    f_get_field,
+                    &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)],
+                    m,
+                );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
                 let end = g_half(m, at(L_END)).unwrap_or(0);
-                status =
-                    h.call_m(f_get_field, &[a, c, u32::from(tok), 7, 1, at(L_F7), at(L_N)], m);
+                status = h.call_guest_m(
+                    f_get_field,
+                    &[a, c, u32::from(tok), 7, 1, at(L_F7), at(L_N)],
+                    m,
+                );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -4315,7 +4931,7 @@ fn fn_1f98c8_inner(
                 if !p_word(m, at(L_STR4), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_field_ptr,
                     &[a, c, u32::from(tok), 9, at(L_STR4), at(L_N)],
                     m,
@@ -4327,7 +4943,7 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_HAS), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(f_has_field, &[a, c, u32::from(tok), 8, at(L_HAS)], m);
+                status = h.call_guest_m(f_has_field, &[a, c, u32::from(tok), 8, at(L_HAS)], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -4336,7 +4952,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_WSTART), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_get_field,
                         &[a, c, u32::from(tok), 8, 1, at(L_WSTART), at(L_N)],
                         m,
@@ -4349,7 +4965,7 @@ fn fn_1f98c8_inner(
                 if !p_word(m, at(L_STR5), 0) || !p_word(m, at(L_STR6), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_field_ptr,
                     &[a, c, u32::from(tok), 5, at(L_STR5), at(L_N)],
                     m,
@@ -4357,7 +4973,7 @@ fn fn_1f98c8_inner(
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_field_ptr,
                     &[a, c, u32::from(tok), 6, at(L_STR6), at(L_N)],
                     m,
@@ -4370,12 +4986,11 @@ fn fn_1f98c8_inner(
                 let need3 = h.call_m(0x195d90, &[str3], m).wrapping_add(1);
                 let need5 = h.call_m(0x195d90, &[str5], m).wrapping_add(1);
                 let need6 = h.call_m(0x195d90, &[str6b], m).wrapping_add(1);
-
                 let b54_1 = g_word(m, p.wrapping_add(0x58)).unwrap_or(0);
                 if need3 > 128 {
                     let q = h.call_m(0x1963e0, &[heap, b54_1, need3], m);
                     if q == 0 {
-                        h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                        h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                         return (0x89b0200a, bufs);
                     }
                     if !p_word(m, p.wrapping_add(0x58), q) {
@@ -4386,7 +5001,7 @@ fn fn_1f98c8_inner(
                 if need5 > 128 {
                     let q = h.call_m(0x1963e0, &[heap, b54_2, need5], m);
                     if q == 0 {
-                        h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                        h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                         return (0x89b0200a, bufs);
                     }
                     if !p_word(m, p.wrapping_add(0x5c), q) {
@@ -4397,7 +5012,7 @@ fn fn_1f98c8_inner(
                 if need6 > 128 {
                     let q = h.call_m(0x1963e0, &[heap, b54_3, need6], m);
                     if q == 0 {
-                        h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                        h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                         return (0x89b0200a, bufs);
                     }
                     if !p_word(m, p.wrapping_add(0x60), q) {
@@ -4429,7 +5044,13 @@ fn fn_1f98c8_inner(
                 while sp3 != 0 {
                     loop {
                         let ch = g_byte(m, text_copy.wrapping_add(u32::from(pos))).unwrap_or(0);
-                        if ch == 0 || ch == b' ' || ch == b'\t' || ch == b'\n' || ch == b'\r' || ch == b'_' {
+                        if ch == 0
+                            || ch == b' '
+                            || ch == b'\t'
+                            || ch == b'\n'
+                            || ch == b'\r'
+                            || ch == b'_'
+                        {
                             break;
                         }
                         pos = pos.wrapping_add(1);
@@ -4437,7 +5058,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_END), pos) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set_field,
                         &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_X)],
                         m,
@@ -4450,7 +5071,7 @@ fn fn_1f98c8_inner(
                         return (FAIL_MEM, bufs);
                     }
                     let phlen = h.call_m(0x195d90, &[ph], m);
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set_field,
                         &[a, c, u32::from(tok), 3, phlen.wrapping_add(1), ph, at(L_X)],
                         m,
@@ -4463,9 +5084,17 @@ fn fn_1f98c8_inner(
                         return (FAIL_MEM, bufs);
                     }
                     let p5len = h.call_m(0x195d90, &[pos5], m);
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set_field,
-                        &[a, c, u32::from(tok), 5, p5len.wrapping_add(1), pos5, at(L_X)],
+                        &[
+                            a,
+                            c,
+                            u32::from(tok),
+                            5,
+                            p5len.wrapping_add(1),
+                            pos5,
+                            at(L_X),
+                        ],
                         m,
                     );
                     if status >= 0x80000000 {
@@ -4474,14 +5103,21 @@ fn fn_1f98c8_inner(
                     if sp5 != 0 {
                         pos5 = sp5.wrapping_add(1);
                     }
-
                     if !p_byte(m, sp6, 0) {
                         return (FAIL_MEM, bufs);
                     }
                     let p6len = h.call_m(0x195d90, &[pos6], m);
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set_field,
-                        &[a, c, u32::from(tok), 6, p6len.wrapping_add(1), pos6, at(L_X)],
+                        &[
+                            a,
+                            c,
+                            u32::from(tok),
+                            6,
+                            p6len.wrapping_add(1),
+                            pos6,
+                            at(L_X),
+                        ],
                         m,
                     );
                     if status >= 0x80000000 {
@@ -4492,7 +5128,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_WEND), wend) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set_field,
                         &[a, c, u32::from(tok), 8, 1, at(L_WEND), at(L_X)],
                         m,
@@ -4506,7 +5142,7 @@ fn fn_1f98c8_inner(
                         if !p_half(m, at(L_TOK), 0) {
                             return (FAIL_MEM, bufs);
                         }
-                        status = h.call_m(f_get_next, &[a, c, u32::from(prev), at(L_TOK)], m);
+                        status = h.call_guest_m(f_get_next, &[a, c, u32::from(prev), at(L_TOK)], m);
                         if status >= 0x80000000 {
                             return (status, bufs);
                         }
@@ -4515,7 +5151,7 @@ fn fn_1f98c8_inner(
                             if !p_half(m, at(L_START), 0) {
                                 return (FAIL_MEM, bufs);
                             }
-                            status = h.call_m(
+                            status = h.call_guest_m(
                                 f_get_field,
                                 &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)],
                                 m,
@@ -4529,7 +5165,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_W), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(f_new_record, &[a, c, u32::from(prev), at(L_W)], m);
+                    status = h.call_guest_m(f_new_record, &[a, c, u32::from(prev), at(L_W)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -4537,7 +5173,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_END), pos) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set_field,
                         &[a, c, u32::from(tok), 1, 1, at(L_END), at(L_X)],
                         m,
@@ -4548,7 +5184,7 @@ fn fn_1f98c8_inner(
                     if !p_byte(m, at(L_WTYPE), wtype) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set_field,
                         &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_X)],
                         m,
@@ -4559,7 +5195,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_F7), f7) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set_field,
                         &[a, c, u32::from(tok), 7, 1, at(L_F7), at(L_X)],
                         m,
@@ -4568,9 +5204,17 @@ fn fn_1f98c8_inner(
                         return (status, bufs);
                     }
                     let langlen = h.call_m(0x195d90, &[lang], m);
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set_field,
-                        &[a, c, u32::from(tok), 9, langlen.wrapping_add(1), lang, at(L_X)],
+                        &[
+                            a,
+                            c,
+                            u32::from(tok),
+                            9,
+                            langlen.wrapping_add(1),
+                            lang,
+                            at(L_X),
+                        ],
                         m,
                     );
                     if status >= 0x80000000 {
@@ -4584,7 +5228,7 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_END), end) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set_field,
                     &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_X)],
                     m,
@@ -4593,7 +5237,7 @@ fn fn_1f98c8_inner(
                     return (status, bufs);
                 }
                 let phlen = h.call_m(0x195d90, &[ph], m);
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set_field,
                     &[a, c, u32::from(tok), 3, phlen.wrapping_add(1), ph, at(L_X)],
                     m,
@@ -4602,18 +5246,34 @@ fn fn_1f98c8_inner(
                     return (status, bufs);
                 }
                 let p5len = h.call_m(0x195d90, &[pos5], m);
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set_field,
-                    &[a, c, u32::from(tok), 5, p5len.wrapping_add(1), pos5, at(L_X)],
+                    &[
+                        a,
+                        c,
+                        u32::from(tok),
+                        5,
+                        p5len.wrapping_add(1),
+                        pos5,
+                        at(L_X),
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
                 let p6len = h.call_m(0x195d90, &[pos6], m);
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set_field,
-                    &[a, c, u32::from(tok), 6, p6len.wrapping_add(1), pos6, at(L_X)],
+                    &[
+                        a,
+                        c,
+                        u32::from(tok),
+                        6,
+                        p6len.wrapping_add(1),
+                        pos6,
+                        at(L_X),
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
@@ -4622,7 +5282,7 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_WEND), wstart) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set_field,
                     &[a, c, u32::from(tok), 8, 1, at(L_WEND), at(L_X)],
                     m,
@@ -4632,11 +5292,10 @@ fn fn_1f98c8_inner(
                 }
             }
         }
-
         if !p_half(m, at(L_TOK), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
+        status = h.call_guest_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -4646,14 +5305,13 @@ fn fn_1f98c8_inner(
         let mut k = 0u8;
         while (k as u16) < n_del {
             let id = g_half(m, at(L_DELIDS).wrapping_add((k as u32) * 2)).unwrap_or(0);
-            status = h.call_m(f_remove, &[a, c, u32::from(id)], m);
+            status = h.call_guest_m(f_remove, &[a, c, u32::from(id)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
             k = k.wrapping_add(1);
         }
     }
-
     if dps_multi != 0 {
         if !f198c8_puts(m, at(0x33c), b"multi_trans_")
             || !f198c8_puts(m, at(0x34a), b"%s L1: %s")
@@ -4666,7 +5324,7 @@ fn fn_1f98c8_inner(
         if !p_half(m, at(L_TOK), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
+        status = h.call_guest_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -4675,7 +5333,11 @@ fn fn_1f98c8_inner(
             if !p_byte(m, at(L_WTYPE), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_field, &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_N)], m);
+            status = h.call_guest_m(
+                f_get_field,
+                &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_N)],
+                m,
+            );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -4684,7 +5346,7 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_HAS), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(f_has_field, &[a, c, u32::from(tok), 11, at(L_HAS)], m);
+                status = h.call_guest_m(f_has_field, &[a, c, u32::from(tok), 11, at(L_HAS)], m);
                 if status >= 0x80000000 {
                     status = 0;
                     if !p_half(m, at(L_HAS), 0) {
@@ -4694,7 +5356,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_TOK), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
+                    status = h.call_guest_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -4704,11 +5366,19 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_START), 0) || !p_half(m, at(L_END), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(f_get_field, &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)], m);
+                status = h.call_guest_m(
+                    f_get_field,
+                    &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)],
+                    m,
+                );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
-                status = h.call_m(f_get_field, &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)], m);
+                status = h.call_guest_m(
+                    f_get_field,
+                    &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)],
+                    m,
+                );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -4724,9 +5394,17 @@ fn fn_1f98c8_inner(
                 let _ = h.call_m(0x195d90, &[at(L_TMP)], m);
                 if end.wrapping_sub(start).wrapping_add(1) > 128 {
                     let cur = g_word(m, p.wrapping_add(0x40)).unwrap_or(0);
-                    let q = h.call_m(0x1963e0, &[heap, cur, u32::from(end.wrapping_sub(start).wrapping_add(1))], m);
+                    let q = h.call_m(
+                        0x1963e0,
+                        &[
+                            heap,
+                            cur,
+                            u32::from(end.wrapping_sub(start).wrapping_add(1)),
+                        ],
+                        m,
+                    );
                     if q == 0 {
-                        h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                        h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                         return (0x89b0200a, bufs);
                     }
                     if !p_word(m, p.wrapping_add(0x40), q) {
@@ -4734,8 +5412,12 @@ fn fn_1f98c8_inner(
                     }
                 }
                 let b400 = g_word(m, p.wrapping_add(0x40)).unwrap_or(0);
-
-                if !f195e38_copy(m, b400, text_copy.wrapping_add(u32::from(start)), u32::from(end.wrapping_sub(start))) {
+                if !f195e38_copy(
+                    m,
+                    b400,
+                    text_copy.wrapping_add(u32::from(start)),
+                    u32::from(end.wrapping_sub(start)),
+                ) {
                     return (FAIL_MEM, bufs);
                 }
                 status = 0;
@@ -4743,14 +5425,14 @@ fn fn_1f98c8_inner(
                     return (FAIL_MEM, bufs);
                 }
                 let f_add_word = g_word(m, cfg_vt.wrapping_add(CFG_ADD_WORD * 4)).unwrap_or(0);
-                status = h.call_m(f_add_word, &[h_a, h_b, str4_last, b400], m);
+                status = h.call_guest_m(f_add_word, &[h_a, h_b, str4_last, b400], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
                 if !p_word(m, at(L_STR3), 0) || !p_word(m, at(L_STR4), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_field_ptr,
                     &[a, c, u32::from(tok), 3, at(L_STR3), at(L_N)],
                     m,
@@ -4758,7 +5440,7 @@ fn fn_1f98c8_inner(
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_get_field_ptr,
                     &[a, c, u32::from(tok), 9, at(L_STR4), at(L_N)],
                     m,
@@ -4778,7 +5460,11 @@ fn fn_1f98c8_inner(
                 let mut k = 0u8;
                 let mut run_total = 3u16;
                 while k < dps_multi {
-                    status = h.call_m(0x176ac8, &[u32::from(k).wrapping_add(1), at(L_NUMBUF), 10], m);
+                    status = h.call_m(
+                        0x176ac8,
+                        &[u32::from(k).wrapping_add(1), at(L_NUMBUF), 10],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -4787,14 +5473,14 @@ fn fn_1f98c8_inner(
                         return (status, bufs);
                     }
                     let s3len = h.call_m(0x195d90, &[str3], m);
-                    status = h.call_m(f_tr_set, &[h2_a, h2_b, 0, str3, s3len], m);
+                    status = h.call_guest_m(f_tr_set, &[h2_a, h2_b, 0, str3, s3len], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
                     if !p_word(m, at(0x260), 0) || !p_half(m, at(0x264), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(f_tr_get, &[h2_a, h2_b, 0, at(0x260), at(0x264)], m);
+                    status = h.call_guest_m(f_tr_get, &[h2_a, h2_b, 0, at(0x260), at(0x264)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -4813,7 +5499,8 @@ fn fn_1f98c8_inner(
                         i = i.wrapping_add(1);
                     }
                     if g_byte(m, lang).unwrap_or(0) != 0 {
-                        status = h.call_m(f_tr_get, &[h2_a, h2_b, 2, at(0x260), at(0x264)], m);
+                        status =
+                            h.call_guest_m(f_tr_get, &[h2_a, h2_b, 2, at(0x260), at(0x264)], m);
                         if status >= 0x80000000 {
                             return (status, bufs);
                         }
@@ -4832,29 +5519,65 @@ fn fn_1f98c8_inner(
                                 j = j.wrapping_add(1);
                             }
                         }
-                        status = h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, at(0x35e), at(L_TMP), out0], m);
+                        status = h.call_m(
+                            0x1738e8,
+                            &[
+                                log,
+                                s_lit(h.rom(), D_8f9532),
+                                5,
+                                0,
+                                at(0x35e),
+                                at(L_TMP),
+                                out0,
+                            ],
+                            m,
+                        );
                         if status >= 0x80000000 {
                             return (status, bufs);
                         }
                     }
-                    status = h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, at(0x34a), at(L_TMP), out0], m);
+                    status = h.call_m(
+                        0x1738e8,
+                        &[
+                            log,
+                            s_lit(h.rom(), D_8f9532),
+                            5,
+                            0,
+                            at(0x34a),
+                            at(L_TMP),
+                            out0,
+                        ],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, at(0x354), at(L_TMP), b400], m);
+                    status = h.call_m(
+                        0x1738e8,
+                        &[
+                            log,
+                            s_lit(h.rom(), D_8f9532),
+                            5,
+                            0,
+                            at(0x354),
+                            at(L_TMP),
+                            b400,
+                        ],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
                     let b40len = h.call_m(0x195d90, &[b400], m);
-                    status = h.call_m(f_tr_set, &[h2_a, h2_b, 1, b400, b40len], m);
+                    status = h.call_guest_m(f_tr_set, &[h2_a, h2_b, 1, b400, b40len], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_tr_sel, &[h2_a, h2_b, at(L_TMP)], m);
+                    status = h.call_guest_m(f_tr_sel, &[h2_a, h2_b, at(L_TMP)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_tr_get, &[h2_a, h2_b, 0, at(0x260), at(0x264)], m);
+                    status = h.call_guest_m(f_tr_get, &[h2_a, h2_b, 0, at(0x260), at(0x264)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -4863,7 +5586,19 @@ fn fn_1f98c8_inner(
                     if !p_byte(m, out0b.wrapping_add(u32::from(tlen)), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, at(0x368), at(L_TMP), out0b], m);
+                    status = h.call_m(
+                        0x1738e8,
+                        &[
+                            log,
+                            s_lit(h.rom(), D_8f9532),
+                            5,
+                            0,
+                            at(0x368),
+                            at(L_TMP),
+                            out0b,
+                        ],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -4874,7 +5609,9 @@ fn fn_1f98c8_inner(
                         if ch == b'~' {
                             let mut j = ii;
                             while j < pos {
-                                let nx = g_byte(m, out0b.wrapping_add(u32::from(j).wrapping_add(1))).unwrap_or(0);
+                                let nx =
+                                    g_byte(m, out0b.wrapping_add(u32::from(j).wrapping_add(1)))
+                                        .unwrap_or(0);
                                 if !p_byte(m, out0b.wrapping_add(u32::from(j)), nx) {
                                     return (FAIL_MEM, bufs);
                                 }
@@ -4896,7 +5633,7 @@ fn fn_1f98c8_inner(
                             let cur = g_word(m, p.wrapping_add(0x44)).unwrap_or(0);
                             let q = h.call_m(0x1963e0, &[heap, cur, u32::from(run_total)], m);
                             if q == 0 {
-                                h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                                h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                                 return (0x89b0200a, bufs);
                             }
                             if !p_word(m, p.wrapping_add(0x44), q) {
@@ -4908,7 +5645,6 @@ fn fn_1f98c8_inner(
                         if status >= 0x80000000 {
                             return (status, bufs);
                         }
-
                         if !p_byte(m, at(0x268), 0x12) || !p_byte(m, at(0x269), 0) {
                             return (FAIL_MEM, bufs);
                         }
@@ -4925,7 +5661,7 @@ fn fn_1f98c8_inner(
                     if !p_byte(m, dst.wrapping_add(blen.wrapping_sub(1)), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set_field,
                         &[a, c, u32::from(tok), 11, blen.wrapping_add(1), dst, at(L_X)],
                         m,
@@ -4938,14 +5674,13 @@ fn fn_1f98c8_inner(
             if !p_half(m, at(L_TOK), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
+            status = h.call_guest_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
             tok = g_half(m, at(L_TOK)).unwrap_or(0);
         }
     }
-
     let no_ext_clc = g_byte(m, p.wrapping_add(FE_NO_EXT_CLC)).unwrap_or(0);
     if no_ext_clc == 0 {
         return (status, bufs);
@@ -4959,7 +5694,7 @@ fn fn_1f98c8_inner(
         if !p_half(m, at(L_TOK), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
+        status = h.call_guest_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -4969,8 +5704,11 @@ fn fn_1f98c8_inner(
                 if !p_byte(m, at(L_WTYPE), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status =
-                    h.call_m(f_get_field, &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_N)], m);
+                status = h.call_guest_m(
+                    f_get_field,
+                    &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_N)],
+                    m,
+                );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -4979,7 +5717,7 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_START), 0) || !p_half(m, at(L_END), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_get_field,
                         &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)],
                         m,
@@ -4987,7 +5725,7 @@ fn fn_1f98c8_inner(
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_get_field,
                         &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)],
                         m,
@@ -5000,7 +5738,7 @@ fn fn_1f98c8_inner(
                     if !p_word(m, at(L_STR4), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_get_field_ptr,
                         &[a, c, u32::from(tok), 9, at(L_STR4), at(L_N)],
                         m,
@@ -5014,7 +5752,15 @@ fn fn_1f98c8_inner(
                         if foreign == 0 {
                             status = h.call_m(
                                 0x1f932c,
-                                &[p, a, c, u32::from(prev_tok), u32::from(prev_start), u32::from(prev_end), text_copy],
+                                &[
+                                    p,
+                                    a,
+                                    c,
+                                    u32::from(prev_tok),
+                                    u32::from(prev_start),
+                                    u32::from(prev_end),
+                                    text_copy,
+                                ],
                                 m,
                             );
                             if status >= 0x80000000 {
@@ -5036,7 +5782,7 @@ fn fn_1f98c8_inner(
                 if !p_half(m, at(L_TOK), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(f_get_next, &[a, c, u32::from(prev_tok), at(L_TOK)], m);
+                status = h.call_guest_m(f_get_next, &[a, c, u32::from(prev_tok), at(L_TOK)], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -5045,27 +5791,31 @@ fn fn_1f98c8_inner(
                     break;
                 }
             }
-            if foreign == 0 {
-
-            }
+            if foreign == 0 {}
         }
         if foreign == 0 {
             status = h.call_m(
                 0x1f932c,
-                &[p, a, c, u32::from(prev_tok), u32::from(prev_start), u32::from(prev_end), text_copy],
+                &[
+                    p,
+                    a,
+                    c,
+                    u32::from(prev_tok),
+                    u32::from(prev_start),
+                    u32::from(prev_end),
+                    text_copy,
+                ],
                 m,
             );
             if status >= 0x80000000 {
                 return (status, bufs);
             }
         }
-
         let no_ext_clc = g_byte(m, p.wrapping_add(FE_NO_EXT_CLC)).unwrap_or(0);
         if no_ext_clc == 0 {
             return (status, bufs);
         }
     }
-
     if !f198c8_puts(m, at(0x2d4), b"Phon before %s CLM %s")
         || !f198c8_puts(m, at(0x2ec), b"Phon after %s CLM %s")
         || !f198c8_puts(m, at(0x302), b"CLM failed for %s")
@@ -5080,7 +5830,7 @@ fn fn_1f98c8_inner(
     if !p_half(m, at(L_TOK), 0) {
         return (FAIL_MEM, bufs);
     }
-    status = h.call_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
+    status = h.call_guest_m(f_get_first, &[a, c, 2, u32::from(root), at(L_TOK)], m);
     if status >= 0x80000000 || g_half(m, at(L_TOK)).unwrap_or(0) == 0 {
         return (status, bufs);
     }
@@ -5089,8 +5839,11 @@ fn fn_1f98c8_inner(
         if !p_byte(m, at(L_WTYPE), 0) {
             return (FAIL_MEM, bufs);
         }
-        status =
-            h.call_m(f_get_field, &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_N)], m);
+        status = h.call_guest_m(
+            f_get_field,
+            &[a, c, u32::from(tok), 0, 1, at(L_WTYPE), at(L_N)],
+            m,
+        );
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -5099,7 +5852,7 @@ fn fn_1f98c8_inner(
             if !p_word(m, at(L_STR3), 0) || !p_word(m, at(L_STR4), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_get_field_ptr,
                 &[a, c, u32::from(tok), 3, at(L_STR3), at(L_N)],
                 m,
@@ -5107,7 +5860,7 @@ fn fn_1f98c8_inner(
             if status >= 0x80000000 {
                 return (status, bufs);
             }
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_get_field_ptr,
                 &[a, c, u32::from(tok), 9, at(L_STR4), at(L_N)],
                 m,
@@ -5118,9 +5871,17 @@ fn fn_1f98c8_inner(
             let str3 = g_word(m, at(L_STR3)).unwrap_or(0);
             let lang = g_word(m, at(L_STR4)).unwrap_or(0);
             let langlen = h.call_m(0x195d90, &[lang], m);
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_set_field,
-                &[a, c, u32::from(tok), 12, langlen.wrapping_add(1), lang, at(L_X)],
+                &[
+                    a,
+                    c,
+                    u32::from(tok),
+                    12,
+                    langlen.wrapping_add(1),
+                    lang,
+                    at(L_X),
+                ],
                 m,
             );
             if status >= 0x80000000 {
@@ -5129,7 +5890,7 @@ fn fn_1f98c8_inner(
             if !p_word(m, at(L_TMP), 0) {
                 return (FAIL_MEM, bufs);
             }
-            status = h.call_m(0x195cd0, &[at(L_TMP), 0x1fd178], m);
+            status = h.call_m(0x195cd0, &[at(L_TMP), s_lit(h.rom(), 0x1fd178)], m);
             if status >= 0x80000000 {
                 return (status, bufs);
             }
@@ -5144,19 +5905,19 @@ fn fn_1f98c8_inner(
             let mut clm = 0u32;
             if status < 0x80000000 {
                 clm = g_word(m, at(L_CLM)).unwrap_or(0);
-                if clm == 0 {
-
-                }
+                if clm == 0 {}
             } else {
                 clm = 0;
             }
             if clm == 0 {
-                status = h.call_m(0x195cd0, &[at(L_TMP), 0x1fd17c], m);
+                status = h.call_m(0x195cd0, &[at(L_TMP), s_lit(h.rom(), 0x1fd17c)], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
                 status = h.call_m(0x175a1c, &[params, at(L_TMP), at(L_CLM)], m);
-                if status >= 0x80000000 || h.call_m(0x1960a8, &[g_word(m, at(L_CLM)).unwrap_or(0), lang], m) == 0 {
+                if status >= 0x80000000
+                    || h.call_m(0x1960a8, &[g_word(m, at(L_CLM)).unwrap_or(0), lang], m) == 0
+                {
                     clm = 0;
                 } else {
                     status = h.call_m(0x195cd0, &[at(L_NO4), s_lit(h.rom(), S_NO)], m);
@@ -5167,15 +5928,18 @@ fn fn_1f98c8_inner(
                 }
             }
             if clm != 0
-                && (h.call_m(0x195d58, &[clm, 0x154ce8], m) != 0
-                    && (h.call_m(0x195d58, &[clm, s_lit(h.rom(), S_NO)], m) != 0 || clm_variants == 0))
+                && (h.call_m(0x195d58, &[clm, s_lit(h.rom(), 0x154ce8)], m) != 0
+                    && (h.call_m(0x195d58, &[clm, s_lit(h.rom(), S_NO)], m) != 0
+                        || clm_variants == 0))
             {
-
-            } else if h.call_m(0x1769d0, &[lang, g_word(m, p.wrapping_add(FE_LANG_CODE)).unwrap_or(0)], m) == 0
+            } else if h.call_m(
+                0x1769d0,
+                &[lang, g_word(m, p.wrapping_add(FE_LANG_CODE)).unwrap_or(0)],
+                m,
+            ) == 0
                 || h.call_m(0x195d58, &[lang, s_lit(h.rom(), 0x2702b8)], m) == 0
                 || h.call_m(0x195d58, &[lang, s_normal(h.rom())], m) == 0
             {
-
             } else {
                 let s3len = h.call_m(0x195d90, &[str3], m);
                 let clm_size = s3len.wrapping_add(1).wrapping_mul(4);
@@ -5203,7 +5967,7 @@ fn fn_1f98c8_inner(
                 }
                 let grown = h.call_m(0x1963e0, &[heap, bufs[2], clm_size], m);
                 if grown == 0 {
-                    h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                    h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                     return (0x89b0200a, bufs);
                 }
                 bufs[2] = grown;
@@ -5211,11 +5975,14 @@ fn fn_1f98c8_inner(
                 if !p_byte(m, clm_buf, 0) {
                     return (FAIL_MEM, bufs);
                 }
-                if clm != 0 && h.call_m(0x195d58, &[clm, s_lit(h.rom(), S_NO)], m) == 0 && clm_variants != 0 {
+                if clm != 0
+                    && h.call_m(0x195d58, &[clm, s_lit(h.rom(), S_NO)], m) == 0
+                    && clm_variants != 0
+                {
                     if !p_half(m, at(L_ONE), 1) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(f_new_record, &[a, c, u32::from(tok), at(L_NEWT)], m);
+                    status = h.call_guest_m(f_new_record, &[a, c, u32::from(tok), at(L_NEWT)], m);
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
@@ -5223,90 +5990,190 @@ fn fn_1f98c8_inner(
                     if !p_half(m, at(L_START), 0) || !p_half(m, at(L_END), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(f_get_field, &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)], m);
+                    status = h.call_guest_m(
+                        f_get_field,
+                        &[a, c, u32::from(tok), 1, 1, at(L_START), at(L_N)],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_get_field, &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)], m);
+                    status = h.call_guest_m(
+                        f_get_field,
+                        &[a, c, u32::from(tok), 2, 1, at(L_END), at(L_N)],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
                     if !p_byte(m, at(L_WTYPE), 15) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 0, 1, at(L_WTYPE), at(L_X)], m);
+                    status = h.call_guest_m(
+                        f_set_field,
+                        &[a, c, u32::from(new_tok), 0, 1, at(L_WTYPE), at(L_X)],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 1, 1, at(L_START), at(L_X)], m);
+                    status = h.call_guest_m(
+                        f_set_field,
+                        &[a, c, u32::from(new_tok), 1, 1, at(L_START), at(L_X)],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 2, 1, at(L_END), at(L_X)], m);
+                    status = h.call_guest_m(
+                        f_set_field,
+                        &[a, c, u32::from(new_tok), 2, 1, at(L_END), at(L_X)],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 5, 1, s_lit(h.rom(), STAR_S), at(L_X)], m);
+                    status = h.call_guest_m(
+                        f_set_field,
+                        &[
+                            a,
+                            c,
+                            u32::from(new_tok),
+                            5,
+                            1,
+                            s_lit(h.rom(), STAR_S),
+                            at(L_X),
+                        ],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 6, 1, s_lit(h.rom(), STAR_S), at(L_X)], m);
+                    status = h.call_guest_m(
+                        f_set_field,
+                        &[
+                            a,
+                            c,
+                            u32::from(new_tok),
+                            6,
+                            1,
+                            s_lit(h.rom(), STAR_S),
+                            at(L_X),
+                        ],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 7, 1, at(L_ONE), at(L_X)], m);
+                    status = h.call_guest_m(
+                        f_set_field,
+                        &[a, c, u32::from(new_tok), 7, 1, at(L_ONE), at(L_X)],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
-                    status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 12, 4, at(0x2d0)], m);
+                    status = h.call_guest_m(
+                        f_set_field,
+                        &[a, c, u32::from(new_tok), 12, 4, at(0x2d0)],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
                 }
                 status = h.call_m(
                     0x1738e8,
-                    &[log, D_8f9532, 5, 0, at(0x2d4), at(L_CODE), str3],
+                    &[
+                        log,
+                        s_lit(h.rom(), D_8f9532),
+                        5,
+                        0,
+                        at(0x2d4),
+                        at(L_CODE),
+                        str3,
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_clm_map,
-                    &[h4_a, h4_b, at(L_CODE), str3, s3len.wrapping_add(1), clm_buf, clm_size],
+                    &[
+                        h4_a,
+                        h4_b,
+                        at(L_CODE),
+                        str3,
+                        s3len.wrapping_add(1),
+                        clm_buf,
+                        clm_size,
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
-                    status = h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, at(0x302), str3], m);
+                    status = h.call_m(
+                        0x1738e8,
+                        &[log, s_lit(h.rom(), D_8f9532), 5, 0, at(0x302), str3],
+                        m,
+                    );
                     if status >= 0x80000000 {
                         return (status, bufs);
                     }
                 }
                 status = h.call_m(
                     0x1738e8,
-                    &[log, D_8f9532, 5, 0, at(0x2ec), at(L_CODE), clm_buf],
+                    &[
+                        log,
+                        s_lit(h.rom(), D_8f9532),
+                        5,
+                        0,
+                        at(0x2ec),
+                        at(L_CODE),
+                        clm_buf,
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
                 let cblen = h.call_m(0x195d90, &[clm_buf], m);
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set_field,
-                    &[a, c, u32::from(new_tok), 3, cblen.wrapping_add(1), clm_buf, at(L_X)],
+                    &[
+                        a,
+                        c,
+                        u32::from(new_tok),
+                        3,
+                        cblen.wrapping_add(1),
+                        clm_buf,
+                        at(L_X),
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
-                status = h.call_m(f_set_field, &[a, c, u32::from(new_tok), 9, 1, s_lit(h.rom(), 0x2702b8), at(L_X)], m);
+                status = h.call_guest_m(
+                    f_set_field,
+                    &[
+                        a,
+                        c,
+                        u32::from(new_tok),
+                        9,
+                        1,
+                        s_lit(h.rom(), 0x2702b8),
+                        at(L_X),
+                    ],
+                    m,
+                );
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
                 if !p_half(m, at(L_HAS), 0) {
                     return (FAIL_MEM, bufs);
                 }
-                status = h.call_m(f_has_field, &[a, c, u32::from(tok), 11, at(L_HAS)], m);
+                status = h.call_guest_m(f_has_field, &[a, c, u32::from(tok), 11, at(L_HAS)], m);
                 if status >= 0x80000000 {
                     return (status, bufs);
                 }
@@ -5314,7 +6181,7 @@ fn fn_1f98c8_inner(
                     if !p_word(m, at(L_STR3), 0) {
                         return (FAIL_MEM, bufs);
                     }
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_get_field_ptr,
                         &[a, c, u32::from(tok), 11, at(L_STR3), at(L_N)],
                         m,
@@ -5325,10 +6192,13 @@ fn fn_1f98c8_inner(
                     let alt3 = g_word(m, at(L_STR3)).unwrap_or(0);
                     if h.call_m(0x195d58, &[alt3, s_lit(h.rom(), 0x2702b8)], m) != 0 {
                         let alen = h.call_m(0x195d90, &[alt3], m);
-                        let grown =
-                            h.call_m(0x1963e0, &[heap, bufs[3], alen.wrapping_add(1).wrapping_mul(4)], m);
+                        let grown = h.call_m(
+                            0x1963e0,
+                            &[heap, bufs[3], alen.wrapping_add(1).wrapping_mul(4)],
+                            m,
+                        );
                         if grown == 0 {
-                            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                             return (0x89b0200a, bufs);
                         }
                         bufs[3] = grown;
@@ -5356,7 +6226,15 @@ fn fn_1f98c8_inner(
                             }
                             status = h.call_m(
                                 0x1738e8,
-                                &[log, D_8f9532, 5, 0, at(0x2d4), at(L_CODE), s3],
+                                &[
+                                    log,
+                                    s_lit(h.rom(), D_8f9532),
+                                    5,
+                                    0,
+                                    at(0x2d4),
+                                    at(L_CODE),
+                                    s3,
+                                ],
                                 m,
                             );
                             if status >= 0x80000000 {
@@ -5371,13 +6249,17 @@ fn fn_1f98c8_inner(
                                 }
                                 let grown = h.call_m(0x1963e0, &[heap, clm_buf, need], m);
                                 if grown == 0 {
-                                    h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                                    h.call_m(
+                                        0x173dc0,
+                                        &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0],
+                                        m,
+                                    );
                                     return (0x89b0200a, bufs);
                                 }
                                 bufs[2] = grown;
                             }
                             let clm_buf2 = bufs[2];
-                            status = h.call_m(
+                            status = h.call_guest_m(
                                 f_clm_map,
                                 &[
                                     h4_a,
@@ -5391,14 +6273,26 @@ fn fn_1f98c8_inner(
                                 m,
                             );
                             if status >= 0x80000000 {
-                                status = h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, at(0x302), s3], m);
+                                status = h.call_m(
+                                    0x1738e8,
+                                    &[log, s_lit(h.rom(), D_8f9532), 5, 0, at(0x302), s3],
+                                    m,
+                                );
                                 if status >= 0x80000000 {
                                     return (status, bufs);
                                 }
                             }
                             status = h.call_m(
                                 0x1738e8,
-                                &[log, D_8f9532, 5, 0, at(0x2ec), at(L_CODE), clm_buf2],
+                                &[
+                                    log,
+                                    s_lit(h.rom(), D_8f9532),
+                                    5,
+                                    0,
+                                    at(0x2ec),
+                                    at(L_CODE),
+                                    clm_buf2,
+                                ],
                                 m,
                             );
                             if status >= 0x80000000 {
@@ -5418,9 +6312,17 @@ fn fn_1f98c8_inner(
                             }
                         }
                         let ablen = h.call_m(0x195d90, &[bufs[3]], m);
-                        status = h.call_m(
+                        status = h.call_guest_m(
                             f_set_field,
-                            &[a, c, u32::from(new_tok), 11, ablen.wrapping_add(1), bufs[3], at(L_X)],
+                            &[
+                                a,
+                                c,
+                                u32::from(new_tok),
+                                11,
+                                ablen.wrapping_add(1),
+                                bufs[3],
+                                at(L_X),
+                            ],
                             m,
                         );
                         if status >= 0x80000000 {
@@ -5433,7 +6335,7 @@ fn fn_1f98c8_inner(
         if !p_half(m, at(L_TOK), 0) {
             return (FAIL_MEM, bufs);
         }
-        status = h.call_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
+        status = h.call_guest_m(f_get_next, &[a, c, u32::from(tok), at(L_TOK)], m);
         if status >= 0x80000000 {
             return (status, bufs);
         }
@@ -5446,46 +6348,87 @@ fn fn_1f98c8_inner(
 }
 
 pub const FN_2719EC_FRAME: u32 = 0xe0fef20;
+
 const F2719EC_RULE: u32 = 0x00;
+
 const F2719EC_LANG: u32 = 0x80;
+
 const F2719EC_LIT: u32 = 0x90;
+
 const F2719EC_OUT: u32 = 0x190;
+
 const F2719EC_LIT_ACRONYM: u32 = 0x00;
+
 const F2719EC_LIT_L1: u32 = 0x13;
+
 const F2719EC_LIT_O1: u32 = 0x1d;
+
 const F2719EC_LIT_ONEWORD: u32 = 0x27;
+
 const F2719EC_LIT_L3: u32 = 0x30;
+
 const F2719EC_LIT_L4: u32 = 0x3a;
+
 const F2719EC_LIT_O3: u32 = 0x44;
+
 const F2719EC_LIT_O5: u32 = 0x4e;
+
 const F2719EC_LIT_NORMAL: u32 = 0x58;
+
 const F2719EC_LIT_SPELL: u32 = 0x5f;
+
 const F2719EC_LIT_USCORE: u32 = 0x6d;
+
 const F2719EC_LIT_CROSS: u32 = 0x6f;
+
 const F2719EC_LIT_PROMPT: u32 = 0x7b;
+
 const F2719EC_LIT_E: u32 = 0x82;
+
 const F2719EC_LIT_ESCORE: u32 = 0x84;
+
 const F2719EC_LIT_NORM2: u32 = 0x87;
+
 const F2719EC_LIT_PLUS: u32 = 0x9a;
+
 const F2719EC_LIT_M11: u32 = 0x9c;
+
 const F2719EC_LIT_SP: u32 = 0x9e;
+
 const F2719EC_LIT_TILDE: u32 = 0xa0;
+
 const F2719EC_LIT_NOAFF: u32 = 0xa2;
+
 const F2719EC_LIT_AFFFAIL: u32 = 0xd1;
+
 const F2719EC_LIT_L2: u32 = 0xe6;
+
 const F2719EC_LIT_O2: u32 = 0xf0;
+
 const F2719EC_OUT_NODE: u32 = 0x00;
+
 const F2719EC_OUT_ENTRY: u32 = 0x04;
+
 const F2719EC_OUT_TEXT: u32 = 0x08;
+
 const F2719EC_OUT_TAGS: u32 = 0x0c;
+
 const F2719EC_OUT_PHON: u32 = 0x10;
+
 const F2719EC_OUT_ORTHO: u32 = 0x14;
+
 const F2719EC_OUT_LEN: u32 = 0x18;
+
 const F2719EC_OUT_ATTR: u32 = 0x1c;
+
 const F2719EC_OUT_WSIZE: u32 = 0x20;
+
 const F2719EC_OUT_B: u32 = 0x24;
+
 const F2719EC_OUT_SEP: u32 = 0x26;
+
 const F2719EC_OUT_TYPE: u32 = 0x1a;
+
 const F2719EC_OUT_FBUF: u32 = 0x1b;
 
 fn f2719ec_wlit(m: &mut Memory<'_>, dst: u32, s: &[u8]) -> bool {
@@ -5557,26 +6500,44 @@ struct CAdapter<'a, H: Host + ?Sized> {
 }
 
 impl<H: Host + ?Sized> crate::component_live_c::Host for CAdapter<'_, H> {
+    fn rom(&self) -> crate::rom_region::Rom {
+        self.inner.rom()
+    }
     fn call_m(&mut self, entry: u32, args: &[u32], memory: &mut Memory<'_>) -> u32 {
         self.inner.call_m(entry, args, memory)
     }
 }
 
 pub const FN_271130_FRAME: u32 = 0xe0fee50;
+
 const F271130_RULES: u32 = 0x00;
+
 const F271130_DOM: u32 = 0x80;
+
 const F271130_TMP: u32 = 0x8c;
+
 const F271130_RESULTS: u32 = 0x90;
+
 const F271130_COUNT: u32 = 0x94;
+
 const F271130_SEPCH: u32 = 0x98;
+
 const F271130_OUT: u32 = 0x9c;
+
 const F271130_OUTLEN: u32 = 0xa0;
+
 const F271130_LIT: u32 = 0xa4;
+
 const F271130_LIT_ONEWORD: u32 = 0x00;
+
 const F271130_LIT_NORMAL: u32 = 0x09;
+
 const F271130_LIT_USCORE: u32 = 0x10;
+
 const F271130_LIT_STAR: u32 = 0x12;
+
 const F271130_LIT_L1: u32 = 0x14;
+
 const F271130_LIT_O1: u32 = 0x1e;
 
 pub fn fn_271130_m(
@@ -5640,7 +6601,6 @@ pub fn fn_271130_m(
     let f_set_input = g_word(m, rule_vt.wrapping_add(9 * 4)).unwrap_or(0);
     let f_get_output = g_word(m, rule_vt.wrapping_add(10 * 4)).unwrap_or(0);
     let f_set_rules = g_word(m, rule_vt.wrapping_add(11 * 4)).unwrap_or(0);
-
     let mut lastc = b' ';
     let mut altc = b' ';
     let mut ret = 0u32;
@@ -5653,7 +6613,7 @@ pub fn fn_271130_m(
     let text_len = h.call_m(0x195d90, &[text], m);
     let copy = h.call_m(0x196394, &[heap, text_len.wrapping_add(1)], m);
     if copy == 0 {
-        h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+        h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
         return 0x89b0200a;
     }
     h.call_m(0x195cd0, &[copy, text], m);
@@ -5671,19 +6631,33 @@ pub fn fn_271130_m(
     let mut i: u16 = 0;
     while (u32::from(i)) <= h.call_m(0x195d90, &[copy], m) {
         let ci = g_byte(m, copy.wrapping_add(u32::from(i))).unwrap_or(0);
-
-        let is_delim = h.call_m(f_is_delim, &[lexh_obj, lexh_data, u32::from(ci)], m) != 0;
+        let is_delim = h.call_guest_m(f_is_delim, &[lexh_obj, lexh_data, u32::from(ci)], m) != 0;
         if is_delim || is_word_sep(ci) || ci == 0 {
             if i != start {
                 lastc = b' ';
                 h.call_m(0x195cd0, &[key, s_lit(h.rom(), 0x2702b8)], m);
                 h.call_m(
                     0x195dac,
-                    &[key, copy.wrapping_add(u32::from(start)), u32::from(i.wrapping_sub(start))],
+                    &[
+                        key,
+                        copy.wrapping_add(u32::from(start)),
+                        u32::from(i.wrapping_sub(start)),
+                    ],
                     m,
                 );
                 let mut best = 0u32;
-                h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, s_lit(h.rom(), 0x2702c0), key], m);
+                h.call_m(
+                    0x1738e8,
+                    &[
+                        log,
+                        s_lit(h.rom(), D_8f9532),
+                        5,
+                        0,
+                        s_lit(h.rom(), 0x2702c0),
+                        key,
+                    ],
+                    m,
+                );
                 if !p_word(m, count_at, 0) || !p_byte(m, sepch_at, 0) {
                     h.call_m(0x196428, &[heap, copy], m);
                     return FAIL_MEM;
@@ -5692,15 +6666,26 @@ pub fn fn_271130_m(
                     h.call_m(0x195cd0, &[dom, s_lit(h.rom(), 0x2702d4)], m);
                     let ki = g_byte(m, key).unwrap_or(0);
                     h.call_m(0x195c90, &[dom, langs.wrapping_add(u32::from(ki) * 3)], m);
-                    ret = h.call_m(
+                    ret = h.call_guest_m(
                         f_lookup_domain,
-                        &[lexh_obj, lexh_data, dom, key, results_at, count_at, sepch_at],
+                        &[
+                            lexh_obj, lexh_data, dom, key, results_at, count_at, sepch_at,
+                        ],
                         m,
                     );
                 } else {
-                    ret = h.call_m(
+                    ret = h.call_guest_m(
                         f_lookup,
-                        &[lexh_obj, lexh_data, s_lit(h.rom(), 0x2702d4), key, results_at, count_at, sepch_at, u32::from(lex_flag)],
+                        &[
+                            lexh_obj,
+                            lexh_data,
+                            s_lit(h.rom(), 0x2702d4),
+                            key,
+                            results_at,
+                            count_at,
+                            sepch_at,
+                            u32::from(lex_flag),
+                        ],
                         m,
                     );
                 }
@@ -5767,7 +6752,11 @@ pub fn fn_271130_m(
                                                     return FAIL_MEM;
                                                 }
                                                 lang = p.wrapping_add(1);
-                                                p = h.call_m(0x195d30, &[lang, u32::from(sepch)], m);
+                                                p = h.call_m(
+                                                    0x195d30,
+                                                    &[lang, u32::from(sepch)],
+                                                    m,
+                                                );
                                                 if p != 0 && !p_byte(m, p, 0) {
                                                     h.call_m(0x196428, &[heap, copy], m);
                                                     return FAIL_MEM;
@@ -5780,16 +6769,37 @@ pub fn fn_271130_m(
                         }
                     }
                     if entry == 0 {
-                        h.call_m(0x173dc0, &[log, D_8f9532, 0x84d1, 0], m);
+                        h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d1, 0], m);
                         h.call_m(0x196428, &[heap, copy], m);
                         return 0x89b02007;
                     }
-                    h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, s_lit(h.rom(), 0x2702d8), entry], m);
+                    h.call_m(
+                        0x1738e8,
+                        &[
+                            log,
+                            s_lit(h.rom(), D_8f9532),
+                            5,
+                            0,
+                            s_lit(h.rom(), 0x2702d8),
+                            entry,
+                        ],
+                        m,
+                    );
                     if domain != 0
                         && h.call_m(0x195d58, &[domain, s_lit(h.rom(), 0x2702b8)], m) != 0
                         && h.call_m(0x1960a8, &[domain, word], m) == 0
                     {
-                        h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, s_lit(h.rom(), 0x2705ec)], m);
+                        h.call_m(
+                            0x1738e8,
+                            &[
+                                log,
+                                s_lit(h.rom(), D_8f9532),
+                                5,
+                                0,
+                                s_lit(h.rom(), 0x2705ec),
+                            ],
+                            m,
+                        );
                     } else if check_lang != 0 && lang != 0 {
                         let mut skip = false;
                         let q = h.call_m(0x1960a8, &[word, lang], m);
@@ -5804,7 +6814,18 @@ pub fn fn_271130_m(
                                 || q2 == 0
                                 || g_byte(m, q2.wrapping_add(word_len)).unwrap_or(0) != b'|'
                             {
-                                h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, s_lit(h.rom(), 0x27060c), lang], m);
+                                h.call_m(
+                                    0x1738e8,
+                                    &[
+                                        log,
+                                        s_lit(h.rom(), D_8f9532),
+                                        5,
+                                        0,
+                                        s_lit(h.rom(), 0x27060c),
+                                        lang,
+                                    ],
+                                    m,
+                                );
                                 skip = true;
                             }
                         }
@@ -5812,7 +6833,9 @@ pub fn fn_271130_m(
                             j = j.wrapping_add(1);
                             continue;
                         }
-                        let score = if scorestr != 0 && h.call_m(0x195d58, &[scorestr, s_lit(h.rom(), 0x2702b8)], m) != 0 {
+                        let score = if scorestr != 0
+                            && h.call_m(0x195d58, &[scorestr, s_lit(h.rom(), 0x2702b8)], m) != 0
+                        {
                             h.call_m(0x17c550, &[scorestr], m) as u16
                         } else {
                             1
@@ -5829,7 +6852,9 @@ pub fn fn_271130_m(
                             }
                         }
                     } else {
-                        let score = if scorestr != 0 && h.call_m(0x195d58, &[scorestr, s_lit(h.rom(), 0x2702b8)], m) != 0 {
+                        let score = if scorestr != 0
+                            && h.call_m(0x195d58, &[scorestr, s_lit(h.rom(), 0x2702b8)], m) != 0
+                        {
                             h.call_m(0x17c550, &[scorestr], m) as u16
                         } else {
                             1
@@ -5855,32 +6880,50 @@ pub fn fn_271130_m(
                         return FAIL_MEM;
                     }
                     if h.call_m(0x195d58, &[best, lit_uscore], m) != 0 {
-                        ret = fn_270b40_m(m, h, loc, ctx, best, lit_star, lit_star, u32::from(lastc), 1);
+                        ret = fn_270b40_m(
+                            m,
+                            h,
+                            loc,
+                            ctx,
+                            best,
+                            lit_star,
+                            lit_star,
+                            u32::from(lastc),
+                            1,
+                        );
                         if ret >= 0x80000000 {
                             h.call_m(0x196428, &[heap, copy], m);
                             return ret;
                         }
                     }
                 } else {
-                    h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, lit_l1, rules, key], m);
+                    h.call_m(
+                        0x1738e8,
+                        &[log, s_lit(h.rom(), D_8f9532), 5, 0, lit_l1, rules, key],
+                        m,
+                    );
                     let key_len = h.call_m(0x195d90, &[key], m) as u16 as u32;
-                    ret = h.call_m(f_set_input, &[ruleh_obj, ruleh_data, 0, key, key_len], m);
+                    ret = h.call_guest_m(f_set_input, &[ruleh_obj, ruleh_data, 0, key, key_len], m);
                     if ret >= 0x80000000 {
                         h.call_m(0x196428, &[heap, copy], m);
                         return ret;
                     }
                     if h.call_m(0x195d58, &[word, lit_normal], m) != 0
-                        && h.call_m(0x195d90, &[word], m).wrapping_add(u32::from(rlen)).wrapping_add(2) < 128
+                        && h.call_m(0x195d90, &[word], m)
+                            .wrapping_add(u32::from(rlen))
+                            .wrapping_add(2)
+                            < 128
                     {
                         h.call_m(0x195c90, &[rules, lit_uscore], m);
                         h.call_m(0x195c90, &[rules, word], m);
                     }
-                    if h.call_m(f_set_rules, &[ruleh_obj, ruleh_data, rules], m) >= 0x80000000 {
+                    if h.call_guest_m(f_set_rules, &[ruleh_obj, ruleh_data, rules], m) >= 0x80000000
+                    {
                         if !p_byte(m, rules.wrapping_add(u32::from(rlen)), 0) {
                             h.call_m(0x196428, &[heap, copy], m);
                             return FAIL_MEM;
                         }
-                        ret = h.call_m(f_set_rules, &[ruleh_obj, ruleh_data, rules], m);
+                        ret = h.call_guest_m(f_set_rules, &[ruleh_obj, ruleh_data, rules], m);
                         if ret >= 0x80000000 {
                             h.call_m(0x196428, &[heap, copy], m);
                             return ret;
@@ -5898,7 +6941,11 @@ pub fn fn_271130_m(
                             return FAIL_MEM;
                         }
                     }
-                    ret = h.call_m(f_get_output, &[ruleh_obj, ruleh_data, 0, out_at, outlen_at], m);
+                    ret = h.call_guest_m(
+                        f_get_output,
+                        &[ruleh_obj, ruleh_data, 0, out_at, outlen_at],
+                        m,
+                    );
                     if ret >= 0x80000000 {
                         h.call_m(0x196428, &[heap, copy], m);
                         return ret;
@@ -5909,7 +6956,11 @@ pub fn fn_271130_m(
                         h.call_m(0x196428, &[heap, copy], m);
                         return FAIL_MEM;
                     }
-                    h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, lit_o1, rules, out], m);
+                    h.call_m(
+                        0x1738e8,
+                        &[log, s_lit(h.rom(), D_8f9532), 5, 0, lit_o1, rules, out],
+                        m,
+                    );
                     ret = fn_270b40_m(m, h, loc, ctx, out, lit_star, lit_star, u32::from(lastc), 1);
                     if ret >= 0x80000000 {
                         h.call_m(0x196428, &[heap, copy], m);
@@ -5921,7 +6972,17 @@ pub fn fn_271130_m(
                 h.call_m(0x196428, &[heap, copy], m);
                 return FAIL_MEM;
             }
-            ret = fn_270b40_m(m, h, loc, ctx, tmp, s_lit(h.rom(), 0x2702b8), s_lit(h.rom(), 0x2702b8), u32::from(b' '), 0);
+            ret = fn_270b40_m(
+                m,
+                h,
+                loc,
+                ctx,
+                tmp,
+                s_lit(h.rom(), 0x2702b8),
+                s_lit(h.rom(), 0x2702b8),
+                u32::from(b' '),
+                0,
+            );
             if ret >= 0x80000000 {
                 h.call_m(0x196428, &[heap, copy], m);
                 return ret;
@@ -5938,6 +6999,7 @@ pub fn fn_271130_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_270b40_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -5996,7 +7058,7 @@ pub fn fn_270b40_m(
     if len > 128 {
         let p = h.call_m(0x1963e0, &[heap, orth, u32::from(len)], m);
         if p == 0 {
-            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
             return 0x89b0200a;
         }
         orth = p;
@@ -6005,7 +7067,7 @@ pub fn fn_270b40_m(
         }
         let p = h.call_m(0x1963e0, &[heap, dst_phon, u32::from(len)], m);
         if p == 0 {
-            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
             return 0x89b0200a;
         }
         dst_phon = p;
@@ -6014,7 +7076,7 @@ pub fn fn_270b40_m(
         }
         let p = h.call_m(0x1963e0, &[heap, dst_pos, u32::from(len)], m);
         if p == 0 {
-            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
             return 0x89b0200a;
         }
         dst_pos = p;
@@ -6023,7 +7085,7 @@ pub fn fn_270b40_m(
         }
         let p = h.call_m(0x1963e0, &[heap, dst_sep, u32::from(len)], m);
         if p == 0 {
-            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
             return 0x89b0200a;
         }
         dst_sep = p;
@@ -6041,7 +7103,7 @@ pub fn fn_270b40_m(
     if h.call_m(0x195d30, &[phon, 0x20], m) == 0 && open != 0 {
         let close = h.call_m(0x195d30, &[open.wrapping_add(1), 0x11], m);
         if close == 0 {
-            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d1, 0], m);
+            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d1, 0], m);
             return 0x89b02007;
         }
         let n = open.wrapping_sub(word).wrapping_add(1) as i32;
@@ -6110,7 +7172,8 @@ pub fn fn_270b40_m(
         h.call_m(0x195c90, &[dst_pos, pos], m);
         h.call_m(0x195c90, &[dst_sep, sep], m);
         let mut i = 0u16;
-        while h.call_m(0x195d90, &[word], m)
+        while h
+            .call_m(0x195d90, &[word], m)
             .wrapping_sub(h.call_m(0x195d90, &[phon], m))
             > u32::from(i)
         {
@@ -6118,7 +7181,8 @@ pub fn fn_270b40_m(
             i = i.wrapping_add(1);
         }
         let mut i = 0u16;
-        while h.call_m(0x195d90, &[word], m)
+        while h
+            .call_m(0x195d90, &[word], m)
             .wrapping_sub(h.call_m(0x195d90, &[pos], m))
             > u32::from(i)
         {
@@ -6126,7 +7190,8 @@ pub fn fn_270b40_m(
             i = i.wrapping_add(1);
         }
         let mut i = 0u16;
-        while h.call_m(0x195d90, &[word], m)
+        while h
+            .call_m(0x195d90, &[word], m)
             .wrapping_sub(h.call_m(0x195d90, &[sep], m))
             > u32::from(i)
         {
@@ -6144,6 +7209,7 @@ pub fn fn_270b40_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_26fc54_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -6170,8 +7236,7 @@ pub fn fn_26fc54_m(
     let capitals = g_byte(m, ctx.wrapping_add(0x6c)).unwrap_or(0);
     let affix = g_byte(m, ctx.wrapping_add(0x6e)).unwrap_or(0);
     let wlen = h.call_m(0x195d90, &[word], m);
-    let mut take_affix =
-        affix == 1 && wlen >= u32::from(min_len) && wlen <= u32::from(max_len);
+    let mut take_affix = affix == 1 && wlen >= u32::from(min_len) && wlen <= u32::from(max_len);
     if take_affix {
         let w0 = g_byte(m, word).unwrap_or(0);
         if capitals == 1 && (w0.wrapping_sub(b'A') as u32) > 25 {
@@ -6182,7 +7247,11 @@ pub fn fn_26fc54_m(
         }
     }
     if !take_affix {
-        h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, lit_noaff, word], m);
+        h.call_m(
+            0x1738e8,
+            &[log, s_lit(h.rom(), D_8f9532), 5, 0, lit_noaff, word],
+            m,
+        );
         let mut adapter = CAdapter { inner: h };
         let rc = crate::component_live_c::dctlkp_canonical_token_m(
             m,
@@ -6235,7 +7304,11 @@ pub fn fn_26fc54_m(
         return rc;
     }
     if g_byte(m, found_at).unwrap_or(0) == 0 {
-        h.call_m(0x1738e8, &[log, D_8f9532, 5, 0, lit_failed], m);
+        h.call_m(
+            0x1738e8,
+            &[log, s_lit(h.rom(), D_8f9532), 5, 0, lit_failed],
+            m,
+        );
         h.call_m(0x195cd0, &[wbuf, word], m);
         h.call_m(0x195cd0, &[pbuf, s_lit(h.rom(), 0x2702b8)], m);
         h.call_m(0x195cd0, &[posbuf, s_lit(h.rom(), 0x2702b8)], m);
@@ -6253,6 +7326,7 @@ pub fn fn_26fc54_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_2719ec_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -6390,7 +7464,7 @@ pub fn fn_2719ec_m(
         }
     }
     let mut node_ids = [0u16; 128];
-    let mut rc = h.call_m(
+    let mut rc = h.call_guest_m(
         f_get_attr,
         &[
             handle_obj,
@@ -6412,7 +7486,7 @@ pub fn fn_2719ec_m(
     let mut node_r = 0u16;
     while attr_start == text_start && start_r != 0 {
         node_r = start_r;
-        rc = h.call_m(
+        rc = h.call_guest_m(
             f_up,
             &[handle_obj, handle_data, u32::from(start_r), out_node],
             m,
@@ -6422,7 +7496,7 @@ pub fn fn_2719ec_m(
         }
         start_r = g_half(m, out_node).unwrap_or(0);
         if start_r != 0 {
-            rc = h.call_m(
+            rc = h.call_guest_m(
                 f_get_attr,
                 &[
                     handle_obj,
@@ -6451,7 +7525,7 @@ pub fn fn_2719ec_m(
     h.call_m(0x195cd0, &[pos_p, s_lit(h.rom(), 0x2702b8)], m);
     h.call_m(0x195cd0, &[sep_p, s_lit(h.rom(), 0x2702b8)], m);
     let end_r = end_in as u16;
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_get_attr,
         &[
             handle_obj,
@@ -6476,7 +7550,7 @@ pub fn fn_2719ec_m(
     if tmp0.wrapping_add(10) > 0x80 {
         let resized = h.call_m(0x1963e0, &[heap, accum0, tmp0.wrapping_add(10)], m);
         if resized == 0 {
-            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
             return 0x89b0200a;
         }
         accum0 = resized;
@@ -6485,7 +7559,7 @@ pub fn fn_2719ec_m(
         }
         let resized = h.call_m(0x1963e0, &[heap, accum1, tmp0.wrapping_add(10)], m);
         if resized == 0 {
-            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
             return 0x89b0200a;
         }
         accum1 = resized;
@@ -6494,7 +7568,7 @@ pub fn fn_2719ec_m(
         }
         let resized = h.call_m(0x1963e0, &[heap, accum2, tmp0.wrapping_add(10)], m);
         if resized == 0 {
-            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
             return 0x89b0200a;
         }
         accum2 = resized;
@@ -6514,8 +7588,7 @@ pub fn fn_2719ec_m(
             u32::from(
                 g_byte(
                     m,
-                    text_str
-                        .wrapping_add(u32::from(text_off).wrapping_add(u32::from(text_start))),
+                    text_str.wrapping_add(u32::from(text_off).wrapping_add(u32::from(text_start))),
                 )
                 .unwrap_or(0),
             ),
@@ -6533,7 +7606,9 @@ pub fn fn_2719ec_m(
                 g_byte(
                     m,
                     text_str.wrapping_add(
-                        u32::from(text_off).wrapping_add(u32::from(text_end)).wrapping_sub(1),
+                        u32::from(text_off)
+                            .wrapping_add(u32::from(text_end))
+                            .wrapping_sub(1),
                     ),
                 )
                 .unwrap_or(0),
@@ -6549,7 +7624,7 @@ pub fn fn_2719ec_m(
     let plus_join = g_byte(m, ctx.wrapping_add(0x70)).unwrap_or(0);
     if u32::from(node_r) != end_in {
         loop {
-            rc = h.call_m(
+            rc = h.call_guest_m(
                 f_get_attr,
                 &[
                     handle_obj,
@@ -6568,7 +7643,7 @@ pub fn fn_2719ec_m(
             let type_r = g_byte(m, out_type).unwrap_or(0);
             if type_r == 0 {
                 if in_word == 0 {
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_attr,
                         &[
                             handle_obj,
@@ -6606,7 +7681,7 @@ pub fn fn_2719ec_m(
                 in_word = 0;
             } else if type_r == 4 || type_r == 8 {
                 in_word = 1;
-                rc = h.call_m(
+                rc = h.call_guest_m(
                     f_get_attr,
                     &[
                         handle_obj,
@@ -6623,7 +7698,7 @@ pub fn fn_2719ec_m(
                     return rc;
                 }
                 attr_start = g_half(m, out_node).unwrap_or(0);
-                rc = h.call_m(
+                rc = h.call_guest_m(
                     f_get_attr,
                     &[
                         handle_obj,
@@ -6640,7 +7715,7 @@ pub fn fn_2719ec_m(
                     return rc;
                 }
                 let attr_end = g_half(m, out_node).unwrap_or(0);
-                rc = h.call_m(
+                rc = h.call_guest_m(
                     f_get_attr,
                     &[
                         handle_obj,
@@ -6677,33 +7752,29 @@ pub fn fn_2719ec_m(
                     if capacity_steps.wrapping_mul(10) < marker_count.wrapping_add(2) {
                         capacity_steps = capacity_steps.wrapping_add(1) & 0xff;
                     }
-                    let tmp = u32::from(span)
-                        .wrapping_add(capacity_steps.wrapping_mul(10));
+                    let tmp = u32::from(span).wrapping_add(capacity_steps.wrapping_mul(10));
                     if tmp.wrapping_add(10) > 0x80 {
-                        let resized =
-                            h.call_m(0x1963e0, &[heap, accum0, tmp.wrapping_add(10)], m);
+                        let resized = h.call_m(0x1963e0, &[heap, accum0, tmp.wrapping_add(10)], m);
                         if resized == 0 {
-                            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                             return 0x89b0200a;
                         }
                         accum0 = resized;
                         if !p_word(m, ctx.wrapping_add(0x40), resized) {
                             return FAIL_MEM;
                         }
-                        let resized =
-                            h.call_m(0x1963e0, &[heap, accum1, tmp.wrapping_add(10)], m);
+                        let resized = h.call_m(0x1963e0, &[heap, accum1, tmp.wrapping_add(10)], m);
                         if resized == 0 {
-                            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                             return 0x89b0200a;
                         }
                         accum1 = resized;
                         if !p_word(m, ctx.wrapping_add(0x44), resized) {
                             return FAIL_MEM;
                         }
-                        let resized =
-                            h.call_m(0x1963e0, &[heap, accum2, tmp.wrapping_add(10)], m);
+                        let resized = h.call_m(0x1963e0, &[heap, accum2, tmp.wrapping_add(10)], m);
                         if resized == 0 {
-                            h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                            h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                             return 0x89b0200a;
                         }
                         accum2 = resized;
@@ -6729,7 +7800,7 @@ pub fn fn_2719ec_m(
                 } else if history_count != 0 {
                     if previous_priority <= u32::from(priority) {
                         let victim = node_ids[history_count.wrapping_sub(1) as usize & 0x7f];
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_remove,
                             &[handle_obj, handle_data, u32::from(victim)],
                             m,
@@ -6743,7 +7814,7 @@ pub fn fn_2719ec_m(
                         node_ids[history_count.wrapping_sub(1) as usize & 0x7f] = node_r;
                     } else {
                         let pos_node = node_r;
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_next,
                             &[handle_obj, handle_data, u32::from(pos_node), out_node],
                             m,
@@ -6752,7 +7823,7 @@ pub fn fn_2719ec_m(
                             return rc;
                         }
                         node_r = g_half(m, out_node).unwrap_or(0);
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_remove,
                             &[handle_obj, handle_data, u32::from(pos_node)],
                             m,
@@ -6769,7 +7840,7 @@ pub fn fn_2719ec_m(
             } else {
                 in_word = 1;
             }
-            rc = h.call_m(
+            rc = h.call_guest_m(
                 f_next,
                 &[handle_obj, handle_data, u32::from(node_r), out_node],
                 m,
@@ -6783,7 +7854,7 @@ pub fn fn_2719ec_m(
             }
         }
     }
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_get_attr,
         &[
             handle_obj,
@@ -6801,7 +7872,7 @@ pub fn fn_2719ec_m(
     }
     let type_r = g_byte(m, out_type).unwrap_or(0);
     if type_r == 0 && in_word == 0 {
-        rc = h.call_m(
+        rc = h.call_guest_m(
             f_get_attr,
             &[
                 handle_obj,
@@ -6849,11 +7920,19 @@ pub fn fn_2719ec_m(
     if flag != 0 {
         h.call_m(
             0x1738e8,
-            &[log, D_8f9532, 5, 0, lit_l1, rule_name, accum0],
+            &[
+                log,
+                s_lit(h.rom(), D_8f9532),
+                5,
+                0,
+                lit_l1,
+                rule_name,
+                accum0,
+            ],
             m,
         );
         let tmp = h.call_m(0x195d90, &[accum0], m);
-        rc = h.call_m(f_set_input, &[ruleh_obj, ruleh_data, 0, accum0, tmp], m);
+        rc = h.call_guest_m(f_set_input, &[ruleh_obj, ruleh_data, 0, accum0, tmp], m);
         if rc >= 0x80000000 {
             return rc;
         }
@@ -6865,22 +7944,21 @@ pub fn fn_2719ec_m(
                 h.call_m(0x195c90, &[rule_name, word], m);
             }
         }
-        rc = h.call_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
+        rc = h.call_guest_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
         if rc >= 0x80000000 {
             if !p_byte(m, rule_name.wrapping_add(rule_length), 0) {
                 return FAIL_MEM;
             }
-            rc = h.call_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
+            rc = h.call_guest_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
             if rc >= 0x80000000 {
                 return rc;
             }
         }
-        rc = h.call_m(
+        rc = h.call_guest_m(
             f_get_output,
             &[ruleh_obj, ruleh_data, 0, out_text, out_len],
             m,
         );
-
         if rc >= 0x80000000 {
             return rc;
         }
@@ -6891,7 +7969,15 @@ pub fn fn_2719ec_m(
         }
         h.call_m(
             0x1738e8,
-            &[log, D_8f9532, 5, 0, lit_o1, rule_name, output_text],
+            &[
+                log,
+                s_lit(h.rom(), D_8f9532),
+                5,
+                0,
+                lit_o1,
+                rule_name,
+                output_text,
+            ],
             m,
         );
         if u32::from(out_len_r).wrapping_add(1) >= 0x81 {
@@ -6901,7 +7987,7 @@ pub fn fn_2719ec_m(
                 m,
             );
             if resized == 0 {
-                h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                 return 0x89b0200a;
             }
             norm_r = resized;
@@ -6918,7 +8004,7 @@ pub fn fn_2719ec_m(
             let tmp2 = h.call_m(0x195d90, &[accum0], m);
             let resized = h.call_m(0x1963e0, &[heap, norm_r, tmp2.wrapping_add(1)], m);
             if resized == 0 {
-                h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                 return 0x89b0200a;
             }
             norm_r = resized;
@@ -6954,9 +8040,14 @@ pub fn fn_2719ec_m(
                 if !p_byte(m, norm_r.wrapping_add(u32::from(token_end)), 0) {
                     return FAIL_MEM;
                 }
-                rc = h.call_m(
+                rc = h.call_guest_m(
                     f_lookup_word,
-                    &[lexh_obj, lexh_data, word, norm_r.wrapping_add(content_start)],
+                    &[
+                        lexh_obj,
+                        lexh_data,
+                        word,
+                        norm_r.wrapping_add(content_start),
+                    ],
                     m,
                 );
                 if rc >= 0x80000000 {
@@ -6967,11 +8058,19 @@ pub fn fn_2719ec_m(
                 let spell_rule_length = h.call_m(0x195d90, &[rule_name], m) & 0xffff;
                 h.call_m(
                     0x1738e8,
-                    &[log, D_8f9532, 5, 0, lit_l1, rule_name, accum0],
+                    &[
+                        log,
+                        s_lit(h.rom(), D_8f9532),
+                        5,
+                        0,
+                        lit_l1,
+                        rule_name,
+                        accum0,
+                    ],
                     m,
                 );
                 let tmp = h.call_m(0x195d90, &[accum0], m);
-                rc = h.call_m(f_set_input, &[ruleh_obj, ruleh_data, 0, accum0, tmp], m);
+                rc = h.call_guest_m(f_set_input, &[ruleh_obj, ruleh_data, 0, accum0, tmp], m);
                 if rc >= 0x80000000 {
                     return rc;
                 }
@@ -6982,17 +8081,17 @@ pub fn fn_2719ec_m(
                         h.call_m(0x195c90, &[rule_name, word], m);
                     }
                 }
-                rc = h.call_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
+                rc = h.call_guest_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
                 if rc >= 0x80000000 {
                     if !p_byte(m, rule_name.wrapping_add(spell_rule_length), 0) {
                         return FAIL_MEM;
                     }
-                    rc = h.call_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
+                    rc = h.call_guest_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
                     if rc >= 0x80000000 {
                         return rc;
                     }
                 }
-                rc = h.call_m(
+                rc = h.call_guest_m(
                     f_get_output,
                     &[ruleh_obj, ruleh_data, 0, out_text, out_len],
                     m,
@@ -7007,7 +8106,15 @@ pub fn fn_2719ec_m(
                 }
                 h.call_m(
                     0x1738e8,
-                    &[log, D_8f9532, 5, 0, lit_o1, rule_name, output_text],
+                    &[
+                        log,
+                        s_lit(h.rom(), D_8f9532),
+                        5,
+                        0,
+                        lit_o1,
+                        rule_name,
+                        output_text,
+                    ],
                     m,
                 );
                 let tmp = h.call_m(0x195d90, &[output_text], m) as i32;
@@ -7025,7 +8132,7 @@ pub fn fn_2719ec_m(
                         m,
                     );
                     if resized == 0 {
-                        h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                        h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                         return 0x89b0200a;
                     }
                     if !p_word(m, text, resized) {
@@ -7034,16 +8141,11 @@ pub fn fn_2719ec_m(
                     text_str = resized;
                 }
                 let grow_out_len = h.call_m(0x195d90, &[output_text], m);
-                let grow_need = (text_start as i32
-                    + grow_out_len as i32
-                    + text_off as i32) as u16;
+                let grow_need = (text_start as i32 + grow_out_len as i32 + text_off as i32) as u16;
                 let text_len = h.call_m(0x195d90, &[text_str], m);
-                if (delta as i32 + text_len as i32 + 1) as u16 as u32
-                    >= u32::from(grow_need)
-                {
-
+                if (delta as i32 + text_len as i32 + 1) as u16 as u32 >= u32::from(grow_need) {
                 } else {
-                    h.call_m(0x173dc0, &[log, D_8f9532, 0x84d1, 0], m);
+                    h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d1, 0], m);
                     return 0x89b02007;
                 }
                 let tmp2d = h.call_m(0x195d90, &[accum0], m);
@@ -7056,10 +8158,8 @@ pub fn fn_2719ec_m(
                             if (mv as u32) > slen {
                                 break;
                             }
-                            let dst =
-                                (mv as i32).wrapping_add(delta as i32) as u32;
-                            let b = g_byte(m, text_str.wrapping_add(u32::from(mv)))
-                                .unwrap_or(0);
+                            let dst = (mv as i32).wrapping_add(delta as i32) as u32;
+                            let b = g_byte(m, text_str.wrapping_add(u32::from(mv))).unwrap_or(0);
                             if !p_byte(m, text_str.wrapping_add(dst), b) {
                                 return FAIL_MEM;
                             }
@@ -7098,7 +8198,7 @@ pub fn fn_2719ec_m(
                 );
                 h.call_m(
                     0x1738e8,
-                    &[log, D_8f9532, 5, 0, lit_norm2, text_str],
+                    &[log, s_lit(h.rom(), D_8f9532), 5, 0, lit_norm2, text_str],
                     m,
                 );
                 let tmp2e = h.call_m(0x195d90, &[accum0], m);
@@ -7117,11 +8217,7 @@ pub fn fn_2719ec_m(
                     if (text_end as i32) <= d as i32 {
                         break;
                     }
-                    if !p_word(
-                        m,
-                        mark_at,
-                        mtime.wrapping_add(text_off as i32) as u32,
-                    ) {
+                    if !p_word(m, mark_at, mtime.wrapping_add(text_off as i32) as u32) {
                         return FAIL_MEM;
                     }
                     if !p_half(m, mi, pidx.wrapping_add(1)) {
@@ -7130,16 +8226,12 @@ pub fn fn_2719ec_m(
                 }
                 let mut node_start = 0u16;
                 let mut node_end = 0u16;
-                rc = h.call_m(
-                    f_get_first,
-                    &[handle_obj, handle_data, 1, 0, out_node],
-                    m,
-                );
+                rc = h.call_guest_m(f_get_first, &[handle_obj, handle_data, 1, 0, out_node], m);
                 if rc >= 0x80000000 {
                     return rc;
                 }
                 let root = g_half(m, out_node).unwrap_or(0);
-                rc = h.call_m(
+                rc = h.call_guest_m(
                     f_get_first,
                     &[handle_obj, handle_data, 2, u32::from(root), out_node],
                     m,
@@ -7151,7 +8243,7 @@ pub fn fn_2719ec_m(
                 let mut tmp_cur = g_half(m, cur_node_ptr).unwrap_or(0) as i32;
                 if tmp_cur != current as i32 {
                     loop {
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_get_attr,
                             &[
                                 handle_obj,
@@ -7168,15 +8260,13 @@ pub fn fn_2719ec_m(
                             return rc;
                         }
                         node_end = g_half(m, out_node).unwrap_or(0);
-                        if (text_end as i32)
-                            <= (node_end as i32).wrapping_sub(text_off as i32)
-                        {
+                        if (text_end as i32) <= (node_end as i32).wrapping_sub(text_off as i32) {
                             node_end = (delta as i32 + node_end as i16 as i32) as u16;
                         }
                         if !p_half(m, out_node, node_end) {
                             return FAIL_MEM;
                         }
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_set_attr,
                             &[
                                 handle_obj,
@@ -7192,7 +8282,7 @@ pub fn fn_2719ec_m(
                         if rc >= 0x80000000 {
                             return rc;
                         }
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_next,
                             &[handle_obj, handle_data, u32::from(current), out_node],
                             m,
@@ -7208,7 +8298,7 @@ pub fn fn_2719ec_m(
                     }
                 }
                 if tmp_cur != 0 {
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_attr,
                         &[
                             handle_obj,
@@ -7231,7 +8321,7 @@ pub fn fn_2719ec_m(
                     if !(node_start < text_end && cur != 0) {
                         break;
                     }
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_attr,
                         &[
                             handle_obj,
@@ -7249,7 +8339,7 @@ pub fn fn_2719ec_m(
                     }
                     let t = g_byte(m, out_type).unwrap_or(0);
                     if t == 5 || t == 6 || t == 4 || t == 9 || t == 10 || t == 7 {
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_get_attr,
                             &[
                                 handle_obj,
@@ -7274,7 +8364,7 @@ pub fn fn_2719ec_m(
                         if !p_half(m, out_node, node_start) {
                             return FAIL_MEM;
                         }
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_set_attr,
                             &[
                                 handle_obj,
@@ -7296,7 +8386,7 @@ pub fn fn_2719ec_m(
                         if !p_half(m, out_node, node_end) {
                             return FAIL_MEM;
                         }
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_set_attr,
                             &[
                                 handle_obj,
@@ -7313,7 +8403,7 @@ pub fn fn_2719ec_m(
                             return rc;
                         }
                     }
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_next,
                         &[handle_obj, handle_data, u32::from(cur), cur_node_ptr],
                         m,
@@ -7323,7 +8413,7 @@ pub fn fn_2719ec_m(
                     }
                     let cur2 = g_half(m, cur_node_ptr).unwrap_or(0);
                     if cur2 != 0 {
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_get_attr,
                             &[
                                 handle_obj,
@@ -7342,8 +8432,7 @@ pub fn fn_2719ec_m(
                         node_start = g_half(m, out_node).unwrap_or(0);
                     }
                 }
-                normalization_delta =
-                    (normalization_delta as i32 + delta as i32) as i16;
+                normalization_delta = (normalization_delta as i32 + delta as i32) as i16;
                 text_normalized = 1;
                 text_off = text_off.wrapping_add(delta as u16);
                 if !p_half(m, ctx.wrapping_add(0x50), text_off) {
@@ -7352,7 +8441,6 @@ pub fn fn_2719ec_m(
                 if !p_byte(m, out_lang, language) {
                     return FAIL_MEM;
                 }
-
                 rc = fn_271130_m(m, h, loc, ctx, word, output_text, out_lang, lang_name);
                 if rc >= 0x80000000 {
                     return rc;
@@ -7374,42 +8462,62 @@ pub fn fn_2719ec_m(
                     while {
                         token_end = token_end.wrapping_add(1);
                         token_end < limit
-                            && g_byte(m, norm_r.wrapping_add(u32::from(token_end)))
-                                .unwrap_or(0)
+                            && g_byte(m, norm_r.wrapping_add(u32::from(token_end))).unwrap_or(0)
                                 != 0x11
                     } {
                         text_start = text_start.wrapping_add(1);
                     }
                     let hid = (history_count & 0x7f) as usize;
                     let hn = node_ids[hid];
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_ptr,
-                        &[handle_obj, handle_data, u32::from(hn), 3, out_text, out_attr],
+                        &[
+                            handle_obj,
+                            handle_data,
+                            u32::from(hn),
+                            3,
+                            out_text,
+                            out_attr,
+                        ],
                         m,
                     );
                     if rc >= 0x80000000 {
                         return rc;
                     }
                     let orthography = g_word(m, out_text).unwrap_or(0);
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_ptr,
-                        &[handle_obj, handle_data, u32::from(hn), 5, out_phon, out_attr],
+                        &[
+                            handle_obj,
+                            handle_data,
+                            u32::from(hn),
+                            5,
+                            out_phon,
+                            out_attr,
+                        ],
                         m,
                     );
                     if rc >= 0x80000000 {
                         return rc;
                     }
                     let phonetic = g_word(m, out_phon).unwrap_or(0);
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_ptr,
-                        &[handle_obj, handle_data, u32::from(hn), 6, out_ortho, out_attr],
+                        &[
+                            handle_obj,
+                            handle_data,
+                            u32::from(hn),
+                            6,
+                            out_ortho,
+                            out_attr,
+                        ],
                         m,
                     );
                     if rc >= 0x80000000 {
                         return rc;
                     }
                     let part_of_speech = g_word(m, out_ortho).unwrap_or(0);
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_attr,
                         &[
                             handle_obj,
@@ -7428,9 +8536,16 @@ pub fn fn_2719ec_m(
                     let saved_type = g_byte(m, out_type).unwrap_or(0);
                     let hid2 = (history_count & 0x7f) as usize;
                     let hn2 = node_ids[hid2];
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_ptr,
-                        &[handle_obj, handle_data, u32::from(hn2), 9, out_tags, out_attr],
+                        &[
+                            handle_obj,
+                            handle_data,
+                            u32::from(hn2),
+                            9,
+                            out_tags,
+                            out_attr,
+                        ],
                         m,
                     );
                     history_count = history_count.wrapping_add(1) & 0xff;
@@ -7485,8 +8600,17 @@ pub fn fn_2719ec_m(
                     if !p_byte(m, letter_at.wrapping_add(1), 0) {
                         return FAIL_MEM;
                     }
-
-                    rc = fn_270b40_m(m, h, loc, ctx, letter_at, s_lit(h.rom(), 0x2702b8), s_lit(h.rom(), 0x2702b8), 0x20, 0);
+                    rc = fn_270b40_m(
+                        m,
+                        h,
+                        loc,
+                        ctx,
+                        letter_at,
+                        s_lit(h.rom(), 0x2702b8),
+                        s_lit(h.rom(), 0x2702b8),
+                        0x20,
+                        0,
+                    );
                     if rc >= 0x80000000 {
                         return rc;
                     }
@@ -7497,12 +8621,10 @@ pub fn fn_2719ec_m(
                 while {
                     let te = (token_end & 0xffff) as u16;
                     token_end = te;
-                    te < limit
-                        && {
-                            let cc = g_byte(m, norm_r.wrapping_add(u32::from(te)))
-                                .unwrap_or(0);
-                            cc != 0x15 && cc != 0x12
-                        }
+                    te < limit && {
+                        let cc = g_byte(m, norm_r.wrapping_add(u32::from(te))).unwrap_or(0);
+                        cc != 0x15 && cc != 0x12
+                    }
                 } {
                     token_end = token_end.wrapping_add(1);
                 }
@@ -7526,31 +8648,55 @@ pub fn fn_2719ec_m(
                 let rule_length2 = h.call_m(0x195d90, &[rule_name], m) & 0xffff;
                 h.call_m(
                     0x1738e8,
-                    &[log, D_8f9532, 5, 0, lit_l1, rule_name, accum0],
+                    &[
+                        log,
+                        s_lit(h.rom(), D_8f9532),
+                        5,
+                        0,
+                        lit_l1,
+                        rule_name,
+                        accum0,
+                    ],
                     m,
                 );
                 let tmp = h.call_m(0x195d90, &[accum0], m);
-                rc = h.call_m(f_set_input, &[ruleh_obj, ruleh_data, 0, accum0, tmp], m);
+                rc = h.call_guest_m(f_set_input, &[ruleh_obj, ruleh_data, 0, accum0, tmp], m);
                 if rc >= 0x80000000 {
                     return rc;
                 }
                 h.call_m(
                     0x1738e8,
-                    &[log, D_8f9532, 5, 0, lit_l3, rule_name, accum1],
+                    &[
+                        log,
+                        s_lit(h.rom(), D_8f9532),
+                        5,
+                        0,
+                        lit_l3,
+                        rule_name,
+                        accum1,
+                    ],
                     m,
                 );
                 let tmp = h.call_m(0x195d90, &[accum1], m);
-                rc = h.call_m(f_set_input, &[ruleh_obj, ruleh_data, 2, accum1, tmp], m);
+                rc = h.call_guest_m(f_set_input, &[ruleh_obj, ruleh_data, 2, accum1, tmp], m);
                 if rc >= 0x80000000 {
                     return rc;
                 }
                 h.call_m(
                     0x1738e8,
-                    &[log, D_8f9532, 5, 0, lit_l4, rule_name, accum2],
+                    &[
+                        log,
+                        s_lit(h.rom(), D_8f9532),
+                        5,
+                        0,
+                        lit_l4,
+                        rule_name,
+                        accum2,
+                    ],
                     m,
                 );
                 let tmp = h.call_m(0x195d90, &[accum2], m);
-                rc = h.call_m(f_set_sep, &[ruleh_obj, ruleh_data, 3, accum2, tmp], m);
+                rc = h.call_guest_m(f_set_sep, &[ruleh_obj, ruleh_data, 3, accum2, tmp], m);
                 if rc >= 0x80000000 {
                     return rc;
                 }
@@ -7560,7 +8706,11 @@ pub fn fn_2719ec_m(
                 if h.call_m(0x195d58, &[word, lit_normal], m) != 0 {
                     rc2 = h.call_m(
                         0x1966ac,
-                        &[g_word(m, ctx.wrapping_add(0x174)).unwrap_or(0), word, out_entry],
+                        &[
+                            g_word(m, ctx.wrapping_add(0x174)).unwrap_or(0),
+                            word,
+                            out_entry,
+                        ],
                         m,
                     );
                 }
@@ -7569,7 +8719,7 @@ pub fn fn_2719ec_m(
                     let dict_id = g_word(m, entry.wrapping_add(8)).unwrap_or(0);
                     let mut dict_ok = false;
                     if pos == 0 && token_end == last_pos {
-                        rc = h.call_m(
+                        rc = h.call_guest_m(
                             f_insert_child,
                             &[handle_obj, handle_data, u32::from(start_r), out_node],
                             m,
@@ -7580,7 +8730,14 @@ pub fn fn_2719ec_m(
                         node_r = g_half(m, out_node).unwrap_or(0);
                         rc = h.call_m(
                             0x26dd20,
-                            &[ctx, u32::from(node_r), handle_obj, handle_data, dict_id, word],
+                            &[
+                                ctx,
+                                u32::from(node_r),
+                                handle_obj,
+                                handle_data,
+                                dict_id,
+                                word,
+                            ],
                             m,
                         );
                         if rc >= 0x80000000 {
@@ -7620,11 +8777,8 @@ pub fn fn_2719ec_m(
                         if wlen.wrapping_add(rule_length2).wrapping_add(2) < 0x80 {
                             h.call_m(0x195c90, &[rule_name, lit_uscore], m);
                             h.call_m(0x195c90, &[rule_name, word], m);
-                            rc2 = h.call_m(
-                                f_set_rules,
-                                &[ruleh_obj, ruleh_data, rule_name],
-                                m,
-                            );
+                            rc2 =
+                                h.call_guest_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
                         }
                     }
                     if rc2 < 0x80000000 {
@@ -7660,7 +8814,7 @@ pub fn fn_2719ec_m(
                                 h.call_m(0x195c90, &[rule_name, lit_escore], m);
                                 language = b'e';
                                 h.call_m(0x195cd0, &[lang_name, lit_e], m);
-                                rc = h.call_m(
+                                rc = h.call_guest_m(
                                     f_set_rules,
                                     &[ruleh_obj, ruleh_data, rule_name],
                                     m,
@@ -7685,7 +8839,7 @@ pub fn fn_2719ec_m(
                                 if !p_byte(m, rule_name.wrapping_add(rule_length2), 0) {
                                     return FAIL_MEM;
                                 }
-                                rc = h.call_m(
+                                rc = h.call_guest_m(
                                     f_set_rules,
                                     &[ruleh_obj, ruleh_data, rule_name],
                                     m,
@@ -7698,14 +8852,9 @@ pub fn fn_2719ec_m(
                                 let entry = g_word(m, out_entry).unwrap_or(0);
                                 let dict_id = g_word(m, entry.wrapping_add(8)).unwrap_or(0);
                                 if pos == 0 && token_end == last_pos {
-                                    rc = h.call_m(
+                                    rc = h.call_guest_m(
                                         f_insert_child,
-                                        &[
-                                            handle_obj,
-                                            handle_data,
-                                            u32::from(start_r),
-                                            out_node,
-                                        ],
+                                        &[handle_obj, handle_data, u32::from(start_r), out_node],
                                         m,
                                     );
                                     if rc >= 0x80000000 {
@@ -7735,14 +8884,10 @@ pub fn fn_2719ec_m(
                                         m,
                                     );
                                     if rc >= 0x80000000 {
-                                        if !p_byte(
-                                            m,
-                                            rule_name.wrapping_add(rule_length2),
-                                            0,
-                                        ) {
+                                        if !p_byte(m, rule_name.wrapping_add(rule_length2), 0) {
                                             return FAIL_MEM;
                                         }
-                                        rc = h.call_m(
+                                        rc = h.call_guest_m(
                                             f_set_rules,
                                             &[ruleh_obj, ruleh_data, rule_name],
                                             m,
@@ -7761,7 +8906,7 @@ pub fn fn_2719ec_m(
                     }
                 }
                 if do_output {
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_output,
                         &[ruleh_obj, ruleh_data, 0, out_text, out_len],
                         m,
@@ -7770,7 +8915,7 @@ pub fn fn_2719ec_m(
                         return rc;
                     }
                     let output_text = g_word(m, out_text).unwrap_or(0);
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_output,
                         &[ruleh_obj, ruleh_data, 2, out_tags, out_len],
                         m,
@@ -7780,14 +8925,10 @@ pub fn fn_2719ec_m(
                     }
                     let output_tags = g_word(m, out_tags).unwrap_or(0);
                     let mut output_tags_len = g_half(m, out_len).unwrap_or(0);
-                    if !p_byte(
-                        m,
-                        output_tags.wrapping_add(u32::from(output_tags_len)),
-                        0,
-                    ) {
+                    if !p_byte(m, output_tags.wrapping_add(u32::from(output_tags_len)), 0) {
                         return FAIL_MEM;
                     }
-                    rc = h.call_m(
+                    rc = h.call_guest_m(
                         f_get_output,
                         &[ruleh_obj, ruleh_data, 4, out_ortho, out_len],
                         m,
@@ -7797,42 +8938,55 @@ pub fn fn_2719ec_m(
                     }
                     let orthography = g_word(m, out_ortho).unwrap_or(0);
                     let mut output_len_r = g_half(m, out_len).unwrap_or(0);
-                    if !p_byte(
-                        m,
-                        orthography.wrapping_add(u32::from(output_len_r)),
-                        0,
-                    ) {
+                    if !p_byte(m, orthography.wrapping_add(u32::from(output_len_r)), 0) {
                         return FAIL_MEM;
                     }
-                    if !p_byte(
-                        m,
-                        output_text.wrapping_add(u32::from(output_len_r)),
-                        0,
-                    ) {
+                    if !p_byte(m, output_text.wrapping_add(u32::from(output_len_r)), 0) {
                         return FAIL_MEM;
                     }
                     h.call_m(
                         0x1738e8,
-                        &[log, D_8f9532, 5, 0, lit_o1, rule_name, output_text],
+                        &[
+                            log,
+                            s_lit(h.rom(), D_8f9532),
+                            5,
+                            0,
+                            lit_o1,
+                            rule_name,
+                            output_text,
+                        ],
                         m,
                     );
                     h.call_m(
                         0x1738e8,
-                        &[log, D_8f9532, 5, 0, lit_o3, rule_name, output_tags],
+                        &[
+                            log,
+                            s_lit(h.rom(), D_8f9532),
+                            5,
+                            0,
+                            lit_o3,
+                            rule_name,
+                            output_tags,
+                        ],
                         m,
                     );
                     h.call_m(
                         0x1738e8,
-                        &[log, D_8f9532, 5, 0, lit_o5, rule_name, orthography],
+                        &[
+                            log,
+                            s_lit(h.rom(), D_8f9532),
+                            5,
+                            0,
+                            lit_o5,
+                            rule_name,
+                            orthography,
+                        ],
                         m,
                     );
                     let mut strip_pos = 0u16;
                     while strip_pos < output_len_r {
-                        let b = g_byte(
-                            m,
-                            output_text.wrapping_add(u32::from(strip_pos)),
-                        )
-                        .unwrap_or(0);
+                        let b =
+                            g_byte(m, output_text.wrapping_add(u32::from(strip_pos))).unwrap_or(0);
                         if b == b'~' {
                             let mut ii = strip_pos;
                             while ii < output_len_r {
@@ -7841,8 +8995,7 @@ pub fn fn_2719ec_m(
                                     output_text.wrapping_add(u32::from(ii).wrapping_add(1)),
                                 )
                                 .unwrap_or(0);
-                                if !p_byte(m, output_text.wrapping_add(u32::from(ii)), bt)
-                                {
+                                if !p_byte(m, output_text.wrapping_add(u32::from(ii)), bt) {
                                     return FAIL_MEM;
                                 }
                                 let bg = g_byte(
@@ -7850,8 +9003,7 @@ pub fn fn_2719ec_m(
                                     output_tags.wrapping_add(u32::from(ii).wrapping_add(1)),
                                 )
                                 .unwrap_or(0);
-                                if !p_byte(m, output_tags.wrapping_add(u32::from(ii)), bg)
-                                {
+                                if !p_byte(m, output_tags.wrapping_add(u32::from(ii)), bg) {
                                     return FAIL_MEM;
                                 }
                                 let bo = g_byte(
@@ -7859,8 +9011,7 @@ pub fn fn_2719ec_m(
                                     orthography.wrapping_add(u32::from(ii).wrapping_add(1)),
                                 )
                                 .unwrap_or(0);
-                                if !p_byte(m, orthography.wrapping_add(u32::from(ii)), bo)
-                                {
+                                if !p_byte(m, orthography.wrapping_add(u32::from(ii)), bo) {
                                     return FAIL_MEM;
                                 }
                                 ii = ii.wrapping_add(1);
@@ -7868,44 +9019,30 @@ pub fn fn_2719ec_m(
                             output_len_r = output_len_r.wrapping_sub(1);
                             strip_pos = strip_pos.wrapping_sub(1);
                         } else if b == 0xad {
-                            if !p_byte(
-                                m,
-                                output_text.wrapping_add(u32::from(strip_pos)),
-                                b'~',
-                            ) {
+                            if !p_byte(m, output_text.wrapping_add(u32::from(strip_pos)), b'~') {
                                 return FAIL_MEM;
                             }
                         }
                         strip_pos = strip_pos.wrapping_add(1);
                     }
-                    if !p_byte(
-                        m,
-                        output_text.wrapping_add(u32::from(output_len_r)),
-                        0,
-                    ) {
+                    if !p_byte(m, output_text.wrapping_add(u32::from(output_len_r)), 0) {
                         return FAIL_MEM;
                     }
                     let mut phon_start = 0u16;
                     loop {
-                        let cc = g_byte(
-                            m,
-                            output_tags.wrapping_add(u32::from(phon_start)),
-                        )
-                        .unwrap_or(0);
+                        let cc =
+                            g_byte(m, output_tags.wrapping_add(u32::from(phon_start))).unwrap_or(0);
                         if cc != b' ' && cc != b'~' {
                             break;
                         }
                         phon_start = phon_start.wrapping_add(1);
                     }
-                    if g_byte(m, output_tags.wrapping_add(u32::from(phon_start)))
-                        .unwrap_or(0)
-                        != 0
+                    if g_byte(m, output_tags.wrapping_add(u32::from(phon_start))).unwrap_or(0) != 0
                     {
                         let mut jj = phon_start;
                         while {
                             let cc =
-                                g_byte(m, output_tags.wrapping_add(u32::from(jj)))
-                                    .unwrap_or(0);
+                                g_byte(m, output_tags.wrapping_add(u32::from(jj))).unwrap_or(0);
                             cc != b' ' && cc != b'~'
                         } {
                             jj = jj.wrapping_add(1);
@@ -7916,27 +9053,19 @@ pub fn fn_2719ec_m(
                     }
                     let mut node_start2 = 0u16;
                     loop {
-                        let cc = g_byte(
-                            m,
-                            orthography.wrapping_add(u32::from(node_start2)),
-                        )
-                        .unwrap_or(0);
+                        let cc = g_byte(m, orthography.wrapping_add(u32::from(node_start2)))
+                            .unwrap_or(0);
                         if cc != b' ' && cc != b'~' {
                             break;
                         }
                         node_start2 = node_start2.wrapping_add(1);
                     }
-                    if g_byte(m, orthography.wrapping_add(u32::from(node_start2)))
-                        .unwrap_or(0)
-                        != 0
+                    if g_byte(m, orthography.wrapping_add(u32::from(node_start2))).unwrap_or(0) != 0
                     {
                         let mut jj = node_start2;
                         while {
-                            let cc = g_byte(
-                                m,
-                                orthography.wrapping_add(u32::from(jj)),
-                            )
-                            .unwrap_or(0);
+                            let cc =
+                                g_byte(m, orthography.wrapping_add(u32::from(jj))).unwrap_or(0);
                             cc != b' ' && cc != b'~'
                         } {
                             jj = jj.wrapping_add(1);
@@ -7960,18 +9089,16 @@ pub fn fn_2719ec_m(
                         return rc;
                     }
                 }
-                }
-
-                pos = token_end.wrapping_add(1);
-                if pos >= limit {
-                    break;
-                }
+            }
+            pos = token_end.wrapping_add(1);
+            if pos >= limit {
+                break;
+            }
         }
     }
     if language == b' ' {
         language = 0;
     }
-
     let mut orth_now = g_word(m, ctx.wrapping_add(0x58)).unwrap_or(0);
     let mut phon_now = g_word(m, ctx.wrapping_add(0x5c)).unwrap_or(0);
     let mut pos_now = g_word(m, ctx.wrapping_add(0x60)).unwrap_or(0);
@@ -7983,39 +9110,27 @@ pub fn fn_2719ec_m(
         let _ = cross_len;
         let tmp = h.call_m(0x195d90, &[orth_now], m) as u16;
         if u32::from(tmp).wrapping_add(1) > 0x80 {
-            let resized = h.call_m(
-                0x1963e0,
-                &[heap, accum0, u32::from(tmp).wrapping_add(1)],
-                m,
-            );
+            let resized = h.call_m(0x1963e0, &[heap, accum0, u32::from(tmp).wrapping_add(1)], m);
             if resized == 0 {
-                h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                 return 0x89b0200a;
             }
             accum0 = resized;
             if !p_word(m, ctx.wrapping_add(0x40), resized) {
                 return FAIL_MEM;
             }
-            let resized = h.call_m(
-                0x1963e0,
-                &[heap, accum1, u32::from(tmp).wrapping_add(1)],
-                m,
-            );
+            let resized = h.call_m(0x1963e0, &[heap, accum1, u32::from(tmp).wrapping_add(1)], m);
             if resized == 0 {
-                h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                 return 0x89b0200a;
             }
             accum1 = resized;
             if !p_word(m, ctx.wrapping_add(0x44), resized) {
                 return FAIL_MEM;
             }
-            let resized = h.call_m(
-                0x1963e0,
-                &[heap, accum2, u32::from(tmp).wrapping_add(1)],
-                m,
-            );
+            let resized = h.call_m(0x1963e0, &[heap, accum2, u32::from(tmp).wrapping_add(1)], m);
             if resized == 0 {
-                h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                 return 0x89b0200a;
             }
             accum2 = resized;
@@ -8023,13 +9138,9 @@ pub fn fn_2719ec_m(
                 return FAIL_MEM;
             }
             let accum3 = g_word(m, ctx.wrapping_add(0x4c)).unwrap_or(0);
-            let resized = h.call_m(
-                0x1963e0,
-                &[heap, accum3, u32::from(tmp).wrapping_add(1)],
-                m,
-            );
+            let resized = h.call_m(0x1963e0, &[heap, accum3, u32::from(tmp).wrapping_add(1)], m);
             if resized == 0 {
-                h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                 return 0x89b0200a;
             }
             if !p_word(m, ctx.wrapping_add(0x4c), resized) {
@@ -8049,9 +9160,7 @@ pub fn fn_2719ec_m(
                 match cb {
                     0x11 => in_word = if in_word == 0 { 1 } else { 0 },
                     0x7e => {
-                        if in_word != 0
-                            && !p_byte(m, accum0.wrapping_add(u32::from(ci)), 0xad)
-                        {
+                        if in_word != 0 && !p_byte(m, accum0.wrapping_add(u32::from(ci)), 0xad) {
                             return FAIL_MEM;
                         }
                     }
@@ -8080,12 +9189,7 @@ pub fn fn_2719ec_m(
             loop {
                 pos = text_end;
                 let cc = g_byte(m, pp.wrapping_add(u32::from(pos))).unwrap_or(0);
-                if cc == 0
-                    || cc == b' '
-                    || cc == b'\t'
-                    || cc == b'\n'
-                    || cc == b'\r'
-                    || cc == b'_'
+                if cc == 0 || cc == b' ' || cc == b'\t' || cc == b'\n' || cc == b'\r' || cc == b'_'
                 {
                     break;
                 }
@@ -8109,17 +9213,27 @@ pub fn fn_2719ec_m(
             }
             h.call_m(
                 0x1738e8,
-                &[log, D_8f9532, 5, 0, lit_l1, rule_name, accum0.wrapping_add(u32::from(text_start))],
+                &[
+                    log,
+                    s_lit(h.rom(), D_8f9532),
+                    5,
+                    0,
+                    lit_l1,
+                    rule_name,
+                    accum0.wrapping_add(u32::from(text_start)),
+                ],
                 m,
             );
-            let tmp = h.call_m(
-                0x195d90,
-                &[accum0.wrapping_add(u32::from(text_start))],
-                m,
-            );
-            rc = h.call_m(
+            let tmp = h.call_m(0x195d90, &[accum0.wrapping_add(u32::from(text_start))], m);
+            rc = h.call_guest_m(
                 f_set_input,
-                &[ruleh_obj, ruleh_data, 0, accum0.wrapping_add(u32::from(text_start)), tmp],
+                &[
+                    ruleh_obj,
+                    ruleh_data,
+                    0,
+                    accum0.wrapping_add(u32::from(text_start)),
+                    tmp,
+                ],
                 m,
             );
             if rc >= 0x80000000 {
@@ -8127,22 +9241,39 @@ pub fn fn_2719ec_m(
             }
             h.call_m(
                 0x1738e8,
-                &[log, D_8f9532, 5, 0, lit_l2, accum1b.wrapping_add(u32::from(text_start))],
+                &[
+                    log,
+                    s_lit(h.rom(), D_8f9532),
+                    5,
+                    0,
+                    lit_l2,
+                    accum1b.wrapping_add(u32::from(text_start)),
+                ],
                 m,
             );
             h.call_m(
                 0x1738e8,
-                &[log, D_8f9532, 5, 0, lit_l2, rule_name, accum1b.wrapping_add(u32::from(text_start))],
+                &[
+                    log,
+                    s_lit(h.rom(), D_8f9532),
+                    5,
+                    0,
+                    lit_l2,
+                    rule_name,
+                    accum1b.wrapping_add(u32::from(text_start)),
+                ],
                 m,
             );
-            let tmp = h.call_m(
-                0x195d90,
-                &[accum1b.wrapping_add(u32::from(text_start))],
-                m,
-            );
-            rc = h.call_m(
+            let tmp = h.call_m(0x195d90, &[accum1b.wrapping_add(u32::from(text_start))], m);
+            rc = h.call_guest_m(
                 f_set_input,
-                &[ruleh_obj, ruleh_data, 1, accum1b.wrapping_add(u32::from(text_start)), tmp],
+                &[
+                    ruleh_obj,
+                    ruleh_data,
+                    1,
+                    accum1b.wrapping_add(u32::from(text_start)),
+                    tmp,
+                ],
                 m,
             );
             if rc >= 0x80000000 {
@@ -8150,17 +9281,27 @@ pub fn fn_2719ec_m(
             }
             h.call_m(
                 0x1738e8,
-                &[log, D_8f9532, 5, 0, lit_l3, rule_name, accum2b.wrapping_add(u32::from(text_start))],
+                &[
+                    log,
+                    s_lit(h.rom(), D_8f9532),
+                    5,
+                    0,
+                    lit_l3,
+                    rule_name,
+                    accum2b.wrapping_add(u32::from(text_start)),
+                ],
                 m,
             );
-            let tmp = h.call_m(
-                0x195d90,
-                &[accum2b.wrapping_add(u32::from(text_start))],
-                m,
-            );
-            rc = h.call_m(
+            let tmp = h.call_m(0x195d90, &[accum2b.wrapping_add(u32::from(text_start))], m);
+            rc = h.call_guest_m(
                 f_set_input,
-                &[ruleh_obj, ruleh_data, 2, accum2b.wrapping_add(u32::from(text_start)), tmp],
+                &[
+                    ruleh_obj,
+                    ruleh_data,
+                    2,
+                    accum2b.wrapping_add(u32::from(text_start)),
+                    tmp,
+                ],
                 m,
             );
             if rc >= 0x80000000 {
@@ -8168,17 +9309,27 @@ pub fn fn_2719ec_m(
             }
             h.call_m(
                 0x1738e8,
-                &[log, D_8f9532, 5, 0, lit_l4, rule_name, accum3b.wrapping_add(u32::from(text_start))],
+                &[
+                    log,
+                    s_lit(h.rom(), D_8f9532),
+                    5,
+                    0,
+                    lit_l4,
+                    rule_name,
+                    accum3b.wrapping_add(u32::from(text_start)),
+                ],
                 m,
             );
-            let tmp = h.call_m(
-                0x195d90,
-                &[accum3b.wrapping_add(u32::from(text_start))],
-                m,
-            );
-            rc = h.call_m(
+            let tmp = h.call_m(0x195d90, &[accum3b.wrapping_add(u32::from(text_start))], m);
+            rc = h.call_guest_m(
                 f_set_sep,
-                &[ruleh_obj, ruleh_data, 3, accum3b.wrapping_add(u32::from(text_start)), tmp],
+                &[
+                    ruleh_obj,
+                    ruleh_data,
+                    3,
+                    accum3b.wrapping_add(u32::from(text_start)),
+                    tmp,
+                ],
                 m,
             );
             if rc >= 0x80000000 {
@@ -8191,7 +9342,7 @@ pub fn fn_2719ec_m(
                     h.call_m(0x195c90, &[rule_name, word], m);
                 }
             }
-            rc = h.call_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
+            rc = h.call_guest_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
             if rc < 0x80000000 {
                 if language == 0 {
                     if split_word == 0 {
@@ -8210,12 +9361,12 @@ pub fn fn_2719ec_m(
                 if !p_byte(m, rule_name.wrapping_add(u32::from(limit)), 0) {
                     return FAIL_MEM;
                 }
-                rc = h.call_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
+                rc = h.call_guest_m(f_set_rules, &[ruleh_obj, ruleh_data, rule_name], m);
                 if rc >= 0x80000000 {
                     return rc;
                 }
             }
-            rc = h.call_m(
+            rc = h.call_guest_m(
                 f_get_output,
                 &[ruleh_obj, ruleh_data, 0, out_text, out_len],
                 m,
@@ -8230,10 +9381,18 @@ pub fn fn_2719ec_m(
             }
             h.call_m(
                 0x1738e8,
-                &[log, D_8f9532, 5, 0, lit_o1, rule_name, cross_text],
+                &[
+                    log,
+                    s_lit(h.rom(), D_8f9532),
+                    5,
+                    0,
+                    lit_o1,
+                    rule_name,
+                    cross_text,
+                ],
                 m,
             );
-            rc = h.call_m(
+            rc = h.call_guest_m(
                 f_get_output,
                 &[ruleh_obj, ruleh_data, 1, out_phon, out_len],
                 m,
@@ -8248,10 +9407,18 @@ pub fn fn_2719ec_m(
             }
             h.call_m(
                 0x1738e8,
-                &[log, D_8f9532, 5, 0, lit_o2, rule_name, cross_phon],
+                &[
+                    log,
+                    s_lit(h.rom(), D_8f9532),
+                    5,
+                    0,
+                    lit_o2,
+                    rule_name,
+                    cross_phon,
+                ],
                 m,
             );
-            rc = h.call_m(
+            rc = h.call_guest_m(
                 f_get_output,
                 &[ruleh_obj, ruleh_data, 2, out_tags, out_len],
                 m,
@@ -8266,7 +9433,15 @@ pub fn fn_2719ec_m(
             }
             h.call_m(
                 0x1738e8,
-                &[log, D_8f9532, 5, 0, lit_o3, rule_name, cross_tags],
+                &[
+                    log,
+                    s_lit(h.rom(), D_8f9532),
+                    5,
+                    0,
+                    lit_o3,
+                    rule_name,
+                    cross_tags,
+                ],
                 m,
             );
             limit = cross_tags_len;
@@ -8277,7 +9452,9 @@ pub fn fn_2719ec_m(
                     if b == b'~' {
                         let mut ppos = stri;
                         while ppos < limit {
-                            let bt = g_byte(m, cross_text.wrapping_add(u32::from(ppos).wrapping_add(1))).unwrap_or(0);
+                            let bt =
+                                g_byte(m, cross_text.wrapping_add(u32::from(ppos).wrapping_add(1)))
+                                    .unwrap_or(0);
                             if !p_byte(m, cross_text.wrapping_add(u32::from(ppos)), bt) {
                                 return FAIL_MEM;
                             }
@@ -8304,7 +9481,9 @@ pub fn fn_2719ec_m(
                     if b == b'~' {
                         let mut ppos = stri;
                         while ppos < limit {
-                            let bt = g_byte(m, cross_phon.wrapping_add(u32::from(ppos).wrapping_add(1))).unwrap_or(0);
+                            let bt =
+                                g_byte(m, cross_phon.wrapping_add(u32::from(ppos).wrapping_add(1)))
+                                    .unwrap_or(0);
                             if !p_byte(m, cross_phon.wrapping_add(u32::from(ppos)), bt) {
                                 return FAIL_MEM;
                             }
@@ -8331,7 +9510,9 @@ pub fn fn_2719ec_m(
                     if b == b'~' {
                         let mut ppos = stri;
                         while ppos < limit {
-                            let bt = g_byte(m, cross_tags.wrapping_add(u32::from(ppos).wrapping_add(1))).unwrap_or(0);
+                            let bt =
+                                g_byte(m, cross_tags.wrapping_add(u32::from(ppos).wrapping_add(1)))
+                                    .unwrap_or(0);
                             if !p_byte(m, cross_tags.wrapping_add(u32::from(ppos)), bt) {
                                 return FAIL_MEM;
                             }
@@ -8351,14 +9532,17 @@ pub fn fn_2719ec_m(
                 }
             }
             let orth_len_now = h.call_m(0x195d90, &[orth_now], m);
-            let need = (h.call_m(0x195d90, &[cross_text], m).wrapping_add(orth_len_now).wrapping_add(2)) as u16;
+            let need = (h
+                .call_m(0x195d90, &[cross_text], m)
+                .wrapping_add(orth_len_now)
+                .wrapping_add(2)) as u16;
             if need < 0x81 {
                 let resized = orth_now;
                 let _ = resized;
             } else {
                 let resized = h.call_m(0x1963e0, &[heap, orth_now, u32::from(need)], m);
                 if resized == 0 {
-                    h.call_m(0x173dc0, &[log, D_8f9532, 0x84d0, 0], m);
+                    h.call_m(0x173dc0, &[log, s_lit(h.rom(), D_8f9532), 0x84d0, 0], m);
                     return 0x89b0200a;
                 }
                 orth_now = resized;
@@ -8388,7 +9572,11 @@ pub fn fn_2719ec_m(
                 }
             }
             let scan_off = scan;
-            let tmpn = h.call_m(0x195d58, &[cross_phon.wrapping_add(scan_off), s_lit(h.rom(), 0x2702b8)], m);
+            let tmpn = h.call_m(
+                0x195d58,
+                &[cross_phon.wrapping_add(scan_off), s_lit(h.rom(), 0x2702b8)],
+                m,
+            );
             let (phondst, srcp) = if tmpn == 0 {
                 (phon_now, s_lit(h.rom(), STAR_S))
             } else {
@@ -8416,7 +9604,11 @@ pub fn fn_2719ec_m(
                 }
             }
             let scan2_off = scan2;
-            let tmpp = h.call_m(0x195d58, &[cross_tags.wrapping_add(scan2_off), s_lit(h.rom(), 0x2702b8)], m);
+            let tmpp = h.call_m(
+                0x195d58,
+                &[cross_tags.wrapping_add(scan2_off), s_lit(h.rom(), 0x2702b8)],
+                m,
+            );
             let (posdst, srcpp) = if tmpp == 0 {
                 (pos_now, s_lit(h.rom(), STAR_S))
             } else {
@@ -8435,9 +9627,8 @@ pub fn fn_2719ec_m(
     if !p_byte(m, pos_now.wrapping_add(1), 0) {
         return FAIL_MEM;
     }
-
     if record_generated == 0 {
-        rc = h.call_m(
+        rc = h.call_guest_m(
             f_insert_child,
             &[handle_obj, handle_data, u32::from(start_r), out_node],
             m,
@@ -8447,19 +9638,34 @@ pub fn fn_2719ec_m(
         }
         node_r = g_half(m, out_node).unwrap_or(0);
     }
-
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_get_attr,
-        &[handle_obj, handle_data, u32::from(start_r), 0, 1, out_type, out_attr],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(start_r),
+            0,
+            1,
+            out_type,
+            out_attr,
+        ],
         m,
     );
     if rc >= 0x80000000 {
         return rc;
     }
     let epi_type = g_byte(m, out_type).unwrap_or(0);
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_get_attr,
-        &[handle_obj, handle_data, u32::from(start_r), 1, 1, out_node, out_attr],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(start_r),
+            1,
+            1,
+            out_node,
+            out_attr,
+        ],
         m,
     );
     if rc >= 0x80000000 {
@@ -8467,15 +9673,22 @@ pub fn fn_2719ec_m(
     }
     attr_start = g_half(m, out_node).unwrap_or(0);
     if text_normalized != 0 && epi_type != 4 {
-        attr_start =
-            (text_off as i32 + attr_start as i32 - normalization_delta as i32) as u16;
+        attr_start = (text_off as i32 + attr_start as i32 - normalization_delta as i32) as u16;
     }
     if !p_half(m, out_node, attr_start) {
         return FAIL_MEM;
     }
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set_attr,
-        &[handle_obj, handle_data, u32::from(node_r), 1, 1, out_node, out_wsize],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(node_r),
+            1,
+            1,
+            out_node,
+            out_wsize,
+        ],
         m,
     );
     if rc >= 0x80000000 {
@@ -8484,17 +9697,33 @@ pub fn fn_2719ec_m(
     if !p_byte(m, out_type, b'\t') {
         return FAIL_MEM;
     }
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set_attr,
-        &[handle_obj, handle_data, u32::from(node_r), 0, 1, out_type, out_attr],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(node_r),
+            0,
+            1,
+            out_type,
+            out_attr,
+        ],
         m,
     );
     if rc >= 0x80000000 {
         return rc;
     }
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_get_attr,
-        &[handle_obj, handle_data, u32::from(end_r), 2, 1, out_node, out_attr],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(end_r),
+            2,
+            1,
+            out_node,
+            out_attr,
+        ],
         m,
     );
     if rc >= 0x80000000 {
@@ -8502,16 +9731,23 @@ pub fn fn_2719ec_m(
     }
     let mut attr_end = g_half(m, out_node).unwrap_or(0);
     if text_normalized != 0 {
-        attr_end =
-            (text_off as i32 + attr_end as i32 - normalization_delta as i32) as u16;
+        attr_end = (text_off as i32 + attr_end as i32 - normalization_delta as i32) as u16;
     }
     attr_end = (normalization_delta as i32 + attr_end as i32) as u16;
     if !p_half(m, out_node, attr_end) {
         return FAIL_MEM;
     }
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set_attr,
-        &[handle_obj, handle_data, u32::from(node_r), 2, 1, out_node, out_wsize],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(node_r),
+            2,
+            1,
+            out_node,
+            out_wsize,
+        ],
         m,
     );
     if rc >= 0x80000000 {
@@ -8521,27 +9757,51 @@ pub fn fn_2719ec_m(
     let phon_now2 = g_word(m, ctx.wrapping_add(0x5c)).unwrap_or(0);
     let pos_now2 = g_word(m, ctx.wrapping_add(0x60)).unwrap_or(0);
     let tmp = h.call_m(0x195d90, &[orth_now2], m);
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set_attr,
-        &[handle_obj, handle_data, u32::from(node_r), 3, tmp.wrapping_add(1), orth_now2, out_wsize],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(node_r),
+            3,
+            tmp.wrapping_add(1),
+            orth_now2,
+            out_wsize,
+        ],
         m,
     );
     if rc >= 0x80000000 {
         return rc;
     }
     let tmp = h.call_m(0x195d90, &[phon_now2], m);
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set_attr,
-        &[handle_obj, handle_data, u32::from(node_r), 5, tmp.wrapping_add(1), phon_now2, out_wsize],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(node_r),
+            5,
+            tmp.wrapping_add(1),
+            phon_now2,
+            out_wsize,
+        ],
         m,
     );
     if rc >= 0x80000000 {
         return rc;
     }
     let tmp = h.call_m(0x195d90, &[pos_now2], m);
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set_attr,
-        &[handle_obj, handle_data, u32::from(node_r), 6, tmp.wrapping_add(1), pos_now2, out_wsize],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(node_r),
+            6,
+            tmp.wrapping_add(1),
+            pos_now2,
+            out_wsize,
+        ],
         m,
     );
     if rc >= 0x80000000 {
@@ -8550,9 +9810,17 @@ pub fn fn_2719ec_m(
     if !p_half(m, out_node, priority) {
         return FAIL_MEM;
     }
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set_attr,
-        &[handle_obj, handle_data, u32::from(node_r), 7, 1, out_node, out_wsize],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(node_r),
+            7,
+            1,
+            out_node,
+            out_wsize,
+        ],
         m,
     );
     if rc >= 0x80000000 {
@@ -8574,27 +9842,44 @@ pub fn fn_2719ec_m(
         }
     }
     let tmp = h.call_m(0x195d90, &[lang_name], m);
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set_attr,
-        &[handle_obj, handle_data, u32::from(node_r), 9, tmp.wrapping_add(1), lang_name, out_wsize],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(node_r),
+            9,
+            tmp.wrapping_add(1),
+            lang_name,
+            out_wsize,
+        ],
         m,
     );
     if rc < 0x80000000 && history_count != 0 {
         limit = 0;
         loop {
             if g_half(m, cur_node_ptr).unwrap_or(0) == node_ids[(limit & 0x7f) as usize] {
-                rc = h.call_m(
+                rc = h.call_guest_m(
                     f_next,
-                    &[handle_obj, handle_data, g_half(m, cur_node_ptr).unwrap_or(0) as u32, cur_node_ptr],
+                    &[
+                        handle_obj,
+                        handle_data,
+                        g_half(m, cur_node_ptr).unwrap_or(0) as u32,
+                        cur_node_ptr,
+                    ],
                     m,
                 );
                 if rc >= 0x80000000 {
                     break;
                 }
             }
-            rc = h.call_m(
+            rc = h.call_guest_m(
                 f_remove,
-                &[handle_obj, handle_data, u32::from(node_ids[(limit & 0x7f) as usize])],
+                &[
+                    handle_obj,
+                    handle_data,
+                    u32::from(node_ids[(limit & 0x7f) as usize]),
+                ],
                 m,
             );
             if rc >= 0x80000000 {
@@ -8610,16 +9895,25 @@ pub fn fn_2719ec_m(
 }
 
 const EXPAND_SCRATCH: u32 = 0xe0fbe40;
+
 const EXPAND_QUERY: u32 = 0x00;
+
 const EXPAND_QUERY_MAX: usize = 128;
+
 const EXPAND_OUT: u32 = 0x80;
+
 const EXPAND_COUNT: u32 = 0x84;
+
 const EXPAND_SEP: u32 = 0x86;
 
 const BROKER_FILE_SCRATCH: u32 = 0xe0fad00;
+
 const BROKER_DATA_SCRATCH: u32 = 0xe0fbd00;
+
 const BROKER_QUERY_SCRATCH: u32 = 0xe0fbd20;
+
 const BROKER_LIT_BASE: u32 = 0xe0fbd40;
+
 const BROKER_LIT_END: u32 = 0xe0fbe40;
 
 struct BAdapter<'a, H: Host + ?Sized> {
@@ -8640,6 +9934,7 @@ struct EndsMirror {
     heap: u32,
     len: u32,
 }
+
 struct LexExpansion<'a, H: Host + ?Sized> {
     ctx: u32,
     inner: BAdapter<'a, H>,
@@ -9102,7 +10397,9 @@ pub fn broker_179f30_live<H: Host + ?Sized>(
 }
 
 const MAP_OUT: u32 = EXPAND_SCRATCH + 0x90;
+
 const MAP_LEN: u32 = EXPAND_SCRATCH + 0x94;
+
 pub fn fn_26b7ec_m<H: Host + ?Sized>(
     m: &mut Memory<'_>,
     h: &mut H,
@@ -9351,13 +10648,11 @@ struct BrokerAdapter<'a, H: Host + ?Sized> {
 
 impl<H: Host + ?Sized> Host for BrokerAdapter<'_, H> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
-        let entry = crate::rom_region::to_us_guest(self.rom(), entry);
+        let entry = crate::rom_region::to_us(self.rom(), entry);
         if entry == 0x179f30 && args.len() >= 3 {
-            let rc =
-                broker_179f30_live(m, args[0], args[1], args[2], &mut *self.inner);
+            let rc = broker_179f30_live(m, args[0], args[1], args[2], &mut *self.inner);
             return rc;
         }
-
         if entry == 0x26b7ec && args.len() >= 4 {
             let rc = fn_26b7ec_m(m, &mut *self.inner, args[0], args[1], args[2], args[3]);
             return rc;
@@ -9370,8 +10665,7 @@ impl<H: Host + ?Sized> Host for BrokerAdapter<'_, H> {
             return fn_26bb44_m(m, args[0]);
         }
         let rc = self.inner.call_m(entry, args, m);
-        if rc >= 0x80000000 {
-        }
+        if rc >= 0x80000000 {}
         rc
     }
     fn rom(&self) -> crate::rom_region::Rom {
@@ -9386,26 +10680,18 @@ pub struct XHost<'a, H: Host + ?Sized> {
 
 impl<H: Host + ?Sized> Host for XHost<'_, H> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
-        let entry = crate::rom_region::to_us_guest(self.rom(), entry);
-
+        let entry = crate::rom_region::to_us(self.rom(), entry);
         if entry == 0x1edd3c && args.len() >= 3 {
             return f1edd3c_is_delim(m, self, args[0], args[1], args[2]);
         }
         if entry == 0x2193a4 && args.len() >= 3 {
             let (engine, tag, key) = (args[0], args[1], args[2]);
-            let rc = depes_exec_module_expanded_m(
-                m,
-                engine,
-                tag,
-                key,
-                &mut self.vm,
-                &mut *self.inner,
-            );
+            let rc =
+                depes_exec_module_expanded_m(m, engine, tag, key, &mut self.vm, &mut *self.inner);
             return rc;
         }
         if entry == 0x179f30 && args.len() >= 3 {
-            let rc =
-                broker_179f30_live(m, args[0], args[1], args[2], &mut *self.inner);
+            let rc = broker_179f30_live(m, args[0], args[1], args[2], &mut *self.inner);
             return rc;
         }
         self.inner.call_m(entry, args, m)

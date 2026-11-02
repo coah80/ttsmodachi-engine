@@ -72,6 +72,7 @@ pub fn count_phrase_boundaries(bytes: &[u8], count: u32) -> Result<u32, Error> {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+
 pub struct SynthesisWindow {
     pub rate: u16,
     pub period: u16,
@@ -132,6 +133,7 @@ impl SynthesisWindow {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+
 pub enum ProsodyResource {
     Linguistic,
     Rules,
@@ -139,6 +141,7 @@ pub enum ProsodyResource {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+
 pub struct PhrasingEnv {
     pub id: u32,
     pub heap: u32,
@@ -147,18 +150,21 @@ pub struct PhrasingEnv {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+
 pub struct PhrasingResource {
     pub interface: u32,
     pub handle: [u32; 2],
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+
 pub struct FeHandle {
     pub obj: u32,
     pub tag: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+
 pub struct Phrasing {
     pub env: u32,
     pub ling: u32,
@@ -257,6 +263,7 @@ pub fn open_phrasing(
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+
 pub struct GlobalEnv {
     pub id: u32,
     pub heap: u32,
@@ -266,6 +273,7 @@ pub struct GlobalEnv {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+
 pub struct ConfigResult {
     pub count: u16,
     pub flag: u8,
@@ -274,6 +282,7 @@ pub struct ConfigResult {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+
 pub struct Global {
     pub id: u32,
     pub env: u32,
@@ -423,6 +432,7 @@ pub struct WindowBuffers<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+
 pub struct WindowCursor {
     pub f16: i16,
     pub f18: i16,
@@ -664,6 +674,7 @@ pub fn select_voice(
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+
 pub struct WindowObject {
     pub rate: u16,
     pub period: u16,
@@ -1479,6 +1490,7 @@ pub fn destroy_global(
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+
 pub struct PhrasingMark {
     pub r#type: u16,
     pub position: u32,
@@ -1655,6 +1667,7 @@ fn parse_pause(output: &[u8], pos: &mut usize, pause_duration: u32) -> i16 {
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn process_phrasing(
     phrasing: &Phrasing,
     handle: [u32; 2],
@@ -1983,6 +1996,7 @@ pub fn process_phrasing(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn merge_modes(
     phrasing: &Phrasing,
     handle: [u32; 2],
@@ -2704,7 +2718,9 @@ impl<'a, 'b> GlobalLayers<'a, 'b> {
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub trait GlobalProcessHost {
+    fn rom(&self) -> crate::rom_region::Rom { crate::rom_region::Rom::Us }
     fn validate(&mut self, object: u32, b: u32, tag: u32, size: u32) -> u32;
     fn foreign_param(&mut self, env: u32) -> (u32, Option<&[u8]>);
     fn first_node(&mut self, handle: [u32; 2], kind: i32, sub: u32) -> (u32, u16);
@@ -2832,6 +2848,7 @@ fn append_span(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn process_global_stage(
     global: &mut Global,
     b: u32,
@@ -2886,13 +2903,11 @@ pub fn process_global_stage(
         if status >= 0x80000000 {
             break 'fail status;
         }
-
         let mut n64 = 0u32;
         let mut n60 = 0u32;
         let mut first = true;
         let mut has_t = 0u16;
         let mut w80_len = 0usize;
-
         let mut word_seen = false;
         while id_b != 0 {
             let (status, raw, _) = host.node_field(handle, id_b, 0, 1);
@@ -2900,7 +2915,6 @@ pub fn process_global_stage(
                 break 'fail status;
             }
             let kind = raw as u8;
-
             if kind == 4
                 || kind == 9
                 || kind == 10
@@ -2981,7 +2995,7 @@ pub fn process_global_stage(
                             span = w80_len as i16;
                         }
                         let mut cut = (mark_pos as i16) as i32;
-                        if cut > span as i32 {
+                        if if host.rom() == crate::rom_region::Rom::Us { cut > span as i32 } else { cut < span as i32 } {
                             span = (i32::from(end) - i32::from(beg)) as i16;
                             if (span as i32) < w80_len as i32 {
                                 span = w80_len as i16;
@@ -3042,7 +3056,6 @@ pub fn process_global_stage(
         if n60 != 0 {
             total = (total.wrapping_add(2)) & 0xffff;
         }
-
         global.f20 = host.alloc_layer(global.env, total as u16);
         if global.f20 == 0 {
             host.log_nomem(global.env);
@@ -3085,7 +3098,6 @@ pub fn process_global_stage(
             }
             layers.layers[6][0] = 0;
         }
-
         first = true;
         has_t = 0;
         let (status, id) = host.first_node(handle, 2, u32::from(id_a));
@@ -3284,7 +3296,6 @@ pub fn process_global_stage(
                             }
                             total = total.wrapping_add(1);
                         }
-
                         if kind == 10 && n64 == 0 {
                             layers.append6(b"\x11/+", b"   ");
                             total = total.wrapping_add(3);
@@ -3317,7 +3328,6 @@ pub fn process_global_stage(
                         }
                         layers.append_byte(4, cbuf);
                         layers.append(5, &buffers.w80[..w80_len]);
-
                         let span = ((i32::from(end) - i32::from(beg)) as i16) as i32;
                         let dw_path = (w80_len as i32) >= span && {
                             let dw4 = w80_len as i32;
@@ -3696,7 +3706,6 @@ pub fn process_global_stage(
                 }
                 id_b = next;
             }
-
             if global.use_tn_tag != 0 && !first {
                 if !lastw_valid {
                     al1 = 0;
@@ -3853,7 +3862,6 @@ pub fn process_global_stage(
                     *b = cbuf;
                 }
             }
-
             al2 = 0;
             if cnt != 0 {
                 loop {
@@ -3907,7 +3915,6 @@ pub fn process_global_stage(
                     }
                 }
             }
-
             let input_len = c_strlen(buffers.input);
             let last = if input_len == 0 {
                 buffers.input_prefix
@@ -3978,7 +3985,6 @@ pub fn process_global_stage(
                         }
                         loop {
                             if lvl > 2 {
-
                                 pos = pos.wrapping_add(1) & 0xffff;
                                 break;
                             }
@@ -4119,11 +4125,9 @@ pub fn process_global_stage(
                     inserted = true;
                 }
                 if inserted {
-
                     commit_layer_output(host, buffers.output, cnt);
                 }
             }
-
             let (status, id) = host.first_node(handle, 2, u32::from(id_a));
             fill_rc = status;
             if fill_rc >= 0x80000000 || id == 0 {
@@ -4269,6 +4273,7 @@ pub struct ProsodyRules<'a> {
 }
 
 #[derive(Clone, Copy)]
+
 pub struct ProsodyMarker {
     pub kind: u16,
     pub active: u32,
@@ -4585,6 +4590,7 @@ fn prosody_boundary_tail(
 }
 
 #[allow(clippy::too_many_lines)]
+
 pub fn build_phone_features(
     allocator: u32,
     log: u32,

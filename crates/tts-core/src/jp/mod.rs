@@ -654,7 +654,9 @@ pub fn mix_pcm(eng: &mut Engine, a: i32, b: i32, pcm: &mut PcmLog) {
                 let u = eng.rds16(unit);
                 let m = mix_sat(r, u);
                 eng.wr16(ring as usize, m as u16);
-                pcm.push(m as i16);
+                if !pcm.voice_output {
+                    pcm.push(m as i16);
+                }
                 n = n.wrapping_add(1);
                 unit += 2;
                 ring = ring.wrapping_add(2);
@@ -673,7 +675,9 @@ pub fn mix_pcm(eng: &mut Engine, a: i32, b: i32, pcm: &mut PcmLog) {
             let u = eng.rds16(unit);
             let m = mix_sat(r, u);
             eng.wr16(ring as usize, m as u16);
-            pcm.push(m as i16);
+            if !pcm.voice_output {
+                pcm.push(m as i16);
+            }
             unit += 2;
             n2 -= 1;
             ring = ring.wrapping_add(2);
@@ -1380,11 +1384,15 @@ fn unit_s16(eng: &Engine, code: &[u8], uo: usize, off: usize) -> i16 {
 pub struct PcmLog<'a> {
     pub buf: &'a mut [i16],
     pub len: usize,
+    voice_output: bool,
 }
 
 impl<'a> PcmLog<'a> {
     pub fn new(buf: &'a mut [i16]) -> Self {
-        PcmLog { buf, len: 0 }
+        PcmLog { buf, len: 0, voice_output: true }
+    }
+    pub fn mixed_writes(buf: &'a mut [i16]) -> Self {
+        PcmLog { buf, len: 0, voice_output: false }
     }
     #[inline]
     pub fn push(&mut self, v: i16) {
@@ -1394,7 +1402,7 @@ impl<'a> PcmLog<'a> {
     }
 }
 
-pub fn voice_render(eng: &mut Engine, n: i32, buf: usize, tab: &Tables) -> i32 {
+pub fn voice_render(eng: &mut Engine, n: i32, buf: usize, tab: &Tables, pcm: &mut PcmLog) -> i32 {
     let mut tmp = [0u8; 960];
     let r5 = n;
     let r8 = r5.wrapping_sub(1);
@@ -1473,7 +1481,7 @@ pub fn voice_render(eng: &mut Engine, n: i32, buf: usize, tab: &Tables) -> i32 {
         if r8 > 0 {
             let mut acc = buf0 as i32;
             for i in 0..r8 as usize {
-                let u = eng.rd16(buf + 2 + i * 2) as i32;
+                let u = eng.rds16(buf + 2 + i * 2) as i32;
                 acc = acc.wrapping_add(u);
                 acc = ((acc as u32).wrapping_add((acc as u32) >> 31)) as i32;
                 acc >>= 1;
@@ -1494,6 +1502,11 @@ pub fn voice_render(eng: &mut Engine, n: i32, buf: usize, tab: &Tables) -> i32 {
         }
 
         let cookie = eng.rd32(0xafe0);
+        if pcm.voice_output && (n2 as i16) > 0 {
+            for sample in tmp[..n2 as usize * 2].chunks_exact(2) {
+                pcm.push(i16::from_le_bytes([sample[0], sample[1]]));
+            }
+        }
         let _ = fnp;
         if (n2 as i16) as i32 > 0 {
             cookie.wrapping_add(88) as i32
@@ -1503,12 +1516,12 @@ pub fn voice_render(eng: &mut Engine, n: i32, buf: usize, tab: &Tables) -> i32 {
     }
 }
 
-pub fn ring_wrap(eng: &mut Engine, tab: &Tables) {
+pub fn ring_wrap(eng: &mut Engine, tab: &Tables, pcm: &mut PcmLog) {
     let w = eng.rd32(0x858C);
     let r = eng.rd32(0x8584);
     if w < r {
         let s = eng.rds16(0x859A) as i32;
-        voice_render(eng, s, w as usize, tab);
+        voice_render(eng, s, w as usize, tab, pcm);
         ring_silence(eng, s as u32, w);
         let mut slot = 0x83A4u32;
         if w == slot {
@@ -1519,7 +1532,7 @@ pub fn ring_wrap(eng: &mut Engine, tab: &Tables) {
     }
 }
 
-pub fn ring_advance(eng: &mut Engine, n: i32, tab: &Tables) -> u32 {
+pub fn ring_advance(eng: &mut Engine, n: i32, tab: &Tables, pcm: &mut PcmLog) -> u32 {
     if n < 0 {
         return n as u32;
     }
@@ -1529,7 +1542,7 @@ pub fn ring_advance(eng: &mut Engine, n: i32, tab: &Tables) -> u32 {
     let act = eng.rd32(0x858C);
     if act == 0x81C4 && cur >= 0x83A4 {
         let s = eng.rds16(0x859A) as i32;
-        voice_render(eng, s, 0x81C4, tab);
+        voice_render(eng, s, 0x81C4, tab, pcm);
         let s = eng.rds16(0x859A) as i32;
         ring_silence(eng, s as u32, 0x81C4);
         eng.wr32(0x858C, 0x83A4);
@@ -1537,7 +1550,7 @@ pub fn ring_advance(eng: &mut Engine, n: i32, tab: &Tables) -> u32 {
 
         if (0x81C4 <= cur && cur < 0x83A4) || cur > 0x8584 {
             let s = eng.rds16(0x859A) as i32;
-            voice_render(eng, s, 0x83A4, tab);
+            voice_render(eng, s, 0x83A4, tab, pcm);
             let s = eng.rds16(0x859A) as i32;
             ring_silence(eng, s as u32, 0x83A4);
             eng.wr32(0x858C, 0x81C4);
@@ -2660,7 +2673,7 @@ pub fn mora_render(
                 }
                 let eb = (eng.rds16(0x81C2) as i32) - step;
                 eng.wr16(0x81C2, eb as i16 as u16);
-                ring_advance(eng, step, tab);
+                ring_advance(eng, step, tab, pcm);
                 if eng.rds16(0x81C2) <= 0 {
                     break;
                 }
@@ -4617,7 +4630,7 @@ pub fn phrase_driver(eng: &mut Engine, tab: &Tables, pcm: &mut PcmLog) {
             if s2 > 0 {
                 let target = s2;
                 loop {
-                    ring_advance(eng, eng.rds16(4) as i32, tab);
+                    ring_advance(eng, eng.rds16(4) as i32, tab, pcm);
                     if flag_done(eng) == 1 {
                         return;
                     }
@@ -6879,7 +6892,7 @@ pub fn task_driver(eng: &mut Engine, tab: &Tables<'_>, pcm: &mut PcmLog) -> u32 
         if flag_done(eng) == 1 {
             break 'outer;
         }
-        ring_wrap(eng, tab);
+        ring_wrap(eng, tab, pcm);
         ring_init(eng);
     }
 

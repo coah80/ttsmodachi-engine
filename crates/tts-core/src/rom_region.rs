@@ -1,8 +1,7 @@
-
-
 include!("rom_region_tables.rs");
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+
 pub enum Rom {
     #[default]
     Us,
@@ -47,6 +46,10 @@ impl Rom {
 pub fn addr(rom: Rom, us: u32) -> u32 {
     if rom == Rom::Us {
         return us;
+    }
+    if us == 0x19592c { return if rom == Rom::Eu { 0x1959dc } else { 0x195a18 }; }
+    if (0xa09390..0xa093e6).contains(&us) {
+        return addr(rom, 0xa093e6) - (0xa093e6 - us);
     }
     if rom == Rom::Eu && (0x917000..0x918000).contains(&us) {
         return us + 0x1240;
@@ -176,6 +179,6 @@ pub fn capture_slot(rom: Rom) -> u32 {
     match rom {
         Rom::Us => 0xc72688,
         Rom::Eu => 0xc7373c,
-        Rom::Kr => 0xc72688,
+        Rom::Kr => 0xc98724,
     }
 }

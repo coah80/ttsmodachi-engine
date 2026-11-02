@@ -1,7 +1,7 @@
-
-
 use crate::boot::Memory;
+
 use crate::component_live_b::Host;
+
 use crate::rom_region::addr;
 
 fn s_len(m: &Memory<'_>, s: u32) -> u32 {
@@ -83,6 +83,7 @@ fn e_code(n: u32) -> u32 {
 fn h_1963e0(h: &mut impl Host, m: &mut Memory<'_>, heap: u32, ptr: u32, size: u32) -> u32 {
     h.call_m(0x1963e0, &[heap, ptr, size], m)
 }
+
 fn h_log(h: &mut impl Host, m: &mut Memory<'_>, log: u32, id: u32, code: u32) -> u32 {
     h.call_m(0x173dc0, &[log, id, code, 0], m)
 }
@@ -285,6 +286,7 @@ pub fn fn_24d2c8_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_2b79b4_m(
     m: &mut Memory<'_>,
     search: u32,
@@ -476,6 +478,7 @@ fn route_1ec7cc(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_2b7d80_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -784,6 +787,7 @@ pub fn fn_1ed6c4_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_2b7fdc_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -816,6 +820,7 @@ pub fn fn_2b7fdc_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn fn_2b7fdc_inner(
     m: &mut Memory<'_>,
     p: u32,
@@ -923,6 +928,7 @@ fn fn_2b7fdc_inner(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn check_2b7fdc(
     m: &mut Memory<'_>,
     p: u32,
@@ -1642,14 +1648,7 @@ pub fn fn_24d8c8_m(
     0
 }
 
-pub fn fn_24a5d4_m(
-    m: &mut Memory<'_>,
-    p: u32,
-    id: u32,
-    val: u32,
-    h: &mut impl Host,
-) -> u32 {
-
+pub fn fn_24a5d4_m(m: &mut Memory<'_>, p: u32, id: u32, val: u32, h: &mut impl Host) -> u32 {
     let fb = 0x1000u32;
     let sv0 = m.word(fb);
     let sv1 = m.word(fb.wrapping_add(4));
@@ -1662,20 +1661,37 @@ pub fn fn_24a5d4_m(
     let handle1 = m.word(p.wrapping_add(0x14));
     let set = m.word(vt.wrapping_add(0x54));
     let get = m.word(vt.wrapping_add(0x5c));
-
-    let mut r = h.call_m(get, &[handle0, handle1, id, 1, s1], m);
+    let mut r = h.call_guest_m(get, &[handle0, handle1, id, 1, s1], m);
     if r < 0x80000000 && m.half(s1) == 1 {
-        r = h.call_m(set, &[handle0, handle1, id, 1, 1, val, s2], m);
+        r = h.call_guest_m(set, &[handle0, handle1, id, 1, 1, val, s2], m);
         if m.half(s2) != 1 {
             let base = m.word(p);
-            h.call_m(0x173dc0, &[m.word(base.wrapping_add(16)), m.word(p.wrapping_add(0x48)), 0x5dde, 0], m);
+            h.call_m(
+                0x173dc0,
+                &[
+                    m.word(base.wrapping_add(16)),
+                    m.word(p.wrapping_add(0x48)),
+                    0x5dde,
+                    0,
+                ],
+                m,
+            );
             r = e_code(0);
         } else {
             r = 0;
         }
     } else {
         let base = m.word(p);
-        h.call_m(0x173dc0, &[m.word(base.wrapping_add(16)), m.word(p.wrapping_add(0x48)), 0x5ddf, 0], m);
+        h.call_m(
+            0x173dc0,
+            &[
+                m.word(base.wrapping_add(16)),
+                m.word(p.wrapping_add(0x48)),
+                0x5ddf,
+                0,
+            ],
+            m,
+        );
         r = e_code(0);
     }
     m.put_word(fb, sv0);
@@ -1683,14 +1699,7 @@ pub fn fn_24a5d4_m(
     r
 }
 
-pub fn fn_24a6bc_m(
-    m: &mut Memory<'_>,
-    p: u32,
-    id: u32,
-    val: u32,
-    h: &mut impl Host,
-) -> u32 {
-
+pub fn fn_24a6bc_m(m: &mut Memory<'_>, p: u32, id: u32, val: u32, h: &mut impl Host) -> u32 {
     let fb = 0x1000u32;
     let sv0 = m.word(fb);
     let sv1 = m.word(fb.wrapping_add(4));
@@ -1705,18 +1714,25 @@ pub fn fn_24a6bc_m(
     let get = m.word(vt.wrapping_add(0x5c));
     let base = m.word(p);
     let tag = m.word(p.wrapping_add(0x48));
-
-    let mut r = h.call_m(get, &[handle0, handle1, id, 2, s1], m);
+    let mut r = h.call_guest_m(get, &[handle0, handle1, id, 2, s1], m);
     if r < 0x80000000 && m.half(s1) == 1 {
-        r = h.call_m(set, &[handle0, handle1, id, 2, 1, val, s2], m);
+        r = h.call_guest_m(set, &[handle0, handle1, id, 2, 1, val, s2], m);
         if m.half(s2) != 1 {
-            h.call_m(0x173dc0, &[m.word(base.wrapping_add(16)), tag, 0x5ddf, 0], m);
+            h.call_m(
+                0x173dc0,
+                &[m.word(base.wrapping_add(16)), tag, 0x5ddf, 0],
+                m,
+            );
             r = e_code(0);
         } else {
             r = 0;
         }
     } else {
-        h.call_m(0x173dc0, &[m.word(base.wrapping_add(16)), tag, 0x5dde, 0], m);
+        h.call_m(
+            0x173dc0,
+            &[m.word(base.wrapping_add(16)), tag, 0x5dde, 0],
+            m,
+        );
         r = e_code(0);
     }
     m.put_word(fb, sv0);
@@ -1724,14 +1740,7 @@ pub fn fn_24a6bc_m(
     r
 }
 
-pub fn fn_24a7a4_m(
-    m: &mut Memory<'_>,
-    p: u32,
-    a: u32,
-    b: u32,
-    h: &mut impl Host,
-) -> u32 {
-
+pub fn fn_24a7a4_m(m: &mut Memory<'_>, p: u32, a: u32, b: u32, h: &mut impl Host) -> u32 {
     let fb = 0x1000u32;
     let sv0 = m.word(fb);
     let sv1 = m.word(fb.wrapping_add(4));
@@ -1747,10 +1756,9 @@ pub fn fn_24a7a4_m(
     let env = m.word(p);
     let w48 = m.word(p.wrapping_add(0x48));
     let mut r = 0u32;
-    let ok = h.call_m(query, &[handle0, handle1, a, 0, s1], m);
+    let ok = h.call_guest_m(query, &[handle0, handle1, a, 0, s1], m);
     if ok < 0x80000000 && m.half(s1) == 1 {
-
-        r = h.call_m(get, &[handle0, handle1, a, 0, 1, b, s2], m);
+        r = h.call_guest_m(get, &[handle0, handle1, a, 0, 1, b, s2], m);
         if m.half(s2) != 1 {
             h.call_m(0x173dc0, &[m.word(env.wrapping_add(16)), w48, 0x5de0, 0], m);
             r = e_code(0);
@@ -1929,13 +1937,11 @@ pub fn fn_24b290_m(
     let h1 = m.word(text.wrapping_add(0x14));
     let get = m.word(vt.wrapping_add(0x34));
     let next = m.word(vt.wrapping_add(0x3c));
-
     let fb = 0x1010u32;
     let mut sv = [0u32; 4];
     for (i, v) in sv.iter_mut().enumerate() {
         *v = m.word(fb.wrapping_add(i as u32 * 4));
     }
-
     let t = fb;
     let root = t;
     let node = t.wrapping_add(2);
@@ -1946,11 +1952,11 @@ pub fn fn_24b290_m(
         m.put_half(a, 0);
     }
     m.put_byte(typ, 0);
-    let mut rc = h.call_m(get, &[h0, h1, 1, 0, root], m);
+    let mut rc = h.call_guest_m(get, &[h0, h1, 1, 0, root], m);
     let done = if rc >= 0x80000000 {
         true
     } else {
-        rc = h.call_m(get, &[h0, h1, 3, m.half(root) as u32, node], m);
+        rc = h.call_guest_m(get, &[h0, h1, 3, m.half(root) as u32, node], m);
         rc != 0
     };
     if !done {
@@ -1975,7 +1981,7 @@ pub fn fn_24b290_m(
                 m.put_half(out, nid as u16);
                 loop {
                     let cur = m.half(node) as u32;
-                    rc = h.call_m(next, &[h0, h1, cur, node], m);
+                    rc = h.call_guest_m(next, &[h0, h1, cur, node], m);
                     if rc != 0 || m.half(node) == 0 {
                         break;
                     }
@@ -2009,7 +2015,7 @@ pub fn fn_24b290_m(
             if position <= np {
                 loop {
                     m.put_half(out, m.half(node));
-                    rc = h.call_m(next, &[h0, h1, m.half(node) as u32, node], m);
+                    rc = h.call_guest_m(next, &[h0, h1, m.half(node) as u32, node], m);
                     if rc != 0 {
                         break;
                     }
@@ -2038,7 +2044,7 @@ pub fn fn_24b290_m(
             if ty != 5 && ni > index {
                 break;
             }
-            rc = h.call_m(next, &[h0, h1, nid, node], m);
+            rc = h.call_guest_m(next, &[h0, h1, nid, node], m);
             if rc != 0 {
                 break;
             }
@@ -2051,6 +2057,7 @@ pub fn fn_24b290_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_24b540_m(
     m: &mut Memory<'_>,
     p: u32,
@@ -2072,7 +2079,6 @@ pub fn fn_24b540_m(
     let find = m.word(mt.wrapping_add(0x24));
     let lookup = m.word(mt.wrapping_add(0x28));
     let set = m.word(mt.wrapping_add(0x50));
-
     let fb = 0x1030u32;
     let mut sv = [0u32; 4];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -2085,34 +2091,33 @@ pub fn fn_24b540_m(
     m.put_half(count, 0);
     h.call_m(0x1738e8, &[log, tag, 4, 0], m);
     let mut rc = if key == 0 {
-        let r = h.call_m(first, &[h0, h1, 1, 0, first_out], m);
+        let r = h.call_guest_m(first, &[h0, h1, 1, 0, first_out], m);
         if r >= 0x80000000 {
             r
         } else {
-            h.call_m(find, &[h0, h1, 3, m.half(first_out) as u32, token], m)
+            h.call_guest_m(find, &[h0, h1, 3, m.half(first_out) as u32, token], m)
         }
     } else {
-        h.call_m(lookup, &[h0, h1, key, token], m)
+        h.call_guest_m(lookup, &[h0, h1, key, token], m)
     };
     if rc < 0x80000000 {
         let tid = m.half(token) as u32;
-
         let kb = fb.wrapping_add(8);
         m.put_byte(kb, 6);
         {
-            rc = h.call_m(set, &[h0, h1, tid, 0, 1, kb, count], m);
+            rc = h.call_guest_m(set, &[h0, h1, tid, 0, 1, kb, count], m);
             if rc < 0x80000000 {
                 rc = if m.half(count) != 1 {
                     e_code(0)
                 } else {
-                    h.call_m(set, &[h0, h1, tid, 1, 1, values, count], m)
+                    h.call_guest_m(set, &[h0, h1, tid, 1, 1, values, count], m)
                 };
             }
             if rc < 0x80000000 {
                 rc = if m.half(count) != 1 {
                     e_code(0)
                 } else {
-                    h.call_m(set, &[h0, h1, tid, 2, 1, values.wrapping_add(2), count], m)
+                    h.call_guest_m(set, &[h0, h1, tid, 2, 1, values.wrapping_add(2), count], m)
                 };
             }
             if rc < 0x80000000 {
@@ -2120,7 +2125,7 @@ pub fn fn_24b540_m(
                     e_code(0)
                 } else {
                     let n = s_len(m, name).wrapping_add(1);
-                    rc = h.call_m(set, &[h0, h1, tid, 4, n, name, count], m);
+                    rc = h.call_guest_m(set, &[h0, h1, tid, 4, n, name, count], m);
                     if rc < 0x80000000 && m.half(count) as u32 != n {
                         e_code(0)
                     } else {
@@ -2131,17 +2136,16 @@ pub fn fn_24b540_m(
             if rc < 0x80000000 {
                 let tx = text.wrapping_add(offset);
                 let n = s_len(m, tx).wrapping_add(1);
-                rc = h.call_m(set, &[h0, h1, tid, 3, n, tx, count], m);
+                rc = h.call_guest_m(set, &[h0, h1, tid, 3, n, tx, count], m);
                 if rc < 0x80000000 && m.half(count) as u32 != n {
                     rc = e_code(0);
                 }
             }
             if rc < 0x80000000 {
-
                 let ec = m.half(p.wrapping_add(0xc4)) as u32;
                 if ec > 1 {
                     let ent = m.word(p.wrapping_add(0xb8));
-                    rc = h.call_m(set, &[h0, h1, tid, 5, ec, ent, count], m);
+                    rc = h.call_guest_m(set, &[h0, h1, tid, 5, ec, ent, count], m);
                     if rc < 0x80000000 && m.half(count) as u32 != ec {
                         rc = e_code(0);
                     }
@@ -2153,7 +2157,7 @@ pub fn fn_24b540_m(
                     let ex = m.word(p.wrapping_add(0x94)).wrapping_add(offset);
                     let ln = s_len(m, ex);
                     if ln != 0 {
-                        rc = h.call_m(set, &[h0, h1, tid, 6, ln + 1, ex, count], m);
+                        rc = h.call_guest_m(set, &[h0, h1, tid, 6, ln + 1, ex, count], m);
                         if rc < 0x80000000 && m.half(count) as u32 != ln + 1 {
                             rc = e_code(0);
                         }
@@ -2169,12 +2173,7 @@ pub fn fn_24b540_m(
     rc
 }
 
-pub fn fn_24b8d0_m(
-    m: &mut Memory<'_>,
-    ctx: u32,
-    range: u32,
-    h: &mut impl Host,
-) -> u32 {
+pub fn fn_24b8d0_m(m: &mut Memory<'_>, ctx: u32, range: u32, h: &mut impl Host) -> u32 {
     if ctx == 0 {
         return e_code(7);
     }
@@ -2188,7 +2187,6 @@ pub fn fn_24b8d0_m(
     let find = m.word(mt.wrapping_add(0x34));
     let next = m.word(mt.wrapping_add(0x3c));
     let remove = m.word(mt.wrapping_add(0x60));
-
     let fb = 0x1050u32;
     let mut sv = [0u32; 4];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -2208,9 +2206,9 @@ pub fn fn_24b8d0_m(
     let rstart = m.half(range) as u32;
     let rend = m.half(range.wrapping_add(2)) as u32;
     let mut previous = 0u32;
-    let mut rc = h.call_m(find, &[h0, h1, 1, 0, group], m);
+    let mut rc = h.call_guest_m(find, &[h0, h1, 1, 0, group], m);
     if rc < 0x80000000 {
-        rc = h.call_m(find, &[h0, h1, 3, m.half(group) as u32, cur], m);
+        rc = h.call_guest_m(find, &[h0, h1, 3, m.half(group) as u32, cur], m);
         if rc == 0 {
             while m.half(cur) != 0 {
                 let cid = m.half(cur) as u32;
@@ -2230,28 +2228,28 @@ pub fn fn_24b8d0_m(
                 let ce = m.half(end) as u32;
                 let ck = m.byte(ty);
                 if rstart <= cs && ce <= rend && (ck == 0 || ck == 1 || ck == 2 || ck == 3) {
-                    rc = h.call_m(remove, &[h0, h1, cid], m);
+                    rc = h.call_guest_m(remove, &[h0, h1, cid], m);
                     if rc != 0 {
                         h.call_m(0x173dc0, &[logger, log, 0x5de1, 0], m);
                         break;
                     }
                     h.call_m(0x1738e8, &[logger, log, 5, 0], m);
                     if previous == 0 {
-                        rc = h.call_m(find, &[h0, h1, 3, m.half(group) as u32, cur], m);
+                        rc = h.call_guest_m(find, &[h0, h1, 3, m.half(group) as u32, cur], m);
                         if rc == 0 {
                             continue;
                         }
                         break;
                     }
                     m.put_half(cur, previous as u16);
-                    rc = h.call_m(next, &[h0, h1, previous, cur], m);
+                    rc = h.call_guest_m(next, &[h0, h1, previous, cur], m);
                     if rc != 0 {
                         break;
                     }
                     continue;
                 }
                 previous = cid;
-                rc = h.call_m(next, &[h0, h1, previous, cur], m);
+                rc = h.call_guest_m(next, &[h0, h1, previous, cur], m);
                 if rc != 0 {
                     break;
                 }
@@ -2266,6 +2264,7 @@ pub fn fn_24b8d0_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_2e4e80_m(
     m: &mut Memory<'_>,
     this: u32,
@@ -2281,7 +2280,6 @@ pub fn fn_2e4e80_m(
     let tag = m.word(this.wrapping_add(0x48));
     let debug = m.byte(this.wrapping_add(0xc6));
     m.put_byte(done, 0);
-
     let fb = 0x1500u32;
     let mut sv = [0u32; 8];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -2297,7 +2295,6 @@ pub fn fn_2e4e80_m(
     let input = m.word(this.wrapping_add(0x64));
     let in_text = m.word(input);
     let in_out = m.word(input.wrapping_add(4));
-
     let in_off = m.half(input.wrapping_add(16));
     let iface = m.word(this.wrapping_add(0x24));
     let hh0 = m.word(this.wrapping_add(0x28));
@@ -2308,7 +2305,6 @@ pub fn fn_2e4e80_m(
     let get_markers = m.word(iface.wrapping_add(0x34));
     let get_output = m.word(iface.wrapping_add(0x28));
     let mut rc;
-
     let is_null = null_or_empty(m, in_text);
     if is_null {
         rc = fn_24d068_m(m, this, in_out, 0, h);
@@ -2323,14 +2319,12 @@ pub fn fn_2e4e80_m(
             h.call_m(0x1738e8, &[log, tag, 5, 0], m);
         }
         let length = s_len(m, in_text);
-
-        rc = h.call_m(set_input, &[hh0, hh1, 0, in_text, length, length], m);
+        rc = h.call_guest_m(set_input, &[hh0, hh1, 0, in_text, length, length], m);
         if rc >= 0x80000000 {
             h.call_m(0x173dc0, &[log, tag, 0x5dca, 0], m);
         } else {
             rc = fn_24cfa0_m(m, this, this.wrapping_add(0xa0), length as u16, h);
             if rc >= 0x80000000 {
-
             } else {
                 let spaces = m.word(this.wrapping_add(0xa0));
                 let n = s_len(m, in_text);
@@ -2338,26 +2332,29 @@ pub fn fn_2e4e80_m(
                 while i < n {
                     m.put_byte(
                         spaces.wrapping_add(i),
-                        if m.byte(in_text.wrapping_add(i)) == b' ' { 1 } else { 0 },
+                        if m.byte(in_text.wrapping_add(i)) == b' ' {
+                            1
+                        } else {
+                            0
+                        },
                     );
                     i = i.wrapping_add(1);
                 }
-                rc = h.call_m(set_markers, &[hh0, hh1, spaces, length], m);
+                rc = h.call_guest_m(set_markers, &[hh0, hh1, spaces, length], m);
                 if rc >= 0x80000000 {
                     h.call_m(0x173dc0, &[log, tag, 0x5dcb, 0], m);
                 } else {
-
                     let fnp = m.byte(function);
                     let _ = fnp;
-                    rc = h.call_m(run, &[hh0, hh1, function.wrapping_add(1)], m);
+                    rc = h.call_guest_m(run, &[hh0, hh1, function.wrapping_add(1)], m);
                     if rc >= 0x80000000 {
                         h.call_m(0x173dc0, &[log, tag, 0x5dcc, 0], m);
                     } else {
-                        rc = h.call_m(get_markers, &[hh0, hh1, mp, mc], m);
+                        rc = h.call_guest_m(get_markers, &[hh0, hh1, mp, mc], m);
                         if rc >= 0x80000000 {
                             h.call_m(0x173dc0, &[log, tag, 0x5dcd, 0], m);
                         } else {
-                            rc = h.call_m(get_output, &[hh0, hh1, 0, tp, tl], m);
+                            rc = h.call_guest_m(get_output, &[hh0, hh1, 0, tp, tl], m);
                             if rc >= 0x80000000 {
                                 h.call_m(0x173dc0, &[log, tag, 0x5dce, 0], m);
                             } else {
@@ -2367,7 +2364,7 @@ pub fn fn_2e4e80_m(
                                 if debug == 1 {
                                     h.call_m(0x1738e8, &[log, tag, 5, 0], m);
                                 }
-                                rc = h.call_m(get_output, &[hh0, hh1, 1, ap, al], m);
+                                rc = h.call_guest_m(get_output, &[hh0, hh1, 1, ap, al], m);
                                 if rc >= 0x80000000 {
                                     h.call_m(0x173dc0, &[log, tag, 0x5dfa, 0], m);
                                 } else {
@@ -2385,7 +2382,8 @@ pub fn fn_2e4e80_m(
                                         } else if c != b' ' && (c == b'N' || c == b'L') {
                                             if k != 0 && m.byte(text.wrapping_add(k - 1)) != b' ' {
                                                 let mut j = k;
-                                                while j != 0 && m.byte(text.wrapping_add(j)) != b' ' {
+                                                while j != 0 && m.byte(text.wrapping_add(j)) != b' '
+                                                {
                                                     j -= 1;
                                                 }
                                                 if m.byte(text.wrapping_add(j)) == b' '
@@ -2442,7 +2440,8 @@ pub fn fn_2e4e80_m(
                                                 if m.byte(markers.wrapping_add(j2)) != 0 {
                                                     if j2 <= text_len
                                                         && (j2 >= text_len
-                                                            || m.byte(text.wrapping_add(j2)) == b' ')
+                                                            || m.byte(text.wrapping_add(j2))
+                                                                == b' ')
                                                     {
                                                         last = j2;
                                                     }
@@ -2505,6 +2504,7 @@ fn null_or_empty(m: &Memory<'_>, s: u32) -> bool {
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_2b4260_m(
     m: &mut Memory<'_>,
     owner: u32,
@@ -2518,7 +2518,6 @@ pub fn fn_2b4260_m(
     let log = m.word(ctx.wrapping_add(16));
     let tag = m.word(owner.wrapping_add(0x48));
     h.call_m(0x1738e8, &[log, tag, 4, 0], m);
-
     let fb = 0x1100u32.wrapping_add(depth.wrapping_mul(96));
     let mut sv = [0u32; 20];
     for (i, v) in sv.iter_mut().enumerate() {
@@ -2532,11 +2531,17 @@ pub fn fn_2b4260_m(
     let output = fb.wrapping_add(60);
     let cb_slot = fb.wrapping_add(72);
     let changed = fb.wrapping_add(76);
-    for b in [child_text, child_alignment, function_alignment, expanded, expanded_alignment, output] {
+    for b in [
+        child_text,
+        child_alignment,
+        function_alignment,
+        expanded,
+        expanded_alignment,
+        output,
+    ] {
         s_set(m, b, 0, 12);
     }
     m.put_byte(changed, 0);
-
     let mut rc = fn_24cea0_m(m, owner, child_text, h);
     if rc >= 0x80000000 {
         for (i, v) in sv.iter().enumerate() {
@@ -2581,7 +2586,15 @@ pub fn fn_2b4260_m(
         while i < nchild {
             h.call_m(0x1738e8, &[log, tag, 5, 0], m);
             let child = m.word(children.wrapping_add(i * 4));
-            rc = fn_2b4260_m(m, owner, child, child_text, child_alignment, h, depth.wrapping_add(1));
+            rc = fn_2b4260_m(
+                m,
+                owner,
+                child,
+                child_text,
+                child_alignment,
+                h,
+                depth.wrapping_add(1),
+            );
             if rc >= 0x80000000 {
                 break;
             }
@@ -2630,11 +2643,16 @@ pub fn fn_2b4260_m(
                         m.put_half(state.wrapping_add(18), m.half(node.wrapping_add(4)));
                         let handled = fb.wrapping_add(77);
                         m.put_byte(handled, 0);
-                        rc = h.call_m(cb, &[owner, handled], m);
+                        rc = h.call_guest_m(cb, &[owner, handled], m);
                         if rc < 0x80000000 && m.byte(handled) != 0 {
                             rc = fn_24d13c_m(m, owner, text, output, h);
                             if rc < 0x80000000 {
-                                s_set(m, m.word(output), 0x20, m.half(output.wrapping_add(6)) as u32);
+                                s_set(
+                                    m,
+                                    m.word(output),
+                                    0x20,
+                                    m.half(output.wrapping_add(6)) as u32,
+                                );
                                 rc = fn_24d13c_m(m, owner, alignment, output, h);
                             }
                         }
@@ -2655,10 +2673,24 @@ pub fn fn_2b4260_m(
                             }
                             if idx == 0 {
                                 end = m.half(m.word(state.wrapping_add(8))) as u32;
-                            } else if m.half(positions.wrapping_add(42).wrapping_add(idx.wrapping_sub(1) * 4)) as i16 != -1
-                                && end > m.half(positions.wrapping_add(42).wrapping_add(idx.wrapping_sub(1) * 4)) as u32
+                            } else if m.half(
+                                positions
+                                    .wrapping_add(42)
+                                    .wrapping_add(idx.wrapping_sub(1) * 4),
+                            ) as i16
+                                != -1
+                                && end
+                                    > m.half(
+                                        positions
+                                            .wrapping_add(42)
+                                            .wrapping_add(idx.wrapping_sub(1) * 4),
+                                    ) as u32
                             {
-                                end = m.half(positions.wrapping_add(42).wrapping_add(idx.wrapping_sub(1) * 4)) as u32;
+                                end = m.half(
+                                    positions
+                                        .wrapping_add(42)
+                                        .wrapping_add(idx.wrapping_sub(1) * 4),
+                                ) as u32;
                             }
                         }
                         j += 1;
@@ -2678,7 +2710,9 @@ pub fn fn_2b4260_m(
                         if found == 1 {
                             let mut pos = m.half(m.word(state.wrapping_add(8)));
                             let textp = m.word(owner.wrapping_add(0x5c));
-                            while (pos as u32) < end && m.byte(textp.wrapping_add(pos as u32)) == b' ' {
+                            while (pos as u32) < end
+                                && m.byte(textp.wrapping_add(pos as u32)) == b' '
+                            {
                                 pos = pos.wrapping_add(1);
                             }
                             let mut p2 = pos;

@@ -1,9 +1,10 @@
-
-
 use crate::boot::Memory;
-use crate::engine_components::InternalCalls;
-use crate::engine_components2::ComponentPlatform;
+
 use crate::engine::{Error, Memory as EngineMemory, Region};
+
+use crate::engine_components::InternalCalls;
+
+use crate::engine_components2::ComponentPlatform;
 
 pub fn flat_regions<'a>(
     data: &'a mut [u8],
@@ -12,6 +13,7 @@ pub fn flat_regions<'a>(
 }
 
 pub struct Platform;
+
 impl ComponentPlatform for Platform {
     fn thread_id(&mut self) -> u32 {
         0x1ff82000
@@ -23,6 +25,7 @@ impl ComponentPlatform for Platform {
         0
     }
 }
+
 impl crate::engine::HeapPlatform for Platform {
     fn thread_id(&mut self) -> u32 {
         0x1ff82000
@@ -803,6 +806,7 @@ impl crate::boot_part_b::Host for OpenHost {
         0x1ff82000
     }
 }
+
 impl crate::boot::Calls for OpenHost {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.dispatch(m, f, a)
@@ -811,25 +815,30 @@ impl crate::boot::Calls for OpenHost {
         panic!("unbound wide call {entry:#x}")
     }
 }
+
 impl crate::boot_part_f::Host for OpenHost {
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.dispatch(m,f,a)}
     fn compare(&mut self,m:&mut Memory<'_>,_:u32,key:&mut crate::boot_part_f::Key,value:&mut u32)->u32 {crate::boot_part_f::compare_parameter(m,*key,*value)}
 }
+
 impl crate::boot_part_e::Host for OpenHost {
     fn call(&mut self, m: &mut Memory<'_>, method: u32, arguments: &[u32]) -> u32 {
         self.dispatch(m, method, arguments)
     }
 }
+
 impl crate::speech_part_3::Host for OpenHost {
     fn call(&mut self, m: &mut Memory<'_>, method: u32, arguments: &[u32]) -> u32 {
         self.dispatch(m, method, arguments)
     }
 }
+
 impl crate::component_live_a2::Calls for OpenHost {
     fn call(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32 {
         self.dispatch(m, entry, args)
     }
 }
+
 impl crate::log_live::LogMethodsM for OpenHost {
     fn log_m(
         &mut self,
@@ -845,11 +854,13 @@ impl crate::log_live::LogMethodsM for OpenHost {
         self.dispatch(m, method, &[object, category, level, arg, format, varargs])
     }
 }
+
 impl crate::boot_part_b::OutputHost for OpenHost {
     fn output(&mut self, _m: &mut Memory<'_>, f: u32, _a: &[u32]) -> (u32, u32) {
         panic!("unbound output call {f:#x}")
     }
 }
+
 impl crate::boot_part_b::PropertyHost for OpenHost {
     fn property(&mut self, _m: &mut Memory<'_>, _p: u32, _k: &[u8]) -> (u32, u32) {
         panic!("unbound broker property lookup")
@@ -858,6 +869,7 @@ impl crate::boot_part_b::PropertyHost for OpenHost {
         panic!("unbound broker property insert")
     }
 }
+
 impl crate::boot_part_b::QueryHost for OpenHost {
     fn query_output(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> (u32, u32) {
         if f != 0x1772b0 {
@@ -876,6 +888,7 @@ impl crate::boot_part_b::QueryHost for OpenHost {
         0x8150_6007
     }
 }
+
 impl crate::boot_part_b::DataHost for OpenHost {
     fn data_output(&mut self, _m: &mut Memory<'_>, _f: u32, _a: &[u32], _out: u32) -> u32 {
         0x8060_2001
@@ -919,7 +932,9 @@ pub const D_9154B0: u32 = 0x9154b0;
 pub const D_9154C8: u32 = 0x9154c8;
 
 pub const D_201498: u32 = 0x201498;
+
 pub const D_2014B8: u32 = 0x2014b8;
+
 pub const D_2014D8: u32 = 0x2014d8;
 
 fn rb(m: &Memory<'_>, at: u32) -> u8 {
@@ -1333,19 +1348,29 @@ pub fn fn_201eb0_m(m: &Memory<'_>, p: u32, magic: u32, rom: crate::rom_region::R
 }
 
 pub const L_NUMBEROUTPUTTRANSCRIPTIONS: u32 = 0x282f30;
+
 pub const L_LANGCODE: u32 = 0x282f4c;
+
 pub const L_IN: u32 = 0x282f5c;
+
 pub const L_BEG: u32 = 0x282f60;
+
 pub const L_FMT_BEG: u32 = 0x282f64;
+
 pub const L_OUT: u32 = 0x282f70;
+
 pub const L_RETC: u32 = 0x282f74;
+
 pub const L_END: u32 = 0x282f7c;
+
 pub const L_FMT_END: u32 = 0x282f80;
 
 pub const D_TRANSFORM_TABLE: u32 = 0x282f2c;
 
 pub const L282324_NUMBEROUTPUTTRANSCRIPTIONS: u32 = 0x28265c;
+
 pub const L282324_BAD_HANDLE: u32 = 0x282678;
+
 pub const L282324_NOT_FOUND: u32 = 0x28267c;
 
 pub const FN282AF0_FRAME: u32 = 0xb8;
@@ -1362,13 +1387,17 @@ pub trait C2DepesHost {
 const LOOKUP_CALLBACK_SLOT: u32 = 56;
 
 const DICTIONARY_LOOKUP_SLOT: u32 = 0;
+
 const DICTIONARY_RELEASE_SLOT: u32 = 4;
+
 const DICTIONARY_LANGUAGE_SLOT: u32 = 8;
+
 const DICTIONARY_ADJUSTMENT_SLOT: u32 = 24;
 
 #[allow(clippy::too_many_arguments)]
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_282af0_m(
     m: &mut Memory<'_>,
     frame: u32,
@@ -1393,7 +1422,6 @@ pub fn fn_282af0_m(
     }
     let settings = rw(m, ctx + 20);
     let logger = rw(m, ctx + 16);
-
     wh(m, frame + 0x30, 0);
     wh(m, frame + 0x14, 0);
     ww(m, frame + 0x44, 0);
@@ -1406,23 +1434,39 @@ pub fn fn_282af0_m(
     let status = h.call(
         m,
         0x175944,
-        &[settings, crate::rom_region::addr(h.rom(), L_NUMBEROUTPUTTRANSCRIPTIONS), frame + 0x6c],
+        &[
+            settings,
+            crate::rom_region::addr(h.rom(), L_NUMBEROUTPUTTRANSCRIPTIONS),
+            frame + 0x6c,
+        ],
     );
     if status < 0x8000_0000 {
         limit = rw(m, frame + 0x6c) & 0xffff;
     }
-    let status = h.call(m, 0x1756d0, &[settings, crate::rom_region::addr(h.rom(), L_LANGCODE), frame + 0x44, 0]);
+    let status = h.call(
+        m,
+        0x1756d0,
+        &[
+            settings,
+            crate::rom_region::addr(h.rom(), L_LANGCODE),
+            frame + 0x44,
+            0,
+        ],
+    );
     if status >= 0x8000_0000 {
         return status;
     }
     let language = rw(m, frame + 0x44);
     let mut word = 0u32;
     if callbacks == 0 {
-
         let interface = rw(m, dictionary + 0x28);
         let vtable = rw(m, interface);
         let object = interface.wrapping_sub(rw(m, vtable + DICTIONARY_ADJUSTMENT_SLOT));
-        let status = h.call(m, rw(m, vtable + DICTIONARY_LANGUAGE_SLOT), &[object, frame + 0x60]);
+        let status = h.call(
+            m,
+            rw(m, vtable + DICTIONARY_LANGUAGE_SLOT),
+            &[object, frame + 0x60],
+        );
         let dictionary_language = rw(m, frame + 0x60);
         if status != 0 || dictionary_language == 0 {
             return 0x8a80_2014;
@@ -1445,8 +1489,14 @@ pub fn fn_282af0_m(
     let mut result = 0u32;
     while transform < transform_count {
         let entry = rw(m, table + transform * 4);
-
-        result = transform_m(m, crate::rom_region::to_us_guest(h.rom(), entry), input, input_length, frame, h.rom());
+        result = transform_m(
+            m,
+            crate::rom_region::to_us_guest(h.rom(), entry),
+            input,
+            input_length,
+            frame,
+            h.rom(),
+        );
         if result & 0x1fff == 0x14 {
             transform += 1;
             continue;
@@ -1463,7 +1513,15 @@ pub fn fn_282af0_m(
             h.call(
                 m,
                 0x17486c,
-                &[logger, 0x6b, crate::rom_region::addr(h.rom(), L_FMT_BEG), crate::rom_region::addr(h.rom(), L_BEG), 0, crate::rom_region::addr(h.rom(), L_IN), text],
+                &[
+                    logger,
+                    0x6b,
+                    crate::rom_region::addr(h.rom(), L_FMT_BEG),
+                    crate::rom_region::addr(h.rom(), L_BEG),
+                    0,
+                    crate::rom_region::addr(h.rom(), L_IN),
+                    text,
+                ],
             );
             let lookup = rw(m, callbacks + LOOKUP_CALLBACK_SLOT);
             result = h.call(
@@ -1482,7 +1540,17 @@ pub fn fn_282af0_m(
             h.call(
                 m,
                 0x17486c,
-                &[logger, 0x6b, crate::rom_region::addr(h.rom(), L_FMT_END), crate::rom_region::addr(h.rom(), L_END), 0, crate::rom_region::addr(h.rom(), L_RETC), result, crate::rom_region::addr(h.rom(), L_OUT), output],
+                &[
+                    logger,
+                    0x6b,
+                    crate::rom_region::addr(h.rom(), L_FMT_END),
+                    crate::rom_region::addr(h.rom(), L_END),
+                    0,
+                    crate::rom_region::addr(h.rom(), L_RETC),
+                    result,
+                    crate::rom_region::addr(h.rom(), L_OUT),
+                    output,
+                ],
             );
             wh(m, text.wrapping_add(length.wrapping_mul(2)), saved);
         } else {
@@ -1492,8 +1560,7 @@ pub fn fn_282af0_m(
             if result < 0x8000_0000 {
                 let interface = rw(m, dictionary + 0x28);
                 let vtable = rw(m, interface);
-                let object =
-                    interface.wrapping_sub(rw(m, vtable + DICTIONARY_ADJUSTMENT_SLOT));
+                let object = interface.wrapping_sub(rw(m, vtable + DICTIONARY_ADJUSTMENT_SLOT));
                 result = h.call(
                     m,
                     rw(m, vtable + DICTIONARY_LOOKUP_SLOT),
@@ -1546,11 +1613,11 @@ pub fn fn_282af0_m(
                     }
                     4 => {
                         let record_text = rw(m, records + 4);
-                        let record_length = fn_17bfc0_m(m, record_text);
+                        let record_length = fn_17bfc0_m(m, record_text, h.rom());
                         if record_length > u32::from(initial_capacity) {
                             result = 0x8a80_2009;
                         } else {
-                            result = fn_17bd74_m(m, record_text, output);
+                            result = fn_17bd74_m(m, record_text, output, h.rom());
                             if result < 0x8000_0000 {
                                 wh(m, capacity, (record_length - 1) as u16);
                             }
@@ -1662,24 +1729,35 @@ pub(crate) fn fn_176314_m(m: &mut Memory<'_>, dst: u32, src: u32) {
     }
 }
 
-pub(crate) fn fn_17bfc0_m(m: &Memory<'_>, s: u32) -> u32 {
+pub(crate) fn fn_17bfc0_m(m: &Memory<'_>, s: u32, rom: crate::rom_region::Rom) -> u32 {
     let mut n = 1u32;
     let mut p = s;
     let mut c = rb(m, p);
     p = p.wrapping_add(1);
     while c != 0 {
         n = n.wrapping_add(1);
-        p = p.wrapping_add(u32::from(rb(m, 0x8dc1f3u32.wrapping_add(u32::from(c)))));
+        p = p.wrapping_add(u32::from(rb(
+            m,
+            crate::rom_region::addr(rom, 0x8dc1f3).wrapping_add(u32::from(c)),
+        )));
         c = rb(m, p);
         p = p.wrapping_add(1);
     }
     n
 }
 
-pub(crate) fn fn_17bd74_m(m: &mut Memory<'_>, src: u32, dst: u32) -> u32 {
-    let extra: [u8; 256] = core::array::from_fn(|i| m.byte(0x8dc1f3 + i as u32));
-    let mask: [u8; 16] = core::array::from_fn(|i| m.byte(0x8dc1e0 + i as u32));
-    let base: [u8; 1024] = core::array::from_fn(|i| m.byte(0x8dc2f4 + i as u32));
+pub(crate) fn fn_17bd74_m(
+    m: &mut Memory<'_>,
+    src: u32,
+    dst: u32,
+    rom: crate::rom_region::Rom,
+) -> u32 {
+    let extra: [u8; 256] =
+        core::array::from_fn(|i| m.byte(crate::rom_region::addr(rom, 0x8dc1f3) + i as u32));
+    let mask: [u8; 16] =
+        core::array::from_fn(|i| m.byte(crate::rom_region::addr(rom, 0x8dc1e0) + i as u32));
+    let base: [u8; 1024] =
+        core::array::from_fn(|i| m.byte(crate::rom_region::addr(rom, 0x8dc2f4) + i as u32));
     let t = crate::normalization::DecoderTables {
         extra: &extra,
         mask: &mask,
@@ -1701,6 +1779,7 @@ pub(crate) fn fn_17bd74_m(m: &mut Memory<'_>, src: u32, dst: u32) -> u32 {
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn restore_text_m(
     m: &mut Memory<'_>,
     output: u32,
@@ -1764,6 +1843,7 @@ fn transform_m(
 pub const FN282324_FRAME: u32 = 0x5c;
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_282324_m(
     m: &mut Memory<'_>,
     frame: u32,
@@ -1783,7 +1863,12 @@ pub fn fn_282324_m(
     let status = h.call(
         m,
         0x175944,
-        &[settings, L282324_NUMBEROUTPUTTRANSCRIPTIONS, frame + 0x10],
+        &[
+            settings,
+            crate::rom_region::addr(h.rom(), 0x282324) + L282324_NUMBEROUTPUTTRANSCRIPTIONS
+                - 0x282324,
+            frame + 0x10,
+        ],
     );
     if status < 0x8000_0000 {
         limit = rw(m, frame + 0x10) & 0xffff;
@@ -1801,8 +1886,11 @@ pub fn fn_282324_m(
     let vtable = rw(m, interface);
     let object = interface.wrapping_sub(rw(m, vtable + DICTIONARY_ADJUSTMENT_SLOT));
     ww(m, frame + 0x18, 0);
-    let status = h.call(m, rw(m, vtable + DICTIONARY_LANGUAGE_SLOT), &[object, frame + 0x18]);
-
+    let status = h.call(
+        m,
+        rw(m, vtable + DICTIONARY_LANGUAGE_SLOT),
+        &[object, frame + 0x18],
+    );
     let language_object = rw(m, frame + 0x18);
     if status != 0 || language_object == 0 {
         return 0x8500_2014;
@@ -1811,7 +1899,6 @@ pub fn fn_282324_m(
     if dictionary_language == 0 {
         return 0x8500_2014;
     }
-
     for i in 0..3u32 {
         let folded = crate::fe_text::fold_17c8c0(u32::from(rb(m, dictionary_language + i)));
         wb(m, frame + 0x1c + i, folded as u8);
@@ -1874,11 +1961,11 @@ pub fn fn_282324_m(
             }
             4 => {
                 let record_text = rw(m, records + 4);
-                let record_length = fn_17bfc0_m(m, record_text);
+                let record_length = fn_17bfc0_m(m, record_text, h.rom());
                 if record_length > u32::from(rh(m, capacity)) {
                     result = 0x8500_2009;
                 } else {
-                    result = fn_17bd74_m(m, record_text, output);
+                    result = fn_17bd74_m(m, record_text, output, h.rom());
                     if result < 0x8000_0000 {
                         wh(m, capacity, (record_length - 1) as u16);
                     }
@@ -3212,6 +3299,7 @@ pub const C2_MLSET_KEY: u32 = 0x180970;
 pub const C2_NUMBEROUTPUTTRANSCRIPTIONS: u32 = 0x28265c;
 
 pub const C2_DICT_SCRATCH: u32 = 0x1a2000;
+
 pub const C2_2B3608_SCRATCH: u32 = 0x1a3000;
 
 pub struct C2DictTables {
@@ -3274,7 +3362,6 @@ impl C2DictHost {
             self.trace_len += 1;
         }
     }
-
     pub fn c2_dict_call(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32 {
         self.dispatch(m, method, args)
     }
@@ -3286,7 +3373,6 @@ impl C2DictHost {
         0x8000_2001
     }
     fn dispatch(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32 {
-
         let method = crate::rom_region::to_us(self.rom, method);
         let arg0 = args.first().copied().unwrap_or(0);
         let result = self.dispatch_inner(m, method, args);
@@ -3295,7 +3381,6 @@ impl C2DictHost {
     }
     fn dispatch_inner(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32 {
         match method {
-
             0x17bff4 => {
                 let mut at = args[0];
                 let mut n = 1u32;
@@ -3319,21 +3404,17 @@ impl C2DictHost {
                 }
                 n
             }
-
             0x176f94 => crate::boot_port_1::fn_176f94(m, args[0], args[1], args[2], args[3]),
-
             0x196394 => crate::boot_part_e::alloc(m, args[0], args[1], self),
             0x1963b8 => crate::boot_part_e::calloc(m, args[0], args[1], args[2], self),
             0x196428 => {
                 crate::boot_part_e::release(m, args[0], args[1], self);
                 0
             }
-
             0x4a779c => {
                 let target = rw(m, rw(m, args[0]).wrapping_add(8));
                 self.dispatch(m, target, &[args[0], args[1], 4])
             }
-
             0x4a7758 => {
                 let n = args[1].wrapping_mul(args[2]);
                 let target = rw(m, rw(m, args[0]).wrapping_add(8));
@@ -3347,12 +3428,10 @@ impl C2DictHost {
                 }
                 p
             }
-
             0x4a774c => {
                 let target = rw(m, rw(m, args[0]).wrapping_add(12));
                 self.dispatch(m, target, &[args[0], args[1]])
             }
-
             0x39f5e8 => {
                 let inner = rw(m, args[0].wrapping_add(4));
                 self.lock(m, inner.wrapping_add(88));
@@ -3360,7 +3439,6 @@ impl C2DictHost {
                 self.unlock(m, inner.wrapping_add(88));
                 r
             }
-
             0x39f5b8 => {
                 let inner = rw(m, args[0].wrapping_add(4));
                 self.lock(m, inner.wrapping_add(88));
@@ -3368,7 +3446,6 @@ impl C2DictHost {
                 self.unlock(m, inner.wrapping_add(88));
                 0
             }
-
             0x184f20 => {
                 let a: [u32; 6] = core::array::from_fn(|i| args.get(i).copied().unwrap_or(0));
                 m.boot_heap_allocate(a)
@@ -3377,33 +3454,31 @@ impl C2DictHost {
                 m.boot_heap_release(args[0], args[1]);
                 0
             }
-
             0x19b78c => {
                 m.boot_heap_release(args[0].wrapping_add(24), args[1]);
                 let count = rw(m, args[0].wrapping_add(84)).wrapping_sub(1);
                 ww(m, args[0].wrapping_add(84), count);
                 0
             }
-
             0x183edc => 0x1ff82000,
-
             0x165d00 => 0,
             0x172d18 => 0,
             0x175a1c => {
                 let lock_word = if args[0] == 0 { 0 } else { rw(m, args[0] + 4) };
-                let mut lock = C2ParamLock { host: &mut *self, word: lock_word };
+                let mut lock = C2ParamLock {
+                    host: &mut *self,
+                    word: lock_word,
+                };
                 crate::speech_part_2::fetch_parameter_m(
-                    m,
-                    args[0],
-                    args[1],
-                    args[2],
-                    &mut lock,
-                    c2_compare,
+                    m, args[0], args[1], args[2], &mut lock, c2_compare,
                 )
             }
             0x175944 => {
                 let lock_word = if args[0] == 0 { 0 } else { rw(m, args[0] + 4) };
-                let mut lock = C2ParamLock { host: &mut *self, word: lock_word };
+                let mut lock = C2ParamLock {
+                    host: &mut *self,
+                    word: lock_word,
+                };
                 crate::reentrant2::get_param_uint_m(
                     m.bytes,
                     if args[0] == 0 { None } else { Some(args[0]) },
@@ -3413,7 +3488,6 @@ impl C2DictHost {
                     c2_compare,
                 )
             }
-
             0x1756d0 => {
                 if args[0] != 0 && args[1] != 0 && args[2] != 0 {
                     ww(m, args[2], 0);
@@ -3424,7 +3498,10 @@ impl C2DictHost {
                 let p = if args[0] == 0 { 0 } else { rw(m, args[0] + 4) };
                 let mut value = if args[2] == 0 { 0 } else { rw(m, args[2]) };
                 let mut size = if args[3] == 0 { 0 } else { rw(m, args[3]) };
-                let mut lock = C2Lock176f { host: &mut *self, p };
+                let mut lock = C2Lock176f {
+                    host: &mut *self,
+                    p,
+                };
                 let rc = crate::reentrant2::lookup_param_m(
                     m.bytes,
                     if args[0] == 0 { None } else { Some(args[0]) },
@@ -3442,7 +3519,6 @@ impl C2DictHost {
                 }
                 rc
             }
-
             0x281aa4 => {
                 let current = rw(m, args[1]);
                 let next = if current == 0 {
@@ -3458,9 +3534,7 @@ impl C2DictHost {
                 }
             }
             0x17bf70 => fn_17bf70_m(m, args[0], args[1], self.rom),
-
             0x17486c => 0,
-
             0x2b331c => {
                 m.put_word(args[1], m.word(args[0].wrapping_add(0x44)));
                 0
@@ -3474,10 +3548,8 @@ impl C2DictHost {
                 C2_2B3608_SCRATCH,
                 self,
             ),
-
             0x2b4004 => 0,
             0x17c8c0 => crate::fe_text::fold_17c8c0(args[0]),
-
             0x1ce56c => {
                 if args[0] == 0 {
                     0
@@ -3490,15 +3562,14 @@ impl C2DictHost {
                     }
                 }
             }
-
             0x18f488 => 0,
             0x1960a8 => crate::frontend::find_substr(m.bytes, args[0], args[1]),
             0x176314 => {
                 fn_176314_m(m, args[0], args[1]);
                 0
             }
-            0x17bfc0 => fn_17bfc0_m(m, args[0]),
-            0x17bd74 => fn_17bd74_m(m, args[0], args[1]),
+            0x17bfc0 => fn_17bfc0_m(m, args[0], self.rom),
+            0x17bd74 => fn_17bd74_m(m, args[0], args[1], self.rom),
             0x173dc0 => {
                 self.error_log_fired += 1;
                 crate::render_part_a::error_log(
@@ -3709,6 +3780,7 @@ impl crate::speech_part_5::Host for C2DictHost {
 impl crate::speech_part_3::SpeechHost for C2DictHost {}
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_202348_m(
     m: &mut Memory<'_>,
     p: u32,

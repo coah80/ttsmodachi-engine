@@ -10,3 +10,11 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
         .map(|v| format!("{v:02x}"))
         .collect()
 }
+
+pub mod japanese;
+
+mod regional_addresses;
+mod regional_ports;
+pub mod regional_boot;
+
+mod regional_rules;

@@ -1,7 +1,6 @@
-
+use crate::rom_region::{addr, to_us, Rom};
 
 use crate::{boot::Memory, frontend};
-use crate::rom_region::{Rom, addr, to_us};
 
 pub trait Calls {
     fn call(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32;
@@ -77,6 +76,7 @@ pub struct LiveCalls<'a> {
     pub scratch: u32,
     rom: Rom,
 }
+
 impl<'a> LiveCalls<'a> {
     pub fn new(platform: &'a mut dyn crate::engine::HeapPlatform, scratch: u32) -> Self {
         Self {
@@ -97,12 +97,17 @@ impl<'a> LiveCalls<'a> {
         self.boot.fault
     }
 }
+
 impl crate::boot_part_e::Host for LiveCalls<'_> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         Calls::call(self, m, f, a)
     }
 }
+
 impl crate::speech_part_1::Host for LiveCalls<'_> {
+    fn guest_entry(&self, f: u32) -> u32 {
+        crate::rom_region::to_us_guest(self.rom, f)
+    }
     fn get(&mut self, _: &mut Memory<'_>, f: u32, _: u32, _: u32, _: u32) -> (u32, u32, u32) {
         panic!("unbound get {f:x}")
     }
@@ -110,12 +115,18 @@ impl crate::speech_part_1::Host for LiveCalls<'_> {
         Calls::call(self, m, f, a)
     }
 }
+
 impl crate::speech_part_2::Host for LiveCalls<'_> {
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        Calls::call(self, m, crate::rom_region::to_us_guest(self.rom, f), a)
+    }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         Calls::call(self, m, f, a)
     }
 }
+
 impl crate::boot_part_b::FormatHost for LiveCalls<'_> {}
+
 impl crate::log_live::LogMethodsM for LiveCalls<'_> {
     fn log_m(
         &mut self,
@@ -136,6 +147,7 @@ impl crate::log_live::LogMethodsM for LiveCalls<'_> {
         }
     }
 }
+
 impl crate::boot::Calls for LiveCalls<'_> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         Calls::call(self, m, f, a)
@@ -144,19 +156,19 @@ impl crate::boot::Calls for LiveCalls<'_> {
         panic!("unbound wide call {f:x}")
     }
 }
+
 impl Calls for LiveCalls<'_> {
     fn rom(&self) -> Rom {
         self.rom
     }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
-
-        let rom = Rom::from_entry(f);
+        let rom = self.rom;
         let f = to_us(rom, f);
         if let Some(r) = m.boot_round10_call(f, a) {
             return r;
         }
         let s = self.scratch;
-        match f {
+        let result = match f {
             0x1994d0 => crate::frontend::divmod_u32(a[0], a[1]).0,
             0x14fe9c | 0x15140c | 0x15017c | 0x150878 | 0x150c0c => stream_call(m, f, a, self),
             0x2a977c => {
@@ -171,12 +183,23 @@ impl Calls for LiveCalls<'_> {
                 .boot_lookup_pure(f, a, 0x196980)
                 .expect("reentrant string getter required"),
             0x17bdc4 => crate::normalization::transcode_u16_with_lead(
-                m.bytes, a[0], a[1], a[2], a[3], a[4], a[5], a[6], addr(self.rom, 0x8dc1e0)+12,
+                m.bytes,
+                a[0],
+                a[1],
+                a[2],
+                a[3],
+                a[4],
+                a[5],
+                a[6],
+                addr(self.rom, 0x8dc1e0) + 12,
             ),
             0x17bb44 => {
-                let extra: [u8; 256] = core::array::from_fn(|i| m.byte(addr(self.rom, 0x8dc1f3) + i as u32));
-                let mask: [u8; 16] = core::array::from_fn(|i| m.byte(addr(self.rom, 0x8dc1e0) + i as u32));
-                let base: [u8; 1024] = core::array::from_fn(|i| m.byte(addr(self.rom, 0x8dc2f4) + i as u32));
+                let extra: [u8; 256] =
+                    core::array::from_fn(|i| m.byte(addr(self.rom, 0x8dc1f3) + i as u32));
+                let mask: [u8; 16] =
+                    core::array::from_fn(|i| m.byte(addr(self.rom, 0x8dc1e0) + i as u32));
+                let base: [u8; 1024] =
+                    core::array::from_fn(|i| m.byte(addr(self.rom, 0x8dc2f4) + i as u32));
                 let t = crate::normalization::DecoderTables {
                     extra: &extra,
                     mask: &mask,
@@ -210,12 +233,14 @@ impl Calls for LiveCalls<'_> {
             }
             0x2ac0ac => apply_rules_live(m, a[0], a[1], a[2], s + 512, self),
             0x14f918 => close_stream_m(m, a[0], a[1], self),
-            0x2312fc|0x231ba0 => {
-
+            0x2312fc | 0x231ba0 => {
                 let mut args = [0u32; 7];
                 args[..a.len().min(7)].copy_from_slice(&a[..a.len().min(7)]);
                 let call = crate::engine::StageCall { entry: f, args };
-                let mut regions = [crate::engine::Region { base: m.base, bytes: &mut *m.bytes }];
+                let mut regions = [crate::engine::Region {
+                    base: m.base,
+                    bytes: &mut *m.bytes,
+                }];
                 let mut sparse = match crate::engine::Memory::new(&mut regions) {
                     Ok(v) => v,
                     Err(e) => {
@@ -242,9 +267,7 @@ impl Calls for LiveCalls<'_> {
                 0
             }
             0x22508c => crate::speech_part_2::fn_22508c(m, a[0], a[1], a[2], a[3]),
-            0x1738e8 => {
-                crate::log_live::fn_1738e8(m, a[0], a[1], a[2], a[3], a[4], a[5], self)
-            }
+            0x1738e8 => crate::log_live::fn_1738e8(m, a[0], a[1], a[2], a[3], a[4], a[5], self),
             0x2a9608 => {
                 let mut out = 0i32;
                 let rc = crate::selection::inverse_percent(a[0] as i32, &mut out);
@@ -253,7 +276,6 @@ impl Calls for LiveCalls<'_> {
             }
             0x225138 => crate::speech_part_2::fn_225138(m, a[0], a[1], a[2], s, self),
             0x2289b0 => {
-
                 let mut valid = 0u8;
                 let rc = crate::frontend_output::validate_parameter(
                     terminated(m.bytes, a[1]),
@@ -265,7 +287,6 @@ impl Calls for LiveCalls<'_> {
             }
             0x228aac => crate::speech_part_2::fn_228aac(m, a[0], a[1], a[2], s, self),
             0x22c6dc => {
-
                 let mut p = crate::prosody_rules::InserterParameters {
                     input_active: m.word(a[0] + 0x10),
                     output_active: m.word(a[0] + 0x18),
@@ -298,14 +319,17 @@ impl Calls for LiveCalls<'_> {
                 rc
             }
             0x22c5f0 => {
-
                 let p = crate::prosody_rules::InserterParameters {
                     input_active: m.word(a[0] + 0x10),
                     output_active: m.word(a[0] + 0x18),
                     ..Default::default()
                 };
                 let mut valid = 1u8;
-                let rc = p.validate(terminated(m.bytes, a[1]), terminated(m.bytes, a[2]), &mut valid);
+                let rc = p.validate(
+                    terminated(m.bytes, a[1]),
+                    terminated(m.bytes, a[2]),
+                    &mut valid,
+                );
                 m.put_byte(a[3], valid);
                 rc
             }
@@ -313,16 +337,23 @@ impl Calls for LiveCalls<'_> {
             0x2aea98 => replace_live(m, a.try_into().unwrap(), s + 256, self),
             0x4a79b8 => crate::speech_part_3::fn_4a79b8(m, a[0], a[1], a[2], self),
             0x19611c => {
-                let pair = core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom(),0x8d7660) + i as u32));
+                let pair = core::array::from_fn(|i| {
+                    m.byte(crate::rom_region::addr(self.rom(), 0x8d7660) + i as u32)
+                });
                 let half = if a[0] == 0 { None } else { Some(m.half(a[0])) };
                 let mut ctx = 0;
-                let r =
-                    frontend::resolve_engine_context(a[0], half, a[1], &pair, crate::rom_region::addr(self.rom(),0x8d7640), &mut ctx);
+                let r = frontend::resolve_engine_context(
+                    a[0],
+                    half,
+                    a[1],
+                    &pair,
+                    crate::rom_region::addr(self.rom(), 0x8d7640),
+                    &mut ctx,
+                );
                 m.put_word(a[2], ctx);
                 r
             }
             0x151df8 => {
-
                 let (p, name, value) = (a[0], a[1], a[2]);
                 if value == 0 || m.byte(value) == 0 || p == 0 {
                     return 0;
@@ -332,22 +363,12 @@ impl Calls for LiveCalls<'_> {
                 let rc = self.call(m, 0x19611c, &[m.word(p), m.word(p + 4), s]);
                 if rc < 0x80000000 {
                     if self.call(m, 0x195d58, &[name, 0x151f24]) == 0 {
-                        m.put_word(
-                            p + 0x38,
-                            crate::normalization::atoi_scan(m.bytes, value),
-                        );
+                        m.put_word(p + 0x38, crate::normalization::atoi_scan(m.bytes, value));
                     } else if self.call(m, 0x195d58, &[name, 0x151f3c]) == 0 {
-                        m.put_word(
-                            p + 0x34,
-                            crate::normalization::atoi_scan(m.bytes, value),
-                        );
+                        m.put_word(p + 0x34, crate::normalization::atoi_scan(m.bytes, value));
                     } else if self.call(m, 0x195d58, &[name, 0x151f48]) == 0 {
-                        m.put_word(
-                            p + 0xe8,
-                            crate::normalization::atoi_scan(m.bytes, value),
-                        );
+                        m.put_word(p + 0xe8, crate::normalization::atoi_scan(m.bytes, value));
                     } else if self.call(m, 0x195d58, &[name, 0x151f60]) == 0 {
-
                         self.boot.fault =
                             Some(crate::engine::Error::MissingStreamAdapter { entry: 0x15af9c });
                         m.put_word(s, saved);
@@ -357,24 +378,31 @@ impl Calls for LiveCalls<'_> {
                 m.put_word(s, saved);
                 rc
             }
-            0x195d58 => crate::frontend::compare_str(&m.bytes[a[0] as usize..], &m.bytes[a[1] as usize..]) as u32,
+            0x195d58 => {
+                crate::frontend::compare_str(&m.bytes[a[0] as usize..], &m.bytes[a[1] as usize..])
+                    as u32
+            }
             0x151840 => {
-
                 let (p, name, s, out) = (a[0], a[1], a[2], a[3]);
                 let mut ret = 0u32;
                 let mut flag = 1u8;
                 if s != 0 && m.byte(s) != 0 && p != 0 {
                     let h0 = m.word(p);
                     let h1 = m.word(p.wrapping_add(4));
-                    let pair =
-                        core::array::from_fn(|i| m.byte(crate::rom_region::addr(self.rom(),0x8d7660) + i as u32));
+                    let pair = core::array::from_fn(|i| {
+                        m.byte(crate::rom_region::addr(self.rom(), 0x8d7660) + i as u32)
+                    });
                     let half = if h0 == 0 { None } else { Some(m.half(h0)) };
                     let mut ctx = 0u32;
                     let r = frontend::resolve_engine_context(
-                        h0, half, h1, &pair, crate::rom_region::addr(self.rom(),0x8d7640), &mut ctx,
+                        h0,
+                        half,
+                        h1,
+                        &pair,
+                        crate::rom_region::addr(self.rom(), 0x8d7640),
+                        &mut ctx,
                     );
                     if r < 0x80000000 {
-
                         let nm = terminated(m.bytes, name);
                         let nm = &nm[..nm.len() - 1];
                         let parse = |mut at: u32| -> i32 {
@@ -390,11 +418,17 @@ impl Calls for LiveCalls<'_> {
                                 at = at.wrapping_add(1);
                             }
                             while c.is_ascii_digit() {
-                                n = (c as i32).wrapping_add(n.wrapping_mul(10)).wrapping_sub(b'0' as i32);
+                                n = (c as i32)
+                                    .wrapping_add(n.wrapping_mul(10))
+                                    .wrapping_sub(b'0' as i32);
                                 c = m.byte(at);
                                 at = at.wrapping_add(1);
                             }
-                            if sign == b'-' { -n } else { n }
+                            if sign == b'-' {
+                                -n
+                            } else {
+                                n
+                            }
                         };
                         if nm == b"readmode" {
                             if (parse(s).wrapping_sub(1) as u32) >= 4 {
@@ -517,7 +551,8 @@ impl Calls for LiveCalls<'_> {
                 assert!(self.boot.fault.is_none(), "unbound {f:x} {a:x?}");
                 r
             }
-        }
+        };
+        result
     }
 }
 
@@ -621,6 +656,7 @@ pub fn release_stream_state_m(m: &mut Memory<'_>, p: u32, _heap: u32, h: &mut im
     }
     h.call(m, 0x196428, &[heap, p]);
 }
+
 fn term<'a>(m: &'a Memory<'_>, p: u32) -> &'a [u8] {
     let s = &m.bytes[m.offset(p)..];
     &s[..s.iter().position(|&b| b == 0).unwrap()]
@@ -634,6 +670,7 @@ pub fn fn_14f010_m(m: &mut Memory<'_>, a: [u32; 7], s: u32, h: &mut impl Calls) 
     }
     r
 }
+
 fn open_stream_inner(m: &mut Memory<'_>, a: [u32; 7], s: u32, h: &mut impl Calls) -> u32 {
     let [p, tag, id, content, mut elements, mode, out] = a;
     let r = frontend::validate_handle(p != 0, tag, 0x47dd, 32);
@@ -810,6 +847,7 @@ impl crate::db_live::PoolHooksM for LiveCalls<'_> {
         panic!("unexpected pool log")
     }
 }
+
 impl crate::db_live::DbHooksM for LiveCalls<'_> {
     fn call_m(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>) -> u32 {
         Calls::call(self, m, f, a)
@@ -1209,22 +1247,28 @@ use frontend::{
     divmod_u32, element_at, fill_bytes, heap_alloc_m, heap_realloc_m, heap_release_m, move_bytes,
     validate_handle, ElementTable,
 };
+
 fn mem_word(m: &[u8], p: u32) -> u32 {
     u32::from_le_bytes(m[p as usize..p as usize + 4].try_into().unwrap())
 }
+
 fn mem_half(m: &[u8], p: u32) -> u16 {
     u16::from_le_bytes(m[p as usize..p as usize + 2].try_into().unwrap())
 }
+
 fn mem_store(m: &mut [u8], p: u32, v: u32) {
     m[p as usize..p as usize + 4].copy_from_slice(&v.to_le_bytes());
 }
+
 fn nz(p: u32) -> Option<u32> {
     (p != 0).then_some(p)
 }
+
 struct StreamHeap<'a, 'h, H> {
     host: &'a core::cell::RefCell<&'h mut H>,
     heap: u32,
 }
+
 impl<H: Calls> frontend::HeapVtableM for StreamHeap<'_, '_, H> {
     fn alloc_at_m(&mut self, o: u32, n: u32, b: &mut [u8]) -> u32 {
         let mut m = Memory { base: 0, bytes: b };
@@ -1242,6 +1286,7 @@ impl<H: Calls> frontend::HeapVtableM for StreamHeap<'_, '_, H> {
         self.host.borrow_mut().call(&mut m, f, &[o, p]);
     }
 }
+
 fn stream_call(m: &mut Memory<'_>, f: u32, a: &[u32], h: &mut impl Calls) -> u32 {
     if f == 0x14fe9c {
         return frontend::read_direct_start(m.bytes, nz(a[0]), a[1], nz(a[2]), nz(a[3]));
@@ -1316,22 +1361,27 @@ impl crate::selection::arena::Host for LiveCalls<'_> {
         (Calls::call(self, &mut m, f, args), 0)
     }
 }
+
 fn load_i16<const N: usize>(m: &Memory<'_>, p: u32) -> [i16; N] {
     core::array::from_fn(|i| m.half(p + i as u32 * 2) as i16)
 }
+
 fn load_i32<const N: usize>(m: &Memory<'_>, p: u32) -> [i32; N] {
     core::array::from_fn(|i| m.word(p + i as u32 * 4) as i32)
 }
+
 fn store_i16(m: &mut Memory<'_>, p: u32, x: &[i16]) {
     for (i, v) in x.iter().enumerate() {
         m.put_half(p + i as u32 * 2, *v as u16);
     }
 }
+
 fn store_i32(m: &mut Memory<'_>, p: u32, x: &[i32]) {
     for (i, v) in x.iter().enumerate() {
         m.put_word(p + i as u32 * 4, *v as u32);
     }
 }
+
 fn numeric_call(m: &mut Memory<'_>, f: u32, a: &[u32], rom: Rom) -> u32 {
     let p = a[0];
     match f {
@@ -1527,6 +1577,7 @@ pub fn fn_22a0a8_m(
     }
     r
 }
+
 fn pump_inner(m: &mut Memory<'_>, p: u32, tag: u32, state: u32, s: u32, h: &mut impl Calls) -> u32 {
     if validate_handle(p != 0, tag, 0x4e7, 0x70) >= 0x80000000 {
         return 0x84e02008;
@@ -1831,6 +1882,7 @@ pub fn close_stream_m(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Calls) 
     h.call(m, 0x196428, &[m.word(ctx + 4), p]);
     0
 }
+
 fn rule_stream(
     m: &mut Memory<'_>,
     p: u32,
@@ -1843,7 +1895,11 @@ fn rule_stream(
     a[0] = m.word(p + slot);
     a[1] = m.word(p + slot + 4);
     a[2..2 + tail.len()].copy_from_slice(tail);
-    h.call(m, m.word(m.word(p + 32) + method), &a[..2 + tail.len()])
+    h.call(
+        m,
+        crate::rom_region::to_us_guest(h.rom(), m.word(m.word(p + 32) + method)),
+        &a[..2 + tail.len()],
+    )
 }
 
 pub fn fn_22b518_m(
@@ -1863,6 +1919,7 @@ pub fn fn_22b518_m(
     }
     rc
 }
+
 fn process_inner(
     m: &mut Memory<'_>,
     p: u32,
@@ -2053,6 +2110,7 @@ fn process_inner(
 }
 
 use crate::prosody_rules::{Arena, RuleContext, RuleItem};
+
 pub trait ApplyRuleHostM {
     fn resolve(&mut self, arena: &mut Arena<'_>, h0: u32, h1: u32) -> (u32, Option<RuleContext>);
     fn alloc(&mut self, arena: &mut Arena<'_>, size: u32) -> u32;
@@ -2278,6 +2336,7 @@ struct ApplyAdapter<'a, H> {
     heap: u32,
     s: u32,
 }
+
 fn arena_call(h: &mut impl Calls, arena: &mut Arena<'_>, f: u32, a: &[u32]) -> u32 {
     let mut m = Memory {
         base: 0,
@@ -2285,6 +2344,7 @@ fn arena_call(h: &mut impl Calls, arena: &mut Arena<'_>, f: u32, a: &[u32]) -> u
     };
     h.call(&mut m, f, a)
 }
+
 impl<H: Calls> ApplyRuleHostM for ApplyAdapter<'_, H> {
     fn resolve(&mut self, arena: &mut Arena<'_>, a: u32, b: u32) -> (u32, Option<RuleContext>) {
         let r = arena_call(self.h, arena, 0x19611c, &[a, b, self.s]);
@@ -2373,6 +2433,7 @@ impl<H: Calls> ApplyRuleHostM for ApplyAdapter<'_, H> {
         panic!("rule error {code:x}")
     }
 }
+
 fn apply_rules_live(
     m: &mut Memory<'_>,
     p: u32,
@@ -2422,6 +2483,7 @@ struct ReplacementAdapter<'a, 'b, H> {
     ptr: u32,
     s: u32,
 }
+
 impl<H: Calls> crate::prosody_rules::ReplacementMatcher for ReplacementAdapter<'_, '_, H> {
     fn resolve(&mut self) -> bool {
         true
@@ -2458,6 +2520,7 @@ impl<H: Calls> crate::prosody_rules::ReplacementMatcher for ReplacementAdapter<'
         crate::regex::error_status(code)
     }
 }
+
 fn replace_live(m: &mut Memory<'_>, a: [u32; 5], s: u32, h: &mut impl Calls) -> u32 {
     let [p, pattern, replacement, input, out] = a;
     if p == 0 || pattern == 0 || input == 0 || out == 0 {
@@ -2528,11 +2591,13 @@ fn replace_live(m: &mut Memory<'_>, a: [u32; 5], s: u32, h: &mut impl Calls) -> 
     }
     r
 }
+
 struct PcreAdapter<'a, 'b, H> {
     m: &'a mut Memory<'b>,
     h: &'a mut H,
     s: u32,
 }
+
 impl<H: Calls> crate::regex::PcreHost for PcreAdapter<'_, '_, H> {
     fn validate(&mut self, p: u32, k: u32, t: u32, n: u32) -> u32 {
         validate_handle(p != 0, k, t, n)
@@ -2554,6 +2619,7 @@ impl<H: Calls> crate::regex::PcreHost for PcreAdapter<'_, '_, H> {
         self.h.call(self.m, 0x196428, &[p, v]);
     }
 }
+
 fn pcre_exec_live(
     m: &mut Memory<'_>,
     engine: [u32; 2],
@@ -2709,6 +2775,7 @@ fn pcre_exec_live(
     }
     result
 }
+
 fn m_word_addr(p: u32, off: u32, m: &Memory<'_>) -> u32 {
     m.word(p + off)
 }
@@ -2733,6 +2800,7 @@ fn frame_ref_at(
     }
     panic!("unknown frame ptr {ptr:x}")
 }
+
 fn frame_addr(
     r: Option<crate::regex::FrameRef>,
     blocks: &[crate::regex::FrameBlockState],
@@ -2741,6 +2809,7 @@ fn frame_addr(
     r.map(|f| blocks[f.block as usize].code_id + f.offset + extra)
         .unwrap_or(0)
 }
+
 fn decode_frame(
     m: &Memory<'_>,
     p: u32,
@@ -2824,6 +2893,7 @@ fn decode_frame(
     f.rec_scratch = m.word(p + 72) == p + 152;
     f
 }
+
 fn encode_frame(
     m: &mut Memory<'_>,
     p: u32,
@@ -2935,6 +3005,7 @@ impl crate::speech_part_3::Host for LiveCalls<'_> {
         Calls::call(self, m, f, a)
     }
 }
+
 impl crate::boot_part_b::Host for LiveCalls<'_> {
     fn thread_id(&mut self) -> u32 {
         self.boot.platform.thread_id()

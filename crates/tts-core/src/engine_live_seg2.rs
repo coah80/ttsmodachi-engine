@@ -1,7 +1,6 @@
-
+use crate::boot::Memory as BootMemory;
 
 use crate::engine;
-use crate::boot::Memory as BootMemory;
 
 pub fn run_step(
     m: &mut crate::boot::Memory<'_>,
@@ -69,9 +68,13 @@ pub const TEXT_ADDR: u32 = 0xB27DAA;
 pub const JOB_ADDR: u32 = 0x00AF340D;
 
 pub const JOB_WAITING: u8 = 1;
+
 pub const JOB_PROCESSING: u8 = 2;
+
 pub const JOB_FINISHED: u8 = 3;
+
 pub const JOB_ERROR: u8 = 4;
+
 pub const JOB_TEXT_READY: u8 = 5;
 
 pub fn job_mark_processing(m: &mut crate::boot::Memory<'_>, job: u32) {
@@ -95,6 +98,7 @@ pub const VOICE_WRAPPER_EU: u32 = 0x86731A0;
 pub const VOICE_WRAPPER_KR: u32 = 0x866A260;
 
 #[derive(Clone, Copy, Debug)]
+
 pub struct VoiceParams {
     pub pitch: u8,
     pub speed: u8,
@@ -105,6 +109,7 @@ pub struct VoiceParams {
 }
 
 #[derive(Clone, Copy, Debug)]
+
 pub struct RequestArgs {
     pub engine: u32,
     pub magic: u32,
@@ -167,11 +172,13 @@ fn request_host_call(
         _ => 0x80002001,
     }
 }
+
 impl crate::speech_part_3::Host for RequestLocks {
     fn call(&mut self, m: &mut BootMemory<'_>, f: u32, a: &[u32]) -> u32 {
         request_host_call(self, m, f, a)
     }
 }
+
 impl crate::boot_part_b::Host for RequestLocks {
     fn thread_id(&mut self) -> u32 {
         0x1ff82000
@@ -180,6 +187,7 @@ impl crate::boot_part_b::Host for RequestLocks {
         request_host_call(self, m, f, a)
     }
 }
+
 impl crate::boot::Calls for RequestLocks {
     fn call(&mut self, m: &mut BootMemory<'_>, address: u32, args: &[u32]) -> u32 {
         request_host_call(self, m, address, args)
@@ -204,6 +212,7 @@ impl TableBuffers {
 }
 
 struct RequestMutex;
+
 impl engine::MutexPlatform for RequestMutex {
     fn acquire_mutex(&mut self, _: u32) -> u32 {
         0x81402001
@@ -214,6 +223,7 @@ impl engine::MutexPlatform for RequestMutex {
 }
 
 struct RequestTick(u64);
+
 impl engine::Platform for RequestTick {
     fn ticks(&mut self) -> u64 {
         self.0
@@ -221,6 +231,7 @@ impl engine::Platform for RequestTick {
 }
 
 struct RequestHeap;
+
 impl engine::HeapPlatform for RequestHeap {
     fn thread_id(&mut self) -> u32 {
         0x1ff82000
@@ -236,6 +247,7 @@ impl engine::HeapPlatform for RequestHeap {
 struct RequestLocks {
     tick: u64,
 }
+
 impl crate::engine_backend::BackendLocks for RequestLocks {
     fn acquire(&mut self, _: u32) -> u32 {
         0
@@ -265,6 +277,7 @@ impl crate::engine_backend::BackendLocks for RequestLocks {
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn request_to_scheduler(
     m: &mut engine::Memory<'_, '_>,
     text: &[u16],
@@ -278,6 +291,7 @@ pub fn request_to_scheduler(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn do_tts_live(
     m: &mut engine::Memory<'_, '_>,
     tts_input: u32,
@@ -309,6 +323,7 @@ pub fn do_tts_live(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn request_prologue_setters_rom(
     m: &mut engine::Memory<'_, '_>,
     text: &[u16],
@@ -357,15 +372,15 @@ pub fn request_setup_rom(
     args: &RequestArgs,
     rom: crate::rom_region::Rom,
 ) -> Result<(), engine::Error> {
-    let _ = rom;
     let mut controls = RequestLocks { tick: args.tick };
-    crate::engine_backend::parameter_reset(m, args.voice, &mut controls)?;
+    crate::engine_backend::parameter_reset_rom(m, args.voice, &mut controls, rom)?;
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn request_prologue_rom(
     m: &mut engine::Memory<'_, '_>,
     text: &[u16],
@@ -381,6 +396,7 @@ pub fn request_prologue_rom(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn request_chain_rom(
     m: &mut engine::Memory<'_, '_>,
     args: &RequestArgs,
@@ -396,15 +412,12 @@ pub fn request_chain_rom(
         magic: args.magic,
     };
     let mut prefix = engine::request_prefix_rom(m, boot, args.request, &mut mutex, rom)?;
-
     let (rc, h) = engine::open_text_live_rom(m, boot.engine, args.request, rom)?;
-
     if rc >= 0x80000000 {
         return Err(engine::Error::EngineStatus(rc));
     }
     prefix.stream = h;
     prefix.blocked_at = engine::Error::MissingStreamAdapter { entry: 0x190410 };
-
     let boundary = engine::voice_start_inner(
         m,
         engine::StageCall {
@@ -443,18 +456,27 @@ pub fn request_chain_rom(
         &mut heap,
         rom,
     )?;
-
     let aux_us = engine::VoiceBoundary {
-        entry: crate::rom_region::to_us(rom, aux.entry),
+        entry: crate::rom_region::to_us_guest(rom, aux.entry),
         ..aux
     };
-    let db = crate::engine_live::database_return(m, aux_us, args.request_sp, workspace, &mut heap, rom)?;
-    let start = crate::engine_live::component_boundary(m, synthesis, args.request_sp, workspace, &mut heap, rom)?;
-    let boundary = crate::engine_live::first_component(m, start, args.request_sp, workspace, &mut heap, rom)?;
+    let db =
+        crate::engine_live::database_return(m, aux_us, args.request_sp, workspace, &mut heap, rom)?;
+    let start = crate::engine_live::component_boundary(
+        m,
+        synthesis,
+        args.request_sp,
+        workspace,
+        &mut heap,
+        rom,
+    )?;
+    let boundary =
+        crate::engine_live::first_component(m, start, args.request_sp, workspace, &mut heap, rom)?;
     Ok(boundary)
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn request_to_scheduler_rom(
     m: &mut engine::Memory<'_, '_>,
     text: &[u16],

@@ -1,15 +1,19 @@
-
-
-use crate::{boot, engine, engine_backend, engine_live, engine_live_seg2};
-use crate::rom_region::{capture_slot, Rom};
 use crate::reentrant::HooksM;
 
+use crate::rom_region::{capture_slot, Rom};
+
+use crate::{boot, engine, engine_backend, engine_live, engine_live_seg2};
+
 pub use crate::engine::Error;
+
 pub use crate::engine_live_seg2::RequestArgs as BootArgs;
+
 pub use crate::engine_live_seg2::TableBuffers;
+
 pub use crate::engine_live_seg2::{TEXT_ADDR, VOICE_WRAPPER};
 
 #[derive(Clone, Copy, Debug)]
+
 pub struct VoiceParams {
     pub pitch: u8,
     pub speed: u8,
@@ -109,11 +113,13 @@ pub fn scheduler_stack_arg(m: &boot::Memory<'_>, synth: u32) -> u32 {
 }
 
 struct FinishNap;
+
 impl engine_live::SleepPlatform for FinishNap {
     fn sleep_ns(&mut self, _: u64) -> Result<(), engine::Error> {
         Ok(())
     }
 }
+
 struct ForwardSink<'o, 'r> {
     outer: &'r mut dyn engine_live::RuntimeServicesM,
     out: &'o mut [i16],
@@ -123,8 +129,18 @@ struct ForwardSink<'o, 'r> {
 }
 
 impl engine_live::RuntimeServicesM for ForwardSink<'_, '_> {
-    fn guest_capture(&self)->bool {self.outer.guest_capture()}
-
+    fn invoke_m_rom(
+        &mut self,
+        m: &mut boot::Memory<'_>,
+        entry: u32,
+        args: &[u32],
+        rom: Rom,
+    ) -> Result<u32, engine::Error> {
+        self.outer.invoke_m_rom(m, entry, args, rom)
+    }
+    fn guest_capture(&self) -> bool {
+        self.outer.guest_capture()
+    }
     fn invoke_m(
         &mut self,
         m: &mut boot::Memory<'_>,
@@ -288,7 +304,6 @@ pub fn speak_pre_chain(
         first_unbound: None,
         first_error: None,
     };
-
     let mut units = 0usize;
     {
         let arena: &[u8] = &mut *state.arena;
@@ -296,12 +311,12 @@ pub fn speak_pre_chain(
         loop {
             let o = ta + units * 2;
             if o + 2 > arena.len() {
-                return Err(Error::Capacity { required: o + 2, available: arena.len() });
+                return Err(Error::Capacity {
+                    required: o + 2,
+                    available: arena.len(),
+                });
             }
-            let w = u16::from_le_bytes([
-                arena[o],
-                arena[o + 1],
-            ]);
+            let w = u16::from_le_bytes([arena[o], arena[o + 1]]);
             if w == 0 {
                 break;
             }
@@ -311,7 +326,10 @@ pub fn speak_pre_chain(
     let nbytes = (units as u32).wrapping_mul(2);
     let text_copy = heap_dispatch(&mut hooks, &mut *state.arena, 0x129778, &[nbytes])?;
     if text_copy == 0 {
-        return Err(Error::Capacity { required: nbytes as usize, available: 0 });
+        return Err(Error::Capacity {
+            required: nbytes as usize,
+            available: 0,
+        });
     }
     {
         let arena: &mut [u8] = &mut *state.arena;
@@ -322,10 +340,12 @@ pub fn speak_pre_chain(
             arena[to + i * 2 + 1] = arena[ta + i * 2 + 1];
         }
     }
-
     {
         let arena: &mut [u8] = &mut *state.arena;
-        let mut region = [engine::Region { base: 0, bytes: arena }];
+        let mut region = [engine::Region {
+            base: 0,
+            bytes: arena,
+        }];
         let mut mem = engine::Memory::new(&mut region)?;
         mem.read(
             crate::rom_region::addr(state.rom, 0xa21fb0),
@@ -342,13 +362,15 @@ pub fn speak_pre_chain(
                     available: state.tables.constants.len(),
                 })?;
         let o = mem.word(request.voice + 8)?;
-        let effects = mem.word(o + 0x61b8)?;
-        engine_backend::reset(&mut mem, effects, &numeric)?;
+        let effects = mem.word(o + crate::speech_layout::field(state.rom, 0x61b8))?;
+        engine_backend::reset_rom(&mut mem, effects, &numeric, state.rom)?;
     }
-
     {
         let arena: &mut [u8] = &mut *state.arena;
-        let mut region = [engine::Region { base: 0, bytes: arena }];
+        let mut region = [engine::Region {
+            base: 0,
+            bytes: arena,
+        }];
         let mut mem = engine::Memory::new(&mut region)?;
         let mut host = DispatchHost { hooks: &mut hooks };
         engine_live_seg2::request_prologue_setters_rom(
@@ -361,37 +383,46 @@ pub fn speak_pre_chain(
             Some(&mut host),
         )?;
     }
-
     {
         let arena: &mut [u8] = &mut *state.arena;
         let at = engine_live_seg2::JOB_ADDR as usize + 12;
         arena[at..at + 8].copy_from_slice(&0u64.to_le_bytes());
     }
-
     {
         let arena: &mut [u8] = &mut *state.arena;
-        let mut region = [engine::Region { base: 0, bytes: arena }];
+        let mut region = [engine::Region {
+            base: 0,
+            bytes: arena,
+        }];
         let mut mem = engine::Memory::new(&mut region)?;
-        engine_live_seg2::request_setup_rom(
-            &mut mem,
-            &request,
-            state.rom,
-        )?;
+        engine_live_seg2::request_setup_rom(&mut mem, &request, state.rom)?;
     }
-
     let tts = heap_dispatch(&mut hooks, &mut *state.arena, 0x129778, &[12])?;
     if tts == 0 {
-        return Err(Error::Capacity { required: 12, available: 0 });
+        return Err(Error::Capacity {
+            required: 12,
+            available: 0,
+        });
     }
     {
         let arena: &mut [u8] = &mut *state.arena;
-        let mut bm = boot::Memory { base: 0, bytes: arena };
+        let mut bm = boot::Memory {
+            base: 0,
+            bytes: arena,
+        };
         bm.put_word(tts, 0);
         bm.put_word(tts.wrapping_add(4), nbytes);
         bm.put_word(tts.wrapping_add(8), text_copy);
     }
     drop(hooks);
-    Ok(Intake { request: engine_live_seg2::RequestArgs { request: tts, ..request }, tts, text: text_copy })
+    Ok(Intake {
+        request: engine_live_seg2::RequestArgs {
+            request: tts,
+            ..request
+        },
+        tts,
+        text: text_copy,
+    })
 }
 
 pub fn guest_free(state: &mut UsEngine<'_>, block: u32) -> Result<(), Error> {
@@ -411,7 +442,8 @@ pub fn unprepare_voice(state: &mut UsEngine<'_>) {
     let arena: &mut [u8] = &mut *state.arena;
     let w = state.boot.voice as usize;
     let obj = u32::from_le_bytes(arena[w + 8..w + 12].try_into().unwrap()) as usize;
-    if let Some(flag) = arena.get_mut(obj + 0x61a0) {
+    if let Some(flag) = arena.get_mut(obj + crate::speech_layout::field(state.rom, 0x61a0) as usize)
+    {
         *flag = 0;
     }
 }
@@ -452,6 +484,7 @@ pub fn speak_release(state: &mut UsEngine<'_>, intake: &Intake) -> Result<(), Er
 }
 
 struct TailMutex;
+
 impl engine::MutexPlatform for TailMutex {
     fn acquire_mutex(&mut self, _: u32) -> u32 {
         0x81402001
@@ -520,52 +553,64 @@ pub fn speak(
     match state.rom {
         Rom::Us if params.language != 1 => return Err(Error::InvalidVoice),
         Rom::Eu if !(1..=5).contains(&params.language) => return Err(Error::InvalidVoice),
-        Rom::Kr => {
-            return Err(Error::UnsupportedStage { entry: 0x15429c });
-        }
+        Rom::Kr if params.language != 1 => return Err(Error::InvalidVoice),
         _ => {}
     }
     if out.is_empty() {
-        return Err(Error::Capacity { required: 1, available: 0 });
+        return Err(Error::Capacity {
+            required: 1,
+            available: 0,
+        });
     }
-
     {
         let arena: &mut [u8] = &mut *state.arena;
-        let mut bm = boot::Memory { base: 0, bytes: arena };
+        let mut bm = boot::Memory {
+            base: 0,
+            bytes: arena,
+        };
         crate::engine_live_seg2::job_mark_processing(&mut bm, crate::engine_live_seg2::JOB_ADDR);
     }
-
     {
         let arena: &mut [u8] = &mut *state.arena;
         let text_addr = engine_live_seg2::TEXT_ADDR as usize;
         let mut at = text_addr;
         for unit in text {
             if at + 2 > arena.len() {
-                return Err(Error::Capacity { required: at + 2, available: arena.len() });
+                return Err(Error::Capacity {
+                    required: at + 2,
+                    available: arena.len(),
+                });
             }
             arena[at..at + 2].copy_from_slice(&unit.to_le_bytes());
             at += 2;
         }
         if at + 2 > arena.len() {
-            return Err(Error::Capacity { required: at + 2, available: arena.len() });
+            return Err(Error::Capacity {
+                required: at + 2,
+                available: arena.len(),
+            });
         }
         arena[at..at + 2].copy_from_slice(&0u16.to_le_bytes());
     }
-
     {
         let arena: &mut [u8] = &mut *state.arena;
-        let mut bm = boot::Memory { base: 0, bytes: arena };
+        let mut bm = boot::Memory {
+            base: 0,
+            bytes: arena,
+        };
         crate::engine_live_seg2::job_mark_processing(&mut bm, crate::engine_live_seg2::JOB_ADDR);
     }
-
     let setup_entry_prepared = {
         let arena: &[u8] = &*state.arena;
         let w = state.boot.voice as usize;
         let obj = u32::from_le_bytes(arena[w + 8..w + 12].try_into().unwrap());
-        arena.get(obj as usize + 0x61a0).copied().unwrap_or(0) != 0
+        arena
+            .get(obj as usize + crate::speech_layout::field(state.rom, 0x61a0) as usize)
+            .copied()
+            .unwrap_or(0)
+            != 0
     };
     let intake = speak_pre_chain(state, text, params)?;
-
     let result = speak_intake(state, &intake, setup_entry_prepared, out);
     let released = speak_release(state, &intake);
     let samples = result?;
@@ -579,7 +624,6 @@ fn speak_intake(
     setup_entry_prepared: bool,
     out: &mut [i16],
 ) -> Result<usize, Error> {
-
     let previous = *state
         .arena
         .get(state.boot.engine as usize + 40)
@@ -596,11 +640,8 @@ fn speak_intake(
         .arena
         .get(seg as usize + 0x30)
         .ok_or(Error::InvalidSnapshot)?;
-
     let boundary = match speak_post_chain(state, intake) {
-        Ok(b) => {
-            b
-        }
+        Ok(b) => b,
         Err(e) => {
             request_tail_restore(state, previous)?;
             synthesis_tail_restore(state, seg, previous_pipe)?;
@@ -608,9 +649,10 @@ fn speak_intake(
         }
     };
     if boundary.entry != 0x15429c {
-        return Err(Error::UnsupportedStage { entry: boundary.entry });
+        return Err(Error::UnsupportedStage {
+            entry: boundary.entry,
+        });
     }
-
     {
         let arena: &mut [u8] = &mut *state.arena;
         let mut bm = boot::Memory {
@@ -625,10 +667,12 @@ fn speak_intake(
             }
         }
     }
-
-    {
+    if state.rom == Rom::Us {
         let arena: &mut [u8] = &mut *state.arena;
-        let mut bm = boot::Memory { base: 0, bytes: arena };
+        let mut bm = boot::Memory {
+            base: 0,
+            bytes: arena,
+        };
         let mut hooks_tmp = UsHooks {
             platform: &mut *state.platform,
             runtime: &mut *state.runtime,
@@ -637,7 +681,6 @@ fn speak_intake(
             first_unbound: None,
             first_error: None,
         };
-
         if let Err(e) = scheduler_setup(&mut hooks_tmp, &mut bm, boundary.args[0]) {
             drop(hooks_tmp);
             drop(bm);
@@ -649,7 +692,10 @@ fn speak_intake(
                     emit_err: None,
                 };
                 let arena: &mut [u8] = &mut *state.arena;
-                let mut region = [engine::Region { base: 0, bytes: arena }];
+                let mut region = [engine::Region {
+                    base: 0,
+                    bytes: arena,
+                }];
                 if let Ok(mut mem) = engine::Memory::new(&mut region) {
                     let _ = engine_live::synthesis_drain_m(
                         &mut mem,
@@ -667,11 +713,15 @@ fn speak_intake(
             return Err(e);
         }
     }
-
     let synth = boundary.args[0];
     let flush = boundary.args[1];
     let mut activity = [0u8; 256];
-    let mut sink = ForwardSink { outer: &mut *state.runtime, out, written: 0, emit_err: None };
+    let mut sink = ForwardSink {
+        outer: &mut *state.runtime,
+        out,
+        written: 0,
+        emit_err: None,
+    };
     let mut hooks = UsHooks {
         platform: &mut *state.platform,
         runtime: &mut sink,
@@ -682,18 +732,19 @@ fn speak_intake(
     };
     let rc = {
         let arena: &mut [u8] = &mut *state.arena;
-        let mut bm = boot::Memory { base: 0, bytes: arena };
+        let mut bm = boot::Memory {
+            base: 0,
+            bytes: arena,
+        };
         engine_live::process_text_m(&mut bm, synth, flush, &mut activity, 0x1e00, &mut hooks)
     };
     if rc >= 0x80000000 {
-
         let first_unbound = hooks.first_unbound;
         let first_error = hooks.first_error;
         drop(hooks);
         let emit_err = sink.emit_err;
         let sched_written = sink.written;
         drop(sink);
-
         {
             let mut drain_sink = ForwardSink {
                 outer: &mut *state.runtime,
@@ -702,7 +753,10 @@ fn speak_intake(
                 emit_err: None,
             };
             let arena: &mut [u8] = &mut *state.arena;
-            let mut region = [engine::Region { base: 0, bytes: arena }];
+            let mut region = [engine::Region {
+                base: 0,
+                bytes: arena,
+            }];
             if let Ok(mut mem) = engine::Memory::new(&mut region) {
                 let _ = engine_live::synthesis_drain_m(
                     &mut mem,
@@ -715,13 +769,13 @@ fn speak_intake(
                 );
             }
         }
-
         request_tail_restore(state, previous)?;
         synthesis_tail_restore(state, seg, previous_pipe)?;
         if let Some(e) = emit_err {
             return Err(e);
         }
-        if let Some(e @ (Error::HeapExhausted { .. } | Error::CodeOverwritten { .. })) = first_error {
+        if let Some(e @ (Error::HeapExhausted { .. } | Error::CodeOverwritten { .. })) = first_error
+        {
             return Err(e);
         }
         return Err(Error::UnsupportedStage {
@@ -731,7 +785,6 @@ fn speak_intake(
     drop(hooks);
     let sched_written = sink.written;
     drop(sink);
-
     let mut finish_written = 0usize;
     {
         let (user, pspeech) = {
@@ -795,7 +848,10 @@ fn speak_intake(
                 },
                 sleeper: &mut nap,
             };
-            let mut output_runtime=engine_live::OutputRuntime {inner:&mut inner,guest_capture:state.runtime.guest_capture()};
+            let mut output_runtime = engine_live::OutputRuntime {
+                inner: &mut inner,
+                guest_capture: state.runtime.guest_capture(),
+            };
             let mut hooks2 = UsHooks {
                 platform: &mut *state.platform,
                 runtime: &mut output_runtime,
@@ -809,24 +865,37 @@ fn speak_intake(
                 base: 0,
                 bytes: arena,
             };
-            engine_live::finish_m(&mut bm, pspeech, user, 0x684f424a, 0x1c40, &mut hooks2);
-            if let Some(e)=hooks2.first_error {return Err(e);}
-            if let Some(entry)=hooks2.first_unbound {return Err(Error::UnsupportedStage{entry});}
+            engine_live::finish_m_rom(
+                &mut bm,
+                pspeech,
+                user,
+                0x684f424a,
+                0x1c40,
+                state.rom,
+                &mut hooks2,
+            );
+            if let Some(e) = hooks2.first_error {
+                return Err(e);
+            }
+            if let Some(entry) = hooks2.first_unbound {
+                return Err(Error::UnsupportedStage { entry });
+            }
             finish_written = inner.written;
         }
     }
     let written = sched_written + finish_written;
-
     let mut drain_sink = ForwardSink {
         outer: &mut *state.runtime,
         out: &mut out[written..],
         written: 0,
         emit_err: None,
     };
-
     let drain_rc = match {
         let arena: &mut [u8] = &mut *state.arena;
-        let mut region = [engine::Region { base: 0, bytes: arena }];
+        let mut region = [engine::Region {
+            base: 0,
+            bytes: arena,
+        }];
         let mut mem = engine::Memory::new(&mut region)?;
         engine_live::synthesis_drain_m(
             &mut mem,
@@ -859,21 +928,29 @@ fn speak_intake(
         synthesis_tail_restore(state, seg, previous_pipe)?;
         return Err(Error::EngineStatus(drain_rc));
     }
-
     request_tail_restore(state, previous)?;
     synthesis_tail_restore(state, seg, previous_pipe)?;
-
     {
         let arena: &mut [u8] = &mut *state.arena;
-        let mut bm = boot::Memory { base: 0, bytes: arena };
+        let mut bm = boot::Memory {
+            base: 0,
+            bytes: arena,
+        };
         crate::engine_live_seg2::job_mark_finished(&mut bm, crate::engine_live_seg2::JOB_ADDR);
     }
-    if !state.runtime.guest_capture() {return Ok(written);}
-
+    if !state.runtime.guest_capture() {
+        return Ok(written);
+    }
     let served = {
         let arena: &[u8] = &*state.arena;
         let rd = |o: usize| -> u32 {
-            u32::from_le_bytes(arena.get(o..o + 4).unwrap_or(&[0, 0, 0, 0]).try_into().unwrap())
+            u32::from_le_bytes(
+                arena
+                    .get(o..o + 4)
+                    .unwrap_or(&[0, 0, 0, 0])
+                    .try_into()
+                    .unwrap(),
+            )
         };
         let slot = rd(capture_slot(state.rom) as usize) as usize;
         let st = rd(slot) as usize;
@@ -886,7 +963,10 @@ fn speak_intake(
         if nsamples > out.len() {
             request_tail_restore(state, previous)?;
             synthesis_tail_restore(state, seg, previous_pipe)?;
-            return Err(Error::Capacity { required: nsamples, available: out.len() });
+            return Err(Error::Capacity {
+                required: nsamples,
+                available: out.len(),
+            });
         }
         if cbuf == 0 {
             for s in &mut out[..nsamples] {
@@ -895,14 +975,16 @@ fn speak_intake(
         } else if (cbuf as usize).wrapping_add(clen as usize) > arena.len() {
             request_tail_restore(state, previous)?;
             synthesis_tail_restore(state, seg, previous_pipe)?;
-            return Err(Error::Capacity { required: clen as usize, available: 0 });
+            return Err(Error::Capacity {
+                required: clen as usize,
+                available: 0,
+            });
         } else {
             for (i, s) in out[..nsamples].iter_mut().enumerate() {
                 let o = (cbuf as usize) + i * 2;
                 *s = i16::from_le_bytes([arena[o], arena[o + 1]]);
             }
         }
-
         {
             let arena: &mut [u8] = &mut *state.arena;
             let at = crate::engine_live_seg2::JOB_ADDR as usize + 12;

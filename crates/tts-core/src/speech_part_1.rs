@@ -1,7 +1,12 @@
-
 use crate::{boot::Memory, fe_text, frontend, normalization};
 
 pub trait Host {
+    fn guest_entry(&self, entry: u32) -> u32 {
+        entry
+    }
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.call(m, self.guest_entry(f), a)
+    }
     fn call(&mut self, m: &mut Memory<'_>, method: u32, args: &[u32]) -> u32;
     fn get(
         &mut self,
@@ -12,6 +17,7 @@ pub trait Host {
         len: u32,
     ) -> (u32, u32, u32);
 }
+
 fn half(m: &Memory<'_>, p: u32) -> u16 {
     let i = m.offset(p);
     u16::from_le_bytes(m.bytes[i..i + 2].try_into().unwrap())
@@ -123,6 +129,7 @@ pub trait StreamHost: Host {
         stream: u32,
     ) -> u32;
 }
+
 fn stream_read(
     m: &mut Memory<'_>,
     p: u32,
@@ -220,6 +227,7 @@ pub struct ComponentEnvironment {
     pub cached_handle: [u8; 8],
     pub input_types: [u32; 2],
 }
+
 fn reset_handle(m: &mut Memory<'_>, p: u32, env: &ComponentEnvironment) {
     let mut pair = [0u8; 8];
     frontend::load_pair(&mut pair, &env.cached_handle);
@@ -326,10 +334,12 @@ pub fn fn_1d513c(
 }
 
 struct MutexHost<'a, H>(&'a mut H);
+
 pub trait HeapHost: Host {
     fn thread_id(&mut self) -> u32;
     fn arbiter_address(&self) -> u32;
 }
+
 impl<H: HeapHost> crate::boot::Calls for MutexHost<'_, H> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.0.call(m, f, a)
@@ -338,6 +348,7 @@ impl<H: HeapHost> crate::boot::Calls for MutexHost<'_, H> {
         unreachable!("mutex operations do not call wide-return services")
     }
 }
+
 impl<H: HeapHost> crate::boot_part_b::Host for MutexHost<'_, H> {
     fn thread_id(&mut self) -> u32 {
         self.0.thread_id()
@@ -420,10 +431,12 @@ pub struct ArchiveEnvironment {
     pub parent: u32,
     pub locale: u32,
 }
+
 struct Resolve {
     path: u32,
     locale: u32,
 }
+
 impl crate::boot_part_b::Host for Resolve {
     fn thread_id(&mut self) -> u32 {
         unreachable!()
@@ -433,6 +446,7 @@ impl crate::boot_part_b::Host for Resolve {
         crate::boot_part_b2::fn_19de08(m, a[0], self.path, self.locale)
     }
 }
+
 fn chdir(m: &mut Memory<'_>, archive: u32, path: u32, locale: u32) -> u32 {
     crate::boot_part_b::fn_19ddd0(m, archive, &mut Resolve { path, locale })
 }
@@ -453,6 +467,7 @@ pub fn fn_16b554(
     m.bytes[at..at + 64].copy_from_slice(&saved);
     result
 }
+
 fn archive_find(
     m: &mut Memory<'_>,
     list: u32,
@@ -534,6 +549,7 @@ fn archive_find(
 }
 
 struct PlatformAdapter<'a, 'h, H>(&'a core::cell::RefCell<&'h mut H>);
+
 impl<H: HeapHost> crate::bridge::Platform for PlatformAdapter<'_, '_, H> {
     fn thread_id(&mut self) -> u32 {
         self.0.borrow_mut().thread_id()
@@ -545,7 +561,9 @@ impl<H: HeapHost> crate::bridge::Platform for PlatformAdapter<'_, '_, H> {
         self.0.borrow_mut().call(m, 0x172d18, a)
     }
 }
+
 struct LiveAdapter<'a, 'h, H>(&'a core::cell::RefCell<&'h mut H>);
+
 impl<H: HeapHost> crate::bridge::Live for LiveAdapter<'_, '_, H> {
     fn call<P: crate::bridge::Platform>(
         &mut self,
@@ -677,6 +695,7 @@ struct ReleaseMethod<'a, H> {
     method: u32,
     host: &'a mut H,
 }
+
 impl<H: Host> crate::frontend::HeapVtableM for ReleaseMethod<'_, H> {
     fn alloc_at_m(&mut self, _: u32, _: u32, _: &mut [u8]) -> u32 {
         panic!("release-only adapter")
@@ -695,6 +714,7 @@ impl<H: Host> crate::frontend::HeapVtableM for ReleaseMethod<'_, H> {
         );
     }
 }
+
 fn release_live(m: &mut Memory<'_>, heap: u32, p: u32, h: &mut impl Host) {
     if heap == 0 || p == 0 {
         return;
@@ -713,7 +733,9 @@ fn release_live(m: &mut Memory<'_>, heap: u32, p: u32, h: &mut impl Host) {
         },
     );
 }
+
 struct ArrayHost<'a, H>(&'a mut H);
+
 impl<H: Host> crate::reentrant2::HooksM for ArrayHost<'_, H> {
     fn call_m(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>) -> u32 {
         if f == 0x196428 {
@@ -828,6 +850,7 @@ pub fn fn_1e4a3c(
 }
 
 struct CallHost<'a, 'h, H>(&'a core::cell::RefCell<&'h mut H>);
+
 impl<H: Host> crate::boot::Calls for CallHost<'_, '_, H> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.0.borrow_mut().call(m, f, a)
@@ -836,11 +859,13 @@ impl<H: Host> crate::boot::Calls for CallHost<'_, '_, H> {
         panic!("no wide call in parameter lookup")
     }
 }
+
 struct ParamLock<'a, 'h, H> {
     cell: &'a core::cell::RefCell<&'h mut H>,
     object: u32,
     scratch: u32,
 }
+
 impl<H: Host> ParamLock<'_, '_, H> {
     fn run(&mut self, bytes: &mut [u8], f: u32) -> u32 {
         let mut m = Memory { base: 0, bytes };
@@ -849,6 +874,7 @@ impl<H: Host> ParamLock<'_, '_, H> {
             .expect("real resource lock")
     }
 }
+
 impl<H: Host> crate::reentrant2::StateLockM for ParamLock<'_, '_, H> {
     fn acquire_m(&mut self, bytes: &mut [u8]) -> u32 {
         self.run(bytes, 0x176f2c)
@@ -857,6 +883,7 @@ impl<H: Host> crate::reentrant2::StateLockM for ParamLock<'_, '_, H> {
         self.run(bytes, 0x176f5c)
     }
 }
+
 fn uint_property(
     m: &mut Memory<'_>,
     object: u32,
@@ -893,6 +920,7 @@ fn uint_property(
         },
     )
 }
+
 fn int_property(
     m: &mut Memory<'_>,
     object: u32,
@@ -928,6 +956,7 @@ fn int_property(
         },
     )
 }
+
 pub struct MarkerEnvironment {
     pub mode: u32,
     pub enabled: u32,
@@ -1025,12 +1054,15 @@ pub fn fn_1e3938<H: Host + crate::speech_part_6::Host>(
 }
 
 struct NormHost<'a, H>(&'a mut H);
+
 struct NormHooks<'a, H>(&'a mut H);
+
 impl<H: crate::speech_part_6::Host> crate::reentrant2::HooksM for NormHooks<'_, H> {
     fn call_m(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>) -> u32 {
         self.0.call(m, f, a)
     }
 }
+
 impl<H: Host + crate::speech_part_6::Host> normalization::NormalizationHost for NormHost<'_, H> {
     fn calloc(&mut self, bytes: &mut [u8], heap: u32, n: u32, size: u32) -> Option<u32> {
         let mut m = Memory { base: 0, bytes };
@@ -1050,10 +1082,13 @@ impl<H: Host + crate::speech_part_6::Host> normalization::NormalizationHost for 
         unreachable!()
     }
 }
+
 fn token_oom(m: &mut Memory<'_>, p: u32, h: &mut impl crate::speech_part_6::Host) {
     h.error(m, m.word(m.word(p) + 16), m.word(p + 0x48), 0x5df0);
 }
+
 const TOKEN_BUFFERS: [u32; 7] = [0x88, 0x94, 0xa0, 0xcc, 0xd8, 0xe4, 0xac];
+
 fn token_prepare<H: Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     p: u32,
@@ -1088,6 +1123,7 @@ fn token_prepare<H: Host + crate::speech_part_6::Host>(
     }
     0
 }
+
 fn token_cleanup<H: Host + crate::speech_part_6::Host>(m: &mut Memory<'_>, p: u32, h: &mut H) {
     if m.word(p + 0xc8) != 0 {
         release_live(m, m.word(m.word(p) + 4), m.word(p + 0xc8), h);
@@ -1248,6 +1284,7 @@ fn string_property(
     );
     (rc, value)
 }
+
 pub struct LanguageEnvironment {
     pub cached_handle: [u8; 8],
     pub depes: u32,
@@ -1261,6 +1298,7 @@ pub struct LanguageEnvironment {
     pub voice: u32,
     pub lid_state: u32,
 }
+
 fn set_string(
     m: &mut Memory<'_>,
     object: u32,
@@ -1278,6 +1316,7 @@ fn set_string(
     )
     .expect("nonnull property string");
 }
+
 fn language_open(
     m: &mut Memory<'_>,
     p: u32,
@@ -1512,10 +1551,12 @@ pub struct StreamEnvironment {
     pub mime_name: u32,
     pub ids: [u16; 7],
 }
+
 struct LiveHeap<'a, H> {
     host: &'a mut H,
     table: u32,
 }
+
 impl<H: Host> frontend::HeapVtableM for LiveHeap<'_, H> {
     fn alloc_at_m(&mut self, obj: u32, n: u32, bytes: &mut [u8]) -> u32 {
         let mut m = Memory { base: 0, bytes };
@@ -1533,6 +1574,7 @@ impl<H: Host> frontend::HeapVtableM for LiveHeap<'_, H> {
         self.host.call(&mut m, f, &[obj, p]);
     }
 }
+
 fn resolve_context(m: &Memory<'_>, a: u32, b: u32, env: &StreamEnvironment) -> (u32, u32) {
     let mut out = 0;
     let cached_a = u32::from_le_bytes(env.cached_handle[..4].try_into().unwrap());
@@ -1552,10 +1594,12 @@ fn resolve_context(m: &Memory<'_>, a: u32, b: u32, env: &StreamEnvironment) -> (
     );
     (r, out)
 }
+
 struct FetchHost<'a, H> {
     host: &'a mut H,
     env: &'a StreamEnvironment,
 }
+
 impl<H: Host> normalization::NormalizationHost for FetchHost<'_, H> {
     fn calloc(&mut self, bytes: &mut [u8], heap: u32, n: u32, size: u32) -> Option<u32> {
         let p = crate::reentrant2::call_method_m(
@@ -1723,39 +1767,49 @@ fn sh(m: &mut Memory<'_>, p: u32, v: u16) {
     let i = m.offset(p);
     m.bytes[i..i + 2].copy_from_slice(&v.to_le_bytes());
 }
+
 fn sb(m: &mut Memory<'_>, p: u32, v: u8) {
     let i = m.offset(p);
     m.bytes[i] = v;
 }
+
 fn sl(m: &Memory<'_>, p: u32) -> u32 {
     normalization::strlen8(m.bytes, p - m.base)
 }
+
 fn cp(m: &mut Memory<'_>, d: u32, s: u32) {
     normalization::strcpy_at(m.bytes, d - m.base, s - m.base);
 }
+
 fn cat(m: &mut Memory<'_>, d: u32, s: u32) {
     let end = d + sl(m, d);
     cp(m, end, s);
 }
+
 fn eq(m: &Memory<'_>, a: u32, b: u32) -> bool {
     normalization::strcmp_at(m.bytes, a - m.base, b - m.base) == 0
 }
+
 fn eq_lit(m: &Memory<'_>, a: u32, b: &[u8]) -> bool {
     let i = m.offset(a);
     m.bytes[i..].starts_with(b) && m.byte(a + b.len() as u32) == 0
 }
+
 fn fill(m: &mut Memory<'_>, p: u32, n: u32, v: u8) {
     let i = m.offset(p);
     m.bytes[i..i + n as usize].fill(v);
 }
+
 fn move_bytes(m: &mut Memory<'_>, d: u32, s: u32, n: u32) {
     let i = m.offset(s);
     let j = m.offset(d);
     m.bytes.copy_within(i..i + n as usize, j);
 }
+
 fn calloc_live(m: &mut Memory<'_>, heap: u32, n: u32, h: &mut impl Host) -> u32 {
     crate::reentrant2::call_method_m(m, heap, 1, n, &mut ArrayHost(h))
 }
+
 fn realloc_live(m: &mut Memory<'_>, heap: u32, p: u32, n: u32, h: &mut impl Host) -> u32 {
     assert_eq!(m.base, 0);
     frontend::heap_realloc_m(
@@ -1769,6 +1823,7 @@ fn realloc_live(m: &mut Memory<'_>, heap: u32, p: u32, n: u32, h: &mut impl Host
         },
     )
 }
+
 pub struct TagEnvironment {
     pub category: u32,
     pub key: u32,
@@ -1781,6 +1836,7 @@ pub struct TagEnvironment {
     pub empty: u32,
     pub end_format: u32,
 }
+
 fn tag_ling(m: &mut Memory<'_>, p: u32, slot: u32, args: &[u32], h: &mut impl Host) -> u32 {
     h.call(m, m.word(m.word(p + 4) + slot), args)
 }
@@ -2666,9 +2722,11 @@ pub struct ProcessEnvironment {
     pub format2: u32,
     pub format4: u32,
 }
+
 fn process_ling(m: &mut Memory<'_>, p: u32, slot: u32, args: &[u32], h: &mut impl Host) -> u32 {
     h.call(m, m.word(m.word(p + 24) + slot), args)
 }
+
 fn process_dict(
     m: &mut Memory<'_>,
     p: u32,
@@ -2691,12 +2749,15 @@ fn process_dict(
         ],
     )
 }
+
 fn len16(m: &Memory<'_>, p: u32) -> u32 {
     fe_text::strlen16_176624(m.bytes, p - m.base) as u32
 }
+
 fn eq16(m: &Memory<'_>, a: u32, b: u32) -> bool {
     fe_text::strcmp16_1765ac(m.bytes, a - m.base, b - m.base) == 0
 }
+
 fn chop_entry(m: &mut Memory<'_>, s: u32) -> u32 {
     let mapped = m.word(m.word(s));
     let q = fe_text::strchr_195d30(m.bytes, mapped - m.base, m.byte(s + 6) as u32);
@@ -2705,6 +2766,7 @@ fn chop_entry(m: &mut Memory<'_>, s: u32) -> u32 {
     }
     mapped
 }
+
 fn pause_map(
     m: &mut Memory<'_>,
     p: u32,
@@ -2728,6 +2790,7 @@ fn pause_map(
         }
     }
 }
+
 fn known_domain(
     m: &mut Memory<'_>,
     p: u32,
@@ -2745,6 +2808,7 @@ fn known_domain(
         && (q == setting || m.byte(q - 1) == b'|')
         && (m.byte(q + sl(m, name)) == 0 || m.byte(q + sl(m, name)) == b'|')
 }
+
 fn extra_type(
     m: &mut Memory<'_>,
     p: u32,
@@ -2756,6 +2820,7 @@ fn extra_type(
     let (rc, setting) = string_property(m, m.word(m.word(p) + 20), e.extra, 0, s, h);
     rc < 0x80000000 && setting != 0 && eq(m, setting, name)
 }
+
 fn tn_name<H: Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     p: u32,
@@ -3050,11 +3115,16 @@ fn tn_name<H: Host + crate::speech_part_6::Host>(
     let _ = rc;
     Ok((mapped, user))
 }
+
 struct ProcessCallee<'a, H> {
     host: &'a mut H,
     scratch: u32,
 }
+
 impl<H: Host + crate::speech_part_6::Host> crate::speech_part_6::Host for ProcessCallee<'_, H> {
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        crate::speech_part_6::Host::call_guest(self.host, m, f, a)
+    }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         if f == 0x175a1c {
             let (r, v) = string_property(m, a[0], a[1], m.word(a[2]), self.scratch, self.host);
@@ -3074,6 +3144,7 @@ impl<H: Host + crate::speech_part_6::Host> crate::speech_part_6::Host for Proces
         crate::speech_part_6::Host::error(self.host, m, l, c, n);
     }
 }
+
 fn process_token<H: Host + crate::speech_part_6::Host>(
     m: &mut Memory<'_>,
     p: u32,
@@ -3472,162 +3543,381 @@ pub fn fn_1d5ba8<H: Host + crate::speech_part_6::Host>(
 }
 
 struct ParamCalls<'a, H> { host: &'a mut H, scratch: u32 }
+
 impl<H: Host> crate::boot::Calls for ParamCalls<'_, H> {
     fn call(&mut self, m:&mut Memory<'_>, f:u32, a:&[u32])->u32 {
         parameter_call_m(m,f,a,self.scratch,self.host)
     }
     fn call_wide(&mut self,_:&mut Memory<'_>,_:u32,_:&[u32])->u64 { panic!("parameter wide call") }
 }
+
 struct ParamTree<'a,'h,H> {
     cell:&'a core::cell::RefCell<&'h mut H>, map:u32, scratch:u32,
 }
-impl<H:Host> frontend::TreeOpsM for ParamTree<'_,'_,H> {
-    fn tree_cmp_m(&mut self,key:u32,node:u32,bytes:&mut [u8])->i32 {
-        let mut m=Memory{base:0,bytes};
-        let f=m.word(m.word(self.map+60)+8);
-        parameter_call_m(&mut m,f,&[key,node],self.scratch,&mut **self.cell.borrow_mut()) as i32
+
+impl<H: Host> frontend::TreeOpsM for ParamTree<'_, '_, H> {
+    fn tree_cmp_m(&mut self, key: u32, node: u32, bytes: &mut [u8]) -> i32 {
+        let mut m = Memory { base: 0, bytes };
+        let f = self
+            .cell
+            .borrow()
+            .guest_entry(m.word(m.word(self.map + 60) + 8));
+        parameter_call_m(
+            &mut m,
+            f,
+            &[key, node],
+            self.scratch,
+            &mut **self.cell.borrow_mut(),
+        ) as i32
     }
-    fn tree_init_m(&mut self,key:u32,heap:u32,_node:u32,bytes:&mut [u8])->(u32,Option<u32>) {
-        let mut m=Memory{base:0,bytes};
-        let f=m.word(m.word(self.map+60));
-        m.put_word(self.scratch,0);
-        let rc=parameter_call_m(&mut m,f,&[key,heap,self.scratch],self.scratch+16,&mut **self.cell.borrow_mut());
-        (rc,Some(m.word(self.scratch)))
+    fn tree_init_m(
+        &mut self,
+        key: u32,
+        heap: u32,
+        _node: u32,
+        bytes: &mut [u8],
+    ) -> (u32, Option<u32>) {
+        let mut m = Memory { base: 0, bytes };
+        let f = self
+            .cell
+            .borrow()
+            .guest_entry(m.word(m.word(self.map + 60)));
+        m.put_word(self.scratch, 0);
+        let rc = parameter_call_m(
+            &mut m,
+            f,
+            &[key, heap, self.scratch],
+            self.scratch + 16,
+            &mut **self.cell.borrow_mut(),
+        );
+        (rc, Some(m.word(self.scratch)))
     }
-    fn tree_alloc_m(&mut self,arg:u32,heap:u32,bytes:&mut [u8])->(u32,u32) {
-        let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.map+60)+12);
-        m.put_word(self.scratch,0);
-        let rc=parameter_call_m(&mut m,f,&[arg,heap,self.scratch],self.scratch+16,&mut **self.cell.borrow_mut());
-        (rc,m.word(self.scratch))
+    fn tree_alloc_m(&mut self, arg: u32, heap: u32, bytes: &mut [u8]) -> (u32, u32) {
+        let mut m = Memory { base: 0, bytes };
+        let f = self
+            .cell
+            .borrow()
+            .guest_entry(m.word(m.word(self.map + 60) + 12));
+        m.put_word(self.scratch, 0);
+        let rc = parameter_call_m(
+            &mut m,
+            f,
+            &[arg, heap, self.scratch],
+            self.scratch + 16,
+            &mut **self.cell.borrow_mut(),
+        );
+        (rc, m.word(self.scratch))
     }
-    fn tree_free_node_m(&mut self,p:u32,heap:u32,bytes:&mut [u8]) {
-        let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.map+60)+4);
-        parameter_call_m(&mut m,f,&[p,heap],self.scratch,&mut **self.cell.borrow_mut());
+    fn tree_free_node_m(&mut self, p: u32, heap: u32, bytes: &mut [u8]) {
+        let mut m = Memory { base: 0, bytes };
+        let f = self
+            .cell
+            .borrow()
+            .guest_entry(m.word(m.word(self.map + 60) + 4));
+        parameter_call_m(
+            &mut m,
+            f,
+            &[p, heap],
+            self.scratch,
+            &mut **self.cell.borrow_mut(),
+        );
     }
-    fn tree_free_handle_m(&mut self,p:u32,heap:u32,bytes:&mut [u8]) {
-        let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.map+60)+16);
-        parameter_call_m(&mut m,f,&[p,heap],self.scratch,&mut **self.cell.borrow_mut());
+    fn tree_free_handle_m(&mut self, p: u32, heap: u32, bytes: &mut [u8]) {
+        let mut m = Memory { base: 0, bytes };
+        let f = self
+            .cell
+            .borrow()
+            .guest_entry(m.word(m.word(self.map + 60) + 16));
+        parameter_call_m(
+            &mut m,
+            f,
+            &[p, heap],
+            self.scratch,
+            &mut **self.cell.borrow_mut(),
+        );
     }
-}
-struct ParamHeap<'a,'h,H>{cell:&'a core::cell::RefCell<&'h mut H>,heap:u32,scratch:u32}
-impl<H:Host> frontend::HeapVtableM for ParamHeap<'_,'_,H> {
-    fn alloc_at_m(&mut self,obj:u32,n:u32,bytes:&mut [u8])->u32 {
-        let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.heap));
-        parameter_call_m(&mut m,f,&[obj,n],self.scratch,&mut **self.cell.borrow_mut())
-    }
-    fn realloc_at_m(&mut self,obj:u32,p:u32,n:u32,bytes:&mut [u8])->u32 {
-        let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.heap)+8);
-        parameter_call_m(&mut m,f,&[obj,p,n],self.scratch,&mut **self.cell.borrow_mut())
-    }
-    fn release_at_m(&mut self,obj:u32,p:u32,bytes:&mut [u8]) {
-        let mut m=Memory{base:0,bytes};let f=m.word(m.word(self.heap)+12);
-        parameter_call_m(&mut m,f,&[obj,p],self.scratch,&mut **self.cell.borrow_mut());
-    }
-}
-fn param_callbacks(m:&mut Memory<'_>,p:u32,key:u32,value:u32,data:u32,s:u32,before:bool,h:&mut impl Host)->u32 {
-    if p==0 || key==0 || value==0 || data==0 {return 0;}
-    let mut rc=0;
-    m.put_byte(s,1);
-    for pass in 0..2 {
-        let list=if pass==0 {m.word(value+8)} else {m.word(p+12)};
-        if list==0 {continue;}
-        let count=m.word(list+20);
-        let mut i=0;
-        while i<count && rc<0x80000000 {
-            let table=frontend::ElementTable{data:&[],elem_size:half(m,list+4),count:m.word(list+20)};
-            let mut off=0;
-            if frontend::element_at(Some(&table),i,Some(&mut off))==0 {return 0x8b702100;}
-            let c=m.word(list).wrapping_add(off);
-            let f=m.word(c+if before {4}else{8});
-            if before {
-                if f!=0 {
-                    rc=h.call(m,f,&[m.word(c),key,data,s]);
-                    if rc<0x80000000 && m.byte(s)==0 {rc=0x8b70200f;break;}
-                }
-            } else {
-                rc=h.call(m,f,&[m.word(c),key,data]);
-                if rc>=0x80000000 {return rc;}
-            }
-            i+=1;
-        }
-    }
-    if before {rc}else{0}
 }
 
-pub fn parameter_call_m(m:&mut Memory<'_>,f:u32,a:&[u32],s:u32,h:&mut impl Host)->u32 {
-    assert_eq!(m.base,0);
-    let off=m.offset(s);let mut saved=[0u8;512];saved.copy_from_slice(&m.bytes[off..off+512]);
-    let r=(|| match f {
-        0x175170=>fn_175170(m,a[0],a[1],a[2],a[3],a[4],s,h),
-        0x196980=>fn_196980(m,a[0],a[1]),
-        0x175850=>{
-            let mut table=[0u16;256];
-            for i in 0..256 {table[i]=if (b'0'..=b'9').contains(&(i as u8)) {4}else if i==32||(9..=13).contains(&i) {8}else{0};}
-            int_property(m,a[0],a[1],a[2],s,&table,h)
-        },
-        0x176104=>param_callbacks(m,a[0],a[1],a[2],a[3],s,false,h),
-        0x1966ac=>{
-            let mut value=0;
-            let map=a[0];
-            let r=crate::reentrant2::lookup_value_m(m.bytes,if map==0 {None}else{Some(map)},a[1],Some(&mut value),|x,y,bytes|{
-                let mut m=Memory{base:0,bytes};let f=m.word(m.word(map+60)+8);
-                parameter_call_m(&mut m,f,&[x,y],s+16,h) as i32
-            });
-            if r<0x80000000 {m.put_word(a[2],value);}r
+struct ParamHeap<'a,'h,H>{cell:&'a core::cell::RefCell<&'h mut H>,heap:u32,scratch:u32}
+
+impl<H: Host> frontend::HeapVtableM for ParamHeap<'_, '_, H> {
+    fn alloc_at_m(&mut self, obj: u32, n: u32, bytes: &mut [u8]) -> u32 {
+        let mut m = Memory { base: 0, bytes };
+        let f = self.cell.borrow().guest_entry(m.word(m.word(self.heap)));
+        parameter_call_m(
+            &mut m,
+            f,
+            &[obj, n],
+            self.scratch,
+            &mut **self.cell.borrow_mut(),
+        )
+    }
+    fn realloc_at_m(&mut self, obj: u32, p: u32, n: u32, bytes: &mut [u8]) -> u32 {
+        let mut m = Memory { base: 0, bytes };
+        let f = self
+            .cell
+            .borrow()
+            .guest_entry(m.word(m.word(self.heap) + 8));
+        parameter_call_m(
+            &mut m,
+            f,
+            &[obj, p, n],
+            self.scratch,
+            &mut **self.cell.borrow_mut(),
+        )
+    }
+    fn release_at_m(&mut self, obj: u32, p: u32, bytes: &mut [u8]) {
+        let mut m = Memory { base: 0, bytes };
+        let f = self
+            .cell
+            .borrow()
+            .guest_entry(m.word(m.word(self.heap) + 12));
+        parameter_call_m(
+            &mut m,
+            f,
+            &[obj, p],
+            self.scratch,
+            &mut **self.cell.borrow_mut(),
+        );
+    }
+}
+
+fn param_callbacks(
+    m: &mut Memory<'_>,
+    p: u32,
+    key: u32,
+    value: u32,
+    data: u32,
+    s: u32,
+    before: bool,
+    h: &mut impl Host,
+) -> u32 {
+    if p == 0 || key == 0 || value == 0 || data == 0 {
+        return 0;
+    }
+    let mut rc = 0;
+    m.put_byte(s, 1);
+    for pass in 0..2 {
+        let list = if pass == 0 {
+            m.word(value + 8)
+        } else {
+            m.word(p + 12)
+        };
+        if list == 0 {
+            continue;
         }
-        0x19668c=>{
-            let map=a[0];let heap=if map==0 {0}else{m.word(map+56)};
-            let cell=core::cell::RefCell::new(&mut *h);
-            frontend::insert_guarded_m(m.bytes,if map==0 {None}else{Some(map)},a[1],a[2],
-                &mut ParamHeap{cell:&cell,heap,scratch:s+64},
-                &mut ParamTree{cell:&cell,map,scratch:s+32})
-        }
-        0x176054=>{
-            let [slot,src,n,heap]:[u32;4]=a.try_into().unwrap();
-            if slot==0 {return 0x8b702007;}
-            let cell=core::cell::RefCell::new(&mut *h);
-            let mut vt=ParamHeap{cell:&cell,heap,scratch:s+16};
-            if n==0 {
-                if m.word(slot)!=0 && m.word(slot+4)!=0 {frontend::heap_release_m(m.bytes,if heap==0 {None}else{Some(heap)},Some(m.word(slot)),&mut vt);}
-                m.put_word(slot+4,0);m.put_word(slot,src);
-            } else {
-                let size=m.word(slot+4);
-                if size==0 {
-                    let p=frontend::heap_alloc_m(m.bytes,if heap==0 {None}else{Some(heap)},n,&mut vt);
-                    m.put_word(slot,p);if p==0 {return 0x8b70200a;}
-                } else if size<n {
-                    let old=m.word(slot);
-                    let p=frontend::heap_realloc_m(m.bytes,if heap==0 {None}else{Some(heap)},old,n,&mut vt);
-                    if p==0 {return 0x8b70200a;}m.put_word(slot,p);
+        let count = m.word(list + 20);
+        let mut i = 0;
+        while i < count && rc < 0x80000000 {
+            let table = frontend::ElementTable {
+                data: &[],
+                elem_size: half(m, list + 4),
+                count: m.word(list + 20),
+            };
+            let mut off = 0;
+            if frontend::element_at(Some(&table), i, Some(&mut off)) == 0 {
+                return 0x8b702100;
+            }
+            let c = m.word(list).wrapping_add(off);
+            let f = m.word(c + if before { 4 } else { 8 });
+            if before {
+                if f != 0 {
+                    rc = h.call_guest(m, f, &[m.word(c), key, data, s]);
+                    if rc < 0x80000000 && m.byte(s) == 0 {
+                        rc = 0x8b70200f;
+                        break;
+                    }
                 }
-                let dst=m.word(slot);fe_text::memcpy_195ae8(m.bytes,dst,src,n);m.put_word(slot+4,n);
-            }0
+            } else {
+                rc = h.call_guest(m, f, &[m.word(c), key, data]);
+                if rc >= 0x80000000 {
+                    return rc;
+                }
+            }
+            i += 1;
         }
-        0x174b38=>{
-            let [p,key,data,size,update]:[u32;5]=a.try_into().unwrap();
-            m.put_word(s,data);m.put_word(s+4,size);m.put_word(s+8,0);
-            let list=m.word(p+16);let mut i=0;let mut r=0;
-            while list!=0 && i<m.word(list+20) {
-                let ent=m.word(list)+i*half(m,list+4) as u32;
-                r=parameter_call_m(m,0x19668c,&[m.word(ent+4),key,s],s+64,h);
-                if r&0x1fff==2 {
-                    if update==0 {r=0;}else{
-                        m.put_word(s+16,0);
-                        r=parameter_call_m(m,0x1966ac,&[m.word(ent+4),key,s+16],s+64,h);
-                        if r>=0x80000000 {r=(r&0x1fff)|0x8b702000;}else{
-                            r=parameter_call_m(m,0x176054,&[m.word(s+16),data,size,m.word(m.word(ent))],s+64,h);
+    }
+    if before {
+        rc
+    } else {
+        0
+    }
+}
+
+pub fn parameter_call_m(m: &mut Memory<'_>, f: u32, a: &[u32], s: u32, h: &mut impl Host) -> u32 {
+    assert_eq!(m.base, 0);
+    let off = m.offset(s);
+    let mut saved = [0u8; 512];
+    saved.copy_from_slice(&m.bytes[off..off + 512]);
+    let r = (|| match f {
+        0x175170 => fn_175170(m, a[0], a[1], a[2], a[3], a[4], s, h),
+        0x196980 => fn_196980(m, a[0], a[1]),
+        0x175850 => {
+            let mut table = [0u16; 256];
+            for i in 0..256 {
+                table[i] = if (b'0'..=b'9').contains(&(i as u8)) {
+                    4
+                } else if i == 32 || (9..=13).contains(&i) {
+                    8
+                } else {
+                    0
+                };
+            }
+            int_property(m, a[0], a[1], a[2], s, &table, h)
+        }
+        0x176104 => param_callbacks(m, a[0], a[1], a[2], a[3], s, false, h),
+        0x1966ac => {
+            let mut value = 0;
+            let map = a[0];
+            let r = crate::reentrant2::lookup_value_m(
+                m.bytes,
+                if map == 0 { None } else { Some(map) },
+                a[1],
+                Some(&mut value),
+                |x, y, bytes| {
+                    let mut m = Memory { base: 0, bytes };
+                    let f = m.word(m.word(map + 60) + 8);
+                    parameter_call_m(&mut m, h.guest_entry(f), &[x, y], s + 16, h) as i32
+                },
+            );
+            if r < 0x80000000 {
+                m.put_word(a[2], value);
+            }
+            r
+        }
+        0x19668c => {
+            let map = a[0];
+            let heap = if map == 0 { 0 } else { m.word(map + 56) };
+            let cell = core::cell::RefCell::new(&mut *h);
+            frontend::insert_guarded_m(
+                m.bytes,
+                if map == 0 { None } else { Some(map) },
+                a[1],
+                a[2],
+                &mut ParamHeap {
+                    cell: &cell,
+                    heap,
+                    scratch: s + 64,
+                },
+                &mut ParamTree {
+                    cell: &cell,
+                    map,
+                    scratch: s + 32,
+                },
+            )
+        }
+        0x176054 => {
+            let [slot, src, n, heap]: [u32; 4] = a.try_into().unwrap();
+            if slot == 0 {
+                return 0x8b702007;
+            }
+            let cell = core::cell::RefCell::new(&mut *h);
+            let mut vt = ParamHeap {
+                cell: &cell,
+                heap,
+                scratch: s + 16,
+            };
+            if n == 0 {
+                if m.word(slot) != 0 && m.word(slot + 4) != 0 {
+                    frontend::heap_release_m(
+                        m.bytes,
+                        if heap == 0 { None } else { Some(heap) },
+                        Some(m.word(slot)),
+                        &mut vt,
+                    );
+                }
+                m.put_word(slot + 4, 0);
+                m.put_word(slot, src);
+            } else {
+                let size = m.word(slot + 4);
+                if size == 0 {
+                    let p = frontend::heap_alloc_m(
+                        m.bytes,
+                        if heap == 0 { None } else { Some(heap) },
+                        n,
+                        &mut vt,
+                    );
+                    m.put_word(slot, p);
+                    if p == 0 {
+                        return 0x8b70200a;
+                    }
+                } else if size < n {
+                    let old = m.word(slot);
+                    let p = frontend::heap_realloc_m(
+                        m.bytes,
+                        if heap == 0 { None } else { Some(heap) },
+                        old,
+                        n,
+                        &mut vt,
+                    );
+                    if p == 0 {
+                        return 0x8b70200a;
+                    }
+                    m.put_word(slot, p);
+                }
+                let dst = m.word(slot);
+                fe_text::memcpy_195ae8(m.bytes, dst, src, n);
+                m.put_word(slot + 4, n);
+            }
+            0
+        }
+        0x174b38 => {
+            let [p, key, data, size, update]: [u32; 5] = a.try_into().unwrap();
+            m.put_word(s, data);
+            m.put_word(s + 4, size);
+            m.put_word(s + 8, 0);
+            let list = m.word(p + 16);
+            let mut i = 0;
+            let mut r = 0;
+            while list != 0 && i < m.word(list + 20) {
+                let ent = m.word(list) + i * half(m, list + 4) as u32;
+                r = parameter_call_m(m, 0x19668c, &[m.word(ent + 4), key, s], s + 64, h);
+                if r & 0x1fff == 2 {
+                    if update == 0 {
+                        r = 0;
+                    } else {
+                        m.put_word(s + 16, 0);
+                        r = parameter_call_m(
+                            m,
+                            0x1966ac,
+                            &[m.word(ent + 4), key, s + 16],
+                            s + 64,
+                            h,
+                        );
+                        if r >= 0x80000000 {
+                            r = (r & 0x1fff) | 0x8b702000;
+                        } else {
+                            r = parameter_call_m(
+                                m,
+                                0x176054,
+                                &[m.word(s + 16), data, size, m.word(m.word(ent))],
+                                s + 64,
+                                h,
+                            );
                         }
                     }
                 }
-                i+=1;if r>=0x80000000 {break;}
-            }r
+                i += 1;
+                if r >= 0x80000000 {
+                    break;
+                }
+            }
+            r
         }
-        _=> {
-            let mut calls=ParamCalls{host:h,scratch:s+32};
-            if let Some(r)=m.boot_parameter_call(&mut calls,f,a,s) {r}else{calls.host.call(m,f,a)}
+        _ => {
+            let mut calls = ParamCalls {
+                host: h,
+                scratch: s + 32,
+            };
+            if let Some(r) = m.boot_parameter_call(&mut calls, f, a, s) {
+                r
+            } else {
+                calls.host.call(m, f, a)
+            }
         }
     })();
-    m.bytes[off..off+512].copy_from_slice(&saved);r
+    m.bytes[off..off + 512].copy_from_slice(&saved);
+    r
 }
 
 pub fn fn_175170(m:&mut Memory<'_>,p:u32,key:u32,data:u32,size:u32,update:u32,s:u32,h:&mut impl Host)->u32 {
@@ -3721,6 +4011,7 @@ fn rule_io<H:Host+crate::speech_part_6::Host>(m:&mut Memory<'_>,p:u32,id:u32,val
     }
     rc
 }
+
 fn token_log<H:Host+crate::speech_part_6::Host>(m:&mut Memory<'_>,p:u32,level:u32,fmt:&[u8],a:&[u32],h:&mut H) {
     crate::speech_part_6::Host::log(h,m,m.word(m.word(p)+16),m.word(p+0x48),level,fmt,a);
 }

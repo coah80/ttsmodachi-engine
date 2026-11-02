@@ -232,6 +232,115 @@ impl Dump {
         }
         Ok(())
     }
+    pub fn verify_eu(&self, code: &[u8]) -> Result<(), String> {
+        if self.title_id != 0x000400000008c400 {
+            return Err("wrong region: EU voices need a decrypted EU Rev 1 dump".into());
+        }
+        if code.len() != 0xb73000 {
+            return Err("wrong revision: EU voices need EU Rev 1".into());
+        }
+        let mut canonical = code.to_vec();
+        mask_hook_body(&mut canonical);
+        if crate::sha256_hex(&canonical)
+            != "b73768148dba87311345c9405f570a0b1a6baafa9a35d2ebfc95ab0b00c9c1f4"
+        {
+            return Err("wrong revision or modified code: EU voices need EU Rev 1".into());
+        }
+        Ok(())
+    }
+
+    pub fn verify_kr(&self, code: &[u8]) -> Result<(), String> {
+        if self.title_id != 0x0004000000120c00 {
+            return Err("wrong region: Korean needs a decrypted KR original release dump".into());
+        }
+        if code.len() != 0xb73000 {
+            return Err("wrong revision: Korean needs the KR original release".into());
+        }
+        let mut canonical = code.to_vec();
+        mask_hook_body(&mut canonical);
+        if crate::sha256_hex(&canonical)
+            != "4b49f517f05cefeac059ec7d17c2e53f31c81683a884d421f614a9ff9c380de9"
+        {
+            return Err(
+                "wrong revision or modified code: Korean needs the KR original release".into(),
+            );
+        }
+        Ok(())
+    }
+
+    pub fn kr_presets(&self) -> Result<[[u8; 6]; 2], String> {
+        let code = self.code()?;
+        self.verify_kr(&code)?;
+        let mut presets = [[0; 6]; 2];
+        for (gender, preset) in presets.iter_mut().enumerate() {
+            let at = 0x8e10d8 - 0x100000 + 7 * 72 + gender * 12;
+            for (field, value) in preset.iter_mut().enumerate() {
+                *value = u8::try_from(u16::from_le_bytes(
+                    code[at + field * 2..at + field * 2 + 2].try_into().unwrap(),
+                ))
+                .map_err(|_| "invalid ROM voice preset")?;
+            }
+            preset[5] += 1;
+        }
+        Ok(presets)
+    }
+
+    pub fn verify_jp(&self, code: &[u8]) -> Result<(), String> {
+        if self.title_id != 0x000400000008c500 {
+            return Err("wrong region: Japanese needs a decrypted JP Rev 2 dump".into());
+        }
+        if code.len() != 0xb73000 {
+            return Err("wrong revision: Japanese needs JP Rev 2".into());
+        }
+        let mut canonical = code.to_vec();
+        mask_hook_body(&mut canonical);
+        if crate::sha256_hex(&canonical)
+            != "e917e4034093473df7d111a128e1fde12f0c70ac49d210ab1585d46aa846021e"
+        {
+            return Err("wrong revision or modified code: Japanese needs JP Rev 2".into());
+        }
+        Ok(())
+    }
+
+    pub fn eu_presets(&self) -> Result<[[[u8; 6]; 2]; 5], String> {
+        let code = self.code()?;
+        self.verify_eu(&code)?;
+        let mut languages = [[[0; 6]; 2]; 5];
+        for (language, presets) in languages.iter_mut().enumerate() {
+            for (gender, preset) in presets.iter_mut().enumerate() {
+                let at = 0x8bee80 - 0x100000 + (language + 2) * 72 + gender * 12;
+                for (field, value) in preset.iter_mut().enumerate() {
+                    let n = u16::from_le_bytes(
+                        code[at + field * 2..at + field * 2 + 2].try_into().unwrap(),
+                    );
+                    *value = u8::try_from(n).map_err(|_| "invalid ROM voice preset")?;
+                }
+                preset[5] += 1;
+            }
+        }
+        Ok(languages)
+    }
+
+    pub fn us_presets(&self) -> Result<[[u8; 6]; 2], String> {
+        let code = self.code()?;
+        self.verify_us(&code)?;
+        let mut presets = [[0u8; 6]; 2];
+        for (gender, preset) in presets.iter_mut().enumerate() {
+            let at = 0x8bdc98 - 0x100000 + gender * 12;
+            for (field, value) in preset.iter_mut().enumerate() {
+                let n = u16::from_le_bytes(
+                    code[at + field * 2..at + field * 2 + 2].try_into().unwrap(),
+                );
+                *value = u8::try_from(n).map_err(|_| "invalid ROM voice preset")?;
+            }
+            preset[5] += 1;
+        }
+        Ok(presets)
+    }
+}
+
+pub fn mask_hook_body(code: &mut [u8]) {
+    code[0xc72000 - 0x100000..0xc72880 - 0x100000].fill(0);
 }
 
 pub fn mask_patch(code: &mut [u8]) {

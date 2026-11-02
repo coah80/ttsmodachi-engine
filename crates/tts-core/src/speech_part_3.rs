@@ -1,4 +1,3 @@
-
 use crate::boot::Memory;
 
 pub trait Host {
@@ -243,10 +242,13 @@ pub fn fn_3015a4(m: &mut Memory<'_>, ctx: u32, crit: u32, list: u32,
 fn sp3_copy(m:&mut Memory<'_>,d:u32,s:u32,n:u32) {
     crate::fe_text::memcpy_195ae8(m.bytes,d-m.base,s-m.base,n);
 }
+
 fn sp3_len(m:&Memory<'_>,s:u32)->u32 {
     crate::fe_text::strlen_195d90(m.bytes,s-m.base) as u32
 }
+
 fn sp3_byte(m:&mut Memory<'_>,p:u32,v:u8) {let i=m.offset(p);m.bytes[i]=v;}
+
 fn sp3_string(m:&mut Memory<'_>,p:u32,s:&[u8]) {let i=m.offset(p);m.bytes[i..i+s.len()].copy_from_slice(s);}
 
 pub trait SpeechHost: crate::speech_part_5::Host {}
@@ -368,6 +370,7 @@ pub fn fn_4a77ac(m:&mut Memory<'_>,archive:u32,allocator:u32,name:u32,mode:u32,r
         0x80000014
     })
 }
+
 fn sp3_convert(m:&mut Memory<'_>,engine:u32,src:u32,dst:u32,h:&mut impl SpeechHost)->u8 {
     let kind=m.word(src);let format=m.word(src+4);
     let mapped=match (kind,format) {(0,0|2)=>Some(1),(1,1)=>Some(2),(3,1)=>Some(8),(2,3|2)=>Some(4),_=>None};
@@ -470,8 +473,11 @@ pub struct FilterWorkspace<'a> {
     pub input:&'a mut [i32],
     pub output:&'a mut [i32],
 }
+
 fn sp3_half(m:&Memory<'_>,p:u32)->u16 {let i=m.offset(p);u16::from_le_bytes(m.bytes[i..i+2].try_into().unwrap())}
+
 struct Round4Normalize<'a,H>(&'a mut H);
+
 impl<H:SpeechRound4Host> crate::normalization::NormalizationHost for Round4Normalize<'_,H> {
     fn calloc(&mut self,b:&mut[u8],heap:u32,n:u32,size:u32)->Option<u32>{
         let r=sp4_alloc(&mut Memory{base:0,bytes:b},heap,n,size,self.0);
@@ -493,6 +499,7 @@ impl<H:SpeechRound4Host> crate::normalization::NormalizationHost for Round4Norma
         let old=m.word(out);let r=self.0.call(&mut m,0x19611c,&[a,c,out]);let p=m.word(out);m.put_word(out,old);(r,p)
     }
 }
+
 fn sp4_alloc(m:&mut Memory<'_>,heap:u32,n:u32,size:u32,h:&mut impl SpeechRound4Host)->u32 {
     struct Method<'a,'b,H>{m:Memory<'a>,h:&'b mut H,method:u32}
     impl<H:SpeechRound4Host> crate::frontend::MethodTable for Method<'_,'_,H> {
@@ -504,16 +511,21 @@ fn sp4_alloc(m:&mut Memory<'_>,heap:u32,n:u32,size:u32,h:&mut impl SpeechRound4H
     crate::frontend::call_method(&local,if heap==0{None}else{Some(0)},n,size,
         &mut Method{m:Memory{base:m.base,bytes:m.bytes},h,method})
 }
+
 fn sp4_free(m:&mut Memory<'_>,heap:u32,p:u32,h:&mut impl SpeechRound4Host){
     assert_eq!(m.base,0);
     crate::frontend::heap_release_m(m.bytes,if heap==0{None}else{Some(heap)},if p==0{None}else{Some(p)},h);
 }
+
 struct Round4Format<'a,H>(&'a mut H);
+
 impl<H:SpeechRound4Host> crate::boot_part_b::Host for Round4Format<'_,H>{
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {self.0.call(m,f,a)}
     fn thread_id(&mut self)->u32 {0}
 }
+
 impl<H:SpeechRound4Host> crate::boot_part_b::FormatHost for Round4Format<'_,H>{}
+
 fn sp4_log(m:&mut Memory<'_>,p:u32,level:u32,site:u32,args:&[u32],h:&mut impl SpeechRound4Host){
     let s=h.scratch();let at=m.offset(s);let mut saved=[0u8;160];saved.copy_from_slice(&m.bytes[at..at+160]);
     for (i,&v) in args.iter().enumerate(){m.put_word(s+32+i as u32*4,v);}
@@ -634,8 +646,11 @@ pub fn fn_2b7118(m:&mut Memory<'_>,p:u32,o:u32,scratch:u32,h:&mut impl SpeechRou
         ret
     })
 }
+
 fn sp4_at(m:&Memory<'_>,table:u32,j:i32,i:i32)->u32 {m.word(table.wrapping_add((j as u32).wrapping_mul(4))).wrapping_add((i as u32).wrapping_mul(4))}
+
 fn sp4_int(m:&Memory<'_>,p:u32)->i32 {m.word(p) as i32}
+
 fn sp4_band(m:&mut Memory<'_>,p:u32,stage:u32,w:&mut FilterWorkspace<'_>)->bool {
     let n=sp4_int(m,p+32).max(0) as usize;let width=sp4_int(m,p+36).max(1) as usize;
     assert!(w.coefficients.len()>=n*width && w.input.len()>=n && w.output.len()>=n);
@@ -660,6 +675,7 @@ fn sp4_band(m:&mut Memory<'_>,p:u32,stage:u32,w:&mut FilterWorkspace<'_>)->bool 
     for i in 0..n {m.put_word(dest+i as u32*4,w.output[i] as u32);}
     true
 }
+
 fn sp4_factor(m:&mut Memory<'_>,context:u32,p:u32,w:&mut FilterWorkspace<'_>,h:&mut impl SpeechRound4Host){
     if !sp4_band(m,p,0,w) {
         let format=h.format(0x2a1c54);let category=h.literal(0x8fa510);
@@ -710,7 +726,9 @@ pub fn fn_2a27fc(m:&mut Memory<'_>,context:u32,p:u32,w:&mut FilterWorkspace<'_>,
         sp4_band(m,p,3,w);sp4_band(m,p,4,w);
     }
 }
+
 struct Round4Pool<'a,'b,H>{m:Memory<'a>,h:&'b mut H,name:u32}
+
 impl<H:SpeechRound4Host> crate::selection::PoolHost for Round4Pool<'_,'_,H>{
     fn block(&self,i:usize)->crate::selection::PoolBlock {
         let p=i as u32;let n=self.m.word(p);
@@ -737,6 +755,7 @@ impl<H:SpeechRound4Host> crate::selection::PoolHost for Round4Pool<'_,'_,H>{
         self.m.bytes[at..at+24].copy_from_slice(&saved);
     }
 }
+
 fn sp4_pool(m:&mut Memory<'_>,f:u32,p:u32,owner:u32,name:u32,n:u32,h:&mut impl SpeechRound4Host)->u32 {
     if f==0x2db19c {
         let name=if name==u32::MAX {h.pool_name(p)}else{name};
@@ -757,7 +776,9 @@ fn sp4_pool(m:&mut Memory<'_>,f:u32,p:u32,owner:u32,name:u32,n:u32,h:&mut impl S
     for (off,v) in [(8,heap.first_block.unwrap_or(0) as u32),(12,heap.expected),(16,heap.pool),(20,heap.allocated)] {adapter.m.put_word(p+off,v);}
     result
 }
+
 struct Round4Selection<'a,'b,'c,H>{h:&'a mut H,w:&'b mut FilterWorkspace<'c>,scratch:u32}
+
 impl<H:SpeechRound4Host> crate::selection::arena::Host for Round4Selection<'_, '_, '_,H> {
     fn call(&mut self,a:&mut crate::selection::arena::Arena<'_>,f:u32,args:&[u32])->(u32,u32){
         (sp4_dispatch(&mut Memory{base:a.base,bytes:a.bytes},f,args,self.scratch,self.w,self.h),0)
@@ -837,6 +858,7 @@ fn sp4_acoustic(m:&mut Memory<'_>,a:&[u32],scratch:u32,h:&mut impl SpeechRound4H
     for i in 0..3 {m.put_word(a[5+i],out[i] as u32);}
     status
 }
+
 fn sp4_dispatch(m:&mut Memory<'_>,f:u32,a:&[u32],scratch:u32,w:&mut FilterWorkspace<'_>,h:&mut impl SpeechRound4Host)->u32 {
     use crate::selection::arena_mid as mid;
     if matches!(f,0x2db19c|0x2db1d0|0x2db3c8|0x2db4a0) {
@@ -865,6 +887,7 @@ fn sp4_dispatch(m:&mut Memory<'_>,f:u32,a:&[u32],scratch:u32,w:&mut FilterWorksp
         _=>host.h.call(&mut Memory{base:arena.base,bytes:arena.bytes},f,a),
     }
 }
+
 fn sp4_smooth(m:&mut Memory<'_>,stream:u32,w:&mut FilterWorkspace<'_>) {
     let n=sp4_int(m,stream+32).max(0) as usize;let mode=sp4_int(m,stream+28);
     if mode!=0 || n==0 {return;}
@@ -1120,6 +1143,7 @@ pub fn fn_2e564c(m:&mut Memory<'_>,p:u32,arg:u32,node:u32,result:u32,depth:u8,sc
     assert_eq!(m.base,0);
     sp3_frame(m,scratch,|m|sp5_check(m,p,arg,node,result,depth,scratch,scratch+4096,h))
 }
+
 fn sp5_check(m:&mut Memory<'_>,p:u32,arg:u32,node:u32,result:u32,depth:u8,s:u32,end:u32,h:&mut impl SpeechRound4Host)->u32 {
     assert!(s+64<=end,"caller check frame exhausted");
     let child=s;let expanded=s+12;let output=s+24;let func=s+36;let flag=s+40;
@@ -1190,28 +1214,71 @@ fn sp5_check(m:&mut Memory<'_>,p:u32,arg:u32,node:u32,result:u32,depth:u8,s:u32,
     sp4_log(m,p,4,0x2e56ff,&[],h);rc
 }
 
-fn sp5_lookup(m:&mut Memory<'_>,p:u32,key:u32,out:u32,h:&mut impl SpeechRound4Host)->u32 {
-    let lookup=m.word(m.word(p+60));
-    m.put_word(out,0);
-    struct Lookup<'a,'b,H>{m:Memory<'a>,h:&'b mut H,out:u32}
-    impl<H:SpeechRound4Host> crate::normalization::LookupHost for Lookup<'_,'_,H> {
-        fn lookup(&mut self,p:u32,key:u32)->u32 {
-            let mut value=0;
-            let cmp=if p==0 {0}else{self.m.word(self.m.word(p+60)+8)};
-            let rc=crate::reentrant2::lookup_value_m(self.m.bytes,if p==0{None}else{Some(p)},key,Some(&mut value),
-                |a,b,bytes|self.h.call(&mut Memory{base:0,bytes},cmp,&[a,b]) as i32);
-
-            if rc>=0x80000000 {self.m.word(self.out)}else{value}
+fn sp5_lookup(
+    m: &mut Memory<'_>,
+    p: u32,
+    key: u32,
+    out: u32,
+    h: &mut impl SpeechRound4Host,
+) -> u32 {
+    let lookup = m.word(m.word(p + 60));
+    m.put_word(out, 0);
+    struct Lookup<'a, 'b, H> {
+        m: Memory<'a>,
+        h: &'b mut H,
+        out: u32,
+    }
+    impl<H: SpeechRound4Host> crate::normalization::LookupHost for Lookup<'_, '_, H> {
+        fn lookup(&mut self, p: u32, key: u32) -> u32 {
+            let mut value = 0;
+            let cmp = if p == 0 {
+                0
+            } else {
+                self.m.word(self.m.word(p + 60) + 8)
+            };
+            let rc = crate::reentrant2::lookup_value_m(
+                self.m.bytes,
+                if p == 0 { None } else { Some(p) },
+                key,
+                Some(&mut value),
+                |a, b, bytes| {
+                    self.h
+                        .call_guest(&mut Memory { base: 0, bytes }, cmp, &[a, b])
+                        as i32
+                },
+            );
+            if rc >= 0x80000000 {
+                self.m.word(self.out)
+            } else {
+                value
+            }
         }
     }
-    let mut descriptor=[0u8;72];
+    let mut descriptor = [0u8; 72];
     descriptor[60..64].copy_from_slice(&64u32.to_le_bytes());
     descriptor[64..68].copy_from_slice(&lookup.to_le_bytes());
-    crate::normalization::dispatch_lookup(&mut descriptor,0,0,key,68,&mut Lookup{m:Memory{base:0,bytes:m.bytes},h,out});
-    let value=u32::from_le_bytes(descriptor[68..72].try_into().unwrap());
-    m.put_word(out,value);value
+    crate::normalization::dispatch_lookup(
+        &mut descriptor,
+        0,
+        0,
+        key,
+        68,
+        &mut Lookup {
+            m: Memory {
+                base: 0,
+                bytes: m.bytes,
+            },
+            h,
+            out,
+        },
+    );
+    let value = u32::from_le_bytes(descriptor[68..72].try_into().unwrap());
+    m.put_word(out, value);
+    value
 }
+
 struct Round5Speech<'a,H>{h:&'a mut H,scratch:u32}
+
 impl<H:SpeechRound4Host> crate::boot_part_f::Host for Round5Speech<'_,H> {
     fn compare(&mut self,m:&mut Memory<'_>,f:u32,k:&mut crate::boot_part_f::Key,v:&mut u32)->u32{self.h.compare(m,f,k,v)}
     fn call(&mut self,m:&mut Memory<'_>,f:u32,a:&[u32])->u32 {
@@ -1222,9 +1289,11 @@ impl<H:SpeechRound4Host> crate::boot_part_f::Host for Round5Speech<'_,H> {
         }
     }
 }
+
 impl<H:SpeechRound4Host> crate::log_live::LogMethodsM for Round5Speech<'_,H> {
     fn log_m(&mut self,a:u32,b:u32,c:u32,d:u32,e:u32,f:u32,g:u32,m:&mut Memory<'_>)->u32{self.h.log_m(a,b,c,d,e,f,g,m)}
 }
+
 impl<H:SpeechRound4Host> crate::speech_part_5::Host for Round5Speech<'_,H> {
     fn scratch(&self)->u32{self.h.scratch()}
     fn category(&self,p:u32)->u32{self.h.category(p)}
@@ -1238,10 +1307,12 @@ impl<H:SpeechRound4Host> crate::speech_part_5::Host for Round5Speech<'_,H> {
 fn sp5_buffer_error(m:&mut Memory<'_>,p:u32,rc:u32,h:&mut impl SpeechRound4Host) {
     if rc>=0x80000000 {sp4_log(m,p,u32::MAX,0x5df0,&[],h);}
 }
+
 fn sp5_alloc(m:&mut Memory<'_>,p:u32,out:u32,h:&mut impl SpeechRound4Host)->u32 {
     let rc=crate::normalization::alloc_destination(m.bytes,p,out,&mut Round4Normalize(h));
     sp5_buffer_error(m,p,rc,h);rc
 }
+
 fn sp5_concat(m:&mut Memory<'_>,p:u32,out:u32,source:u32,h:&mut impl SpeechRound4Host)->u32 {
     let rc=crate::normalization::concat_buffers(m.bytes,p,out,source,&mut Round4Normalize(h));
     sp5_buffer_error(m,p,rc,h);rc

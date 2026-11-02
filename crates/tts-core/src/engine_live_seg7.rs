@@ -1,10 +1,12 @@
+use crate::engine_components::InternalCalls;
 
+use crate::engine_live::NESTED_RESULT;
+
+use crate::engine_live_back::BackHost;
+
+use crate::rom_region::{to_us_guest, Rom};
 
 use crate::{boot::Memory, engine};
-use crate::engine_components::InternalCalls;
-use crate::engine_live::NESTED_RESULT;
-use crate::engine_live_back::BackHost;
-use crate::rom_region::{Rom, to_us_guest};
 
 pub struct RenderCtx<'w> {
     pub workspace: &'w mut crate::engine_live::BackendWorkspace<'w>,
@@ -17,6 +19,7 @@ pub struct RenderCtx<'w> {
 }
 
 struct NoSleep;
+
 impl crate::engine_live::SleepPlatform for NoSleep {
     fn sleep_ns(&mut self, _nanoseconds: u64) -> Result<(), engine::Error> {
         Ok(())
@@ -30,15 +33,19 @@ const SEG7_STEP_SLOT: u32 = 0x0e0fdd40;
 const SEG7_STEP_VARARGS: u32 = 0x0e0fdd48;
 
 const SEG7_SAMP_VARARGS: u32 = 0x0e0fddc0;
+
 const SEG7_SAMP_PARAMS: u32 = 0x0e0fddd0;
 
 const SEG7_REQ: u32 = 0x0e0fdd60;
 
 const SEG7_OUT_LOCAL: u32 = 0x1f00;
+
 const SEG7_OUT_REQUEST: u32 = 0x1f20;
+
 const SEG7_OUT_SCRATCH: u32 = 0x1f40;
 
 const SEG7_FMT_RETURNED: u32 = 0x1551c4;
+
 const SEG7_FMT_CALLING: u32 = 0x154630;
 
 const SEG7_LOG_MODULE: u32 = 0x8d7994;
@@ -345,6 +352,8 @@ impl crate::engine_live::EmitHooksM for Seg7OutputSide<'_, '_, '_> {
         mem: &mut [u8],
     ) -> (u32, Option<u32>, u32, u32) {
         self.put_calls = self.put_calls.wrapping_add(1);
+
+
         let mut m = Memory { base: 0, bytes: mem };
         let o = self.synth.wrapping_add(0x84);
         let mut samples = m.word(o.wrapping_add(0x60));
@@ -824,22 +833,29 @@ fn seg7_notify_event(
     p: u32,
     kind: u32,
     vfp: engine::NotificationRegisters,
+    rom: Rom,
 ) -> u32 {
-    let vector = p.wrapping_add(0x61cc);
+    let vector = p.wrapping_add(crate::speech_layout::field(rom, 0x61cc));
     let begin = m.word(vector.wrapping_add(4));
     let end = m.word(vector.wrapping_add(8));
     let tick = if end != 0 {
         let last = end.wrapping_sub(32);
         if last >= begin {
-            m.word(last.wrapping_add(8)) as u64
-                | ((m.word(last.wrapping_add(12)) as u64) << 32)
+            m.word(last.wrapping_add(8)) as u64 | ((m.word(last.wrapping_add(12)) as u64) << 32)
         } else {
             0
         }
     } else {
         0
     };
-    crate::boot_part_b2::fn_183258_live(m, p, kind, vfp.s16, vfp.s17, tick)
+    crate::boot_part_b2::fn_183258_live(
+        m,
+        p + crate::speech_layout::field(rom, 0x61cc) - 0x61cc,
+        kind,
+        vfp.s16,
+        vfp.s17,
+        tick,
+    )
 }
 
 struct Seg7NestedSink {
@@ -847,6 +863,19 @@ struct Seg7NestedSink {
 }
 
 impl crate::engine_live::RuntimeServicesM for Seg7NestedSink {
+    fn invoke_m_rom(
+        &mut self,
+        m: &mut Memory<'_>,
+        entry: u32,
+        a: &[u32],
+        rom: Rom,
+    ) -> Result<u32, engine::Error> {
+        if entry == 0x183258 {
+            Ok(seg7_notify_event(m, a[0], a[1], self.registers, rom))
+        } else {
+            self.invoke_m(m, entry, a)
+        }
+    }
     fn invoke_m(
         &mut self,
         m: &mut Memory<'_>,
@@ -855,7 +884,7 @@ impl crate::engine_live::RuntimeServicesM for Seg7NestedSink {
     ) -> Result<u32, engine::Error> {
         let entry = to_us_guest(Rom::from_entry(entry), entry);
         match entry {
-            0x183258 => Ok(seg7_notify_event(m, a[0], a[1], self.registers)),
+            0x183258 => Ok(seg7_notify_event(m, a[0], a[1], self.registers, Rom::Us)),
             0xc72018 => Ok(0),
             _ => Err(engine::Error::UnsupportedStage { entry }),
         }
@@ -868,6 +897,7 @@ struct Seg7FmtHost<'p, 'r> {
     snap: &'r [u8],
     rom: Rom,
 }
+
 impl crate::boot_part_b::Host for Seg7FmtHost<'_, '_> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         match crate::engine_live::call_live_with_runtime_m_rom(
@@ -890,6 +920,7 @@ impl crate::boot_part_b::Host for Seg7FmtHost<'_, '_> {
         true
     }
 }
+
 impl crate::boot_part_b::FormatHost for Seg7FmtHost<'_, '_> {}
 
 pub struct Seg7Runtime<'p, 'r> {
@@ -904,6 +935,19 @@ pub struct StopAtRender<'a> {
 }
 
 impl crate::engine_live::RuntimeServicesM for StopAtRender<'_> {
+    fn invoke_m_rom(
+        &mut self,
+        m: &mut Memory<'_>,
+        entry: u32,
+        args: &[u32],
+        rom: Rom,
+    ) -> Result<u32, engine::Error> {
+        if entry == 0x1a18c4 {
+            self.stopped = true;
+            return Err(engine::Error::UnsupportedStage { entry });
+        }
+        self.inner.invoke_m_rom(m, entry, args, rom)
+    }
     fn invoke_m(
         &mut self,
         m: &mut Memory<'_>,
@@ -926,10 +970,18 @@ impl crate::engine_live::RuntimeServicesM for Seg7Runtime<'_, '_> {
         entry: u32,
         a: &[u32],
     ) -> Result<u32, engine::Error> {
-        let rom = Rom::from_entry(entry);
-        let entry = to_us_guest(rom, entry);
+        self.invoke_m_rom(m, entry, a, Rom::from_entry(entry))
+    }
+    fn invoke_m_rom(
+        &mut self,
+        m: &mut Memory<'_>,
+        entry: u32,
+        a: &[u32],
+        rom: Rom,
+    ) -> Result<u32, engine::Error> {
+        let entry = crate::rom_region::to_us(rom, entry);
         match entry {
-            0x183258 => Ok(seg7_notify_event(m, a[0], a[1], self.registers)),
+            0x183258 => Ok(seg7_notify_event(m, a[0], a[1], self.registers, rom)),
             0xc72018 => {
                 let mut sink = Seg7NestedSink {
                     registers: self.registers,

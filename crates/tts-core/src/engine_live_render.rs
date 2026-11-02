@@ -1,11 +1,17 @@
-
-
 use crate::boot::Memory;
+
 use crate::frontend;
+
 use crate::normalization;
-use crate::rom_region::{addr, Rom};
+
 use crate::render_part_c;
-use crate::render_part_c2::{ContextHost, ParserEnvironment, ParserRuntime, ResourceHost, SegmentCallbackHost, SegmentEnvironment};
+
+use crate::render_part_c2::{
+    ContextHost, ParserEnvironment, ParserRuntime, ResourceHost, SegmentCallbackHost,
+    SegmentEnvironment,
+};
+
+use crate::rom_region::{addr, Rom};
 
 fn nz(p: u32) -> Option<u32> {
     if p == 0 {
@@ -43,6 +49,7 @@ pub fn live_heap<'a, H: crate::render_part_c::Host>(heap: u32, host: &'a mut H) 
 }
 
 #[derive(Clone, Copy)]
+
 pub struct CallRecord {
     pub entry: u32,
     pub args: [u32; 4],
@@ -977,8 +984,21 @@ where
                 continue;
             }
             if sent {
-
-                let split_rc = segment_split_live(m, ctx, timeline, base, d4, it, index as u16, stack, seg, env, host, snap, rom);
+                let split_rc = segment_split_live(
+                    m,
+                    ctx,
+                    timeline,
+                    if rom == Rom::Us { base } else { field },
+                    d4,
+                    it,
+                    index as u16,
+                    stack,
+                    seg,
+                    env,
+                    host,
+                    snap,
+                    rom,
+                );
                 if split_rc >= 0x80000000 {
                     return split_rc;
                 }
@@ -1038,10 +1058,12 @@ where
 pub trait ParserAllocatorM: frontend::HeapVtableM {
     fn calloc_m(&mut self, object: u32, count: u32, size: u32, memory: &mut [u8]) -> u32;
 }
+
 struct FetchHostM<'a, A> {
     allocator: &'a mut A,
     env: &'a crate::render_part_c::Environment,
 }
+
 impl<A: ParserAllocatorM> normalization::NormalizationHost for FetchHostM<'_, A> {
     fn resolve(&mut self, bytes: &mut [u8], a: u32, b: u32) -> (u32, u32) {
         crate::render_part_c2::resolve(&Memory { base: 0, bytes }, [a, b], self.env)
@@ -1114,6 +1136,7 @@ fn live_lookup_lock(m: &mut Memory<'_>, owner: u32, release: bool, h: &mut impl 
 }
 
 struct HeldLock;
+
 impl crate::frontend::StateLock for HeldLock {
     fn acquire(&mut self) -> u32 { 0 }
     fn release(&mut self) -> u32 { 0 }
@@ -1185,6 +1208,7 @@ fn block_call_m(m:&mut Memory<'_>,f:u32,a:&[u32],e:&crate::render_part_b::BlockE
 fn block_text(m:&mut Memory<'_>,o:u32,ctx:u32,sp:u32,tag:u32,label:usize,e:&crate::render_part_b::BlockEnvironment<'_>,h:&mut impl crate::render_part_b::BlockHost) {
     crate::render_part_b::fn_263384(m,m.byte(o+0x78) as i32,ctx,sp,tag,e.labels[label],e.log,h);
 }
+
 fn block_mark(m:&mut Memory<'_>,o:u32,ctx:u32,sp:u32,tag:u32,label:usize,e:&crate::render_part_b::BlockEnvironment<'_>,h:&mut impl crate::render_part_b::BlockHost) {
     crate::render_part_b::fn_2634c0(m,m.byte(o+0x78) as i32,ctx,sp,tag,e.labels[label],0,0,0,e.log,h);
 }
@@ -1586,6 +1610,7 @@ pub struct LiveLock {
     pub release_entry: u32,
     pub release_target: u32,
 }
+
 impl crate::frontend::StateLock for LiveLock {
     fn acquire(&mut self) -> u32 {
         if self.entry != 0 {
@@ -1645,6 +1670,7 @@ fn lock_verdict(m: &Memory<'_>, owner: u32) -> LiveLock {
 }
 
 pub struct LiveTreeOps;
+
 impl crate::frontend::TreeOps for LiveTreeOps {
     fn tree_cmp(&mut self, _a: u32, _b: u32) -> i32 {
         panic!("the live render reached the property tree");
@@ -1664,6 +1690,7 @@ impl crate::frontend::TreeOps for LiveTreeOps {
 }
 
 pub struct LiveBefore;
+
 impl crate::frontend::BeforeChange for LiveBefore {
     fn before(&mut self, _c: u32, _k: u32, _d: u32, _a: &mut u8) -> u32 {
         panic!("the live render reached the before-change callback");
@@ -1671,6 +1698,7 @@ impl crate::frontend::BeforeChange for LiveBefore {
 }
 
 pub struct LiveElement;
+
 impl crate::frontend::ElementCallback for LiveElement {
     fn call_element(&mut self, _a: u32, _q: u32, _r: u32) -> u32 {
         panic!("the live render reached the element callback");
@@ -2412,6 +2440,7 @@ pub struct ParseAlloc<'a, D> {
     pub heap: u32,
     pub dispatch: &'a core::cell::RefCell<&'a mut D>,
 }
+
 impl<D: LiveDispatch> crate::frontend::HeapVtableM for ParseAlloc<'_, D> {
     fn alloc_at_m(&mut self, object: u32, size: u32, mem: &mut [u8]) -> u32 {
         if self.heap == 0 {
@@ -2438,6 +2467,7 @@ impl<D: LiveDispatch> crate::frontend::HeapVtableM for ParseAlloc<'_, D> {
         self.dispatch.borrow_mut().dispatch(&mut Memory { base: 0, bytes: mem }, method, &[object, pointer]);
     }
 }
+
 impl<D: LiveDispatch> crate::render_part_c2::ParserAllocatorM for ParseAlloc<'_, D> {
     fn calloc_m(&mut self, object: u32, count: u32, size: u32, memory: &mut [u8]) -> u32 {
         if self.heap == 0 || count == 0 || size == 0 {
@@ -2448,6 +2478,7 @@ impl<D: LiveDispatch> crate::render_part_c2::ParserAllocatorM for ParseAlloc<'_,
         self.dispatch.borrow_mut().dispatch(&mut Memory { base: 0, bytes: memory }, method, &[object, count, size])
     }
 }
+
 impl<D: LiveDispatch> crate::boot_part_b::Host for ParseHost<'_, '_, D> {
     fn call(&mut self, m: &mut Memory<'_>, function: u32, args: &[u32]) -> u32 {
         self.dispatch.borrow_mut().dispatch(m, function, args)
@@ -2456,6 +2487,7 @@ impl<D: LiveDispatch> crate::boot_part_b::Host for ParseHost<'_, '_, D> {
         self.dispatch.borrow_mut().thread_id()
     }
 }
+
 impl<D: LiveDispatch> crate::frontend::TreeOps for ParseHost<'_, '_, D> {
     fn tree_cmp(&mut self, _a: u32, _b: u32) -> i32 {
         panic!("the live parse reached the property tree");
@@ -2473,6 +2505,7 @@ impl<D: LiveDispatch> crate::frontend::TreeOps for ParseHost<'_, '_, D> {
         panic!("the live parse reached the property tree");
     }
 }
+
 impl<D: LiveDispatch> crate::render_part_c2::ResourceHost for ParseHost<'_, '_, D> {
     fn resource_call(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32 {
         self.dispatch.borrow_mut().dispatch(m, entry, args)
@@ -2563,17 +2596,20 @@ impl<D: LiveDispatch> crate::render_part_d::DictionaryHost for ParseHost<'_, '_,
         rc
     }
 }
+
 impl<D: LiveDispatch> crate::render_part_c2::SegmentCallbackHost for ParseHost<'_, '_, D> {
     fn previous_match(&mut self, event: &[u8], target: &[u8]) -> i32 {
         let _ = target;
         crate::normalization::strcmp_at(event, 0, 0)
     }
 }
+
 impl<D: LiveDispatch> crate::render_part_b::ParameterHost for ParseHost<'_, '_, D> {
     fn invoke(&mut self, function: u32, _args: &[u32]) -> u32 {
         panic!("the live parse reached the arena-blind invoke {function:#x}");
     }
 }
+
 impl<D: LiveDispatch> crate::render_part_c2::ContextHost for ParseHost<'_, '_, D> {
     fn select_lock(&mut self, lock: u32) {
         *self.lock_current = lock;
@@ -2591,6 +2627,7 @@ impl<D: LiveDispatch> crate::render_part_c2::ContextHost for ParseHost<'_, '_, D
         *self.lock_count += 1;
     }
 }
+
 impl<D: LiveDispatch> crate::frontend::StateLock for ParseHost<'_, '_, D> {
     fn acquire(&mut self) -> u32 {
         if !*self.lock_current_set {
@@ -2617,6 +2654,7 @@ impl<D: LiveDispatch> crate::frontend::StateLock for ParseHost<'_, '_, D> {
         0
     }
 }
+
 impl<D: LiveDispatch> crate::render_part_c::Host for ParseHost<'_, '_, D> {
     fn call(&mut self, m: &mut Memory<'_>, entry: u32, args: &[u32]) -> u32 {
         self.dispatch.borrow_mut().dispatch(m, entry, args)
@@ -2625,12 +2663,15 @@ impl<D: LiveDispatch> crate::render_part_c::Host for ParseHost<'_, '_, D> {
         panic!("the live parse reached the output method {entry:#x}");
     }
 }
+
 impl<D: LiveDispatch> crate::boot_part_b::FormatHost for ParseHost<'_, '_, D> {}
+
 impl<D: LiveDispatch> crate::log_live::LogMethodsM for ParseHost<'_, '_, D> {
     fn log_m(&mut self, method: u32, object: u32, category: u32, level: u32, arg: u32, format: u32, varargs: u32, mem: &mut Memory<'_>) -> u32 {
         self.dispatch.borrow_mut().dispatch(mem, method, &[object, category, level, arg, format, varargs])
     }
 }
+
 impl<D: LiveDispatch> crate::frontend::HeapVtable for ParseHost<'_, '_, D> {
     fn alloc_at(&mut self, _o: u32, _n: u32) -> u32 {
         panic!("the live parse reached the arena-blind allocator");
@@ -2642,6 +2683,7 @@ impl<D: LiveDispatch> crate::frontend::HeapVtable for ParseHost<'_, '_, D> {
         panic!("the live parse reached the arena-blind releaser");
     }
 }
+
 impl<D: LiveDispatch> crate::frontend::MethodTable for ParseHost<'_, '_, D> {
     fn call_at(&mut self, _o: u32, _a: u32, _b: u32) -> u32 {
         panic!("the live parse reached the arena-blind method table");

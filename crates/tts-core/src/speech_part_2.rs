@@ -1,8 +1,10 @@
-
 use crate::{boot::Memory, frontend};
 
 pub trait Host {
     fn call(&mut self, memory: &mut Memory<'_>, method: u32, args: &[u32]) -> u32;
+    fn call_guest(&mut self, memory: &mut Memory<'_>, method: u32, args: &[u32]) -> u32 {
+        self.call(memory, method, args)
+    }
 }
 
 pub struct Environment {
@@ -11,6 +13,7 @@ pub struct Environment {
     pub input_types: [u32; 2],
     pub output_types: [u32; 2],
 }
+
 fn close_slots(
     m: &mut Memory<'_>,
     p: u32,
@@ -23,7 +26,7 @@ fn close_slots(
     for i in 0..n {
         let at = p + start + i * 8;
         if m.word(at) != 0 {
-            rc = h.call(
+            rc = h.call_guest(
                 m,
                 m.word(m.word(p + vt) + 0x24),
                 &[m.word(at), m.word(at + 4)],
@@ -74,7 +77,7 @@ pub fn fn_219c8c(
     let mut j = 0;
     let mut rc;
     loop {
-        rc = h.call(
+        rc = h.call_guest(
             m,
             m.word(m.word(p + 28) + 32),
             &[
@@ -94,11 +97,11 @@ pub fn fn_219c8c(
         if i == 2 {
             loop {
                 let mode = if j == 1 {
-                    h.call(m, m.word(m.word(p + 28) + 76), &[])
+                    h.call_guest(m, m.word(m.word(p + 28) + 76), &[])
                 } else {
                     0
                 };
-                rc = h.call(
+                rc = h.call_guest(
                     m,
                     m.word(m.word(p + 28) + 32),
                     &[
@@ -116,13 +119,13 @@ pub fn fn_219c8c(
                 }
                 j += 1;
                 if j == 2 {
-                    rc = h.call(
+                    rc = h.call_guest(
                         m,
                         m.word(m.word(p + 24) + 56),
                         &[m.word(p + 16), m.word(p + 20), 0, 1],
                     );
                     if rc < 0x80000000 {
-                        rc = h.call(
+                        rc = h.call_guest(
                             m,
                             m.word(m.word(p + 24) + 56),
                             &[m.word(p + 16), m.word(p + 20), 0, 0],
@@ -141,6 +144,7 @@ pub fn fn_219c8c(
     close_slots(m, p, 28, 48, j, 0, h);
     rc
 }
+
 fn context(m: &Memory<'_>, p: u32, tag: u32, expected: u32, size: u32, e: &Environment) -> u32 {
     let rc = frontend::validate_handle(p != 0, tag, expected, size);
     if rc >= 0x80000000 {
@@ -158,6 +162,7 @@ fn context(m: &Memory<'_>, p: u32, tag: u32, expected: u32, size: u32, e: &Envir
     let mut out = 0;
     frontend::resolve_engine_context(a, pointed, b, &e.cached_handle, e.default_context, &mut out)
 }
+
 fn release_blobs(
     m: &mut Memory<'_>,
     p: u32,
@@ -169,7 +174,7 @@ fn release_blobs(
     for i in 0..3 {
         let at = p + start + i * 8;
         if m.word(at) != 0 {
-            h.call(
+            h.call_guest(
                 m,
                 m.word(m.word(p + vt) + 36),
                 &[m.word(at), m.word(at + 4)],
@@ -213,7 +218,7 @@ pub fn fn_1ef464(
     let mut j = 0;
     let mut rc;
     loop {
-        rc = h.call(
+        rc = h.call_guest(
             m,
             m.word(m.word(p + 12) + 32),
             &[
@@ -233,11 +238,11 @@ pub fn fn_1ef464(
         if i == 2 {
             loop {
                 let mode = if j == 1 {
-                    h.call(m, m.word(m.word(p + 12) + 76), &[])
+                    h.call_guest(m, m.word(m.word(p + 12) + 76), &[])
                 } else {
                     0
                 };
-                rc = h.call(
+                rc = h.call_guest(
                     m,
                     m.word(m.word(p + 12) + 32),
                     &[
@@ -367,7 +372,7 @@ pub fn fn_1e5af0(m: &mut Memory<'_>, p: u32, tag: u32, h: &mut impl Host) -> u32
     }
     for start in [28, 20, 12] {
         if m.word(p + start) != 0 {
-            let rc = h.call(
+            let rc = h.call_guest(
                 m,
                 m.word(m.word(p + 8) + 36),
                 &[m.word(p + start), m.word(p + start + 4)],
@@ -417,7 +422,7 @@ pub fn fn_2319f0(
         None
     };
     frontend::resolve_engine_context(a, pointed, b, &e.cached_handle, e.default_context, &mut ctx);
-    let rc = Host::call(
+    let rc = Host::call_guest(
         h,
         m,
         m.word(m.word(p + 8) + 32),
@@ -427,7 +432,7 @@ pub fn fn_2319f0(
         return 0;
     }
     for (offset, mode, line) in [(20, 0, 0x3ab2), (28, 1, 0x3ab3)] {
-        let rc = Host::call(
+        let rc = Host::call_guest(
             h,
             m,
             m.word(m.word(p + 8) + 32),
@@ -469,10 +474,13 @@ pub struct SpeechLiterals {
 }
 
 pub trait SpeechHost: Host + log_live::LogMethodsM + crate::boot_part_b::FormatHost {}
+
 impl<T: Host + log_live::LogMethodsM + crate::boot_part_b::FormatHost> SpeechHost for T {}
+
 fn half(m: &Memory<'_>, p: u32) -> u16 {
     u16::from_le_bytes([m.byte(p), m.byte(p + 1)])
 }
+
 fn live_log(
     m: &mut Memory<'_>,
     p: u32,
@@ -491,6 +499,7 @@ fn live_log(
     log_live::fn_1738e8(m, m.word(m.word(p) + 16), category, 4, 0, fmt, s, h);
     m.bytes[off..off + 32].copy_from_slice(&saved);
 }
+
 fn diagnostic(
     m: &mut Memory<'_>,
     p: u32,
@@ -597,9 +606,11 @@ pub fn fn_24eb78(
     }
     0
 }
+
 fn space(c: u8) -> bool {
     matches!(c, b' ' | b'\t' | b'\n' | b'\r' | b'_')
 }
+
 fn token_digit(m: &Memory<'_>, p: u32, d: u16, c: u8) -> bool {
     let set = if d == 999 {
         0
@@ -612,6 +623,7 @@ fn token_digit(m: &Memory<'_>, p: u32, d: u16, c: u8) -> bool {
         c != 0 && crate::fe_text::strchr_195d30(m.bytes, set, c as u32) != 0
     }
 }
+
 fn token_punct(m: &Memory<'_>, p: u32, d: u16, c: u8) -> bool {
     let mut set = if d == 999 {
         0
@@ -623,6 +635,7 @@ fn token_punct(m: &Memory<'_>, p: u32, d: u16, c: u8) -> bool {
     }
     c != 0 && crate::fe_text::strchr_195d30(m.bytes, set, c as u32) != 0
 }
+
 fn token_alpha(m: &Memory<'_>, p: u32, d: u16, c: u8) -> bool {
     let set = if d == 999 {
         0
@@ -635,6 +648,7 @@ fn token_alpha(m: &Memory<'_>, p: u32, d: u16, c: u8) -> bool {
         c != 0 && crate::fe_text::strchr_195d30(m.bytes, set, c as u32) != 0
     }
 }
+
 fn token_domain(
     m: &Memory<'_>,
     p: u32,
@@ -698,7 +712,7 @@ pub fn fn_1ede44(
     let mut result = 0;
     live_log(m, p, t.text[8], t.text[9], &[], s + 32, h);
     'work: {
-        result = Host::call(
+        result = Host::call_guest(
             h,
             m,
             m.word(m.word(p + 0x84) + 0x34),
@@ -707,7 +721,7 @@ pub fn fn_1ede44(
         if result >= 0x80000000 {
             break 'work;
         }
-        result = Host::call(
+        result = Host::call_guest(
             h,
             m,
             m.word(m.word(p + 0x84) + 0x58),
@@ -782,14 +796,14 @@ pub fn fn_1ede44(
                 pos = pos.wrapping_add(1);
             }
             result = if start == 0 {
-                Host::call(
+                Host::call_guest(
                     h,
                     m,
                     m.word(m.word(p + 0x84) + 0x24),
                     &[text_handle[0], text_handle[1], 3, half(m, s) as u32, s + 10],
                 )
             } else {
-                Host::call(
+                Host::call_guest(
                     h,
                     m,
                     m.word(m.word(p + 0x84) + 0x28),
@@ -808,7 +822,7 @@ pub fn fn_1ede44(
             m.put_half(s + 16, start);
             m.put_half(s + 18, pos);
             for (field, at) in [(0, s + 14), (1, s + 16), (2, s + 18)] {
-                result = Host::call(
+                result = Host::call_guest(
                     h,
                     m,
                     m.word(m.word(p + 0x84) + 0x50),
@@ -833,6 +847,7 @@ pub fn fn_1ede44(
     m.bytes[off..off + 84].copy_from_slice(&saved);
     result
 }
+
 fn domain_row_live(
     m: &mut Memory<'_>,
     p: u32,
@@ -857,6 +872,7 @@ fn domain_row_live(
     }
     rc
 }
+
 fn domain_entry_live(
     m: &mut Memory<'_>,
     p: u32,
@@ -882,6 +898,7 @@ fn domain_entry_live(
     }
     rc
 }
+
 fn domain_value_live(
     m: &mut Memory<'_>,
     p: u32,
@@ -1142,8 +1159,11 @@ pub fn fn_24c470(
 }
 
 pub trait Round3Host: SpeechHost + crate::reentrant::HooksM {}
+
 impl<T: SpeechHost + crate::reentrant::HooksM> Round3Host for T {}
+
 struct SelectionHost<'a, H>(&'a mut H);
+
 impl<H: Host> crate::selection::arena::Host for SelectionHost<'_, H> {
     fn call(
         &mut self,
@@ -1159,6 +1179,7 @@ impl<H: Host> crate::selection::arena::Host for SelectionHost<'_, H> {
         (Host::call(self.0, &mut m, f, args), 0)
     }
 }
+
 fn release_lookup(m: &mut Memory<'_>, p: u32, h: &mut impl Host) {
     let mut a = crate::selection::arena::Arena::new(m.base, m.bytes);
     crate::selection::arena_mid::release_frame_lookup(&mut a, &mut SelectionHost(h), p);
@@ -1480,7 +1501,7 @@ pub fn fn_2276dc(
     m.put_word(p + 0x7ec, 0);
     for o in [0x7a0, 0x7a8, 0x7c8, 0x7d0, 0x7b0, 0x7b8] {
         if m.word(p + o) != 0 {
-            let r = Host::call(
+            let r = Host::call_guest(
                 h,
                 m,
                 m.word(m.word(p + 12) + 36),
@@ -1552,11 +1573,11 @@ pub fn fn_2279b4(
         (0x7b8, 1, u32::MAX, 1, true, 25004),
     ] {
         let mode = if mode == u32::MAX {
-            Host::call(h, m, m.word(m.word(p + 12) + 76), &[])
+            Host::call_guest(h, m, m.word(m.word(p + 12) + 76), &[])
         } else {
             mode
         };
-        let r = Host::call(
+        let r = Host::call_guest(
             h,
             m,
             m.word(m.word(p + 12) + 32),
@@ -1565,7 +1586,6 @@ pub fn fn_2279b4(
         if required {
             rc = r;
             if rc >= 0x80000000 {
-
                 m.put_word(scratch + 12, t.content_type);
                 m.put_word(scratch + 16, t.mime[mi]);
                 crate::render_part_a::error_log(
@@ -1612,7 +1632,9 @@ pub fn fn_26b718(m:&mut Memory<'_>,p:u32,key:u32,size:u32,found:u32,scratch:u32,
  let rc=crate::reentrant::contains_m(m,&mut QueryMaps {h,scratch:scratch+4},p,key,size,found,scratch);
  m.bytes[off..off+80].copy_from_slice(&saved);rc
 }
+
 struct QueryMaps<'a,H>{h:&'a mut H,scratch:u32}
+
 impl<H:Round3Host> crate::reentrant::HooksM for QueryMaps<'_,H>{
  fn call_m(&mut self,f:u32,a:&[u32],m:&mut Memory<'_>)->u32 {
   if f==0x17a1a4 {
@@ -1622,6 +1644,7 @@ impl<H:Round3Host> crate::reentrant::HooksM for QueryMaps<'_,H>{
  }
  fn literal_m(&self,l:crate::reentrant::LiteralM)->u32{crate::reentrant::HooksM::literal_m(self.h,l)}
 }
+
 pub fn fn_1ecf68(
     m: &mut Memory<'_>,
     p: u32,
@@ -1681,9 +1704,11 @@ pub struct DictionaryLiterals<'a> {
     pub trace_formats: [u32; 4],
     pub labels: [u32; 7],
 }
+
 fn string_slice<'a>(m: &'a Memory<'_>, p: u32) -> &'a [u8] {
     &m.bytes[m.offset(p)..]
 }
+
 fn dictionary_trace(m: &mut Memory<'_>, p: u32, fmt: u32, args: &[u32], h: &mut impl Host) {
     let mut a = [0u32; 15];
     a[0] = m.word(m.word(p + 8) + 16);
@@ -1916,10 +1941,9 @@ pub fn fn_202348(
                 }
             }
         }
-
         if iterator == 0 {
             if m.word(p + 40) != 0 {
-                err = Host::call(h, m, m.word(p + 40), &[m.word(p + 44), text, len, out]);
+                err = Host::call_guest(h, m, m.word(p + 40), &[m.word(p + 44), text, len, out]);
             } else if err < 0x80000000 {
                 err = 0x85002014;
             }
@@ -1959,6 +1983,7 @@ pub struct XcoderLiterals {
     pub format: u32,
     pub content_type: u32,
 }
+
 fn resolved_context(m: &Memory<'_>, p: u32, tag: u32, e: &Environment) -> (u32, u32) {
     let mut rc = frontend::validate_handle(p != 0, tag, 0x354, 300);
     if rc >= 0x80000000 {
@@ -1989,6 +2014,7 @@ fn resolved_context(m: &Memory<'_>, p: u32, tag: u32, e: &Environment) -> (u32, 
     );
     (rc, ctx)
 }
+
 fn parameter(m: &mut Memory<'_>, context: u32, key: u32, out: u32, h: &mut impl Host) -> u32 {
     m.put_word(out, 0);
     let rc = Host::call(h, m, 0x175a1c, &[m.word(context + 20), key, out]);
@@ -2096,7 +2122,7 @@ pub fn fn_230e1c(
             (t.utf16, 1, p + 284, 0x3ab3),
             (t.sync, 1, p + 292, 0x3ab3),
         ] {
-            rc = Host::call(
+            rc = Host::call_guest(
                 h,
                 m,
                 m.word(m.word(p + 272) + 32),
@@ -2129,6 +2155,7 @@ pub struct G2pLiterals {
     pub category: u32,
     pub formats: [u32; 9],
 }
+
 fn g2p_log(
     m: &mut Memory<'_>,
     ctx: u32,
@@ -2204,7 +2231,7 @@ pub fn fn_26ff18(
             m.bytes[off + 80..off + 84].copy_from_slice(b"g2p\0");
             let language = ctx + 0x2b5 + m.byte(word) as u32 * 3;
             frontend::append_str(m.bytes, scratch + 80, language);
-            ret = Host::call(
+            ret = Host::call_guest(
                 h,
                 m,
                 m.word(lex + 28),
@@ -2219,7 +2246,7 @@ pub fn fn_26ff18(
                 ],
             );
         } else {
-            ret = Host::call(
+            ret = Host::call_guest(
                 h,
                 m,
                 m.word(lex + 72),
@@ -2253,7 +2280,6 @@ pub fn fn_26ff18(
                 m.put_byte(split, 0);
                 cursor = split + 1;
             }
-
             let pos = fields[0];
             let dom = fields[1];
             let mut phon = fields[2];
@@ -2347,7 +2373,7 @@ pub fn fn_26ff18(
                 start.wrapping_add(frontend::strlen_bytes(string_slice(m, orig)) as u16),
             );
             m.put_half(scratch + 32, record);
-            ret = Host::call(
+            ret = Host::call_guest(
                 h,
                 m,
                 m.word(m.word(ctx + 12) + 44),
@@ -2358,7 +2384,7 @@ pub fn fn_26ff18(
                 break 'lookup ret;
             }
             for (field, value) in [(0, scratch + 36), (1, scratch + 30), (2, end)] {
-                ret = Host::call(
+                ret = Host::call_guest(
                     h,
                     m,
                     m.word(m.word(ctx + 12) + 80),
@@ -2391,7 +2417,7 @@ pub fn fn_26ff18(
             let p = frontend::find_byte(m.bytes, w, 0x12);
             if p != 0 {
                 m.put_byte(p, 0);
-                ret = Host::call(
+                ret = Host::call_guest(
                     h,
                     m,
                     m.word(m.word(ctx + 12) + 80),
@@ -2409,7 +2435,7 @@ pub fn fn_26ff18(
                     break 'lookup ret;
                 }
             }
-            ret = Host::call(
+            ret = Host::call_guest(
                 h,
                 m,
                 m.word(m.word(ctx + 12) + 80),
@@ -2437,7 +2463,7 @@ pub fn fn_26ff18(
                     value = scratch + 96;
                     n = 2;
                 }
-                ret = Host::call(
+                ret = Host::call_guest(
                     h,
                     m,
                     m.word(m.word(ctx + 12) + 80),
@@ -2456,7 +2482,7 @@ pub fn fn_26ff18(
             if lang != 0 {
                 phon = frontend::find_substr(m.bytes, domain, lang);
                 langc = m.byte(lang);
-                ret = Host::call(
+                ret = Host::call_guest(
                     h,
                     m,
                     m.word(m.word(ctx + 12) + 80),
@@ -2494,7 +2520,7 @@ pub fn fn_26ff18(
             } else {
                 langc = 0;
                 m.put_byte(scratch + 96, 0);
-                ret = Host::call(
+                ret = Host::call_guest(
                     h,
                     m,
                     m.word(m.word(ctx + 12) + 80),
@@ -2513,7 +2539,7 @@ pub fn fn_26ff18(
                 break 'lookup ret;
             }
             m.put_half(scratch + 34, prio);
-            ret = Host::call(
+            ret = Host::call_guest(
                 h,
                 m,
                 m.word(m.word(ctx + 12) + 80),
@@ -2551,6 +2577,7 @@ pub struct DomainOpenLiterals {
     pub empty: u32,
     pub virtual_domain: u32,
 }
+
 fn rule_live(
     m: &mut Memory<'_>,
     p: u32,
@@ -2562,7 +2589,7 @@ fn rule_live(
 ) -> u32 {
     m.put_half(s, 0);
     m.put_half(s + 4, 0);
-    let status = Host::call(
+    let status = Host::call_guest(
         h,
         m,
         m.word(m.word(p + 12) + 92),
@@ -2571,7 +2598,7 @@ fn rule_live(
     let got = half(m, s);
     let mut wrote = 0u16;
     if status < 0x80000000 && got == 1 {
-        Host::call(
+        Host::call_guest(
             h,
             m,
             m.word(m.word(p + 12) + 84),
@@ -2579,7 +2606,6 @@ fn rule_live(
         );
         wrote = half(m, s + 4);
     }
-
     let mut frame = [0u8; 0x530];
     for (at, v) in [
         (0x504, status),
@@ -2606,6 +2632,7 @@ fn rule_live(
     }
     rc
 }
+
 fn set_active(
     m: &mut Memory<'_>,
     p: u32,
@@ -2629,6 +2656,7 @@ fn set_active(
     m.put_byte(a + 8, 1);
     rc
 }
+
 fn domain_open_log(
     m: &mut Memory<'_>,
     p: u32,
@@ -2757,7 +2785,7 @@ pub fn fn_24bbc8(
                 );
             }
         }
-        rc = Host::call(
+        rc = Host::call_guest(
             h,
             m,
             m.word(m.word(p + 12) + 52),
@@ -2766,7 +2794,7 @@ pub fn fn_24bbc8(
         if rc >= 0x80000000 {
             break 'domains rc;
         }
-        rc = Host::call(
+        rc = Host::call_guest(
             h,
             m,
             m.word(m.word(p + 12) + 52),
@@ -2804,7 +2832,7 @@ pub fn fn_24bbc8(
                 m.put_byte(name, 0);
                 m.put_half(call_scratch, 0);
                 m.put_half(call_scratch + 4, 0);
-                let status = Host::call(
+                let status = Host::call_guest(
                     h,
                     m,
                     m.word(m.word(p + 12) + 92),
@@ -2817,7 +2845,7 @@ pub fn fn_24bbc8(
                     ],
                 );
                 if status < 0x80000000 && half(m, call_scratch) == 1 {
-                    Host::call(
+                    Host::call_guest(
                         h,
                         m,
                         m.word(m.word(p + 12) + 84),
@@ -2980,7 +3008,7 @@ pub fn fn_24bbc8(
                     }
                 }
             }
-            if Host::call(
+            if Host::call_guest(
                 h,
                 m,
                 m.word(m.word(p + 12) + 60),
@@ -3000,15 +3028,19 @@ pub fn fn_24bbc8(
 fn lattice_at(p: u32, i: i32) -> u32 {
     p.wrapping_add((i as u32).wrapping_mul(4))
 }
+
 fn lattice_get(m: &Memory<'_>, p: u32, i: i32) -> i32 {
     m.word(lattice_at(p, i)) as i32
 }
+
 fn lattice_elem(m: &Memory<'_>, table: u32, j: i32, i: i32) -> u32 {
     lattice_at(m.word(lattice_at(table, j)), i)
 }
+
 fn lattice_asr(v: i32, n: u32) -> i32 {
     v >> ((n & 255).min(31))
 }
+
 fn lattice_lsl(v: i32, n: u32) -> i32 {
     if n & 255 >= 32 {
         0
@@ -3016,6 +3048,7 @@ fn lattice_lsl(v: i32, n: u32) -> i32 {
         v.wrapping_shl(n & 255)
     }
 }
+
 fn lattice_div(v: i32, d: i32) -> i32 {
     crate::runtime::signed_division(v, d)
         .expect("ARM division by zero")

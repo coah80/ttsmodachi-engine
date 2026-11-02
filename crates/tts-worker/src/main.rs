@@ -1,6 +1,8 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
 
+mod japanese;
+mod languages;
 mod pool;
 
 #[derive(Debug, Clone)]
@@ -493,6 +495,11 @@ fn markup(s: &str) -> String {
 }
 
 fn wav_bytes(samples: &[i16]) -> Vec<u8> {
+    wav_rate(samples, "useng")
+}
+
+fn wav_rate(samples: &[i16], lang: &str) -> Vec<u8> {
+    let rate: u32 = if lang == "jp" { 22767 } else { 16000 };
     let n = (samples.len() * 2) as u32;
     let mut o = Vec::with_capacity(44 + samples.len() * 2);
     o.extend_from_slice(b"RIFF");
@@ -502,8 +509,8 @@ fn wav_bytes(samples: &[i16]) -> Vec<u8> {
     o.extend_from_slice(&16u32.to_le_bytes());
     o.extend_from_slice(&1u16.to_le_bytes());
     o.extend_from_slice(&1u16.to_le_bytes());
-    o.extend_from_slice(&16000u32.to_le_bytes());
-    o.extend_from_slice(&32000u32.to_le_bytes());
+    o.extend_from_slice(&rate.to_le_bytes());
+    o.extend_from_slice(&(rate * 2).to_le_bytes());
     o.extend_from_slice(&2u16.to_le_bytes());
     o.extend_from_slice(&16u16.to_le_bytes());
     o.extend_from_slice(b"data");
@@ -779,6 +786,10 @@ impl tts_core::engine_live::SleepPlatform for Nap {
 }
 
 enum UsJob {
+    Jp {
+        text: String,
+        params: [(i32, i32); 6],
+    },
     Speak {
         text16: Vec<u16>,
         vp: tts_core::engine_us::VoiceParams,
@@ -788,6 +799,7 @@ enum UsJob {
 }
 
 struct UsLane {
+    rom: tts_core::rom_region::Rom,
     arena: sparse::Mmap,
     snap: std::sync::Arc<sparse::Mmap>,
     workspace: sparse::Mmap,
@@ -808,8 +820,15 @@ impl pool::LaneEngine<UsJob> for UsLane {
             UsJob::Speak { text16, vp } => (text16, vp),
             UsJob::NoAudio => return Err(pool::RenderFailure::NoAudio),
             UsJob::EmptySing => return Ok(Vec::new()),
+            UsJob::Jp { .. } => {
+                return Err(pool::RenderFailure::Engine("wrong language lane".into()))
+            }
         };
+        if self.rom == tts_core::rom_region::Rom::Eu && !self.fresh {
+            self.restart();
+        }
         let Self {
+            rom,
             arena,
             snap,
             workspace,
@@ -848,6 +867,7 @@ impl pool::LaneEngine<UsJob> for UsLane {
                 heap,
                 &mut output,
             );
+            engine.rom = *rom;
             let n = tts_core::engine_us::speak(&mut engine, text16, vp, out)?;
             if first {
                 tts_core::engine_us::unprepare_voice(&mut engine);
@@ -872,7 +892,8 @@ impl pool::LaneEngine<UsJob> for UsLane {
 }
 
 struct UsFactory {
-    boot_fd: std::os::unix::io::RawFd,
+    rom: tts_core::rom_region::Rom,
+    boot_store: sparse::BootState,
     size: usize,
     boot: tts_core::engine_us::BootArgs,
     snap: std::sync::Arc<sparse::Mmap>,
@@ -883,9 +904,10 @@ impl pool::EngineFactory<UsJob> for UsFactory {
         let map =
             |what: &str, m: std::io::Result<sparse::Mmap>| m.map_err(|e| format!("{what}: {e}"));
         Ok(Box::new(UsLane {
+            rom: self.rom,
             arena: map(
                 "arena map",
-                sparse::Mmap::private_rw(self.boot_fd, self.size),
+                sparse::Mmap::private_rw(self.boot_store.fd_private(), self.size),
             )?,
             snap: self.snap.clone(),
 
@@ -1394,7 +1416,7 @@ fn parse_render(body: &[u8]) -> Result<RenderReq, RenderErr> {
                 return Err(RenderErr::detail(400, format!("Unsupported language: {s}")));
             }
 
-            "useng".to_string()
+            s.clone()
         }
     };
     let engine = match &vce.engine {
@@ -1440,7 +1462,8 @@ struct Inflight {
 }
 
 struct Shared {
-    pool: std::sync::Arc<pool::RendererPool<UsJob>>,
+    pools: std::collections::HashMap<String, std::sync::Arc<languages::LanguagePool>>,
+    languages: Vec<languages::Language>,
     executor: pool::ExecutorSlots,
     max_inflight: usize,
     gain_pct: i64,
@@ -1461,46 +1484,35 @@ fn effective_volume(volume: i128, gain_pct: i64) -> i64 {
 
 fn health_body(sh: &Shared) -> Vec<u8> {
     let pid = std::process::id();
-    let h = sh.pool.health();
+    let all: Vec<_> = sh
+        .languages
+        .iter()
+        .map(|l| sh.pools[l.id].health())
+        .collect();
     let float = |v: Option<f64>| v.map_or_else(|| "null".to_string(), py_float2);
     let text = |v: &Option<String>| v.as_deref().map_or_else(|| "null".to_string(), py_json_str);
-    let workers: Vec<String> = h
-        .workers
-        .iter()
-        .map(|w| {
-            let pid = if w.running { pid.to_string() } else { "null".to_string() };
-            format!(
-                "{{\"name\":{},\"rom\":{},\"port\":{},\"pid\":{pid},\"worker_pid\":{pid},\"citra_pid\":null,\"alive\":{},\"ready\":{},\"paused\":{},\"active_job_count\":{},\"idle_seconds\":{},\"last_render_ms\":{},\"resume_count\":{},\"restart_count\":{},\"render_retry_count\":{},\"last_recovery_reason\":{},\"last_error\":{}}}",
-                py_json_str(&w.name),
-                py_json_str(&w.rom),
-                sh.port,
-                w.alive,
-                w.ready,
-                w.paused,
-                w.active_job_count,
-                float(w.idle_seconds),
-                float(w.last_render_ms),
-                w.resume_count,
-                w.restart_count,
-                w.render_retry_count,
-                text(&w.last_recovery_reason),
-                text(&w.last_error),
-            )
-        })
-        .collect();
-    let rom = py_json_str(&h.rom);
+    let workers: Vec<String> = all.iter().flat_map(|h| &h.workers).map(|w| {
+        let pid = if w.running { pid.to_string() } else { "null".to_string() };
+        format!(
+            "{{\"name\":{},\"rom\":{},\"port\":{},\"pid\":{pid},\"worker_pid\":{pid},\"citra_pid\":null,\"alive\":{},\"ready\":{},\"paused\":{},\"active_job_count\":{},\"idle_seconds\":{},\"last_render_ms\":{},\"resume_count\":{},\"restart_count\":{},\"render_retry_count\":{},\"last_recovery_reason\":{},\"last_error\":{}}}",
+            py_json_str(&w.name), py_json_str(&w.rom), sh.port, w.alive, w.ready,
+            w.paused, w.active_job_count, float(w.idle_seconds), float(w.last_render_ms),
+            w.resume_count, w.restart_count, w.render_retry_count,
+            text(&w.last_recovery_reason), text(&w.last_error),
+        )
+    }).collect();
+    let pairs = |field: fn(&pool::PoolHealth) -> usize| {
+        all.iter()
+            .map(|h| format!("{}:{}", py_json_str(&h.rom), field(h)))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
     format!(
-        "{{\"ok\":true,\"cache_dir\":{},\"pool\":{{\"autoscale\":{{\"enabled\":{},\"scale_down_idle_seconds\":{},\"min_active_by_rom\":{{{rom}:{}}},\"running_by_rom\":{{{rom}:{}}},\"total_running\":{},\"total_configured\":{}}},\"workers\":[{}]}}}}",
-        py_json_str(&sh.cache_dir.to_string_lossy()),
-        h.autoscale,
-        py_float_repr(h.scale_down_idle),
-        h.min_active,
-        h.running,
-        h.running,
-        h.configured,
-        workers.join(","),
-    )
-    .into_bytes()
+        "{{\"ok\":true,\"pid\":{pid},\"cache_dir\":{},\"pool\":{{\"autoscale\":{{\"enabled\":{},\"scale_down_idle_seconds\":{},\"min_active_by_rom\":{{{}}},\"running_by_rom\":{{{}}},\"total_running\":{},\"total_configured\":{}}},\"workers\":[{}]}}}}",
+        py_json_str(&sh.cache_dir.to_string_lossy()), all[0].autoscale,
+        py_float_repr(all[0].scale_down_idle), pairs(|h| h.min_active), pairs(|h| h.running),
+        all.iter().map(|h| h.running).sum::<usize>(), all.iter().map(|h| h.configured).sum::<usize>(), workers.join(","),
+    ).into_bytes()
 }
 
 fn handle(mut s: std::net::TcpStream, sh: std::sync::Arc<Shared>) {
@@ -1551,6 +1563,28 @@ fn handle(mut s: std::net::TcpStream, sh: std::sync::Arc<Shared>) {
             return;
         }
         pool_render_flow(&mut s, &sh, &body, head_only);
+        return;
+    }
+    if path == "/languages" {
+        if method != "GET" {
+            respond_err(
+                &mut s,
+                405,
+                b"{\"detail\":\"Method Not Allowed\"}",
+                head_only,
+            );
+            return;
+        }
+        let body = languages::body(&sh.languages);
+        respond(
+            &mut s,
+            200,
+            "application/json",
+            &[],
+            false,
+            body.as_bytes(),
+            head_only,
+        );
         return;
     }
     if path == "/health" {
@@ -1684,6 +1718,9 @@ fn render_flow(s: &mut std::net::TcpStream, sh: &Shared, body: &[u8], head_only:
     };
     let v = req.voice;
 
+    if !languages::require(s, sh, &v.lang, head_only) {
+        return;
+    }
     let pre = req.text.replace('\n', " ");
     let pre = py_strip(&pre);
     let limit = if v.lang == "jp" { 1024 } else { 2000 };
@@ -1719,9 +1756,16 @@ fn render_flow(s: &mut std::net::TcpStream, sh: &Shared, body: &[u8], head_only:
         && req.mode == "text"
         && v.lang == "useng";
     let backend_tag = if use_standalone { ":standalone" } else { "" };
+    let language_version = if v.lang == "jp" {
+        ":jp-voice-queue-v1"
+    } else {
+        ""
+    };
     let version = format!(
-        "{}:gain{}:grammarpauses1{backend_tag}",
-        sh.engine_version, sh.gain_pct
+        "{}:gain{}:grammarpauses{}{backend_tag}{language_version}",
+        sh.engine_version,
+        sh.gain_pct,
+        if sh.grammar { 1 } else { 0 }
     );
     let key = cache_key(&render_text, &v, &req.mode, &version);
     let cache_path = sh.cache_dir.join(format!("{key}.wav"));
@@ -1758,7 +1802,7 @@ fn render_flow(s: &mut std::net::TcpStream, sh: &Shared, body: &[u8], head_only:
     };
     let outcome = if created {
         let job = us_job(&req.mode, pre, &render_text, sing_empty, &v);
-        let outcome = render_to_cache(sh, &cache_path, job, v.volume);
+        let outcome = render_to_cache(sh, &cache_path, job, v.volume, &v.lang);
         finish_inflight(sh, &key, &entry, outcome.clone());
         outcome
     } else {
@@ -1799,6 +1843,21 @@ fn us_job(mode: &str, pre: &str, render_text: &str, sing_empty: bool, v: &VoiceD
     if mode == "text" && pre.is_empty() {
         return UsJob::NoAudio;
     }
+    if v.lang == "jp" {
+        return UsJob::Jp {
+            text: markup(render_text),
+            params: japanese::parameters(
+                [
+                    v.pitch as u8,
+                    v.speed as u8,
+                    v.quality as u8,
+                    v.tone as u8,
+                    v.accent as u8,
+                ],
+                (v.intonation - 1) as u8,
+            ),
+        };
+    }
     UsJob::Speak {
         text16: markup(render_text).encode_utf16().collect(),
         vp: tts_core::engine_us::VoiceParams {
@@ -1808,7 +1867,7 @@ fn us_job(mode: &str, pre: &str, render_text: &str, sing_empty: bool, v: &VoiceD
             tone: v.tone as u8,
             accent: v.accent as u8,
             intonation: (v.intonation - 1) as u8,
-            language: 1,
+            language: match v.lang.as_str() { "fr" => 2, "de" => 3, "it" => 4, "es" => 5, _ => 1 },
         },
     }
 }
@@ -1818,6 +1877,7 @@ fn render_to_cache(
     cache_path: &std::path::Path,
     job: UsJob,
     volume: i128,
+    lang: &str,
 ) -> SynthResult {
     if let Ok(wav) = std::fs::read(cache_path) {
         return Ok(Served {
@@ -1828,10 +1888,10 @@ fn render_to_cache(
     }
     let rendered = {
         let _slot = sh.executor.acquire();
-        sh.pool.render(std::sync::Arc::new(job))?
+        sh.pools[lang].render(std::sync::Arc::new(job))?
     };
     let wav = amplify(
-        wav_bytes(&rendered.samples),
+        wav_rate(&rendered.samples, lang),
         effective_volume(volume, sh.gain_pct),
     );
     write_cache(sh, cache_path, &wav);
@@ -1850,6 +1910,9 @@ fn pool_render_flow(s: &mut std::net::TcpStream, sh: &Shared, body: &[u8], head_
             return;
         }
     };
+    if !languages::require(s, sh, &req.voice.lang, head_only) {
+        return;
+    }
     let pre = py_strip(&req.text);
     let sing_empty = req.mode == "sing" && !has_lyrics(pre);
     if req.mode == "sing" && !sing_empty {
@@ -1862,14 +1925,14 @@ fn pool_render_flow(s: &mut std::net::TcpStream, sh: &Shared, body: &[u8], head_
         return;
     }
     let job = us_job(&req.mode, pre, &req.text, sing_empty, &req.voice);
-    match sh.pool.render(std::sync::Arc::new(job)) {
+    match sh.pools[&req.voice.lang].render(std::sync::Arc::new(job)) {
         Ok(rendered) => respond(
             s,
             200,
             "audio/wav",
             &[("X-Render-Time-Ms", &py_float2(rendered.elapsed_ms))],
             false,
-            &wav_bytes(&rendered.samples),
+            &wav_rate(&rendered.samples, &req.voice.lang),
             head_only,
         ),
         Err(detail) => err_detail(s, 500, &detail, head_only),
@@ -1906,8 +1969,12 @@ fn write_cache(sh: &Shared, path: &std::path::Path, wav: &[u8]) {
     }
 }
 
-fn options() -> Result<(std::path::PathBuf, u16), String> {
-    let mut rom = std::env::var_os("TTS_ROM").map(std::path::PathBuf::from);
+fn options() -> Result<(Vec<std::path::PathBuf>, u16), String> {
+    let mut roms = Vec::new();
+    let mut cli_roms = Vec::new();
+    if let Some(value) = std::env::var_os("TTS_ROM") {
+        roms.extend(std::env::split_paths(&value).filter(|p| !p.as_os_str().is_empty()));
+    }
     let mut port = std::env::var("RUST_WORKER_PORT")
         .ok()
         .map(|v| {
@@ -1919,7 +1986,7 @@ fn options() -> Result<(std::path::PathBuf, u16), String> {
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
         match arg.to_str() {
-            Some("--rom") => rom = Some(args.next().ok_or("--rom needs a dump path")?.into()),
+            Some("--rom") => cli_roms.push(args.next().ok_or("--rom needs a dump path")?.into()),
             Some("--port") => {
                 port = args
                     .next()
@@ -1930,20 +1997,23 @@ fn options() -> Result<(std::path::PathBuf, u16), String> {
                     .map_err(|_| "invalid port")?
             }
             Some("--help") | Some("-h") => {
-                println!("usage: tts-worker [--rom DUMP] [--port PORT]\nset TTS_ROM when --rom is omitted");
+                println!("usage: tts-worker [--rom DUMP]... [--port PORT]\nset TTS_ROM to a path list when --rom is omitted");
                 std::process::exit(0);
             }
             _ => return Err("unknown option, use --rom DUMP or --port PORT".into()),
         }
     }
-    Ok((
-        rom.ok_or("set TTS_ROM or pass --rom with your decrypted US Rev 1 dump")?,
-        port,
-    ))
+    if !cli_roms.is_empty() {
+        roms = cli_roms;
+    }
+    if roms.is_empty() {
+        return Err("set TTS_ROM or pass --rom with your decrypted game dump".into());
+    }
+    Ok((roms, port))
 }
 
 fn main() {
-    let (rom_path, port) = match options() {
+    let (rom_paths, port) = match options() {
         Ok(options) => options,
         Err(error) => {
             eprintln!("tts-worker: {error}");
@@ -1958,27 +2028,13 @@ fn main() {
         .map(|v| !matches!(v.to_lowercase().as_str(), "0" | "false" | "no" | "off"))
         .unwrap_or(true);
 
-    let image = match tts_rom::BootImage::load(&rom_path) {
-        Ok(image) => image,
+    let (pools, languages) = match languages::load(&rom_paths) {
+        Ok(loaded) => loaded,
         Err(error) => {
             eprintln!("tts-worker: {error}");
             std::process::exit(2);
         }
     };
-    let size = image.arena.len();
-    let boot = image.boot;
-    let store = sparse::BootState::create(size).expect("boot memory");
-    for (index, page) in image.arena.chunks(4096).enumerate() {
-        if page.iter().any(|b| *b != 0) {
-            store
-                .write_at((index * 4096) as u64, page)
-                .expect("boot memory write");
-        }
-    }
-    drop(image);
-    let boot_fd = store.fd_private();
-    let snap = sparse::Mmap::shared_ro(boot_fd, size).expect("boot memory mapping");
-    std::mem::forget(store);
 
     let engine_version =
         tts_env("TTSMODACHI_ENGINE_VERSION").unwrap_or_else(|| "ttsmodachi-v1".to_string());
@@ -1998,19 +2054,9 @@ fn main() {
         );
     }
 
-    let pool = pool::RendererPool::new(
-        pool_config(),
-        std::sync::Arc::new(UsFactory {
-            boot_fd,
-            size,
-            boot,
-            snap: std::sync::Arc::new(snap),
-        }),
-    );
-    pool.start();
-
     let shared = std::sync::Arc::new(Shared {
-        pool,
+        pools,
+        languages,
         executor: pool::ExecutorSlots::new(default_executor_threads()),
         max_inflight: env_int("TTSMODACHI_MAX_INFLIGHT_RENDERS", MAX_INFLIGHT_DEFAULT).max(0)
             as usize,
@@ -2065,18 +2111,10 @@ fn env_float(name: &str, default: f64) -> f64 {
     }
 }
 
-fn pool_config() -> pool::PoolConfig {
-    let roms = tts_env("TTSMODACHI_WORKER_ROMS").unwrap_or_else(|| "US".to_string());
-    if roms
-        .split(',')
-        .map(|r| r.trim().to_uppercase())
-        .any(|r| !r.is_empty() && r != "US")
-    {
-        eprintln!("tts-worker: TTSMODACHI_WORKER_ROMS={roms}: only the US engine is available");
-    }
-    let workers = env_int("TTSMODACHI_US_WORKERS", 1).max(0);
+fn pool_config(rom: &str) -> pool::PoolConfig {
+    let workers = env_int(&format!("TTSMODACHI_{rom}_WORKERS"), 1).max(1);
     let default_min = env_int("TTSMODACHI_MIN_WORKERS", 2).max(1);
-    let min_active = env_int("TTSMODACHI_US_MIN_WORKERS", default_min)
+    let min_active = env_int(&format!("TTSMODACHI_{rom}_MIN_WORKERS"), default_min)
         .min(workers)
         .max(1);
     let autoscale = !matches!(
@@ -2087,7 +2125,7 @@ fn pool_config() -> pool::PoolConfig {
         "0" | "false" | "no" | "off"
     );
     pool::PoolConfig {
-        rom: "US".to_string(),
+        rom: rom.to_string(),
         workers: workers as usize,
         min_active: min_active as usize,
         render_timeout: env_float("TTSMODACHI_RENDER_TIMEOUT", 20.0),
@@ -2102,4 +2140,34 @@ fn pool_config() -> pool::PoolConfig {
 fn default_executor_threads() -> usize {
     let cpus = unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN) }.max(1) as usize;
     (cpus + 4).min(32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn requested_language_survives_validation() {
+        for lang in LANG_TO_ID {
+            let json = format!("{{\"text\":\"test\",\"voice\":{{\"lang\":\"{lang}\"}}}}");
+            let req =
+                parse_render(json.as_bytes()).unwrap_or_else(|_| panic!("valid language {lang}"));
+            assert_eq!(req.voice.lang, *lang);
+        }
+        assert!(parse_render(b"{\"text\":\"test\",\"voice\":{\"lang\":\"unknown\"}}").is_err());
+    }
+
+    #[test]
+    fn wav_headers_use_each_engines_sample_rate() {
+        for (lang, rate) in [("useng", 16000u32), ("jp", 22767u32)] {
+            let wav = wav_rate(&[-32768, -1, 0, 32767], lang);
+            assert_eq!(u32::from_le_bytes(wav[24..28].try_into().unwrap()), rate);
+            assert_eq!(
+                u32::from_le_bytes(wav[28..32].try_into().unwrap()),
+                rate * 2
+            );
+            assert_eq!(u32::from_le_bytes(wav[40..44].try_into().unwrap()), 8);
+            assert_eq!(&wav[44..], &[0, 128, 255, 255, 0, 0, 255, 127]);
+        }
+    }
 }

@@ -9,6 +9,15 @@
   <body>
     <h1>ttsmodachi-engine</h1>
     <form id="form">
+      <p><label>language <select name="lang" required disabled></select></label></p>
+      <p>
+        <label>voice
+          <select name="preset" disabled>
+            <option value="boy">boy</option>
+            <option value="girl">girl</option>
+          </select>
+        </label>
+      </p>
       <p>
         <label for="text">text</label><br />
         <textarea id="text" rows="5" maxlength="2000" required>Hello, this is Tomodachi Life text to speech.</textarea>
@@ -29,7 +38,7 @@
         </label>
       </p>
       <p><label>volume <input name="volume" type="number" min="25" max="300" value="100" /></label></p>
-      <p><button id="generate">generate</button></p>
+      <p><button id="generate" disabled>generate</button></p>
     </form>
     <p id="status" role="status"></p>
     <audio id="player" controls></audio>

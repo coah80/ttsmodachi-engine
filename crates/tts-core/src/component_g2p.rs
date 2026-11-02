@@ -1,44 +1,71 @@
-
-
 #![allow(dead_code)]
 
 use crate::{boot::Memory, component_live_b::Host};
 
 pub const G2P9B_SUB: u32 = 0x1b8;
+
 const G_MODE: u32 = 0x20;
+
 const G_RESULT_COUNT: u32 = 0x10;
+
 const G_LENGTH: u32 = 0x1c;
+
 const G_WRITTEN: u32 = 0x14;
+
 const G_NUMBER: u32 = 0x18;
+
 const G_TOKEN: u32 = 0x1c0;
+
 const G_POSITION: u32 = 0x1bc;
+
 const G_SEPARATOR: u32 = 0xf4;
+
 const G_KIND: u32 = 0x110;
+
 const G_RESULTS: u32 = 0x10c;
+
 const G_MDE_RESULT: u32 = 0x114;
+
 const G_LOOKUP: u32 = 0xf8;
 
 const CAT: u32 = 0x8f9532;
+
 const LIT_MODE: u32 = 0x2c9eb0;
+
 const LIT_NORMAL: u32 = 0x2c9b2c;
+
 const LIT_UNDER: u32 = 0x2c9b34;
+
 const FMT_L1: u32 = 0x2c9b1c;
+
 const FMT_L2: u32 = 0x2c9ec0;
+
 const FMT_O1: u32 = 0x2c9b38;
+
 const FMT_LOOKUP: u32 = 0x2ca360;
+
 const FMT_VALID: u32 = 0x2ca370;
+
 const FMT_DOMAIN: u32 = 0x2ca6a8;
+
 const FMT_USAGE: u32 = 0x2ca6c8;
+
 const ZERO_S: u32 = 0x2c9eac;
+
 const EMPTY_S: u32 = 0x2c9ebc;
+
 const EMPTY2_S: u32 = 0x2ca6c4;
+
 const ONE_S: u32 = 0x2ca69c;
+
 const STAR_S: u32 = 0x2ca6f0;
 
 fn s_lit(rom: crate::rom_region::Rom, us: u32) -> u32 {
     crate::rom_region::addr(rom, us)
 }
+
 const FAIL_MEM: u32 = 0x89b0200a;
+
 const FAIL_HANDLE: u32 = 0x89b02007;
 
 fn g_word(m: &Memory<'_>, p: u32) -> Option<u32> {
@@ -97,6 +124,7 @@ fn p_word(m: &mut Memory<'_>, p: u32, v: u32) -> bool {
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_2c9ba0_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -112,7 +140,6 @@ pub fn fn_2c9ba0_m(
     handle_data: u32,
     end: u32,
 ) -> u32 {
-
     let body = sp.wrapping_sub(G2P9B_SUB);
     let mode = body.wrapping_add(G_MODE);
     let a_count = body.wrapping_add(G_RESULT_COUNT);
@@ -125,7 +152,6 @@ pub fn fn_2c9ba0_m(
     let a_results = body.wrapping_add(G_RESULTS);
     let a_mde_result = body.wrapping_add(G_MDE_RESULT);
     let a_lookup = body.wrapping_add(G_LOOKUP);
-
     if !g_range(m, mode, 128)
         || !g_range(m, a_count, 2)
         || !g_range(m, a_length, 2)
@@ -145,7 +171,6 @@ pub fn fn_2c9ba0_m(
     {
         return FAIL_MEM;
     }
-
     let services = g_word(m, engine).unwrap_or(0);
     let token_api = g_word(m, engine.wrapping_add(0x0c)).unwrap_or(0);
     let dict_obj = g_word(m, engine.wrapping_add(0x10)).unwrap_or(0);
@@ -157,47 +182,55 @@ pub fn fn_2c9ba0_m(
     let logger = g_word(m, services.wrapping_add(0x10)).unwrap_or(0);
     let allocator = g_word(m, services.wrapping_add(4)).unwrap_or(0);
     let lookup_flags = g_byte(m, engine.wrapping_add(0x172)).unwrap_or(0);
-
     let f_insert_after = g_word(m, token_api.wrapping_add(0x2c)).unwrap_or(0);
     let f_set = g_word(m, token_api.wrapping_add(0x50)).unwrap_or(0);
     let f_dict_lookup = g_word(m, dict_api.wrapping_add(0x48)).unwrap_or(0);
     let f_mde_input = g_word(m, mde_api.wrapping_add(0x24)).unwrap_or(0);
     let f_mde_output = g_word(m, mde_api.wrapping_add(0x28)).unwrap_or(0);
     let f_mde_select = g_word(m, mde_api.wrapping_add(0x2c)).unwrap_or(0);
-
     h.call_m(0x195cd0, &[mode, s_lit(h.rom(), 0x2c9eb0)], m);
     let mut status: u32;
     let mode_length = h.call_m(0x195d90, &[mode], m) as u16;
     h.call_m(0x1738e8, &[logger, CAT, 5, 0, FMT_L1, mode, normalized], m);
     let normalized_len = h.call_m(0x195d90, &[normalized], m);
-    status = h.call_m(f_mde_input, &[mde_obj, mde_data, 0, normalized, normalized_len], m);
+    status = h.call_guest_m(
+        f_mde_input,
+        &[mde_obj, mde_data, 0, normalized, normalized_len],
+        m,
+    );
     if status >= 0x80000000 {
         return status;
     }
     h.call_m(0x1738e8, &[logger, CAT, 5, 0, FMT_L2, mode, text], m);
     let text_len = h.call_m(0x195d90, &[text], m);
-    status = h.call_m(f_mde_input, &[mde_obj, mde_data, 1, text, text_len], m);
+    status = h.call_guest_m(f_mde_input, &[mde_obj, mde_data, 1, text, text_len], m);
     if status >= 0x80000000 {
         return status;
     }
     if h.call_m(0x195d58, &[domain, s_lit(h.rom(), 0x2c9b2c)], m) != 0
-        && h.call_m(0x195d90, &[domain], m).wrapping_add(u32::from(mode_length)).wrapping_add(2)
+        && h.call_m(0x195d90, &[domain], m)
+            .wrapping_add(u32::from(mode_length))
+            .wrapping_add(2)
             < 128
     {
         h.call_m(0x195c90, &[mode, s_lit(h.rom(), 0x2c9b34)], m);
         h.call_m(0x195c90, &[mode, domain], m);
     }
-    status = h.call_m(f_mde_select, &[mde_obj, mde_data, mode], m);
+    status = h.call_guest_m(f_mde_select, &[mde_obj, mde_data, mode], m);
     if status >= 0x80000000 {
         if !p_byte(m, mode.wrapping_add(u32::from(mode_length)), 0) {
             return FAIL_MEM;
         }
-        status = h.call_m(f_mde_select, &[mde_obj, mde_data, mode], m);
+        status = h.call_guest_m(f_mde_select, &[mde_obj, mde_data, mode], m);
         if status >= 0x80000000 {
             return 0;
         }
     }
-    status = h.call_m(f_mde_output, &[mde_obj, mde_data, 0, a_mde_result, a_length], m);
+    status = h.call_guest_m(
+        f_mde_output,
+        &[mde_obj, mde_data, 0, a_mde_result, a_length],
+        m,
+    );
     if status >= 0x80000000 {
         return status;
     }
@@ -207,12 +240,11 @@ pub fn fn_2c9ba0_m(
         return FAIL_MEM;
     }
     h.call_m(0x1738e8, &[logger, CAT, 5, 0, FMT_O1, mode, mde_result], m);
-    status = h.call_m(f_mde_output, &[mde_obj, mde_data, 1, a_lookup, a_length], m);
+    status = h.call_guest_m(f_mde_output, &[mde_obj, mde_data, 1, a_lookup, a_length], m);
     if status >= 0x80000000 {
         return status;
     }
     let lookup = g_word(m, a_lookup).unwrap_or(0);
-
     let mut prefixes = [0u32; 10];
     let mut suffixes = [0u32; 10];
     let mut contexts = [0u32; 10];
@@ -222,7 +254,6 @@ pub fn fn_2c9ba0_m(
     let base: u32;
     let mut cursor: u32;
     status = 0;
-
     if g_byte(m, mde_result).unwrap_or(0) == b'{' {
         context_count = 2;
         prefixes[0] = mde_result.wrapping_add(1);
@@ -274,7 +305,10 @@ pub fn fn_2c9ba0_m(
         if cursor == 0 {
             cursor = h.call_m(
                 0x195d30,
-                &[suffixes[infix_count.wrapping_sub(1) as usize], u32::from(b'}')],
+                &[
+                    suffixes[infix_count.wrapping_sub(1) as usize],
+                    u32::from(b'}'),
+                ],
                 m,
             );
         }
@@ -282,28 +316,45 @@ pub fn fn_2c9ba0_m(
     if cursor != 0 && !p_byte(m, cursor, 0) {
         return FAIL_MEM;
     }
-
     let mut i = 0u16;
     while u32::from(i) < context_count {
         let mut j = 0u16;
         while u32::from(j) < u32::from(infix_count) {
-            if h.call_m(0x195d58, &[contexts[i as usize], s_lit(h.rom(), 0x2c9eac)], m) == 0
-                && h.call_m(0x195d58, &[suffixes[j as usize], s_lit(h.rom(), 0x2c9eac)], m) == 0
+            if h.call_m(
+                0x195d58,
+                &[contexts[i as usize], s_lit(h.rom(), 0x2c9eac)],
+                m,
+            ) == 0
+                && h.call_m(
+                    0x195d58,
+                    &[suffixes[j as usize], s_lit(h.rom(), 0x2c9eac)],
+                    m,
+                ) == 0
             {
                 j = j.wrapping_add(1);
                 continue;
             }
-            if h.call_m(0x195d58, &[prefixes[i as usize], s_lit(h.rom(), 0x2c9eac)], m) != 0 {
+            if h.call_m(
+                0x195d58,
+                &[prefixes[i as usize], s_lit(h.rom(), 0x2c9eac)],
+                m,
+            ) != 0
+            {
                 h.call_m(0x195cd0, &[lookup, prefixes[i as usize]], m);
                 h.call_m(0x195c90, &[lookup, base], m);
             } else {
                 h.call_m(0x195cd0, &[lookup, base], m);
             }
-            if h.call_m(0x195d58, &[infixes[j as usize], s_lit(h.rom(), 0x2c9eac)], m) != 0 {
+            if h.call_m(
+                0x195d58,
+                &[infixes[j as usize], s_lit(h.rom(), 0x2c9eac)],
+                m,
+            ) != 0
+            {
                 h.call_m(0x195c90, &[lookup, infixes[j as usize]], m);
             }
             h.call_m(0x1738e8, &[logger, CAT, 5, 0, FMT_LOOKUP, lookup], m);
-            status = h.call_m(
+            status = h.call_guest_m(
                 f_dict_lookup,
                 &[
                     dict_obj,
@@ -331,7 +382,6 @@ pub fn fn_2c9ba0_m(
             let mut k = 0u16;
             while u32::from(k) < u32::from(result_count) {
                 let word = g_word(m, results.wrapping_add(u32::from(k) * 4)).unwrap_or(0);
-
                 let mut p = h.call_m(0x195d30, &[word, separator], m);
                 let mut entry_type = 0u32;
                 let mut result_domain = 0u32;
@@ -415,7 +465,7 @@ pub fn fn_2c9ba0_m(
                     return FAIL_MEM;
                 }
                 let token = g_half(m, a_token).unwrap_or(0);
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_insert_after,
                     &[handle_obj, handle_data, u32::from(token), a_token],
                     m,
@@ -424,29 +474,52 @@ pub fn fn_2c9ba0_m(
                     return status;
                 }
                 let token = g_half(m, a_token).unwrap_or(0);
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set,
-                    &[handle_obj, handle_data, u32::from(token), 0, 1, a_kind, a_written],
+                    &[
+                        handle_obj,
+                        handle_data,
+                        u32::from(token),
+                        0,
+                        1,
+                        a_kind,
+                        a_written,
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
                     return status;
                 }
-
                 if !p_half(m, body.wrapping_add(G_POSITION), position) {
                     return FAIL_MEM;
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set,
-                    &[handle_obj, handle_data, u32::from(token), 1, 1, body.wrapping_add(G_POSITION), a_written],
+                    &[
+                        handle_obj,
+                        handle_data,
+                        u32::from(token),
+                        1,
+                        1,
+                        body.wrapping_add(G_POSITION),
+                        a_written,
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
                     return status;
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set,
-                    &[handle_obj, handle_data, u32::from(token), 2, 1, end, a_written],
+                    &[
+                        handle_obj,
+                        handle_data,
+                        u32::from(token),
+                        2,
+                        1,
+                        end,
+                        a_written,
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
@@ -467,7 +540,12 @@ pub fn fn_2c9ba0_m(
                     }
                 }
                 let pronunciation = g_word(m, engine.wrapping_add(0x58)).unwrap_or(0);
-                if h.call_m(0x195d58, &[contexts[i as usize], s_lit(h.rom(), 0x2c9eac)], m) != 0 {
+                if h.call_m(
+                    0x195d58,
+                    &[contexts[i as usize], s_lit(h.rom(), 0x2c9eac)],
+                    m,
+                ) != 0
+                {
                     h.call_m(0x195cd0, &[pronunciation, contexts[i as usize]], m);
                     h.call_m(0x195c90, &[pronunciation, s_lit(h.rom(), 0x2ca69c)], m);
                 } else {
@@ -475,11 +553,16 @@ pub fn fn_2c9ba0_m(
                 }
                 h.call_m(0x195c90, &[pronunciation, word], m);
                 h.call_m(0x195c90, &[pronunciation, s_lit(h.rom(), 0x2ca69c)], m);
-                if h.call_m(0x195d58, &[suffixes[j as usize], s_lit(h.rom(), 0x2c9eac)], m) != 0 {
+                if h.call_m(
+                    0x195d58,
+                    &[suffixes[j as usize], s_lit(h.rom(), 0x2c9eac)],
+                    m,
+                ) != 0
+                {
                     h.call_m(0x195c90, &[pronunciation, suffixes[j as usize]], m);
                 }
                 let pron_len = h.call_m(0x195d90, &[pronunciation], m);
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set,
                     &[
                         handle_obj,
@@ -496,10 +579,9 @@ pub fn fn_2c9ba0_m(
                     return status;
                 }
                 if feature5 != 0 {
-
                     if h.call_m(0x195d58, &[feature5, s_lit(h.rom(), 0x2ca6c4)], m) != 0 {
                         let f5_len = h.call_m(0x195d90, &[feature5], m);
-                        status = h.call_m(
+                        status = h.call_guest_m(
                             f_set,
                             &[
                                 handle_obj,
@@ -513,9 +595,17 @@ pub fn fn_2c9ba0_m(
                             m,
                         );
                     } else {
-                        status = h.call_m(
+                        status = h.call_guest_m(
                             f_set,
-                            &[handle_obj, handle_data, u32::from(token), 5, 2, s_lit(h.rom(), 0x2ca6f0), a_written],
+                            &[
+                                handle_obj,
+                                handle_data,
+                                u32::from(token),
+                                5,
+                                2,
+                                s_lit(h.rom(), 0x2ca6f0),
+                                a_written,
+                            ],
                             m,
                         );
                     }
@@ -524,10 +614,9 @@ pub fn fn_2c9ba0_m(
                     }
                 }
                 if feature6 != 0 {
-
                     if h.call_m(0x195d58, &[feature6, s_lit(h.rom(), 0x2ca6c4)], m) != 0 {
                         let f6_len = h.call_m(0x195d90, &[feature6], m);
-                        status = h.call_m(
+                        status = h.call_guest_m(
                             f_set,
                             &[
                                 handle_obj,
@@ -541,9 +630,17 @@ pub fn fn_2c9ba0_m(
                             m,
                         );
                     } else {
-                        status = h.call_m(
+                        status = h.call_guest_m(
                             f_set,
-                            &[handle_obj, handle_data, u32::from(token), 6, 2, s_lit(h.rom(), 0x2ca6f0), a_written],
+                            &[
+                                handle_obj,
+                                handle_data,
+                                u32::from(token),
+                                6,
+                                2,
+                                s_lit(h.rom(), 0x2ca6f0),
+                                a_written,
+                            ],
                             m,
                         );
                     }
@@ -559,9 +656,17 @@ pub fn fn_2c9ba0_m(
                 if !p_half(m, a_number, number_val) {
                     return FAIL_MEM;
                 }
-                status = h.call_m(
+                status = h.call_guest_m(
                     f_set,
-                    &[handle_obj, handle_data, u32::from(token), 7, 1, a_number, a_written],
+                    &[
+                        handle_obj,
+                        handle_data,
+                        u32::from(token),
+                        7,
+                        1,
+                        a_number,
+                        a_written,
+                    ],
                     m,
                 );
                 if status >= 0x80000000 {
@@ -569,7 +674,7 @@ pub fn fn_2c9ba0_m(
                 }
                 if extra != 0 {
                     let extra_len = h.call_m(0x195d90, &[extra], m);
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set,
                         &[
                             handle_obj,
@@ -583,9 +688,17 @@ pub fn fn_2c9ba0_m(
                         m,
                     );
                 } else {
-                    status = h.call_m(
+                    status = h.call_guest_m(
                         f_set,
-                        &[handle_obj, handle_data, u32::from(token), 9, 1, s_lit(h.rom(), 0x2ca6c4), a_written],
+                        &[
+                            handle_obj,
+                            handle_data,
+                            u32::from(token),
+                            9,
+                            1,
+                            s_lit(h.rom(), 0x2ca6c4),
+                            a_written,
+                        ],
                         m,
                     );
                 }
@@ -602,47 +715,85 @@ pub fn fn_2c9ba0_m(
 }
 
 pub const G2P93F0_SUB: u32 = 0x50;
+
 const F93_APPLIED: u32 = 0x0c;
+
 const F93_TOKEN: u32 = 0x54;
+
 const F93_KIND: u32 = 0x10;
+
 const F93_COUNT: u32 = 0x14;
+
 const F93_ENABLED: u32 = 0x18;
 
 pub const G2P85_SUB: u32 = 0x158;
+
 const R_BUF: u32 = 0x14;
+
 const R_TABLE: u32 = 0x120;
+
 const R_FLAG: u32 = 0x10;
+
 const R_DELIM: u32 = 0x118;
+
 const R_G: u32 = 0x98;
+
 const R_GLEN: u32 = 0x9c;
+
 const R_C1: u32 = 0xb8;
+
 const R_C2: u32 = 0xbc;
 
 const CAT93: u32 = 0x8f9532;
+
 const SKIP_FMT: u32 = 0x2c9724;
+
 const E93_S: u32 = 0x2c93c0;
+
 const FMT_CHK: u32 = 0x2c8878;
+
 const LIT_FECFG: u32 = 0x2c8884;
+
 const FMT_SUCCEEDS: u32 = 0x2c888c;
+
 const FMT_FAILS: u32 = 0x2c889c;
+
 const LIT_MDE: u32 = 0x2c88a8;
+
 const LIT_USCORE: u32 = 0x2c8874;
+
 const E93_2: u32 = 0x2c8870;
+
 const LIT_PLUS: u32 = 0x2c8ca4;
+
 const LIT_SPACE: u32 = 0x2c8ca8;
+
 const LIT_ONE: u32 = 0x2c8cac;
+
 const LIT_YES: u32 = 0x2c8cb0;
+
 const LIT_ONEWORD: u32 = 0x2c8cb4;
+
 const FMT85_L1: u32 = 0x2c8cc0;
+
 const FMT85_O1: u32 = 0x2c910c;
+
 const LIT_G2P: u32 = 0x2c9118;
+
 const FMT85_VALID: u32 = 0x2c911c;
+
 const ZERO93: u32 = 0x2c9130;
+
 const E93_3: u32 = 0x2c9134;
+
 const E93_4: u32 = 0x2c8cbc;
+
 const FMT85_DOMAIN: u32 = 0x2c93a4;
+
 const FMT85_USAGE: u32 = 0x2c93c4;
+
 const STAR93: u32 = 0x2c8868;
+
 const LIT_MDEU: u32 = 0x2c886c;
 
 pub fn fn_2c84ac_m(m: &mut Memory<'_>, h: &mut impl Host, p: u32, n: u32) -> u32 {
@@ -667,6 +818,7 @@ pub fn fn_2c84ac_m(m: &mut Memory<'_>, h: &mut impl Host, p: u32, n: u32) -> u32
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_2c8554_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -679,7 +831,6 @@ pub fn fn_2c8554_m(
     applied_ptr: u32,
     start: u32,
 ) -> u32 {
-
     let base = recsp.wrapping_sub(level.wrapping_add(1).wrapping_mul(G2P85_SUB));
     let buf = base.wrapping_add(R_BUF);
     let a_table = base.wrapping_add(R_TABLE);
@@ -700,13 +851,14 @@ pub fn fn_2c8554_m(
     {
         return FAIL_MEM;
     }
-
     let ctx = g_word(m, p).unwrap_or(0);
     let f10 = g_word(m, p.wrapping_add(0x10)).unwrap_or(0);
     let f14 = g_word(m, p.wrapping_add(0x14)).unwrap_or(0);
     let vt = g_word(m, p.wrapping_add(0x18)).unwrap_or(0);
     let f_fec = g_word(m, vt.wrapping_add(0x1c)).unwrap_or(0);
     let f_g2p = g_word(m, vt.wrapping_add(0x48)).unwrap_or(0);
+    let mde_obj = g_word(m, p.wrapping_add(0x1c)).unwrap_or(0);
+    let mde_data = g_word(m, p.wrapping_add(0x20)).unwrap_or(0);
     let vt2 = g_word(m, p.wrapping_add(0x24)).unwrap_or(0);
     let f_m36 = g_word(m, vt2.wrapping_add(0x24)).unwrap_or(0);
     let f_m40 = g_word(m, vt2.wrapping_add(0x28)).unwrap_or(0);
@@ -715,10 +867,8 @@ pub fn fn_2c8554_m(
     let f58 = g_word(m, p.wrapping_add(0x58)).unwrap_or(0);
     let f5c = g_word(m, p.wrapping_add(0x5c)).unwrap_or(0);
     let f60 = g_word(m, p.wrapping_add(0x60)).unwrap_or(0);
-
     let mut rc = 0u32;
     let mut kind = 0u32;
-
     if h.call_m(0x195d90, &[word], m) == limit {
         h.call_m(0x195cd0, &[buf, s_lit(h.rom(), 0x2c886c)], m);
         h.call_m(0x195c90, &[buf, opts], m);
@@ -742,7 +892,19 @@ pub fn fn_2c8554_m(
         if !p_half(m, a_flag, 0xffff) {
             return FAIL_MEM;
         }
-        rc = h.call_m(f_fec, &[f10, f14, s_lit(h.rom(), 0x2c8884), buf, a_table, a_flag, a_delim], m);
+        rc = h.call_guest_m(
+            f_fec,
+            &[
+                f10,
+                f14,
+                s_lit(h.rom(), 0x2c8884),
+                buf,
+                a_table,
+                a_flag,
+                a_delim,
+            ],
+            m,
+        );
         if rc >= 0x80000000 {
             return rc;
         }
@@ -767,7 +929,19 @@ pub fn fn_2c8554_m(
             if !p_half(m, a_flag, 0xffff) {
                 return FAIL_MEM;
             }
-            rc = h.call_m(f_fec, &[f10, f14, s_lit(h.rom(), 0x2c8884), buf, a_table, a_flag, a_delim], m);
+            rc = h.call_guest_m(
+                f_fec,
+                &[
+                    f10,
+                    f14,
+                    s_lit(h.rom(), 0x2c8884),
+                    buf,
+                    a_table,
+                    a_flag,
+                    a_delim,
+                ],
+                m,
+            );
             if rc >= 0x80000000 {
                 return rc;
             }
@@ -786,7 +960,6 @@ pub fn fn_2c8554_m(
             h.call_m(0x1738e8, &[logger, CAT93, 5, 0, FMT_SUCCEEDS], m);
         }
     }
-
     if g_byte(m, p.wrapping_add(0x6d)).unwrap_or(0) == start as u8 {
         return rc;
     }
@@ -807,7 +980,19 @@ pub fn fn_2c8554_m(
         if !p_half(m, a_flag, 0) {
             return FAIL_MEM;
         }
-        rc = h.call_m(f_fec, &[f10, f14, s_lit(h.rom(), 0x2c88a8), base_w, a_table, a_flag, a_delim], m);
+        rc = h.call_guest_m(
+            f_fec,
+            &[
+                f10,
+                f14,
+                s_lit(h.rom(), 0x2c88a8),
+                base_w,
+                a_table,
+                a_flag,
+                a_delim,
+            ],
+            m,
+        );
         if rc >= 0x80000000 {
             return rc;
         }
@@ -830,7 +1015,6 @@ pub fn fn_2c8554_m(
             let delim = u32::from(g_byte(m, a_delim).unwrap_or(0));
             let mut q = h.call_m(0x195d30, &[f1, delim], m);
             if q == 0 {
-
             } else {
                 kind = q.wrapping_add(1);
                 if !p_byte(m, q, 0) {
@@ -872,10 +1056,12 @@ pub fn fn_2c8554_m(
                 h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
             }
             if f3 == 0 || h.call_m(0x195d58, &[f3, s_lit(h.rom(), 0x2c8870)], m) == 0 {
-
                 if kind != 0 && h.call_m(0x195d58, &[kind, s_lit(h.rom(), 0x2c8cb0)], m) == 0 {
-
-                    h.call_m(0x195cd0, &[buf.wrapping_add(4), s_lit(h.rom(), 0x2c8cb4)], m);
+                    h.call_m(
+                        0x195cd0,
+                        &[buf.wrapping_add(4), s_lit(h.rom(), 0x2c8cb4)],
+                        m,
+                    );
                     if !p_byte(m, word.wrapping_add(u32::from(i)), 0) {
                         return FAIL_MEM;
                     }
@@ -886,20 +1072,24 @@ pub fn fn_2c8554_m(
                     {
                         return FAIL_MEM;
                     }
-                    h.call_m(0x1738e8, &[logger, CAT93, 5, 0, FMT85_L1, buf.wrapping_add(4), base_w], m);
+                    h.call_m(
+                        0x1738e8,
+                        &[logger, CAT93, 5, 0, FMT85_L1, buf.wrapping_add(4), base_w],
+                        m,
+                    );
                     let base_len = h.call_m(0x195d90, &[base_w], m);
-                    rc = h.call_m(f_m36, &[f10, f14, 0, base_w, base_len], m);
+                    rc = h.call_guest_m(f_m36, &[mde_obj, mde_data, 0, base_w, base_len], m);
                     if rc >= 0x80000000 {
                         return rc;
                     }
                     if !p_byte(m, word.wrapping_add(u32::from(i)), save) {
                         return FAIL_MEM;
                     }
-                    rc = h.call_m(f_m44, &[f10, f14, buf.wrapping_add(4)], m);
+                    rc = h.call_guest_m(f_m44, &[mde_obj, mde_data, buf.wrapping_add(4)], m);
                     if rc >= 0x80000000 {
                         return rc;
                     }
-                    rc = h.call_m(f_m40, &[f10, f14, 0, a_g, a_glen], m);
+                    rc = h.call_guest_m(f_m40, &[mde_obj, mde_data, 0, a_g, a_glen], m);
                     if rc >= 0x80000000 {
                         return rc;
                     }
@@ -918,7 +1108,8 @@ pub fn fn_2c8554_m(
                                 if !(u32::from(kk) < u32::from(glen2)) {
                                     break;
                                 }
-                                let nxt = g_byte(m, gptr.wrapping_add(u32::from(kk) + 1)).unwrap_or(0);
+                                let nxt =
+                                    g_byte(m, gptr.wrapping_add(u32::from(kk) + 1)).unwrap_or(0);
                                 if !p_byte(m, gptr.wrapping_add(u32::from(kk)), nxt) {
                                     return FAIL_MEM;
                                 }
@@ -941,8 +1132,15 @@ pub fn fn_2c8554_m(
                     if !p_byte(m, gptr.wrapping_add(u32::from(glen)), 0) {
                         return FAIL_MEM;
                     }
-                    h.call_m(0x1738e8, &[logger, CAT93, 5, 0, FMT85_O1, buf.wrapping_add(4), gptr], m);
-                    let grow = h.call_m(0x195d90, &[gptr], m).wrapping_add(u32::from(n)).wrapping_add(4);
+                    h.call_m(
+                        0x1738e8,
+                        &[logger, CAT93, 5, 0, FMT85_O1, buf.wrapping_add(4), gptr],
+                        m,
+                    );
+                    let grow = h
+                        .call_m(0x195d90, &[gptr], m)
+                        .wrapping_add(u32::from(n))
+                        .wrapping_add(4);
                     rc = fn_2c84ac_m(m, h, p, grow);
                     if rc >= 0x80000000 {
                         return rc;
@@ -1018,8 +1216,21 @@ pub fn fn_2c8554_m(
                     }
                 }
             }
-
-            rc = fn_2c8554_m(m, h, recsp, level.wrapping_add(1), p, word, opts, u32::from(i), applied_ptr, start);
+            h.call_m(0x195c90, &[f58, s_lit(h.rom(), 0x2c8cac)], m);
+            h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
+            h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
+            rc = fn_2c8554_m(
+                m,
+                h,
+                recsp,
+                level.wrapping_add(1),
+                p,
+                word,
+                opts,
+                u32::from(i),
+                applied_ptr,
+                start,
+            );
             if rc >= 0x80000000 {
                 return rc;
             }
@@ -1033,7 +1244,6 @@ pub fn fn_2c8554_m(
             }
             k = k.wrapping_add(1);
         }
-
         if g_byte(m, applied_ptr).unwrap_or(0) != 0 {
             return rc;
         }
@@ -1045,7 +1255,20 @@ pub fn fn_2c8554_m(
             return FAIL_MEM;
         }
         let f172 = u32::from(g_byte(m, p.wrapping_add(0x172)).unwrap_or(0));
-        rc = h.call_m(f_g2p, &[f10, f14, s_lit(h.rom(), 0x2c9118), base_w, a_table, a_flag, a_delim, f172], m);
+        rc = h.call_guest_m(
+            f_g2p,
+            &[
+                f10,
+                f14,
+                s_lit(h.rom(), 0x2c9118),
+                base_w,
+                a_table,
+                a_flag,
+                a_delim,
+                f172,
+            ],
+            m,
+        );
         if rc >= 0x80000000 {
             return rc;
         }
@@ -1068,14 +1291,12 @@ pub fn fn_2c8554_m(
             let delim = u32::from(g_byte(m, a_delim).unwrap_or(0));
             let mut q = h.call_m(0x195d30, &[f1, delim], m);
             if q == 0 {
-
             } else {
                 if !p_byte(m, q, 0) {
                     return FAIL_MEM;
                 }
                 q = h.call_m(0x195d30, &[q.wrapping_add(1), delim], m);
                 if q == 0 {
-
                 } else {
                     if !p_byte(m, q, 0) {
                         return FAIL_MEM;
@@ -1083,7 +1304,6 @@ pub fn fn_2c8554_m(
                     f2 = q.wrapping_add(1);
                     q = h.call_m(0x195d30, &[f2, delim], m);
                     if q == 0 {
-
                     } else {
                         if !p_byte(m, q, 0) {
                             return FAIL_MEM;
@@ -1097,7 +1317,6 @@ pub fn fn_2c8554_m(
                             }
                             q = h.call_m(0x195d30, &[f4, delim], m);
                             if q == 0 {
-
                             } else {
                                 if !p_byte(m, q, 0) {
                                     return FAIL_MEM;
@@ -1105,7 +1324,6 @@ pub fn fn_2c8554_m(
                                 f5 = q.wrapping_add(1);
                                 q = h.call_m(0x195d30, &[f5, delim], m);
                                 if q == 0 {
-
                                 } else {
                                     if !p_byte(m, q, 0) {
                                         return FAIL_MEM;
@@ -1140,8 +1358,18 @@ pub fn fn_2c8554_m(
             }
             let n = h.call_m(0x195d90, &[f58], m) as u16;
             if h.call_m(0x195d58, &[f1, s_lit(h.rom(), 0x2c9134)], m) == 0 {
-
-                rc = fn_2c8554_m(m, h, recsp, level.wrapping_add(1), p, word, opts, u32::from(i), applied_ptr, start);
+                rc = fn_2c8554_m(
+                    m,
+                    h,
+                    recsp,
+                    level.wrapping_add(1),
+                    p,
+                    word,
+                    opts,
+                    u32::from(i),
+                    applied_ptr,
+                    start,
+                );
                 if rc >= 0x80000000 {
                     return rc;
                 }
@@ -1164,7 +1392,10 @@ pub fn fn_2c8554_m(
             } else {
                 s_lit(h.rom(), 0x2c8868)
             };
-            let grow = h.call_m(0x195d90, &[f1], m).wrapping_add(u32::from(n)).wrapping_add(4);
+            let grow = h
+                .call_m(0x195d90, &[f1], m)
+                .wrapping_add(u32::from(n))
+                .wrapping_add(4);
             rc = fn_2c84ac_m(m, h, p, grow);
             if rc >= 0x80000000 {
                 return rc;
@@ -1195,8 +1426,18 @@ pub fn fn_2c8554_m(
             h.call_m(0x195c90, &[f58, s_lit(h.rom(), 0x2c8cac)], m);
             h.call_m(0x195c90, &[f5c, s_lit(h.rom(), 0x2c8ca8)], m);
             h.call_m(0x195c90, &[f60, s_lit(h.rom(), 0x2c8ca8)], m);
-
-            rc = fn_2c8554_m(m, h, recsp, level.wrapping_add(1), p, word, opts, u32::from(i), applied_ptr, start);
+            rc = fn_2c8554_m(
+                m,
+                h,
+                recsp,
+                level.wrapping_add(1),
+                p,
+                word,
+                opts,
+                u32::from(i),
+                applied_ptr,
+                start,
+            );
             if rc >= 0x80000000 {
                 return rc;
             }
@@ -1215,6 +1456,7 @@ pub fn fn_2c8554_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn fn_2c93f0_m(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -1229,7 +1471,6 @@ pub fn fn_2c93f0_m(
     handle_data: u32,
     end: u32,
 ) -> u32 {
-
     let body = sp.wrapping_sub(G2P93F0_SUB);
     let a_applied = body.wrapping_add(F93_APPLIED);
     let a_token = body.wrapping_add(F93_TOKEN);
@@ -1249,7 +1490,6 @@ pub fn fn_2c93f0_m(
     {
         return FAIL_MEM;
     }
-
     let services = g_word(m, p).unwrap_or(0);
     let methods = g_word(m, p.wrapping_add(0x0c)).unwrap_or(0);
     let logger = g_word(m, services.wrapping_add(0x10)).unwrap_or(0);
@@ -1258,13 +1498,16 @@ pub fn fn_2c93f0_m(
     let text_buf = g_word(m, p.wrapping_add(0x58)).unwrap_or(0);
     let alt_buf = g_word(m, p.wrapping_add(0x5c)).unwrap_or(0);
     let extra_buf = g_word(m, p.wrapping_add(0x60)).unwrap_or(0);
-
     let mut rc = 0u32;
     let skip = g_byte(m, p.wrapping_add(0x6e)).unwrap_or(0) == 1
         || h.call_m(0x195d90, &[text], m) < u32::from(g_byte(m, p.wrapping_add(0x6a)).unwrap_or(0))
         || h.call_m(0x195d90, &[text], m) > u32::from(g_byte(m, p.wrapping_add(0x6b)).unwrap_or(0));
     if skip {
-        h.call_m(0x1738e8, &[logger, CAT93, 5, 0, s_lit(h.rom(), 0x2c9724), word], m);
+        h.call_m(
+            0x1738e8,
+            &[logger, CAT93, 5, 0, s_lit(h.rom(), 0x2c9724), word],
+            m,
+        );
         return rc;
     }
     if g_byte(m, p.wrapping_add(0x6c)).unwrap_or(0) == 1 {
@@ -1272,7 +1515,11 @@ pub fn fn_2c93f0_m(
         let upper = (c.wrapping_sub(b'A') as u32) <= 25;
         let listed = matches!(c, 0x80 | 0x8e | 0x8f | 0x90 | 0x92 | 0x99 | 0x9a | 0xa5);
         if !upper && !listed {
-            h.call_m(0x1738e8, &[logger, CAT93, 5, 0, s_lit(h.rom(), 0x2c9724), word], m);
+            h.call_m(
+                0x1738e8,
+                &[logger, CAT93, 5, 0, s_lit(h.rom(), 0x2c9724), word],
+                m,
+            );
             return rc;
         }
     }
@@ -1288,41 +1535,68 @@ pub fn fn_2c93f0_m(
         return FAIL_MEM;
     }
     let token = g_half(m, a_token).unwrap_or(0);
-    rc = h.call_m(f_select, &[handle_obj, handle_data, u32::from(token), a_token], m);
+    rc = h.call_guest_m(
+        f_select,
+        &[handle_obj, handle_data, u32::from(token), a_token],
+        m,
+    );
     if rc >= 0x80000000 {
         return rc;
     }
     let token = g_half(m, a_token).unwrap_or(0);
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set,
-        &[handle_obj, handle_data, u32::from(token), 0, 1, a_kind, a_count],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(token),
+            0,
+            1,
+            a_kind,
+            a_count,
+        ],
         m,
     );
     if rc >= 0x80000000 {
         return rc;
     }
-
     if !p_half(m, body.wrapping_add(0x50), start) {
         return FAIL_MEM;
     }
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set,
-        &[handle_obj, handle_data, u32::from(token), 1, 1, body.wrapping_add(0x50), a_count],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(token),
+            1,
+            1,
+            body.wrapping_add(0x50),
+            a_count,
+        ],
         m,
     );
     if rc >= 0x80000000 {
         return rc;
     }
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set,
-        &[handle_obj, handle_data, u32::from(token), 2, 1, end, a_count],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(token),
+            2,
+            1,
+            end,
+            a_count,
+        ],
         m,
     );
     if rc >= 0x80000000 {
         return rc;
     }
     let tlen = h.call_m(0x195d90, &[text_buf], m);
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set,
         &[
             handle_obj,
@@ -1339,7 +1613,7 @@ pub fn fn_2c93f0_m(
         return rc;
     }
     let alen = h.call_m(0x195d90, &[alt_buf], m);
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set,
         &[
             handle_obj,
@@ -1356,7 +1630,7 @@ pub fn fn_2c93f0_m(
         return rc;
     }
     let elen = h.call_m(0x195d90, &[extra_buf], m);
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set,
         &[
             handle_obj,
@@ -1372,17 +1646,33 @@ pub fn fn_2c93f0_m(
     if rc >= 0x80000000 {
         return rc;
     }
-    rc = h.call_m(
+    rc = h.call_guest_m(
         f_set,
-        &[handle_obj, handle_data, u32::from(token), 7, 1, a_enabled, a_count],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(token),
+            7,
+            1,
+            a_enabled,
+            a_count,
+        ],
         m,
     );
     if rc >= 0x80000000 {
         return rc;
     }
-    h.call_m(
+    h.call_guest_m(
         f_set,
-        &[handle_obj, handle_data, u32::from(token), 9, 1, s_lit(h.rom(), 0x2c93c0), a_count],
+        &[
+            handle_obj,
+            handle_data,
+            u32::from(token),
+            9,
+            1,
+            s_lit(h.rom(), 0x2c93c0),
+            a_count,
+        ],
         m,
     )
 }

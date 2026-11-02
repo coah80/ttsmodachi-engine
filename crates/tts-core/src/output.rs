@@ -23,6 +23,7 @@ pub struct SpeechFrame<'a> {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
+
 pub struct SpeechTiming {
     pub phoneme: u16,
     pub pitch_duration: i32,
@@ -45,7 +46,6 @@ pub struct FrameSynthesis<'a, 'b, 'c> {
 }
 
 impl FrameSynthesis<'_, '_, '_> {
-
     pub fn render(
         &mut self,
         resources: &mut EngineResources<'_>,
@@ -60,7 +60,6 @@ impl FrameSynthesis<'_, '_, '_> {
             resources, tag, frame, outputs, flush, tables, None, synthesize,
         )
     }
-
     pub fn render_korean(
         &mut self,
         resources: &mut EngineResources<'_>,
@@ -83,7 +82,6 @@ impl FrameSynthesis<'_, '_, '_> {
             synthesize,
         )
     }
-
     fn render_region(
         &mut self,
         resources: &mut EngineResources<'_>,
@@ -112,7 +110,8 @@ impl FrameSynthesis<'_, '_, '_> {
                 .input
                 .skip_samples(self.setup.voice.time, initial, 0);
         }
-        self.setup.apply_commands(frame.commands, 0, tables);
+        self.setup
+            .apply_commands_regional(frame.commands, 0, tables, korean.is_some());
         let mut total = frame.leading_ticks;
         let sample_count = frame.samples.len() as i32;
         if sample_count == 0 {
@@ -453,6 +452,7 @@ pub fn clear_output(output: &mut [u8]) {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+
 pub struct OutputNode {
     pub buffer: u32,
     pub samples: u32,
@@ -496,6 +496,7 @@ pub fn unsigned_division(
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+
 pub struct OutputState {
     pub current: u32,
     pub next: u32,

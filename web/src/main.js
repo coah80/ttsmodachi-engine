@@ -6,6 +6,23 @@ const generate = document.querySelector("#generate");
 
 const NUMBER_FIELDS = ["pitch", "speed", "quality", "tone", "accent", "intonation", "volume"];
 let currentUrl = null;
+let languages = [];
+
+function applyPreset() {
+  const language = languages.find((item) => item.id === form.elements.lang.value);
+  if (!language) return;
+  const preset = language.defaults[form.elements.preset.value];
+  for (const [name, value] of Object.entries(preset)) {
+    form.elements[name].value = value;
+  }
+  form.elements.text.maxLength = language.id === "jp" ? 1024 : 2000;
+}
+
+form.elements.lang.addEventListener("change", () => {
+  form.elements.preset.value = "boy";
+  applyPreset();
+});
+form.elements.preset.addEventListener("change", applyPreset);
 
 async function errorText(response) {
   const body = await response.text();
@@ -19,7 +36,7 @@ async function errorText(response) {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const voice = { engine: "tl3ds", lang: "useng" };
+  const voice = { engine: "tl3ds", lang: form.elements.lang.value };
   for (const name of NUMBER_FIELDS) {
     voice[name] = Number(form.elements[name].value);
   }
@@ -49,3 +66,25 @@ form.addEventListener("submit", async (event) => {
     generate.disabled = false;
   }
 });
+
+async function loadLanguages() {
+  status.textContent = "loading languages...";
+  try {
+    const response = await fetch("/languages");
+    if (!response.ok) throw new Error(await errorText(response));
+    ({ languages } = await response.json());
+    if (!languages.length) throw new Error("no languages available");
+    for (const language of languages) {
+      form.elements.lang.add(new Option(language.name, language.id));
+    }
+    applyPreset();
+    form.elements.lang.disabled = false;
+    form.elements.preset.disabled = false;
+    generate.disabled = false;
+    status.textContent = "";
+  } catch (error) {
+    status.textContent = `failed: ${error.message}. check the worker and reload the page.`;
+  }
+}
+
+loadLanguages();

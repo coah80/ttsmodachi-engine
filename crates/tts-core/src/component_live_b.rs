@@ -1,10 +1,12 @@
+use crate::rom_region::{addr, to_us, Rom};
 
 use crate::{boot::Memory, frontend};
-use crate::rom_region::{Rom, addr, to_us};
 
 pub trait Host {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32;
-
+    fn call_guest_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
+        self.call_m(crate::rom_region::to_us_guest(self.rom(), entry), args, m)
+    }
     fn rom(&self) -> Rom {
         Rom::Us
     }
@@ -187,6 +189,7 @@ pub fn fn_1e4a3c_m(m: &mut Memory<'_>, p: u32, key: u32, h: &mut impl Host) -> u
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub(crate) fn fn_2c1e2c_m(m: &mut Memory<'_>, h: &mut impl Host, ctx: u32, handle: u32, scratch: u32) -> u32 {
     const TABLE: u32 = 0x9c5630;
     let rom = h.rom();
@@ -483,6 +486,7 @@ pub(crate) fn fn_175a24_m(m: &mut Memory<'_>, h: &mut impl Host, props: u32, key
     }
     result
 }
+
 pub struct LiveHost<'a> {
     pub platform: &'a mut dyn crate::engine::HeapPlatform,
     pub fault: Option<crate::engine::Error>,
@@ -502,20 +506,11 @@ impl LiveHost<'_> {
 }
 
 impl LiveHost<'_> {
-    pub fn call_m_with(
-        &mut self,
-        f: u32,
-        a: &[u32],
-        m: &mut Memory<'_>,
-        rom: Rom,
-    ) -> u32 {
+    pub fn call_m_with(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>, rom: Rom) -> u32 {
         self.dispatch(f, a, m, rom)
     }
-
     fn dispatch(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>, rom: Rom) -> u32 {
-
         let f = to_us(rom, f);
-
         if f == 0xffff0001 {
             return self.faulted(f);
         }
@@ -542,7 +537,6 @@ impl LiveHost<'_> {
             let literals = speech_literals(m, rom);
             return crate::speech_part_2::fn_24c470(m, a[0], &literals, 0x5800, self);
         }
-
         if f == 0x226ef8 {
             return crate::speech_part_2::fn_226ef8(m, a[0], a[1], a[2]);
         }
@@ -588,7 +582,6 @@ impl LiveHost<'_> {
             let mut descs = [0u8; 1360];
             let anchor = addr(rom, 0x8d7ca0);
             descs.copy_from_slice(&m.bytes[anchor as usize..anchor as usize + 1360]);
-
             let word_anchor = addr(rom, 0x8d7c98);
             return write_field_m(
                 m.bytes,
@@ -601,16 +594,21 @@ impl LiveHost<'_> {
                 a[6],
                 &descs,
                 word_anchor,
-                &mut WithRom { inner: &mut *self, rom },
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
             );
         }
         if f == 0x15bf74 {
-
             let mut args = [0u32; 5];
             let n = a.len().min(5);
             args[..n].copy_from_slice(&a[..n]);
             let mut parent_types = [0u8; 8];
-            if let Some(s) = m.bytes.get(addr(rom, 0x8d7b50) as usize..addr(rom, 0x8d7b50) as usize + 8) {
+            if let Some(s) = m
+                .bytes
+                .get(addr(rom, 0x8d7b50) as usize..addr(rom, 0x8d7b50) as usize + 8)
+            {
                 parent_types.copy_from_slice(s);
             }
             let scratch = self.scratch;
@@ -619,7 +617,10 @@ impl LiveHost<'_> {
                 args,
                 scratch.wrapping_add(0x300),
                 &parent_types,
-                &mut WithRom { inner: &mut *self, rom },
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
             );
         }
         if f == 0x199458 {
@@ -634,7 +635,6 @@ impl LiveHost<'_> {
             }
             return fn_30253c_m(m, a[0], a[1], a[2]);
         }
-
         if f == 0x172e10 {
             return 0;
         }
@@ -642,11 +642,9 @@ impl LiveHost<'_> {
             if a.len() < 2 {
                 return self.faulted(f);
             }
-
             return fn_30209c_m(a[0] as i32, a[1] as i32) as u32;
         }
         if matches!(f, 0x26b2f8 | 0x26b37c | 0x26b444 | 0x26b530) {
-
             if a.is_empty() {
                 return self.faulted(f);
             }
@@ -662,9 +660,7 @@ impl LiveHost<'_> {
                 }
             };
             let rc = match f {
-                0x26b2f8 => {
-                    crate::component_live_c4::fn_26b2f8_m(&mut view, a[0], a[1], a[2])
-                }
+                0x26b2f8 => crate::component_live_c4::fn_26b2f8_m(&mut view, a[0], a[1], a[2]),
                 0x26b37c => crate::component_live_c4::fn_26b37c_m(&mut view, a[0]),
                 0x26b444 => crate::component_live_c4::fn_26b444_m(&mut view, a[0]),
                 _ => crate::component_live_c4::fn_26b530_m(&mut view, a[0]),
@@ -678,7 +674,6 @@ impl LiveHost<'_> {
             };
         }
         if f == 0x15c1e4 || f == 0x15c2f0 {
-
             let at = self.scratch.wrapping_add(0x300) as usize;
             if m.bytes.len() < at + 16 {
                 return self.faulted(f);
@@ -690,9 +685,25 @@ impl LiveHost<'_> {
             args[..n].copy_from_slice(&a[..n]);
             let scratch = self.scratch;
             let rc = if f == 0x15c1e4 {
-                fn_15c1e4_m(m, args, scratch.wrapping_add(0x300), &mut WithRom { inner: &mut *self, rom })
+                fn_15c1e4_m(
+                    m,
+                    args,
+                    scratch.wrapping_add(0x300),
+                    &mut WithRom {
+                        inner: &mut *self,
+                        rom,
+                    },
+                )
             } else {
-                fn_15c2f0_m(m, args, scratch.wrapping_add(0x300), &mut WithRom { inner: &mut *self, rom })
+                fn_15c2f0_m(
+                    m,
+                    args,
+                    scratch.wrapping_add(0x300),
+                    &mut WithRom {
+                        inner: &mut *self,
+                        rom,
+                    },
+                )
             };
             m.bytes[at..at + 16].copy_from_slice(&saved);
             return rc;
@@ -701,15 +712,28 @@ impl LiveHost<'_> {
             let mut args = [0u32; 3];
             let n = a.len().min(3);
             args[..n].copy_from_slice(&a[..n]);
-            return fn_15d83c_m(m, args, &mut WithRom { inner: &mut *self, rom });
+            return fn_15d83c_m(
+                m,
+                args,
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
         if f == 0x15da64 {
             let mut args = [0u32; 3];
             let n = a.len().min(3);
             args[..n].copy_from_slice(&a[..n]);
-            return fn_15da64_m(m, args, &mut WithRom { inner: &mut *self, rom });
+            return fn_15da64_m(
+                m,
+                args,
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
-
         if f == 0x218f88 || f == 0x218ba4 {
             if a.len() < 5 {
                 return self.faulted(f);
@@ -740,7 +764,23 @@ impl LiveHost<'_> {
                 &mut adapter,
             );
         }
-
+        if f == 0x1ea4e0 {
+            return crate::component_live_b4::fn_1ea4e0_m(
+                m, self, a[0], a[1], a[2], a[3], a[4], a[5], a[6],
+            );
+        }
+        if f == 0x26b7ec && a.len() >= 4 {
+            return crate::component_live_b3::fn_26b7ec_m(m, self, a[0], a[1], a[2], a[3]);
+        }
+        if f == 0x26bb28 && a.len() >= 2 {
+            return crate::component_live_b3::fn_26bb28_m(m, self, a[0], a[1]);
+        }
+        if f == 0x26bb44 && !a.is_empty() {
+            return crate::component_live_b3::fn_26bb44_m(m, a[0]);
+        }
+        if f == 0x1eb978 {
+            return crate::component_live_b3::fn_1eb978_m(m, self, a[0], a[1], a[2], 0x18000);
+        }
         if f == 0x1ed1d0 {
             if a.len() < 4 {
                 return self.faulted(f);
@@ -755,7 +795,6 @@ impl LiveHost<'_> {
                 &mut adapter,
             );
         }
-
         if f == 0x175a24 {
             if a.len() < 2 {
                 return self.faulted(f);
@@ -763,7 +802,6 @@ impl LiveHost<'_> {
             let sc = self.scratch;
             return fn_175a24_m(m, self, a[0], a[1], sc);
         }
-
         if f == 0x2c1e2c {
             if a.len() < 2 {
                 return self.faulted(f);
@@ -771,7 +809,6 @@ impl LiveHost<'_> {
             let sc = self.scratch;
             return fn_2c1e2c_m(m, self, a[0], a[1], sc);
         }
-
         if f == 0x1850c0 {
             if a.len() < 4 || !guest_range(m, a[0], 64) {
                 return self.faulted(f);
@@ -798,7 +835,6 @@ impl LiveHost<'_> {
             };
             return v;
         }
-
         if f == 0x195ae8 || f == 0x195b38 {
             if !guest_range(m, a[0], a[2]) || !guest_range(m, a[1], a[2]) {
                 return self.faulted(f);
@@ -850,12 +886,17 @@ impl LiveHost<'_> {
                 Some(v) => v,
                 None => return self.faulted(f),
             };
-
-            let left = match m.bytes.get(a[0] as usize..a[0] as usize + al.wrapping_add(1) as usize) {
+            let left = match m
+                .bytes
+                .get(a[0] as usize..a[0] as usize + al.wrapping_add(1) as usize)
+            {
                 Some(v) => v,
                 None => return self.faulted(f),
             };
-            let right = match m.bytes.get(a[1] as usize..a[1] as usize + bl.wrapping_add(1) as usize) {
+            let right = match m
+                .bytes
+                .get(a[1] as usize..a[1] as usize + bl.wrapping_add(1) as usize)
+            {
                 Some(v) => v,
                 None => return self.faulted(f),
             };
@@ -891,7 +932,6 @@ impl LiveHost<'_> {
             return crate::pronunciation::parse_int(text) as u32;
         }
         if f == 0x15b758 {
-
             let mut adapter = DbAdapter(self);
             return crate::db_live::create_record_m(
                 &mut adapter,
@@ -911,7 +951,6 @@ impl LiveHost<'_> {
             return crate::frontend::validate_handle(a[0] != 0, a[1], a[2], a[3]);
         }
         if f == 0x195d90 {
-
             return match guest_str_len(m, a[0]) {
                 Some(v) => v,
                 None => self.faulted(f),
@@ -955,10 +994,22 @@ impl LiveHost<'_> {
             return 0;
         }
         if f == 0x26b7ec {
-            return crate::component_live_b3::fn_26b7ec_m(m, &mut WithRom { inner: self, rom }, a[0], a[1], a[2], a[3]);
+            return crate::component_live_b3::fn_26b7ec_m(
+                m,
+                &mut WithRom { inner: self, rom },
+                a[0],
+                a[1],
+                a[2],
+                a[3],
+            );
         }
         if f == 0x26bb28 {
-            return crate::component_live_b3::fn_26bb28_m(m, &mut WithRom { inner: self, rom }, a[0], a[1]);
+            return crate::component_live_b3::fn_26bb28_m(
+                m,
+                &mut WithRom { inner: self, rom },
+                a[0],
+                a[1],
+            );
         }
         if f == 0x26bb44 {
             return crate::component_live_b3::fn_26bb44_m(m, a[0]);
@@ -966,7 +1017,6 @@ impl LiveHost<'_> {
         if f == 0x26bb54 {
             return crate::component_live_c::fn_26bb54_m(m, a[0]) as u32;
         }
-
         if matches!(
             f,
             0x17a1a4
@@ -983,13 +1033,7 @@ impl LiveHost<'_> {
         ) {
             let scratch = self.scratch.wrapping_add(0x400);
             let mut adapter = ComponentCHost { host: self, rom };
-            return crate::component_live_c::broker_range_live_m(
-                m,
-                f,
-                a,
-                scratch,
-                &mut adapter,
-            );
+            return crate::component_live_c::broker_range_live_m(m, f, a, scratch, &mut adapter);
         }
         if f == 0x1fef0c {
             let mut adapter = PromptDomainAdapter {
@@ -1025,14 +1069,9 @@ impl LiveHost<'_> {
                     return 0x80002001;
                 }
             };
-
             let mut calls = crate::engine_components::RegionalCalls { rom };
-            return match crate::engine_components::InternalCalls::call(
-                &mut calls,
-                &mut view,
-                f,
-                a,
-            ) {
+            return match crate::engine_components::InternalCalls::call(&mut calls, &mut view, f, a)
+            {
                 Ok(rc) => rc,
                 Err(e) => {
                     self.fault = Some(e);
@@ -1041,9 +1080,16 @@ impl LiveHost<'_> {
             };
         }
         if matches!(f, 0x15d594 | 0x15d378 | 0x15d0c4 | 0x15c7d8) {
-            return database_read_m(m, f, a, &mut WithRom { inner: &mut *self, rom });
+            return database_read_m(
+                m,
+                f,
+                a,
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
-
         if matches!(
             f,
             0x14f010
@@ -1069,7 +1115,8 @@ impl LiveHost<'_> {
                 return self.faulted(f);
             }
             saved.copy_from_slice(&m.bytes[0x3000..0x4100]);
-            let mut calls = crate::component_live_a2::LiveCalls::new(self.platform, 0x3000).with_rom(rom);
+            let mut calls =
+                crate::component_live_a2::LiveCalls::new(self.platform, 0x3000).with_rom(rom);
             let rc = crate::component_live_a2::Calls::call(&mut calls, m, f, a);
             self.fault = calls.fault();
             m.bytes[0x3000..0x4100].copy_from_slice(&saved);
@@ -1079,17 +1126,25 @@ impl LiveHost<'_> {
             return rc;
         }
         if matches!(f, 0x175944 | 0x175a1c | 0x1756d0) {
-            return get_property_m(m, f, a, &mut WithRom { inner: &mut *self, rom });
+            return get_property_m(
+                m,
+                f,
+                a,
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
-        if matches!(f, 0x1966ac | 0x196980 | 0x175170 | 0x174b38 | 0x176104 | 0x1759a0) {
+        if matches!(
+            f,
+            0x1966ac | 0x196980 | 0x175170 | 0x174b38 | 0x176104 | 0x1759a0
+        ) {
             return crate::speech_part_1::parameter_call_m(m, f, a, 0x1800, self);
         }
         if f == 0x2643f8 {
-
             let env = crate::speech_part_1::SequenceEnvironment {
-                cached_handle: core::array::from_fn(|i| {
-                    m.byte(addr(rom, 0x8d7660) + i as u32)
-                }),
+                cached_handle: core::array::from_fn(|i| m.byte(addr(rom, 0x8d7660) + i as u32)),
                 default_context: addr(rom, 0x8d7640),
                 eos: literal(m.bytes, b"eosdetection"),
                 direct_size: literal(m.bytes, b"ppreaddirectsize"),
@@ -1097,10 +1152,27 @@ impl LiveHost<'_> {
             return crate::speech_part_1::fn_2643f8(m, a[0], a[1], a[2], &env, 0x900, self);
         }
         if f == 0x2c47d0 {
-            return reset_cursor_m(m, a[0], a[1], &mut WithRom { inner: &mut *self, rom });
+            return reset_cursor_m(
+                m,
+                a[0],
+                a[1],
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
         if f == 0x2c2338 {
-            return reset_markers_m(m, a[0], a[1], 0xb00, &mut WithRom { inner: &mut *self, rom });
+            return reset_markers_m(
+                m,
+                a[0],
+                a[1],
+                0xb00,
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
         if f == 0x24c9fc {
             return crate::speech_part_6::fn_24c9fc(m, self, a[0], 0xa00);
@@ -1121,7 +1193,15 @@ impl LiveHost<'_> {
             return crate::boot_part_e::fn_1963e0(m, a[0], a[1], a[2], self);
         }
         if f == 0x1503b0 || f == 0x15017c {
-            return stream_call_m(m, f, a, &mut WithRom { inner: &mut *self, rom });
+            return stream_call_m(
+                m,
+                f,
+                a,
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
         if f == 0x14e614 {
             let log = m.word(m.word(a[0] + 4) + 16);
@@ -1133,7 +1213,17 @@ impl LiveHost<'_> {
             return crate::component_live_a::max_slot_level_m(m, a[0], self);
         }
         if f == 0x196794 {
-            return alloc_handle_for_key_live(m, a[0], a[1], a[2], a[3], &mut WithRom { inner: &mut *self, rom });
+            return alloc_handle_for_key_live(
+                m,
+                a[0],
+                a[1],
+                a[2],
+                a[3],
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
         if f == 0x196860 {
             let mut key = 0;
@@ -1164,7 +1254,15 @@ impl LiveHost<'_> {
                 Err(_) => return self.faulted(f),
             };
             let scratch = self.scratch;
-            return fn_1fe600_m(m, args, scratch + 0x200, &mut WithRom { inner: &mut *self, rom });
+            return fn_1fe600_m(
+                m,
+                args,
+                scratch + 0x200,
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
         if f == 0x18f488 {
             return frontend::finish_request();
@@ -1181,7 +1279,6 @@ impl LiveHost<'_> {
             return crate::boot_part_e::fn_1970ac(m, a[0], a[1], a[2]);
         }
         if f == 0x19611c {
-
             let anchor = addr(rom, 0x8d7660);
             let mut pair = [0u8; 8];
             pair.copy_from_slice(&m.bytes[anchor as usize..anchor as usize + 8]);
@@ -1199,10 +1296,28 @@ impl LiveHost<'_> {
             return rc;
         }
         if f == 0x23ffd4 {
-            return pcre_deinit_m(m, a[0], a[1], &mut WithRom { inner: &mut *self, rom });
+            return pcre_deinit_m(
+                m,
+                a[0],
+                a[1],
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
         if f == 0x2401a0 {
-            return pcre_init_m(m, a[0], a[1], a[2] as i32, a[3] as i32, &mut WithRom { inner: &mut *self, rom });
+            return pcre_init_m(
+                m,
+                a[0],
+                a[1],
+                a[2] as i32,
+                a[3] as i32,
+                &mut WithRom {
+                    inner: &mut *self,
+                    rom,
+                },
+            );
         }
         match f {
             0x15140c | 0x14fe9c | 0x21958c | 0x219554 => {
@@ -1218,12 +1333,7 @@ impl LiveHost<'_> {
                     }
                 };
                 let mut reads = crate::engine_components2::RegionalReads { rom };
-                let rc = crate::engine_components::InternalCalls::call(
-                    &mut reads,
-                    &mut view,
-                    f,
-                    a,
-                );
+                let rc = crate::engine_components::InternalCalls::call(&mut reads, &mut view, f, a);
                 return match rc {
                     Ok(v) => v,
                     Err(e) => {
@@ -1281,7 +1391,6 @@ impl LiveHost<'_> {
             }
             0x4a774c => return crate::speech_part_3::fn_4a774c(m, a[0], a[1], self),
             0x4a779c => return m.fn_4a779c(self, a[0], a[1]),
-
             0x4a79b8 => {
                 if a.len() < 3 {
                     return self.faulted(f);
@@ -1304,17 +1413,23 @@ impl LiveHost<'_> {
                 m.fn_165d00(self, &g, a[0]);
                 return 0;
             }
-            0x172d18 => return { if a.get(2) == Some(&0) { 0 } else { self.platform.arbitrate(m, a) } },
+            0x172d18 => {
+                return {
+                    if a.get(2) == Some(&0) {
+                        0
+                    } else {
+                        self.platform.arbitrate(m, a)
+                    }
+                }
+            }
             _ => {}
         }
-
         let scratch = self.scratch;
         let scratch_ok = self.scratch_ok(m, scratch, 48);
         let mut boot = crate::engine::SpeechBootHost {
             platform: self.platform,
             fault: self.fault,
         };
-
         let rc = if f == 0x1738e8 {
             if !scratch_ok {
                 let mut args = [0u32; 6];
@@ -1332,7 +1447,11 @@ impl LiveHost<'_> {
                 for (i, v) in a.get(5..).unwrap_or(&[]).iter().enumerate() {
                     m.put_word(scratch + i as u32 * 4, *v);
                 }
-                let rc = boot.invoke(m, f, &[head[0], head[1], head[2], head[3], head[4], scratch]);
+                let rc = boot.invoke(
+                    m,
+                    f,
+                    &[head[0], head[1], head[2], head[3], head[4], scratch],
+                );
                 for (i, v) in saved.iter().enumerate() {
                     m.put_word(scratch + i as u32 * 4, *v);
                 }
@@ -1345,7 +1464,6 @@ impl LiveHost<'_> {
         };
         self.fault = boot.fault;
         if self.fault.is_some() {
-
             return 0x80002001;
         }
         rc
@@ -1353,8 +1471,10 @@ impl LiveHost<'_> {
 }
 
 impl Host for LiveHost<'_> {
+    fn rom(&self) -> Rom {
+        self.rom
+    }
     fn call_m(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>) -> u32 {
-
         let rom = match Rom::from_entry(f) {
             Rom::Us => self.rom,
             r => r,
@@ -1367,6 +1487,7 @@ struct WithRom<'x, 'a> {
     inner: &'x mut LiveHost<'a>,
     rom: Rom,
 }
+
 impl Host for WithRom<'_, '_> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
         self.inner.call_m_with(entry, args, m, self.rom)
@@ -1386,6 +1507,7 @@ impl crate::boot::Calls for LiveHost<'_> {
         0
     }
 }
+
 impl crate::boot_part_e::Host for LiveHost<'_> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.call_m(f, a, m)
@@ -1472,6 +1594,7 @@ impl crate::boot_part_b::Host for LiveHost<'_> {
         self.call_m(f, a, m)
     }
 }
+
 impl crate::speech_part_3::Host for LiveHost<'_> {
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.call_m(f, a, m)
@@ -1479,15 +1602,19 @@ impl crate::speech_part_3::Host for LiveHost<'_> {
 }
 
 use crate::frontend::u16_len;
+
 fn mem_word(b: &[u8], p: u32) -> u32 {
     u32::from_le_bytes(b[p as usize..p as usize + 4].try_into().unwrap())
 }
+
 fn mem_store(b: &mut [u8], p: u32, v: u32) {
     b[p as usize..p as usize + 4].copy_from_slice(&v.to_le_bytes());
 }
+
 fn mem_store16(b: &mut [u8], p: u32, v: u16) {
     b[p as usize..p as usize + 2].copy_from_slice(&v.to_le_bytes());
 }
+
 pub trait PreprocessHooksM {
 
     fn check_m(&mut self, proc: u32, tag: u32, mem: &mut [u8]) -> u32;
@@ -1548,6 +1675,7 @@ pub trait PreprocessHooksM {
 
     fn free_buf_m(&mut self, heap: u32, ptr: u32, mem: &mut [u8]);
 }
+
 pub fn preprocess_prompt_m<H: PreprocessHooksM>(
     hooks: &mut H,
     mem: &mut [u8],
@@ -1733,6 +1861,7 @@ pub struct PreprocessAdapter<'a, H> {
     pub processor: u32,
     pub scratch: u32,
 }
+
 impl<H: Host> PreprocessAdapter<'_, H> {
     fn invoke(&mut self, mem: &mut [u8], f: u32, a: &[u32]) -> u32 {
         self.host.call_m(
@@ -1759,6 +1888,7 @@ impl<H: Host> PreprocessAdapter<'_, H> {
         (rc, values)
     }
 }
+
 impl<H: Host> PreprocessHooksM for PreprocessAdapter<'_, H> {
     fn check_m(&mut self, p: u32, key: u32, _: &mut [u8]) -> u32 {
         frontend::validate_handle(p != 0, key, 0xf424, 0x40)
@@ -1869,6 +1999,7 @@ pub fn fn_1f48cc_m(m: &mut Memory<'_>, args: [u32; 5], scratch: u32, h: &mut imp
 pub trait VoiceNodeAllocatorM: frontend::HeapVtableM {
     fn alloc_items_at_m(&mut self, ctx: u32, count: u32, width: u32, mem: &mut [u8]) -> u32;
 }
+
 pub trait DomainApiM {
     fn resolve_m(&mut self, first: u32, second: u32, context: &mut u32, mem: &mut [u8]) -> u32;
     fn find_m(&mut self, map: u32, name: u32, item: &mut u32, mem: &mut [u8]) -> u32;
@@ -1882,6 +2013,7 @@ pub trait DomainApiM {
 
     fn trace_m(&mut self, log: u32, code: u32, name: u32, status: u32, mem: &mut [u8]);
 }
+
 pub trait DomainConsultationM: DomainApiM + VoiceNodeAllocatorM {
     fn allocate_name_m(&mut self, heap: u32, size: u32, mem: &mut [u8]) -> u32;
     fn map_iter_m(&mut self, map: u32, iterator: &mut u32, mem: &mut [u8]) -> u32;
@@ -1907,6 +2039,7 @@ pub trait DomainConsultationM: DomainApiM + VoiceNodeAllocatorM {
         status: Option<u32>,
     );
 }
+
 pub fn duplicate_voice_name_m(
     mem: &mut [u8],
     ctx: u32,
@@ -1936,6 +2069,7 @@ pub fn duplicate_voice_name_m(
     }
     0
 }
+
 pub fn update_voice_node_m(
     mem: &mut [u8],
     ctx: u32,
@@ -1979,6 +2113,7 @@ pub fn update_voice_node_m(
     }
     0
 }
+
 pub fn create_voice_node_m(
     mem: &mut [u8],
     ctx: u32,
@@ -2041,6 +2176,7 @@ pub fn create_voice_node_m(
     }
     node
 }
+
 pub fn release_node_chain_m(
     mem: &mut [u8],
     n: Option<u32>,
@@ -2061,6 +2197,7 @@ pub fn release_node_chain_m(
         frontend::heap_release_m(mem, owner, Some(node), vt);
     }
 }
+
 fn domain_context_m(
     mem: &mut [u8],
     handle: Option<u32>,
@@ -2085,6 +2222,7 @@ fn domain_context_m(
         Ok((context, rc))
     }
 }
+
 pub fn enable_domain_m(
     mem: &mut [u8],
     handle: Option<u32>,
@@ -2111,6 +2249,7 @@ pub fn enable_domain_m(
     api.trace_m(log, 0xb7a0, name, rc, mem);
     rc
 }
+
 fn consult_active_domains_m(
     mem: &mut [u8],
     manager: u32,
@@ -2169,6 +2308,7 @@ fn consult_active_domains_m(
     api.consultation_log_m(mem, log, text, entries, count, Some(rc));
     rc
 }
+
 pub fn consult_original_domains_m(
     mem: &mut [u8],
     handle: Option<u32>,
@@ -2317,6 +2457,7 @@ pub fn consult_original_domains_m(
     api.trace_m(log, 0, 0, rc, mem);
     rc
 }
+
 fn domain_wide_equal(mem: &[u8], a: Option<u32>, b: Option<u32>) -> bool {
     let normal = [110u16, 111, 114, 109, 97, 108, 0];
     let mut i = 0usize;
@@ -2338,6 +2479,7 @@ fn domain_wide_equal(mem: &[u8], a: Option<u32>, b: Option<u32>) -> bool {
         i += 1;
     }
 }
+
 fn recode_176460(mem: &mut [u8], dst: u32, src: u32) {
     let mut s = src;
     let mut d = dst;
@@ -2352,12 +2494,15 @@ fn recode_176460(mem: &mut [u8], dst: u32, src: u32) {
     }
     mem[d as usize] = 0;
 }
+
 fn mem_half(b: &[u8], p: u32) -> u16 {
     u16::from_le_bytes(b[p as usize..p as usize + 2].try_into().unwrap())
 }
+
 fn nz(p: u32) -> Option<u32> {
     (p != 0).then_some(p)
 }
+
 use crate::frontend::move_bytes;
 
 pub struct DomainAdapter<'a, H> {
@@ -2365,6 +2510,7 @@ pub struct DomainAdapter<'a, H> {
     pub trace_count: u32,
     pub heap: u32,
 }
+
 impl<H: Host> frontend::HeapVtableM for DomainAdapter<'_, H> {
     fn alloc_at_m(&mut self, heap: u32, size: u32, mem: &mut [u8]) -> u32 {
         self.io.invoke(mem, 0x196394, &[heap, size])
@@ -2384,11 +2530,13 @@ impl<H: Host> frontend::HeapVtableM for DomainAdapter<'_, H> {
         }
     }
 }
+
 impl<H: Host> VoiceNodeAllocatorM for DomainAdapter<'_, H> {
     fn alloc_items_at_m(&mut self, heap: u32, n: u32, width: u32, mem: &mut [u8]) -> u32 {
         self.io.invoke(mem, 0x1963b8, &[heap, n, width])
     }
 }
+
 fn literal(mem: &[u8], text: &[u8]) -> u32 {
     let end = mem.len().min(0x500000);
     let range = &mem[0x100000..end];
@@ -2398,6 +2546,7 @@ fn literal(mem: &[u8], text: &[u8]) -> u32 {
             .position(|w| &w[..text.len()] == text && w[text.len()] == 0)
             .expect("mapped source literal")) as u32
 }
+
 impl<H: Host> DomainApiM for DomainAdapter<'_, H> {
     fn resolve_m(&mut self, a: u32, b: u32, out: &mut u32, mem: &mut [u8]) -> u32 {
         let (rc, v) = self.io.out(mem, 0x19611c, &[a, b, self.io.scratch], [0; 3]);
@@ -2482,6 +2631,7 @@ impl<H: Host> DomainApiM for DomainAdapter<'_, H> {
         }
     }
 }
+
 impl<H: Host> DomainConsultationM for DomainAdapter<'_, H> {
     fn allocate_name_m(&mut self, heap: u32, n: u32, mem: &mut [u8]) -> u32 {
         self.io.invoke(mem, 0x196394, &[heap, n])
@@ -2563,6 +2713,7 @@ impl<H: Host> DomainConsultationM for DomainAdapter<'_, H> {
         }
     }
 }
+
 pub fn fn_1fe600_m(m: &mut Memory<'_>, a: [u32; 5], scratch: u32, h: &mut impl Host) -> u32 {
     assert_eq!(m.base, 0);
     let mut api = DomainAdapter {
@@ -2623,6 +2774,7 @@ pub fn alloc_handle_for_key_m(
     mem_store(mem, o + 8, v);
     0
 }
+
 fn search_node_m(
     mem: &mut [u8],
     tree: u32,
@@ -2645,11 +2797,13 @@ fn search_node_m(
     }
     prev
 }
+
 struct IteratorMethod<'a, 'h, H> {
     cell: &'a core::cell::RefCell<&'h mut H>,
     heap: u32,
     out: u32,
 }
+
 impl<H: Host> MethodTableM for IteratorMethod<'_, '_, H> {
     fn call_at_m(&mut self, _obj: u32, n: u32, size: u32, mem: &mut [u8]) -> u32 {
         let mut m = Memory {
@@ -2665,6 +2819,7 @@ impl<H: Host> MethodTableM for IteratorMethod<'_, '_, H> {
         p
     }
 }
+
 pub(crate) fn alloc_handle_for_key_live(
     m: &mut Memory<'_>,
     p: u32,
@@ -2803,6 +2958,7 @@ pub fn compact_stream_buffer_m(
         }
     }
 }
+
 pub fn read_direct_end_m(
     mem: &mut [u8],
     stream: Option<u32>,
@@ -2834,6 +2990,7 @@ pub fn read_direct_end_m(
     compact_stream_buffer_m(mem, state, 0, vt, dtor);
     rc
 }
+
 pub fn write_stream_m(
     mem: &mut [u8],
     object: Option<u32>,
@@ -2954,6 +3111,7 @@ struct StreamHeap<'a, 'h, H> {
     cell: &'a core::cell::RefCell<&'h mut H>,
     heap: u32,
 }
+
 impl<H: Host> frontend::HeapVtableM for StreamHeap<'_, '_, H> {
     fn alloc_at_m(&mut self, obj: u32, n: u32, mem: &mut [u8]) -> u32 {
         let f = mem_word(mem, mem_word(mem, self.heap));
@@ -2989,6 +3147,7 @@ impl<H: Host> frontend::HeapVtableM for StreamHeap<'_, '_, H> {
         );
     }
 }
+
 pub fn stream_call_m(m: &mut Memory<'_>, entry: u32, a: &[u32], h: &mut impl Host) -> u32 {
     assert_eq!(m.base, 0);
     if frontend::validate_handle(a[0] != 0, a[1], 0x47de, 12) >= 0x80000000 {
@@ -3070,6 +3229,7 @@ pub fn duplicate_typed_string_m(
     mem_store(mem, out + 20, d);
     1
 }
+
 pub fn release_typed_buffer_m(
     mem: &mut [u8],
     p: Option<u32>,
@@ -3084,9 +3244,13 @@ pub fn release_typed_buffer_m(
         mem_store(mem, p + 20, 0);
     }
 }
+
 const STRING_KINDS: &[u16] = &[6, 12, 21, 50, 36, 39, 37, 34, 22, 40, 26, 29];
 
 impl crate::speech_part_1::Host for LiveHost<'_> {
+    fn guest_entry(&self, f: u32) -> u32 {
+        crate::rom_region::to_us_guest(self.rom, f)
+    }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.call_m(f, a, m)
     }
@@ -3109,7 +3273,11 @@ impl crate::speech_part_1::Host for LiveHost<'_> {
         got
     }
 }
+
 impl crate::speech_part_6::Host for LiveHost<'_> {
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        self.call_m(crate::rom_region::to_us_guest(self.rom, f), a, m)
+    }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.call_m(f, a, m)
     }
@@ -3183,7 +3351,9 @@ pub fn fn_1e4b7c_m<H: crate::speech_part_1::Host + crate::speech_part_6::Host>(
 ) -> u32 {
     crate::speech_part_1::fn_1e4b7c(m, a[0], a[1], [a[2], a[3]], a[4], end_name, scratch, h)
 }
+
 struct ComponentCalls<'a, H>(&'a mut H);
+
 impl<H: Host> crate::engine_components::InternalCalls for ComponentCalls<'_, H> {
     fn call(
         &mut self,
@@ -3228,6 +3398,7 @@ pub fn fn_26a42c(m: &mut Memory<'_>, p: u32, out: u32) -> u32 {
 }
 
 struct NormAdapter<'a, H>(&'a mut H);
+
 impl<H: Host> crate::normalization::NormalizationHost for NormAdapter<'_, H> {
     fn calloc(&mut self, bytes: &mut [u8], heap: u32, n: u32, size: u32) -> Option<u32> {
         nz(self
@@ -3351,6 +3522,7 @@ struct PropertyLockM<'a, 'h, H> {
     cell: &'a core::cell::RefCell<&'h mut H>,
     obj: u32,
 }
+
 impl<H: Host> crate::reentrant2::StateLockM for PropertyLockM<'_, '_, H> {
     fn acquire_m(&mut self, bytes: &mut [u8]) -> u32 {
         let mut m = Memory { base: 0, bytes };
@@ -3891,6 +4063,7 @@ pub fn prompt_token_m<H: PromptTokenHooksM>(
 pub struct PromptTokenAdapter<'a, H> {
     io: PreprocessAdapter<'a, H>,
 }
+
 impl<H: Host> PromptTokenHooksM for PromptTokenAdapter<'_, H> {
     fn check(&mut self, p: u32, key: u32, x: u32, y: u32, _: &mut [u8]) -> u32 {
         frontend::validate_handle(p != 0, key, x, y)
@@ -4126,6 +4299,7 @@ pub fn fn_1f3ea0_m(m: &mut Memory<'_>, a: [u32; 5], scratch: u32, h: &mut impl H
 struct PromptDomainAdapter<'a, H> {
     io: PreprocessAdapter<'a, H>,
 }
+
 impl<H: Host> crate::frontend_part_b::PromptHost for PromptDomainAdapter<'_, H> {
     fn prompt(
         &mut self,
@@ -4420,6 +4594,7 @@ pub fn write_field_m(
 }
 
 struct DbAdapter<'a, H>(&'a mut H);
+
 impl<H: Host> crate::db_live::PoolHooksM for DbAdapter<'_, H> {
     fn log_pool_m(&mut self, p: u32, n: u32, m: &mut Memory<'_>) {
 
@@ -4443,6 +4618,7 @@ impl<H: Host> crate::db_live::PoolHooksM for DbAdapter<'_, H> {
         );
     }
 }
+
 impl<H: Host> crate::db_live::DbHooksM for DbAdapter<'_, H> {
     fn call_m(&mut self, f: u32, a: &[u32], m: &mut Memory<'_>) -> u32 {
         self.0.call_m(f, a, m)
@@ -4459,6 +4635,7 @@ pub(crate) fn speech_literals(m: &Memory<'_>, rom: Rom) -> crate::speech_part_2:
         errors: [0x24ea48, 0x24ee48, 0x1ec3f4, 0x250d48, 0x207740],
     }
 }
+
 pub(crate) fn domain_literals(m: &Memory<'_>, rom: Rom) -> crate::speech_part_2::DomainOpenLiterals {
     crate::speech_part_2::DomainOpenLiterals {
         formats: [
@@ -4473,11 +4650,16 @@ pub(crate) fn domain_literals(m: &Memory<'_>, rom: Rom) -> crate::speech_part_2:
 }
 
 impl crate::speech_part_2::Host for LiveHost<'_> {
+    fn call_guest(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
+        Host::call_m(self, crate::rom_region::to_us_guest(self.rom, f), a, m)
+    }
     fn call(&mut self, m: &mut Memory<'_>, f: u32, a: &[u32]) -> u32 {
         self.call_m(f, a, m)
     }
 }
+
 impl crate::boot_part_b::FormatHost for LiveHost<'_> {}
+
 impl crate::log_live::LogMethodsM for LiveHost<'_> {
     fn log_m(
         &mut self,
@@ -4590,6 +4772,7 @@ struct ComponentCHost<'a, 'b> {
     host: &'a mut LiveHost<'b>,
     rom: Rom,
 }
+
 impl crate::component_live_c::Host for ComponentCHost<'_, '_> {
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
         self.host.call_m_with(entry, args, m, self.rom)
@@ -5310,36 +5493,63 @@ fn copy_guest_string(m: &mut Memory<'_>, dst: u32, src: u32) {
 }
 
 const TRIE_POS: u32 = 0x00;
+
 const TRIE_BIT: u32 = 0x04;
+
 const TRIE_DATA: u32 = 0x08;
+
 const TRIE_TABLES: u32 = 0x0c;
+
 const TRIE_HANDLE0: u32 = 0x10;
+
 const TRIE_HANDLE1: u32 = 0x14;
 
 const TRIE_HEADER: u32 = 0x00;
+
 const TRIE_ALPHABET: u32 = 0x04;
+
 const TRIE_INITIAL_CHARS: u32 = 0x0c;
+
 const TRIE_INITIAL_OFFSETS: u32 = 0x10;
+
 const TRIE_INITIAL_INDICES: u32 = 0x14;
+
 const TRIE_COUNT_TREE: u32 = 0x18;
+
 const TRIE_CHAR_TREE: u32 = 0x1c;
+
 const TRIE_DELTA_TREE: u32 = 0x20;
+
 const TRIE_COUNTS: u32 = 0x2c;
+
 const TRIE_CHARS: u32 = 0x30;
+
 const TRIE_DELTAS: u32 = 0x34;
+
 const TRIE_DATA_OFFSET: u32 = 0x40;
 
 const TRIE_FIRST_CHAR: u32 = 0x04;
+
 const TRIE_ALIGN_MASK: u32 = 0x0f;
+
 const TRIE_TERMINATOR: u32 = 0x10;
+
 const TRIE_INITIAL_BIT: u32 = 0x11;
+
 const TRIE_INLINE_LIMIT: u32 = 0x12;
+
 const TRIE_DIRECT_COUNT: u32 = 0x18;
+
 const TRIE_COUNT_ROOT: u32 = 0x1a;
+
 const TRIE_CHAR_ROOT: u32 = 0x1c;
+
 const TRIE_DELTA_ROOT: u32 = 0x1e;
+
 const TRIE_INITIAL_COUNT: u32 = 0x2e;
+
 const TRIE_PAGE_SIZE: u32 = 0x32;
+
 const TRIE_INITIAL_POS: u32 = 0x38;
 
 const TRIE_FAIL: i32 = -1;
@@ -5464,6 +5674,7 @@ pub fn fn_26c1c0_m(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn trie_step(
     m: &mut Memory<'_>,
     h: &mut impl Host,
@@ -5802,17 +6013,29 @@ fn align_bit(m: &mut Memory<'_>, reader: u32, mask: u8) -> u8 {
 }
 
 const NORM_DP_FIRST: u32 = 0x34;
+
 const NORM_DP_NEXT: u32 = 0x3c;
+
 const NORM_DP_SET: u32 = 0x50;
+
 const NORM_DP_GET: u32 = 0x54;
+
 const NORM_DP_GET_PTR: u32 = 0x58;
+
 const NORM_DP_GET_TYPE: u32 = 0x5c;
+
 const NORM_DP_REMOVE: u32 = 0x60;
+
 const NORM_OUT_SET_LAYER: u32 = 0x24;
+
 const NORM_OUT_GET_LAYER: u32 = 0x28;
+
 const NORM_OUT_PROCESS: u32 = 0x2c;
+
 const NORM_OUT_SET_POS: u32 = 0x38;
+
 const NORM_OUT_GET_POS: u32 = 0x3c;
+
 const NORM_OUT_SET_LAYER_X: u32 = 0x40;
 
 const NORM_RECORD_LEN: u32 = 12;

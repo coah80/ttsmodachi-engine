@@ -1,5 +1,3 @@
-
-
 use crate::{boot::Memory, engine, engine_live};
 
 pub fn run_step(
@@ -79,9 +77,11 @@ pub fn run_1f3ea0(
 }
 
 const G_SCRATCH: u32 = 0x2000;
+
 const G_SCRATCH_LEN: usize = 0x2000;
 
 const G_TEXT: u32 = 0x2400;
+
 const G_TEXT_LEN: usize = 0x1c00;
 
 struct DepesFwd<'a> {
@@ -91,9 +91,11 @@ struct DepesFwd<'a> {
 }
 
 impl crate::component_live_c::Host for DepesFwd<'_> {
+    fn rom(&self) -> crate::rom_region::Rom {
+        self.rom
+    }
     fn call_m(&mut self, entry: u32, args: &[u32], m: &mut Memory<'_>) -> u32 {
         let entry = crate::rom_region::to_us_guest(self.rom, entry);
-
         if entry == 0x1769d0 && args.len() >= 2 {
             return crate::fe_text::strcmp_ci_1769d0(m.bytes, args[0], args[1]) as u32;
         }
@@ -346,6 +348,7 @@ impl<'a, 'm> LiveGlobalHost<'a, 'm> {
 }
 
 impl crate::prosody::GlobalProcessHost for LiveGlobalHost<'_, '_> {
+    fn rom(&self) -> crate::rom_region::Rom { self.rom }
     fn validate(&mut self, object: u32, b: u32, tag: u32, size: u32) -> u32 {
         self.call(0x176f94, &[object, b, tag, size])
     }

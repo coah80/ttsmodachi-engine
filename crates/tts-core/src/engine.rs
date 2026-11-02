@@ -1,8 +1,7 @@
-
-
 use crate::text;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+
 pub enum Error {
     Capacity { required: usize, available: usize },
     InvalidSnapshot,
@@ -23,12 +22,14 @@ pub enum Error {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+
 pub struct Settings {
 
     pub parameters: [u8; 6],
     pub bpm: u32,
     pub stretch: u32,
 }
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -91,6 +92,7 @@ pub struct Voice<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+
 pub enum Start {
     Initialized,
     Cold,
@@ -105,6 +107,7 @@ pub struct Request<'a> {
 }
 
 #[derive(Default, Debug)]
+
 pub struct State {
     pub encoded_bytes: usize,
     pub pcm_samples: usize,
@@ -163,6 +166,7 @@ pub fn render(
 }
 
 #[derive(Clone, Copy, Debug)]
+
 pub struct BootState {
     pub engine: u32,
     pub magic: u32,
@@ -231,6 +235,7 @@ impl<'a, 'b> Memory<'a, 'b> {
     }
 
     pub fn write(&mut self, address: u32, input: &[u8]) -> Result<(), Error> {
+
         self.check(address, input.len())?;
         let mut done = 0;
         while done < input.len() {
@@ -340,6 +345,7 @@ fn lock<'a>(
 }
 
 #[derive(Clone, Copy, Debug)]
+
 pub struct StageCall {
     pub entry: u32,
     pub args: [u32; 7],
@@ -352,6 +358,7 @@ pub struct EncodingScratch<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+
 pub struct StageReturn {
 
     pub r0: Option<u32>,
@@ -626,6 +633,7 @@ pub(crate) fn resolve_environment_rom(
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+
 pub struct RequestPrefix {
     pub environment: u32,
     pub stream: [u32; 2],
@@ -712,6 +720,7 @@ pub fn request_prefix_rom(
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+
 pub struct SchedulerBoundary {
     pub call: crate::frontend::PipelineCall,
     pub entry: u32,
@@ -724,6 +733,7 @@ struct DispatchPrefix<'a, 'b, 'c> {
     boundary: Option<SchedulerBoundary>,
     fault: Option<Error>,
 }
+
 impl crate::frontend::PipelineStages for DispatchPrefix<'_, '_, '_> {
     fn call(
         &mut self,
@@ -798,7 +808,9 @@ impl crate::frontend::PipelineStages for DispatchPrefix<'_, '_, '_> {
         blocked
     }
 }
+
 struct NoSynthesis;
+
 impl crate::frontend::SynthesisSink for NoSynthesis {
     fn emit(&mut self, _: crate::frontend::SynthesisPayload<'_>) -> u32 {
         0x80002001
@@ -866,9 +878,11 @@ pub fn scheduler_prefix(
 fn pair(m: &Memory<'_, '_>, p: u32) -> Result<[u32; 2], Error> {
     Ok([m.word(p)?, m.word(p + 4)?])
 }
+
 fn put_half(m: &mut Memory<'_, '_>, p: u32, v: u16) -> Result<(), Error> {
     m.write(p, &v.to_le_bytes())
 }
+
 fn fill(m: &mut Memory<'_, '_>, p: u32, n: u32, v: u8) -> Result<(), Error> {
     m.check(p, n as usize)?;
     for i in 0..n {
@@ -876,6 +890,7 @@ fn fill(m: &mut Memory<'_, '_>, p: u32, n: u32, v: u8) -> Result<(), Error> {
     }
     Ok(())
 }
+
 fn move_guest(m: &mut Memory<'_, '_>, dst: u32, src: u32, n: u32) -> Result<(), Error> {
     m.check(dst, n as usize)?;
     m.check(src, n as usize)?;
@@ -890,6 +905,7 @@ fn move_guest(m: &mut Memory<'_, '_>, dst: u32, src: u32, n: u32) -> Result<(), 
     }
     Ok(())
 }
+
 fn block_init(m: &mut Memory<'_, '_>, b: u32, tag: u16, n: u32) -> Result<(), Error> {
     put_half(m, b, tag)?;
     put_half(m, b + 2, 0)?;
@@ -897,12 +913,14 @@ fn block_init(m: &mut Memory<'_, '_>, b: u32, tag: u16, n: u32) -> Result<(), Er
     m.put_word(b + 8, 0)?;
     m.put_word(b + 12, 0)
 }
+
 fn block_unlink(m: &mut Memory<'_, '_>, list: u32, b: u32) -> Result<(), Error> {
     let prev = m.word(b + 8)?;
     let next = m.word(b + 12)?;
     m.put_word(if prev == 0 { list } else { prev + 12 }, next)?;
     m.put_word(if next == 0 { list + 4 } else { next + 8 }, prev)
 }
+
 fn block_link(m: &mut Memory<'_, '_>, list: u32, prev: u32, b: u32) -> Result<(), Error> {
     let slot = if prev == 0 { list } else { prev + 12 };
     let next = m.word(slot)?;
@@ -1053,6 +1071,7 @@ fn string_equal(m: &Memory<'_, '_>, p: u32, s: &[u8]) -> Result<bool, Error> {
     }
     Ok(m.byte(p + s.len() as u32)? == 0)
 }
+
 fn compare_key(m: &Memory<'_, '_>, key: &[u8], p: u32) -> Result<i32, Error> {
     for i in 0.. {
         let a = key.get(i).copied().unwrap_or(0);
@@ -1110,6 +1129,7 @@ fn property_rom(
     }
     Ok((0x8b702014, 0, 0))
 }
+
 fn numeric_property(
     m: &Memory<'_, '_>,
     props: u32,
@@ -1154,6 +1174,7 @@ struct CreateStream<'a, 'b, 'c> {
     fault: Option<Error>,
     rom: crate::rom_region::Rom,
 }
+
 impl CreateStream<'_, '_, '_> {
     fn result<T: Default>(&mut self, r: Result<T, Error>) -> T {
         match r {
@@ -1165,6 +1186,7 @@ impl CreateStream<'_, '_, '_> {
         }
     }
 }
+
 impl crate::frontend::StreamOpenHooks for CreateStream<'_, '_, '_> {
     fn resolve_ctx(&mut self, a: u32, b: u32, out: &mut u32) -> u32 {
         let r = resolve_environment(self.memory, [a, b]);
@@ -1403,6 +1425,7 @@ fn new_writer(
     m.put_word(state + 8, writer)?;
     Ok((0, [writer, 0x47de]))
 }
+
 fn stream_state(m: &Memory<'_, '_>, h: [u32; 2]) -> Result<u32, Error> {
     let rc = crate::frontend::validate_handle(h[0] != 0, h[1], 0x47de, 12);
     if rc >= 0x80000000 {
@@ -1410,6 +1433,7 @@ fn stream_state(m: &Memory<'_, '_>, h: [u32; 2]) -> Result<u32, Error> {
     }
     m.word(h[0] + 4)
 }
+
 fn reserve_guest(m: &mut Memory<'_, '_>, h: [u32; 2], count: u32) -> Result<(u32, u32), Error> {
     let state = stream_state(m, h)?;
     if count == 0 || !matches!(m.byte(h[0])?, 1 | 2) {
@@ -1438,6 +1462,7 @@ fn reserve_guest(m: &mut Memory<'_, '_>, h: [u32; 2], count: u32) -> Result<(u32
     fill(m, buf, count, 0)?;
     Ok((0, buf))
 }
+
 fn commit_guest(m: &mut Memory<'_, '_>, h: [u32; 2], count: u32) -> Result<u32, Error> {
     let state = stream_state(m, h)?;
     if !matches!(m.byte(h[0])?, 1 | 2) {
@@ -1464,6 +1489,7 @@ fn commit_guest(m: &mut Memory<'_, '_>, h: [u32; 2], count: u32) -> Result<u32, 
     compact_guest(m, state, 0)?;
     Ok(0)
 }
+
 fn compact_guest(m: &mut Memory<'_, '_>, state: u32, required: u32) -> Result<(), Error> {
     if m.word(state + 60)? == 0 || m.byte(state + 40)? != 0 {
         return Ok(());
@@ -1514,6 +1540,7 @@ fn compact_guest(m: &mut Memory<'_, '_>, state: u32, required: u32) -> Result<()
     }
     Ok(())
 }
+
 fn close_guest(m: &mut Memory<'_, '_>, h: [u32; 2]) -> Result<u32, Error> {
     let state = stream_state(m, h)?;
     if m.byte(h[0])? == 0 {
@@ -1550,9 +1577,11 @@ fn close_guest(m: &mut Memory<'_, '_>, h: [u32; 2]) -> Result<u32, Error> {
     mapped_free(m, heap, h[0])?;
     Ok(0)
 }
+
 fn create_live(m: &mut Memory<'_, '_>, h: [u32; 2]) -> Result<(u32, [u32; 2]), Error> {
     create_live_rom(m, h, crate::rom_region::Rom::Us)
 }
+
 fn create_live_rom(
     m: &mut Memory<'_, '_>,
     h: [u32; 2],
@@ -1588,6 +1617,7 @@ fn create_live_rom(
         ],
     ))
 }
+
 fn open_text_live(
     m: &mut Memory<'_, '_>,
     engine: u32,
@@ -1691,6 +1721,7 @@ fn available_guest(m: &Memory<'_, '_>, h: [u32; 2]) -> Result<(u32, u32, u8), Er
         m.byte(state + 68)?,
     ))
 }
+
 fn position_guest(m: &Memory<'_, '_>, h: [u32; 2]) -> Result<u32, Error> {
     let state = stream_state(m, h)?;
     m.word(if m.byte(h[0])? == 0 {
@@ -1699,6 +1730,7 @@ fn position_guest(m: &Memory<'_, '_>, h: [u32; 2]) -> Result<u32, Error> {
         state + 44
     })
 }
+
 fn read_guest(m: &Memory<'_, '_>, h: [u32; 2]) -> Result<(u32, u32, u32), Error> {
     let state = stream_state(m, h)?;
     if m.byte(h[0])? != 0 {
@@ -1716,6 +1748,7 @@ fn read_guest(m: &Memory<'_, '_>, h: [u32; 2]) -> Result<(u32, u32, u32), Error>
     }
     Ok((0, buf, count))
 }
+
 fn consume_guest(m: &mut Memory<'_, '_>, h: [u32; 2], count: u32) -> Result<u32, Error> {
     let state = stream_state(m, h)?;
     if m.byte(h[0])? != 0 {
@@ -1730,11 +1763,13 @@ fn consume_guest(m: &mut Memory<'_, '_>, h: [u32; 2], count: u32) -> Result<u32,
     compact_guest(m, state, 0)?;
     Ok(if count > available { 0x88f02007 } else { 0 })
 }
+
 fn merge_status(rc: &mut u32, next: u32) {
     if *rc < 0x80000000 && next >= 0x80000000 {
         *rc = next;
     }
 }
+
 fn xcoder_validate(m: &Memory<'_, '_>, h: [u32; 2], tag: u32, size: u32) -> Result<u32, Error> {
     let rc = crate::frontend::validate_handle(h[0] != 0, h[1], tag, size);
     if rc >= 0x80000000 {
@@ -1874,6 +1909,7 @@ pub fn xcoder_text_stage(
     merge_status(&mut rc, consume_guest(m, input, consumed)?);
     Ok(StageReturn { r0: Some(rc) })
 }
+
 fn translated(
     m: &Memory<'_, '_>,
     pos: u32,
@@ -1976,6 +2012,7 @@ pub fn xcoder_markers_stage(m: &mut Memory<'_, '_>, call: StageCall) -> Result<S
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+
 pub struct VoiceBoundary {
     pub entry: u32,
     pub args: [u32; 7],
@@ -2022,6 +2059,7 @@ impl VoicePrefix<'_, '_, '_, '_> {
         }
     }
 }
+
 impl crate::frontend::StopVoiceHooks for VoicePrefix<'_, '_, '_, '_> {
     fn apply_mode(&mut self, _: u32) -> u32 {
         self.suspend(
@@ -2304,6 +2342,7 @@ pub fn synthesis_restore_rom(
     }
     Ok(())
 }
+
 fn release_state_guest(m: &mut Memory<'_, '_>, state: u32) -> Result<(), Error> {
     if state == 0 {
         return Ok(());
@@ -2338,6 +2377,7 @@ fn release_state_guest(m: &mut Memory<'_, '_>, state: u32) -> Result<(), Error> 
     }
     mapped_free(m, heap, state)
 }
+
 fn tree_first(m: &Memory<'_, '_>, tree: u32) -> Result<u32, Error> {
     let mut n = m.word(tree)?;
     if n == tree {
@@ -2348,6 +2388,7 @@ fn tree_first(m: &Memory<'_, '_>, tree: u32) -> Result<u32, Error> {
     }
     Ok(n)
 }
+
 fn tree_next(m: &Memory<'_, '_>, tree: u32, mut n: u32) -> Result<u32, Error> {
     if m.word(n + 4)? != tree {
         n = m.word(n + 4)?;
@@ -2488,6 +2529,7 @@ pub fn backend_stage(
 }
 
 pub(crate) struct LiveComponentCalls;
+
 impl crate::engine_components::InternalCalls for LiveComponentCalls {
     fn call(&mut self, m: &mut Memory<'_, '_>, entry: u32, a: &[u32]) -> Result<u32, Error> {
         match entry {
@@ -2561,16 +2603,20 @@ pub fn component_stage(
 }
 
 use crate::voice::{VoiceEvent, VoiceQueue, VoiceState, VoiceTransition};
+
 fn live_word(b: &[u8], at: usize) -> u32 {
     u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
 }
+
 fn live_put(b: &mut [u8], at: usize, v: u32) {
     b[at..at + 4].copy_from_slice(&v.to_le_bytes());
 }
+
 const LIVE_VOICE_FLOAT_OFFSETS: [usize; 22] = [
     8, 0x5c, 0x6c, 0x70, 0x74, 0x78, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4,
     0xb0, 0xc0, 0xc4, 0xc8, 0xcc, 0xd0,
 ];
+
 fn live_queue(bytes: &[u8]) -> VoiceQueue {
     assert!(live_word(bytes, 0) < 256 && live_word(bytes, 4) < 256);
     VoiceQueue {
@@ -2585,6 +2631,7 @@ fn live_queue(bytes: &[u8]) -> VoiceQueue {
         }),
     }
 }
+
 fn live_write_queue(q: &VoiceQueue, bytes: &mut [u8]) {
     live_put(bytes, 0, q.read as u32);
     live_put(bytes, 4, q.write as u32);
@@ -2603,6 +2650,7 @@ fn live_write_queue(q: &VoiceQueue, bytes: &mut [u8]) {
         }
     }
 }
+
 fn live_voice(bytes: &[u8]) -> VoiceState {
     let f = |o| f32::from_bits(live_word(bytes, o));
     VoiceState {
@@ -2640,6 +2688,7 @@ fn live_voice(bytes: &[u8]) -> VoiceState {
         }),
     }
 }
+
 fn live_write_voice(s: &VoiceState, bytes: &mut [u8]) {
     let floats = [
         s.sample_rate,
@@ -2723,7 +2772,6 @@ pub fn reset_synthesis_live(
         live_write_queue(&input, &mut raw[0xe8..0x14f0]);
         live_write_queue(&commands, &mut raw[0x14f0..0x28f8]);
         m.write(engine, &raw)?;
-
         let amount =
             (f32::from_bits(m.word(engine + 0x58)?) + m.word(engine + 0x68)? as i32 as f32) as i32;
         let amount = amount.min(m.word(engine + 0x40)? as i32).max(0) as u32;
@@ -2736,7 +2784,7 @@ pub fn reset_synthesis_live(
         for at in [
             0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0xcc, 0xd0, 0xd4, 0xd8, 0xdc, 0xac, 0xb8,
         ] {
-            m.put_word(engine + at, 0)?;
+            m.put_word(engine + crate::speech_layout::backend_field(rom, at), 0)?;
         }
         m.put_word(engine + 0x78, 1.0f32.to_bits())?;
         m.put_word(engine + 0x2908, 0x80000000)?;
@@ -2748,21 +2796,29 @@ pub fn reset_synthesis_live(
             base: cursor,
             bytes: &mut local,
         }
-        .reset_cursor(cursor);
+        .reset_cursor_in_region(
+            cursor,
+            if rom == crate::rom_region::Rom::Kr {
+                crate::boot_part_c::CursorRegion::Kr
+            } else {
+                crate::boot_part_c::CursorRegion::UsEu
+            },
+        );
         m.write(cursor, &local)?;
     }
     for at in [0x4bc8, 0x4bcc, 0x381c, 0x3820, 0x3824] {
-        m.put_word(engine + at, 0)?;
+        m.put_word(engine + crate::speech_layout::backend_field(rom, at), 0)?;
     }
-    m.write(engine + 0x4c30, &[0])?;
-
+    m.write(
+        engine + crate::speech_layout::backend_field(rom, 0x4c30),
+        &[0],
+    )?;
     let mut queue_bytes = [0u8; 0x1408];
     m.read(engine + 0xe8, &mut queue_bytes)?;
     let mut queue = live_queue(&queue_bytes);
     queue.enqueue_flag(m.word(engine + 0x64)? as i32, 0, 0);
     live_write_queue(&queue, &mut queue_bytes);
     m.write(engine + 0xe8, &queue_bytes)?;
-
     let mut frame = crate::queue::SpeechFrame::default();
     frame.reset_for_output();
     let p = engine + 0x3828;
@@ -2795,10 +2851,15 @@ pub fn reset_synthesis_live(
     }
     m.put_word(engine + 0x4bb4, u32::MAX)?;
     m.put_word(engine + 0x4bb8, u32::MAX)?;
-    m.write(engine + 0x4bbc, &[0])?;
-    put_half(m, engine + 0x4c38, 0x23)?;
-    m.put_word(engine + 0x4c6c, 0)?;
-
+    if rom != crate::rom_region::Rom::Kr {
+        m.write(engine + 0x4bbc, &[0])?;
+    }
+    put_half(
+        m,
+        engine + crate::speech_layout::backend_field(rom, 0x4c38),
+        0x23,
+    )?;
+    m.put_word(engine + crate::speech_layout::backend_field(rom, 0x4c6c), 0)?;
     let mut floats = [[0f32; crate::buffers::VOICE_DELAY_CAPACITY]; 3];
     let mut headers = [0u32; 3];
     let mut sizes = [0usize; 3];
@@ -2856,6 +2917,7 @@ pub fn reset_synthesis_live(
 }
 
 #[derive(Clone, Copy, Debug, Default)]
+
 pub struct NotificationRegisters {
     pub s16: u32,
     pub s17: u32,
@@ -2868,8 +2930,26 @@ pub fn notify_synthesis_live(
     registers: NotificationRegisters,
     host: &mut (impl Platform + ?Sized),
 ) -> Result<(), Error> {
+    notify_synthesis_live_rom(
+        m,
+        speech,
+        event,
+        registers,
+        host,
+        crate::rom_region::Rom::Us,
+    )
+}
+
+pub fn notify_synthesis_live_rom(
+    m: &mut Memory<'_, '_>,
+    speech: u32,
+    event: u32,
+    registers: NotificationRegisters,
+    host: &mut (impl Platform + ?Sized),
+    rom: crate::rom_region::Rom,
+) -> Result<(), Error> {
     let tick = host.ticks();
-    let vector = speech + 0x61cc;
+    let vector = speech + crate::speech_layout::field(rom, 0x61cc);
     let begin = m.word(vector + 4)?;
     let end = m.word(vector + 8)?;
     let capacity = m.word(vector + 12)?;
@@ -2923,6 +3003,7 @@ pub fn request_callback_prefix(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn request_callback_prefix_rom(
     m: &mut Memory<'_, '_>,
     boot: BootState,
@@ -2970,12 +3051,13 @@ fn start_callback_live(
     impl cb::CallbackHost for Host<'_, '_, '_, '_> {
         fn notify(&mut self, speech: u32, event: i32, _: &mut [u8]) {
             if self.fault.is_none() {
-                self.fault = notify_synthesis_live(
+                self.fault = notify_synthesis_live_rom(
                     self.memory,
                     speech,
                     event as u32,
                     self.registers,
                     self.platform,
+                    self.rom,
                 )
                 .err();
             }
@@ -2985,7 +3067,6 @@ fn start_callback_live(
                 self.fault = reset_synthesis_live(self.memory, engine, self.rom).err();
             }
         }
-
         fn finalize(&mut self, _: u32, _: u32, _: u32) {
             self.fault = Some(Error::MissingStreamAdapter { entry: 0x183398 });
         }
@@ -3028,7 +3109,7 @@ fn start_callback_live(
     let mut view = cb::CallbackSpeech {
         address: speech,
         tail: cb::CallbackTail {
-            engine: m.word(speech + 0x61b8)?,
+            engine: m.word(speech + crate::speech_layout::field(rom, 0x61b8))?,
             ..Default::default()
         },
         ..Default::default()
@@ -3068,6 +3149,7 @@ pub fn synthesis_start_prefix(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn synthesis_start_prefix_rom(
     m: &mut Memory<'_, '_>,
     call: VoiceBoundary,
@@ -3262,7 +3344,9 @@ pub trait HeapPlatform {
     fn arbiter_address(&self) -> u32;
     fn arbitrate(&mut self, memory: &mut crate::boot::Memory<'_>, args: &[u32]) -> u32;
 }
+
 struct BridgePlatform<'a>(&'a mut dyn HeapPlatform);
+
 impl crate::bridge::Platform for BridgePlatform<'_> {
     fn thread_id(&mut self) -> u32 {
         self.0.thread_id()
@@ -3285,6 +3369,7 @@ pub fn synthesis_allocate_prefix(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn synthesis_allocate_prefix_rom(
     m: &mut Memory<'_, '_>,
     call: VoiceBoundary,
@@ -3491,6 +3576,7 @@ pub fn synthesis_logging_prefix(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn synthesis_logging_prefix_rom(
     m: &mut Memory<'_, '_>,
     synthesis: VoiceBoundary,
@@ -3599,6 +3685,7 @@ pub fn synthesis_aux_prefix(
 }
 
 #[allow(clippy::too_many_arguments)]
+
 pub fn synthesis_aux_prefix_rom(
     m: &mut Memory<'_, '_>,
     synthesis: VoiceBoundary,
@@ -3705,6 +3792,7 @@ pub(crate) struct SpeechBootHost<'a> {
     pub(crate) platform: &'a mut dyn HeapPlatform,
     pub(crate) fault: Option<Error>,
 }
+
 impl SpeechBootHost<'_> {
     pub(crate) fn invoke(&mut self, m: &mut crate::boot::Memory<'_>, f: u32, a: &[u32]) -> u32 {
         if self.fault.is_some() { return 0x80002001; }
@@ -3804,23 +3892,29 @@ impl SpeechBootHost<'_> {
         }
     }
 }
+
 impl crate::log_live::LogMethodsM for SpeechBootHost<'_> {
     fn log_m(&mut self, method: u32, object: u32, category: u32, level: u32, arg: u32,
         format: u32, varargs: u32, m: &mut crate::boot::Memory<'_>) -> u32 {
         self.invoke(m, method, &[object, category, level, arg, format, varargs])
     }
 }
+
 impl crate::boot_part_b::FormatHost for SpeechBootHost<'_> {}
+
 impl crate::boot_part_e::Host for SpeechBootHost<'_> {
     fn call(&mut self, m: &mut crate::boot::Memory<'_>, f: u32, a: &[u32]) -> u32 { self.invoke(m, f, a) }
 }
+
 impl crate::speech_part_3::Host for SpeechBootHost<'_> {
     fn call(&mut self, m: &mut crate::boot::Memory<'_>, f: u32, a: &[u32]) -> u32 { self.invoke(m, f, a) }
 }
+
 impl crate::boot_part_b::Host for SpeechBootHost<'_> {
     fn thread_id(&mut self) -> u32 { self.platform.thread_id() }
     fn call(&mut self, m: &mut crate::boot::Memory<'_>, f: u32, a: &[u32]) -> u32 { self.invoke(m, f, a) }
 }
+
 impl crate::boot::Calls for SpeechBootHost<'_> {
     fn call(&mut self, m: &mut crate::boot::Memory<'_>, f: u32, a: &[u32]) -> u32 { self.invoke(m, f, a) }
     fn call_wide(&mut self, _: &mut crate::boot::Memory<'_>, f: u32, _: &[u32]) -> u64 {

@@ -1,13 +1,14 @@
-
-
 #![allow(dead_code)]
 
 use crate::depes::HandleValidator;
+
 use crate::frontend::find_substr;
+
 use crate::normalization::{
-    NormOutHost, NormalizationHost, memcpy_at, memmove_at, memset_at, rule_entry, strcat_at,
-    strcmp_at, strcpy_at, strlen8, strnappend, vec_grow, wordspan_1ea35c,
+    memcpy_at, memmove_at, memset_at, rule_entry, strcat_at, strcmp_at, strcpy_at, strlen8,
+    strnappend, vec_grow, wordspan_1ea35c, NormOutHost, NormalizationHost,
 };
+
 use crate::text_input::strncpy_at;
 
 fn byte(data: &[u8], off: u32) -> u8 {
@@ -127,11 +128,11 @@ fn strchr8(data: &[u8], base: u32, c: u8) -> u32 {
 }
 
 pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
-
+    fn literal(&self, us: u32) -> u32 {
+        us
+    }
     fn cmp_seq(&mut self, arena: &mut [u8], a: u32, b: u32) -> i32;
-
     fn lock_call(&mut self, target: u32) -> u32;
-
     fn lat_first_node(
         &mut self,
         arena: &mut [u8],
@@ -141,7 +142,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         x: u32,
         node: &mut u16,
     ) -> u32;
-
     fn lat_next_node(
         &mut self,
         arena: &mut [u8],
@@ -150,7 +150,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         node: u32,
         next: &mut u16,
     ) -> u32;
-
     fn lat_get_int(
         &mut self,
         arena: &mut [u8],
@@ -162,7 +161,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         count: &mut u16,
     ) -> u32;
-
     fn lat_get_str(
         &mut self,
         arena: &mut [u8],
@@ -173,7 +171,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         count: &mut u16,
     ) -> u32;
-
     fn lat_get_u16(
         &mut self,
         arena: &mut [u8],
@@ -183,7 +180,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         key: u32,
         out: &mut u16,
     ) -> u32;
-
     fn lat_set_field(
         &mut self,
         arena: &mut [u8],
@@ -195,7 +191,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         data: u32,
         written: &mut u16,
     ) -> u32;
-
     fn lat_set_field_bytes(
         &mut self,
         arena: &mut [u8],
@@ -207,7 +202,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         data: &[u8],
         written: &mut u16,
     ) -> u32;
-
     fn lat_count_nodes(
         &mut self,
         arena: &mut [u8],
@@ -217,7 +211,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         x: u32,
         count: &mut u16,
     ) -> u32;
-
     fn lat_append(
         &mut self,
         arena: &mut [u8],
@@ -227,7 +220,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         x: u32,
         node: &mut u16,
     ) -> u32;
-
     fn lat_insert_after(
         &mut self,
         arena: &mut [u8],
@@ -236,7 +228,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         node: u32,
         new: &mut u16,
     ) -> u32;
-
     fn lat_insert_before(
         &mut self,
         arena: &mut [u8],
@@ -245,11 +236,8 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         node: u32,
         new: &mut u16,
     ) -> u32;
-
     fn lat_remove(&mut self, arena: &mut [u8], h0: u32, h1: u32, node: u32) -> u32;
-
     fn lat_reset(&mut self, arena: &mut [u8], h0: u32, h1: u32) -> u32;
-
     fn synth_convert(
         &mut self,
         arena: &mut [u8],
@@ -261,7 +249,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: u32,
         cap: u32,
     ) -> u32;
-
     fn dict_lookup(
         &mut self,
         arena: &mut [u8],
@@ -273,7 +260,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         found: &mut u16,
         sep: &mut u8,
     ) -> u32;
-
     fn dict_annotate(
         &mut self,
         arena: &mut [u8],
@@ -284,7 +270,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         toks: u32,
         count: u32,
     ) -> u32;
-
     fn res_available(
         &mut self,
         arena: &mut [u8],
@@ -293,7 +278,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         avail: &mut u32,
         end: &mut u8,
     ) -> u32;
-
     fn res_read(
         &mut self,
         arena: &mut [u8],
@@ -302,11 +286,8 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         data: &mut u32,
         bytes: &mut u32,
     ) -> u32;
-
     fn res_consume(&mut self, arena: &mut [u8], h0: u32, h1: u32, n: u32) -> u32;
-
     fn lat_type_name(&mut self, arena: &mut [u8], h0: u32, h1: u32, ty: u32, out: &mut u32);
-
     fn dct_get_param(
         &mut self,
         arena: &mut [u8],
@@ -318,16 +299,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         found: &mut u16,
         n: &mut i32,
     ) -> u32;
-
-    fn dct_get_flags(
-        &mut self,
-        arena: &mut [u8],
-        h0: u32,
-        h1: u32,
-        a: &mut u8,
-        b: &mut u8,
-    ) -> u32;
-
+    fn dct_get_flags(&mut self, arena: &mut [u8], h0: u32, h1: u32, a: &mut u8, b: &mut u8) -> u32;
     fn depes_set_input(
         &mut self,
         arena: &mut [u8],
@@ -337,7 +309,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         s: u32,
         n: u32,
     ) -> u32;
-
     fn depes_get_output(
         &mut self,
         arena: &mut [u8],
@@ -347,18 +318,8 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         len: &mut u16,
     ) -> u32;
-
     fn depes_set_rules(&mut self, arena: &mut [u8], h0: u32, h1: u32, name: u32) -> u32;
-
-    fn depes_set_weights(
-        &mut self,
-        arena: &mut [u8],
-        h0: u32,
-        h1: u32,
-        w: u32,
-        n: u32,
-    ) -> u32;
-
+    fn depes_set_weights(&mut self, arena: &mut [u8], h0: u32, h1: u32, w: u32, n: u32) -> u32;
     fn depes_get_weights(
         &mut self,
         arena: &mut [u8],
@@ -367,22 +328,10 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         len: &mut u16,
     ) -> u32;
-
-    fn prop_get(
-        &mut self,
-        arena: &mut [u8],
-        h0: u32,
-        h1: u32,
-        pos: &mut i32,
-        flag: u32,
-    ) -> u32;
-
+    fn prop_get(&mut self, arena: &mut [u8], h0: u32, h1: u32, pos: &mut i32, flag: u32) -> u32;
     fn prop_set(&mut self, arena: &mut [u8], h0: u32, h1: u32, val: u32, flag: u32) -> u32;
-
     fn char_punctuation(&mut self, arena: &mut [u8], h0: u32, h1: u32, c: u32) -> i32;
-
     fn log_level(&mut self, arena: &mut [u8], log: u32) -> u32;
-
     fn dp_first_node(
         &mut self,
         arena: &mut [u8],
@@ -392,7 +341,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         x: u32,
         node: &mut u16,
     ) -> u32;
-
     fn dp_next_node(
         &mut self,
         arena: &mut [u8],
@@ -401,7 +349,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         node: u32,
         next: &mut u16,
     ) -> u32;
-
     fn dp_get(
         &mut self,
         arena: &mut [u8],
@@ -413,7 +360,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         count: &mut u16,
     ) -> u32;
-
     fn dp_get_ptr(
         &mut self,
         arena: &mut [u8],
@@ -424,7 +370,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         count: &mut u16,
     ) -> u32;
-
     fn dp_get_type(
         &mut self,
         arena: &mut [u8],
@@ -434,7 +379,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         key: u32,
         out: &mut u16,
     ) -> u32;
-
     fn dp_set(
         &mut self,
         arena: &mut [u8],
@@ -446,18 +390,8 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         data: u32,
         written: &mut u16,
     ) -> u32;
-
     fn dp_remove(&mut self, arena: &mut [u8], h0: u32, h1: u32, node: u32) -> u32;
-
-    fn out_get_pos(
-        &mut self,
-        arena: &mut [u8],
-        h0: u32,
-        h1: u32,
-        pos: &mut i32,
-        flag: u32,
-    ) -> u32;
-
+    fn out_get_pos(&mut self, arena: &mut [u8], h0: u32, h1: u32, pos: &mut i32, flag: u32) -> u32;
     fn out_set_layer(
         &mut self,
         arena: &mut [u8],
@@ -467,7 +401,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         s: u32,
         n: u32,
     ) -> u32;
-
     fn out_set_layer_x(
         &mut self,
         arena: &mut [u8],
@@ -477,9 +410,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         s: u32,
         n: u32,
     ) -> u32;
-
     fn out_process(&mut self, arena: &mut [u8], h0: u32, h1: u32, name: u32) -> u32;
-
     fn out_get_layer(
         &mut self,
         arena: &mut [u8],
@@ -489,9 +420,7 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out: &mut u32,
         len: &mut u16,
     ) -> u32;
-
     fn out_set_pos(&mut self, arena: &mut [u8], h0: u32, h1: u32, pos: i32, flag: u32) -> u32;
-
     fn st_open(
         &mut self,
         arena: &mut [u8],
@@ -504,7 +433,6 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out_a: &mut u32,
         out_b: &mut u32,
     ) -> u32;
-
     fn st_open4(
         &mut self,
         arena: &mut [u8],
@@ -517,20 +445,9 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         out_a: &mut u32,
         out_b: &mut u32,
     ) -> u32;
-
     fn st_close(&mut self, arena: &mut [u8], ha: u32, hb: u32) -> u32;
-
     fn st_get_mode(&mut self, arena: &mut [u8]) -> u32;
-
-    fn st_read(
-        &mut self,
-        arena: &mut [u8],
-        ha: u32,
-        hb: u32,
-        n: &mut i32,
-        fin: &mut u8,
-    ) -> u32;
-
+    fn st_read(&mut self, arena: &mut [u8], ha: u32, hb: u32, n: &mut i32, fin: &mut u8) -> u32;
     fn st_gettext(
         &mut self,
         arena: &mut [u8],
@@ -539,11 +456,8 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         buf: &mut u32,
         len: &mut i32,
     ) -> u32;
-
     fn st_write(&mut self, arena: &mut [u8], ha: u32, hb: u32, buf: u32, len: u32) -> u32;
-
     fn st_consume(&mut self, arena: &mut [u8], ha: u32, hb: u32, n: u32) -> u32;
-
     fn depes_get_pos(
         &mut self,
         arena: &mut [u8],
@@ -552,13 +466,9 @@ pub trait FeTextHost: NormalizationHost + HandleValidator + NormOutHost {
         pos: &mut i32,
         flag: u32,
     ) -> u32;
-
     fn depes_set_pos(&mut self, arena: &mut [u8], h0: u32, h1: u32, pos: i32, flag: u32) -> u32;
-
     fn dict_count(&mut self, arena: &mut [u8], ha: u32, hb: u32) -> u32;
-
     fn suba1c(&mut self, arena: &mut [u8], reg: u32, key: u32, out: &mut u32) -> u32;
-
     fn tn_282af0(
         &mut self,
         arena: &mut [u8],
@@ -770,6 +680,7 @@ fn find_substr_lit(mem: &[u8], s: u32, lit: &[u8]) -> u32 {
 }
 
 #[inline]
+
 fn is_word_ch(ch: u8) -> bool {
     (ch >= b'A' || ch == b' ') && (ch as u32).wrapping_sub('[' as u32) >= 6 && {
         ch <= b'z' || ch == 0x82 || ch == 0x85 || ch == 0x88 || ch == 0x8a
@@ -777,6 +688,7 @@ fn is_word_ch(ch: u8) -> bool {
 }
 
 #[inline]
+
 fn mark_pos(arena: &[u8], marks: u32, idx: u32) -> u32 {
     word(arena, marks.wrapping_add(idx.wrapping_mul(0x18)).wrapping_add(0xc))
 }
@@ -2206,8 +2118,7 @@ pub fn fe_tags_1d9508(
     text: u32,
     host: &mut impl FeTextHost,
 ) -> u32 {
-    const KEY_INIT: u32 = 0x760;
-
+    let key_init = host.literal(0x8f8980);
     let env = word(arena, c);
     let heap = word(arena, env.wrapping_add(4));
     let log = word(arena, env.wrapping_add(0x10));
@@ -2313,12 +2224,21 @@ pub fn fe_tags_1d9508(
     let mut pv = 0u32;
     let mut found = 0xffffu16;
     let mut sep = 0i32;
-    r = host.dct_get_param(arena, dh0, dh1, 0, 0, &mut pv, &mut found, &mut sep);
+    r = host.dct_get_param(
+        arena,
+        dh0,
+        dh1,
+        host.literal(0x1d9a88),
+        key_init,
+        &mut pv,
+        &mut found,
+        &mut sep,
+    );
     if r >= 0x8000_0000 {
         clear_strs_1d9508(arena, strs, n_str);
         return r;
     }
-    let mut key = KEY_INIT;
+    let mut key = key_init;
     if found != 0 {
         let q = strchr_195d30(arena, word(arena, pv), sep as u32);
         if q != 0 {
@@ -2416,10 +2336,15 @@ pub fn fe_tags_1d9508(
                     let mut k = 0u32;
                     while k < vlen {
                         if byte(arena, val.wrapping_add(k)) == b'_' {
-                            let ch = fold_17c8dc(byte(arena, val.wrapping_add(k).wrapping_add(1)) as u32)
-                                as u8;
+                            let ch = fold_17c8dc(
+                                byte(arena, val.wrapping_add(k).wrapping_add(1)) as u32
+                            ) as u8;
                             put_byte(arena, tb.wrapping_add(0xa), ch);
-                            put_word(arena, tab.wrapping_add(u32::from(ch).wrapping_mul(4)), val.wrapping_add(k).wrapping_add(1));
+                            put_word(
+                                arena,
+                                tab.wrapping_add(u32::from(ch).wrapping_mul(4)),
+                                val.wrapping_add(k).wrapping_add(1),
+                            );
                             memset_195bec(arena, buf.wrapping_add(k), 0, vlen.wrapping_sub(k));
                             break;
                         }
@@ -2441,7 +2366,12 @@ pub fn fe_tags_1d9508(
                 }
                 let mut i = 0u16;
                 while i < n_str {
-                    if strcmp_ci_1769d0(arena, word(arena, strs.wrapping_add(u32::from(i).wrapping_mul(4))), buf) == 0 {
+                    if strcmp_ci_1769d0(
+                        arena,
+                        word(arena, strs.wrapping_add(u32::from(i).wrapping_mul(4))),
+                        buf,
+                    ) == 0
+                    {
                         put_half(arena, tb.wrapping_add(8), i);
                         host.free(arena, heap, buf);
                         buf = 0;
@@ -2477,11 +2407,20 @@ pub fn fe_tags_1d9508(
                 let lid_v = byte(arena, tb.wrapping_add(0xc));
                 let mut k = from;
                 while k < to {
-                    put_half(arena, word_idx.wrapping_add(u32::from(k).wrapping_mul(2)), str_i);
+                    put_half(
+                        arena,
+                        word_idx.wrapping_add(u32::from(k).wrapping_mul(2)),
+                        str_i,
+                    );
                     put_byte(arena, lid.wrapping_add(u32::from(k)), lid_v);
                     k = k.wrapping_add(1);
                 }
-                if strcmp_lit(arena, word(arena, strs.wrapping_add(u32::from(str_i).wrapping_mul(4))), b"phon") == 0 {
+                if strcmp_lit(
+                    arena,
+                    word(arena, strs.wrapping_add(u32::from(str_i).wrapping_mul(4))),
+                    b"phon",
+                ) == 0
+                {
                     let mut k = from;
                     while k < to {
                         put_byte(arena, cls.wrapping_add(u32::from(k)), b'P');
@@ -2497,7 +2436,6 @@ pub fn fe_tags_1d9508(
             node = next;
         }
     }
-
     r = 0;
     let mut i = 0u16;
     while i < n_tok {
@@ -2542,7 +2480,9 @@ pub fn fe_tags_1d9508(
                 k = k.wrapping_add(1);
             }
             if t_to != k && tj_to == k {
-                let n = strlen8(arena, pron).wrapping_add(u32::from(tj_to).wrapping_sub(u32::from(t_to))) as u16;
+                let n = strlen8(arena, pron)
+                    .wrapping_add(u32::from(tj_to).wrapping_sub(u32::from(t_to)))
+                    as u16;
                 buf = match host.calloc(arena, heap, 1, u32::from(n).wrapping_add(1)) {
                     Some(p) => p,
                     None => {
@@ -2551,14 +2491,33 @@ pub fn fe_tags_1d9508(
                     }
                 };
                 strcpy_at(arena, buf, pron);
-                strncat_195dac(arena, buf, text.wrapping_add(u32::from(t_to)), u32::from(tj_to).wrapping_sub(u32::from(t_to)));
+                strncat_195dac(
+                    arena,
+                    buf,
+                    text.wrapping_add(u32::from(t_to)),
+                    u32::from(tj_to).wrapping_sub(u32::from(t_to)),
+                );
                 let n1 = n.wrapping_add(1);
                 r = host.lat_set_field(arena, h0, h1, u32::from(f00), 6, n1 as u32, buf, &mut len);
                 if r < 0x8000_0000 {
                     if n1 == len {
                         strcpy_at(arena, buf, norm);
-                        strncat_195dac(arena, buf, text.wrapping_add(u32::from(t_to)), u32::from(tj_to).wrapping_sub(u32::from(t_to)));
-                        r = host.lat_set_field(arena, h0, h1, u32::from(f00), 3, n1 as u32, buf, &mut len);
+                        strncat_195dac(
+                            arena,
+                            buf,
+                            text.wrapping_add(u32::from(t_to)),
+                            u32::from(tj_to).wrapping_sub(u32::from(t_to)),
+                        );
+                        r = host.lat_set_field(
+                            arena,
+                            h0,
+                            h1,
+                            u32::from(f00),
+                            3,
+                            n1 as u32,
+                            buf,
+                            &mut len,
+                        );
                         if r >= 0x8000_0000 {
                             host.free(arena, heap, buf);
                             break;
@@ -2566,7 +2525,16 @@ pub fn fe_tags_1d9508(
                         if n1 == len {
                             host.free(arena, heap, buf);
                             put_half(arena, tb.wrapping_add(4), tj_to);
-                            r = host.lat_set_field(arena, h0, h1, u32::from(f00), 2, 1, tb.wrapping_add(4), &mut len);
+                            r = host.lat_set_field(
+                                arena,
+                                h0,
+                                h1,
+                                u32::from(f00),
+                                2,
+                                1,
+                                tb.wrapping_add(4),
+                                &mut len,
+                            );
                             break;
                         }
                     }
@@ -2586,7 +2554,6 @@ pub fn fe_tags_1d9508(
         clear_strs_1d9508(arena, strs, n_str);
         return r;
     }
-
     i = 0;
     while i < n_tok {
         let tb = tok_base(toks, i);
@@ -2654,7 +2621,6 @@ pub fn fe_tags_1d9508(
         }
         i = i.wrapping_add(1);
     }
-
     i = 0;
     while i < n_tok {
         let tb = tok_base(toks, i);
@@ -2686,7 +2652,10 @@ pub fn fe_tags_1d9508(
                 && byte(arena, tj.wrapping_add(6)) == 6
                 && byte(arena, tj.wrapping_add(7)) != 3
                 && half(arena, word_idx.wrapping_add(u32::from(k).wrapping_mul(2)))
-                    != half(arena, word_idx.wrapping_add(u32::from(tj_from).wrapping_mul(2)))
+                    != half(
+                        arena,
+                        word_idx.wrapping_add(u32::from(tj_from).wrapping_mul(2)),
+                    )
             {
                 bisect = true;
             }
@@ -2712,7 +2681,6 @@ pub fn fe_tags_1d9508(
         }
         i = i.wrapping_add(1);
     }
-
     i = 0;
     while i < n_tok {
         let tb = tok_base(toks, i);
@@ -2756,7 +2724,10 @@ pub fn fe_tags_1d9508(
                     let tj_from = half(arena, tj.wrapping_add(2));
                     if byte(arena, tj.wrapping_add(7)) != 3
                         && half(arena, word_idx.wrapping_add(u32::from(ub).wrapping_mul(2)))
-                            != half(arena, word_idx.wrapping_add(u32::from(tj_from).wrapping_mul(2)))
+                            != half(
+                                arena,
+                                word_idx.wrapping_add(u32::from(tj_from).wrapping_mul(2)),
+                            )
                     {
                         conflict = true;
                         break;
@@ -2776,7 +2747,6 @@ pub fn fe_tags_1d9508(
         }
         i = i.wrapping_add(1);
     }
-
     {
         let mut prev = byte(arena, cls);
         let mut k = 0u16;
@@ -2806,18 +2776,23 @@ pub fn fe_tags_1d9508(
             }
         }
     }
-
     i = 0;
     while i < n_tok {
         let tb = tok_base(toks, i);
         if byte(arena, tb.wrapping_add(6)) == 5
-            && strcmp_lit(arena, word(arena, strs.wrapping_add(u32::from(half(arena, tb.wrapping_add(8))).wrapping_mul(4))), b"phon") != 0
+            && strcmp_lit(
+                arena,
+                word(
+                    arena,
+                    strs.wrapping_add(u32::from(half(arena, tb.wrapping_add(8))).wrapping_mul(4)),
+                ),
+                b"phon",
+            ) != 0
         {
             put_byte(arena, tb.wrapping_add(7), 3);
         }
         i = i.wrapping_add(1);
     }
-
     if sent_len != 0 {
         let mut prev_cls = byte(arena, cls);
         let mut prev_w = half(arena, word_idx);
@@ -2831,7 +2806,10 @@ pub fn fe_tags_1d9508(
                 k = k.wrapping_add(1);
             }
             if k != start && byte(arena, cls.wrapping_add(u32::from(start))) != b'P' {
-                let w = half(arena, word_idx.wrapping_add(u32::from(start).wrapping_mul(2)));
+                let w = half(
+                    arena,
+                    word_idx.wrapping_add(u32::from(start).wrapping_mul(2)),
+                );
                 let l = byte(arena, lid.wrapping_add(u32::from(start)));
                 let mut pos = 0u16;
                 let mut j = 0u16;
@@ -2849,8 +2827,10 @@ pub fn fe_tags_1d9508(
                         pos = n_tok;
                         if j.wrapping_add(1) < n_tok {
                             while j.wrapping_add(1) < n_tok
-                                && half(arena, tok_base(toks, j.wrapping_add(1)).wrapping_add(2)) == start
-                                && byte(arena, tok_base(toks, j.wrapping_add(1)).wrapping_add(7)) != 3
+                                && half(arena, tok_base(toks, j.wrapping_add(1)).wrapping_add(2))
+                                    == start
+                                && byte(arena, tok_base(toks, j.wrapping_add(1)).wrapping_add(7))
+                                    != 3
                             {
                                 j = j.wrapping_add(1);
                             }
@@ -2872,10 +2852,12 @@ pub fn fe_tags_1d9508(
                         start = k;
                         if k < sent_len
                             && (byte(arena, cls.wrapping_add(u32::from(k))) != prev_cls
-                                || half(arena, word_idx.wrapping_add(u32::from(k).wrapping_mul(2))) != prev_w)
+                                || half(arena, word_idx.wrapping_add(u32::from(k).wrapping_mul(2)))
+                                    != prev_w)
                         {
                             prev_cls = byte(arena, cls.wrapping_add(u32::from(k)));
-                            prev_w = half(arena, word_idx.wrapping_add(u32::from(k).wrapping_mul(2)));
+                            prev_w =
+                                half(arena, word_idx.wrapping_add(u32::from(k).wrapping_mul(2)));
                         }
                         if start >= sent_len {
                             break;
@@ -2902,7 +2884,11 @@ pub fn fe_tags_1d9508(
                 put_half(arena, nb.wrapping_add(2), start);
                 put_half(arena, nb.wrapping_add(4), k);
                 put_half(arena, nb.wrapping_add(8), w);
-                put_byte(arena, nb.wrapping_add(0xa), byte(arena, cls.wrapping_add(u32::from(start))));
+                put_byte(
+                    arena,
+                    nb.wrapping_add(0xa),
+                    byte(arena, cls.wrapping_add(u32::from(start))),
+                );
                 put_byte(arena, nb.wrapping_add(7), 2);
                 put_byte(arena, nb.wrapping_add(6), 5);
                 put_byte(arena, nb.wrapping_add(0xc), l);
@@ -2921,7 +2907,6 @@ pub fn fe_tags_1d9508(
             }
         }
     }
-
     i = 0;
     while i < n_tok {
         let tb = tok_base(toks, i);
@@ -2967,40 +2952,81 @@ pub fn fe_tags_1d9508(
                 clear_strs_1d9508(arena, strs, n_str);
                 return r;
             }
-            r = host.lat_set_field(arena, h0, h1, u32::from(node), 0, 1, tb.wrapping_add(6), &mut len);
+            r = host.lat_set_field(
+                arena,
+                h0,
+                h1,
+                u32::from(node),
+                0,
+                1,
+                tb.wrapping_add(6),
+                &mut len,
+            );
             if r >= 0x8000_0000 {
                 clear_strs_1d9508(arena, strs, n_str);
                 return r;
             }
-            r = host.lat_set_field(arena, h0, h1, u32::from(node), 1, 1, tb.wrapping_add(2), &mut len);
+            r = host.lat_set_field(
+                arena,
+                h0,
+                h1,
+                u32::from(node),
+                1,
+                1,
+                tb.wrapping_add(2),
+                &mut len,
+            );
             if r >= 0x8000_0000 {
                 clear_strs_1d9508(arena, strs, n_str);
                 return r;
             }
-            r = host.lat_set_field(arena, h0, h1, u32::from(node), 2, 1, tb.wrapping_add(4), &mut len);
+            r = host.lat_set_field(
+                arena,
+                h0,
+                h1,
+                u32::from(node),
+                2,
+                1,
+                tb.wrapping_add(4),
+                &mut len,
+            );
             if r >= 0x8000_0000 {
                 clear_strs_1d9508(arena, strs, n_str);
                 return r;
             }
             put_half(arena, tb, node);
             if byte(arena, tb.wrapping_add(0xc)) != 0 {
-
-                r = host.lat_set_field_bytes(arena, h0, h1, u32::from(node), 6, 4, b"lid\0", &mut len);
+                r = host.lat_set_field_bytes(
+                    arena,
+                    h0,
+                    h1,
+                    u32::from(node),
+                    6,
+                    4,
+                    b"lid\0",
+                    &mut len,
+                );
                 if r >= 0x8000_0000 {
                     clear_strs_1d9508(arena, strs, n_str);
                     return r;
                 }
             }
             let from = half(arena, tb.wrapping_add(2));
-            let widx = half(arena, word_idx.wrapping_add(u32::from(from).wrapping_mul(2)));
+            let widx = half(
+                arena,
+                word_idx.wrapping_add(u32::from(from).wrapping_mul(2)),
+            );
             buf = match host.calloc(
                 arena,
                 heap,
                 1,
-                (strlen8(arena, word(arena, strs.wrapping_add(u32::from(widx).wrapping_mul(4))))
-                    .wrapping_add(6)
-                    .wrapping_add(1)
-                    .wrapping_add(1)) as u16 as u32,
+                (strlen8(
+                    arena,
+                    word(arena, strs.wrapping_add(u32::from(widx).wrapping_mul(4))),
+                )
+                .wrapping_add(6)
+                .wrapping_add(1)
+                .wrapping_add(1)) as u16 as u32,
             ) {
                 Some(p) => p,
                 None => {
@@ -3009,7 +3035,11 @@ pub fn fe_tags_1d9508(
                 }
             };
             if widx != 0 {
-                strcpy_at(arena, buf, word(arena, strs.wrapping_add(u32::from(widx).wrapping_mul(4))));
+                strcpy_at(
+                    arena,
+                    buf,
+                    word(arena, strs.wrapping_add(u32::from(widx).wrapping_mul(4))),
+                );
                 if byte(arena, tb.wrapping_add(0xa)) != b'N' {
                     strcat_lit(arena, buf, b"_");
                     let tab_ch = byte(arena, tb.wrapping_add(0xa));
@@ -3022,8 +3052,21 @@ pub fn fe_tags_1d9508(
                 }
             } else if byte(arena, tb.wrapping_add(0xa)) == b'N' {
                 strcpy_at(arena, buf, word(arena, strs));
-            } else if word(arena, tab.wrapping_add(u32::from(byte(arena, tb.wrapping_add(0xa))).wrapping_mul(4))) != 0 {
-                strcpy_at(arena, buf, word(arena, tab.wrapping_add(u32::from(byte(arena, tb.wrapping_add(0xa))).wrapping_mul(4))));
+            } else if word(
+                arena,
+                tab.wrapping_add(u32::from(byte(arena, tb.wrapping_add(0xa))).wrapping_mul(4)),
+            ) != 0
+            {
+                strcpy_at(
+                    arena,
+                    buf,
+                    word(
+                        arena,
+                        tab.wrapping_add(
+                            u32::from(byte(arena, tb.wrapping_add(0xa))).wrapping_mul(4),
+                        ),
+                    ),
+                );
             } else {
                 strcpy_lit(arena, buf, b"latin");
             }
@@ -3051,7 +3094,16 @@ pub fn fe_tags_1d9508(
                 }
             }
         } else if op == 1 {
-            r = host.lat_set_field(arena, h0, h1, u32::from(half(arena, tb)), 2, 1, tb.wrapping_add(4), &mut len);
+            r = host.lat_set_field(
+                arena,
+                h0,
+                h1,
+                u32::from(half(arena, tb)),
+                2,
+                1,
+                tb.wrapping_add(4),
+                &mut len,
+            );
             if r >= 0x8000_0000 {
                 clear_strs_1d9508(arena, strs, n_str);
                 return r;
@@ -5056,15 +5108,23 @@ pub fn strstr16_176538(arena: &[u8], a: u32, b: u32) -> u32 {
 }
 
 const DEPES_SCRATCH_CTYPE: u32 = 0x770;
+
 const DEPES_SCRATCH_CAP: u32 = 0x774;
+
 const DEPES_SCRATCH_LANG: u32 = 0x778;
+
 const DEPES_SCRATCH_NORMAL: u32 = 0x780;
+
 const DEPES_SCRATCH_SPELL: u32 = 0x790;
+
 const DEPES_SCRATCH_LID: u32 = 0x7a0;
+
 const DEPES_SCRATCH_DUMMY: u32 = 0x7b0;
+
 const DEPES_SCRATCH_PUNCT: u32 = 0x7b8;
 
 #[allow(clippy::too_many_arguments)]
+
 fn cleanup_2031b0(
     arena: &mut [u8],
     heap: u32,
@@ -5120,6 +5180,7 @@ fn cleanup_2031b0(
 }
 
 #[allow(clippy::too_many_lines)]
+
 pub fn fe_depes_2031b0(
     arena: &mut [u8],
     p: u32,
@@ -7152,9 +7213,13 @@ fn cmp_tok_1d5214(arena: &[u8], a: u32, b: u32) -> i32 {
 }
 
 const BBA_NORMAL: u32 = 0xc40;
+
 const BBA_PHON: u32 = 0xc50;
+
 const BBA_U16_NORMAL: u32 = 0xc60;
+
 const BBA_U16_LID: u32 = 0xc70;
+
 const BBA_U16_LATIN: u32 = 0xc80;
 
 pub fn fe_process_1d5ba8(
